@@ -1,5 +1,7 @@
 //! `#[derive(Oopsie)]` implementation.
 
+mod gen_display;
+mod gen_error;
 mod gen_selectors;
 pub(crate) mod parse;
 
@@ -7,6 +9,8 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{DeriveInput, parse_quote};
 
+use self::gen_display::{gen_enum_display, gen_struct_display};
+use self::gen_error::{gen_enum_error, gen_struct_error};
 use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
 use self::parse::ContainerAttrs;
 
@@ -37,9 +41,13 @@ fn expand_enum(
 ) -> syn::Result<TokenStream2> {
     let path = oopsie_path(container_attrs);
     let selectors = gen_enum_selectors(input, container_attrs, &path)?;
+    let display = gen_enum_display(input)?;
+    let error = gen_enum_error(input)?;
 
     Ok(quote! {
         #(#selectors)*
+        #display
+        #error
     })
 }
 
@@ -49,8 +57,12 @@ fn expand_struct(
 ) -> syn::Result<TokenStream2> {
     let path = oopsie_path(container_attrs);
     let selector = gen_struct_selector(input, container_attrs, &path)?;
+    let display = gen_struct_display(input)?;
+    let error = gen_struct_error(input)?;
 
     Ok(quote! {
         #selector
+        #display
+        #error
     })
 }
