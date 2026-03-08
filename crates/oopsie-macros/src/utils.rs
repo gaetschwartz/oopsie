@@ -122,12 +122,12 @@ impl<const DEFAULT: bool> FromMeta for BetterFlag<DEFAULT> {
 }
 
 #[derive(Debug)]
-pub struct SnafuValue<T> {
+pub struct OopsieValue<T> {
     pub value: Option<T>,
     pub span: Span,
 }
 
-impl<T> SnafuValue<T> {
+impl<T> OopsieValue<T> {
     pub fn new_some(value: T) -> Self {
         Self {
             value: Some(value),
@@ -141,7 +141,7 @@ impl<T> SnafuValue<T> {
     }
 }
 
-impl<T> Deref for SnafuValue<T> {
+impl<T> Deref for OopsieValue<T> {
     type Target = Option<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -149,7 +149,7 @@ impl<T> Deref for SnafuValue<T> {
     }
 }
 
-impl<T: Default> Default for SnafuValue<T> {
+impl<T: Default> Default for OopsieValue<T> {
     fn default() -> Self {
         Self {
             value: None,
@@ -158,13 +158,13 @@ impl<T: Default> Default for SnafuValue<T> {
     }
 }
 
-impl<T: FromMeta> FromMeta for SnafuValue<T> {
+impl<T: FromMeta> FromMeta for OopsieValue<T> {
     fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
         match meta {
             syn::Meta::NameValue(MetaNameValue { value, .. }) => {
                 let span = value.span();
                 let value = T::from_expr(value)?;
-                Ok(SnafuValue {
+                Ok(OopsieValue {
                     value: Some(value),
                     span,
                 })
@@ -174,12 +174,12 @@ impl<T: FromMeta> FromMeta for SnafuValue<T> {
                 let meta_2 = syn::parse2::<syn::Meta>(tokens.clone())
                     .map_err(|e| darling::Error::custom(e).with_span(tokens))?;
                 let value = T::from_meta(&meta_2)?;
-                Ok(SnafuValue {
+                Ok(OopsieValue {
                     value: Some(value),
                     span,
                 })
             }
-            syn::Meta::Path(p) => Ok(SnafuValue {
+            syn::Meta::Path(p) => Ok(OopsieValue {
                 value: None,
                 span: p.span(),
             }),
@@ -188,15 +188,15 @@ impl<T: FromMeta> FromMeta for SnafuValue<T> {
 }
 
 #[derive(Debug)]
-pub struct SnafuSynValue<T> {
+pub struct OopsieSynValue<T> {
     pub value: Option<T>,
     pub span: Span,
 }
 
 #[expect(unused_macros)]
-macro_rules! snafu_syn_value {
+macro_rules! oopsie_syn_value {
     ($($tt:tt)*) => {
-        SnafuValue {
+        OopsieValue {
             value: Some(syn::parse_quote! { $($tt)* }),
             span: Span::call_site(),
         }
@@ -204,9 +204,9 @@ macro_rules! snafu_syn_value {
 }
 
 #[expect(unused_imports)]
-pub(crate) use snafu_syn_value;
+pub(crate) use oopsie_syn_value;
 
-impl<T> SnafuSynValue<T> {
+impl<T> OopsieSynValue<T> {
     pub fn new_some(value: T) -> Self {
         Self {
             value: Some(value),
@@ -220,7 +220,7 @@ impl<T> SnafuSynValue<T> {
     }
 }
 
-impl<T> Deref for SnafuSynValue<T> {
+impl<T> Deref for OopsieSynValue<T> {
     type Target = Option<T>;
 
     fn deref(&self) -> &Self::Target {
@@ -228,7 +228,7 @@ impl<T> Deref for SnafuSynValue<T> {
     }
 }
 
-impl<T: Default> Default for SnafuSynValue<T> {
+impl<T: Default> Default for OopsieSynValue<T> {
     fn default() -> Self {
         Self {
             value: None,
@@ -237,13 +237,13 @@ impl<T: Default> Default for SnafuSynValue<T> {
     }
 }
 
-impl<T: FromMeta + syn::parse::Parse> FromMeta for SnafuSynValue<T> {
+impl<T: FromMeta + syn::parse::Parse> FromMeta for OopsieSynValue<T> {
     fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
         match meta {
             syn::Meta::NameValue(MetaNameValue { value, .. }) => {
                 let span = value.span();
                 let value = T::from_expr(value)?;
-                Ok(SnafuSynValue {
+                Ok(OopsieSynValue {
                     value: Some(value),
                     span,
                 })
@@ -252,12 +252,12 @@ impl<T: FromMeta + syn::parse::Parse> FromMeta for SnafuSynValue<T> {
                 let span = tokens.span();
                 let value = syn::parse2::<T>(tokens.clone())
                     .map_err(|e| darling::Error::custom(e).with_span(tokens))?;
-                Ok(SnafuSynValue {
+                Ok(OopsieSynValue {
                     value: Some(value),
                     span,
                 })
             }
-            syn::Meta::Path(p) => Ok(SnafuSynValue {
+            syn::Meta::Path(p) => Ok(OopsieSynValue {
                 value: None,
                 span: p.span(),
             }),
@@ -273,20 +273,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn snafu_value_from_meta_name_value() {
+    fn oopsie_value_from_meta_name_value() {
         let meta: Vec<syn::Attribute> = parse_quote! {
-            #[snafu(visibility(pub(crate)))]
+            #[oopsie(visibility(pub(crate)))]
         };
 
         #[derive(Debug, darling::FromAttributes)]
-        #[darling(attributes(snafu))]
-        struct SnafuValueTest {
-            visibility: SnafuSynValue<syn::Visibility>,
+        #[darling(attributes(oopsie))]
+        struct OopsieValueTest {
+            visibility: OopsieSynValue<syn::Visibility>,
         }
 
-        let snafu_value = SnafuValueTest::from_attributes(&meta).unwrap();
+        let oopsie_value = OopsieValueTest::from_attributes(&meta).unwrap();
         assert_eq!(
-            snafu_value.visibility.value,
+            oopsie_value.visibility.value,
             Some(parse_quote! { pub(crate) })
         );
     }

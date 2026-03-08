@@ -148,7 +148,7 @@ mod tests {
     #[test]
     fn test_derive_enum_with_transparent() {
         let input = quote! {
-            #[oopsie(module(error_with_span_trace_snafus))]
+            #[oopsie(module(error_with_span_trace_oopsies))]
             #[oopsie(vis = pub(crate))]
             #[oopsie(path = "crate")]
             pub enum ErrorWithSpanTrace {

@@ -474,9 +474,27 @@ mod tests {
         let _ = trace;
     }
 
-    // TODO(task-9): Rewrite using #[derive(Oopsie)] once the derive macro is ready.
-    // This test previously used #[derive(Snafu)] with #[snafu(provide(...))] to verify
-    // that boxed span traces can be extracted via the Provider API.
+    #[cfg(feature = "unstable")]
+    mod provide_test {
+        use super::*;
+        use oopsie_macros::Oopsie;
+
+        #[derive(Debug, Oopsie)]
+        #[oopsie("Boxed spantrace error")]
+        #[oopsie(suffix, module(false), path = "crate")]
+        #[oopsie(provide(ref, crate::Spantrace => span.as_ref()))]
+        struct BoxedSpantraceError {
+            #[oopsie(auto)]
+            span: Box<Spantrace>,
+        }
+
+        #[test]
+        fn test_extract_boxed_spantrace_via_provide_ref() {
+            let err = BoxedSpantraceErrorOopsie.build();
+            let extracted = Spantrace::extract(&err);
+            assert!(extracted.is_some());
+        }
+    }
 
     #[test]
     fn test_fallback_spantrace_deserialization() {

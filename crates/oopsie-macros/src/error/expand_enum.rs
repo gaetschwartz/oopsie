@@ -94,7 +94,7 @@ fn apply_enum_oopsie_attrs(
         if !module_name.is_empty() {
             module_name.push('_');
         }
-        module_name.push_str("snafus");
+        module_name.push_str("oopsies");
         let module_ident = syn::Ident::new(&module_name, span);
         attrs.push(parse_quote! { #[oopsie(module(#module_ident))] });
     }
