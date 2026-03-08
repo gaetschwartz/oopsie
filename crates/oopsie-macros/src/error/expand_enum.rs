@@ -10,8 +10,7 @@ use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{
     add_provide_attrs, check_existing_fields, extract_and_strip_attr, inject_fields,
 };
-use super::snafu_attrs::{SnafuAttrs, extract_snafu_attr};
-use super::type_check::check_derive_snafu;
+use super::type_check::ensure_derive_oopsie;
 
 pub(super) fn expand_enum(
     args: &ErrorArgs,
@@ -24,23 +23,14 @@ pub(super) fn expand_enum(
         .clone()
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
-    // 1. Validate derives
-    check_derive_snafu(&input.attrs)?;
+    // 1. Ensure #[derive(Oopsie)] is present
+    ensure_derive_oopsie(&mut input.attrs);
 
-    // 2. Extract and validate SNAFU attributes
-    let snafu_attr = match extract_snafu_attr(&input.attrs) {
-        Ok(attr) => attr,
-        Err(e) => {
-            return Ok(e.write_errors());
-        }
-    };
-    validate_no_snafu_module_or_context(&snafu_attr)?;
-
-    // 3. Build config
+    // 2. Build config
     let magnetite_utils_path_for_impl = magnetite_utils_path.clone();
     let config = FieldInjectorConfig::new(args, magnetite_utils_path);
 
-    // 4. Process variants
+    // 3. Process variants
     for variant in &mut input.variants {
         let existence = check_existing_fields(&variant.fields, &config.timestamp_type);
         let to_inject = FieldsToInject {
@@ -69,16 +59,10 @@ pub(super) fn expand_enum(
         );
     }
 
-    // 5. Add enum-level SNAFU attributes
-    apply_enum_snafu_attrs(
-        &mut input.attrs,
-        args,
-        &snafu_attr,
-        &enum_name,
-        input.ident.span(),
-    );
+    // 4. Add enum-level oopsie attributes
+    apply_enum_oopsie_attrs(&mut input.attrs, args, &enum_name, input.ident.span());
 
-    // 6. Generate LowerExp impl for fancy error reporting via {:e} format
+    // 5. Generate LowerExp impl for fancy error reporting via {:e} format
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     #[cfg(feature = "daisy")]
@@ -98,28 +82,10 @@ pub(super) fn expand_enum(
     })
 }
 
-/// Validate that `#[snafu(module)]` and `#[snafu(context)]` are not used with enums.
-fn validate_no_snafu_module_or_context(snafu_attr: &SnafuAttrs) -> syn::Result<()> {
-    if let Some(module) = &snafu_attr.module {
-        return Err(syn::Error::new(
-            module.span,
-            "`#[snafu(module)]` cannot be used when using #[oopsie] and should be removed. The #[oopsie] macro already manages module generation automatically.",
-        ));
-    }
-    if let Some(context) = &snafu_attr.context {
-        return Err(syn::Error::new(
-            context.span(),
-            "`#[snafu(context)]` cannot be used when using #[oopsie] and should be removed. The #[oopsie] macro already manages module generation automatically.",
-        ));
-    }
-    Ok(())
-}
-
-/// Apply SNAFU attributes to an enum (module, suffix, visibility).
-fn apply_enum_snafu_attrs(
+/// Apply oopsie attributes to an enum (module, visibility).
+fn apply_enum_oopsie_attrs(
     attrs: &mut Vec<syn::Attribute>,
     args: &ErrorArgs,
-    snafu_attr: &SnafuAttrs,
     enum_name: &str,
     span: Span,
 ) {
@@ -130,12 +96,12 @@ fn apply_enum_snafu_attrs(
         }
         module_name.push_str("snafus");
         let module_ident = syn::Ident::new(&module_name, span);
-        attrs.push(parse_quote! { #[snafu(module(#module_ident))] });
+        attrs.push(parse_quote! { #[oopsie(module(#module_ident))] });
     }
-    if !args.no_suffix.is_enabled() {
-        attrs.push(parse_quote! { #[snafu(context(suffix(false)))] });
+    // suffix(false) is the default in Oopsie, so we only add it if no_suffix is explicitly enabled
+    // (which means the user wants suffixes, the non-default behavior)
+    if args.no_suffix.is_enabled() {
+        // no_suffix enabled means we want no suffix — which is already the default, so nothing to add
     }
-    if snafu_attr.visibility.is_none() {
-        attrs.push(parse_quote! { #[snafu(visibility(pub(crate)))] });
-    }
+    attrs.push(parse_quote! { #[oopsie(vis = pub(crate))] });
 }

@@ -48,12 +48,12 @@ impl FieldInjectorConfig {
         let timestamp_provide_attr = if let Some(s) = &args.timestamp.opt_settings()
             && s.provide.is_enabled()
         {
-            Some(quote! { #[snafu(provide)] })
+            Some(quote! { #[oopsie(provide)] })
         } else {
             None
         };
-        let backtrace_attrs = quote! { #[snafu(implicit)] };
-        let spantrace_attrs = quote! { #[snafu(implicit)] };
+        let backtrace_attrs = quote! { #[oopsie(auto)] };
+        let spantrace_attrs = quote! { #[oopsie(auto)] };
         let code_type = args
             .code
             .opt_settings()

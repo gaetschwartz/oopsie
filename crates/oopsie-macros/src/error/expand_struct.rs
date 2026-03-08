@@ -9,8 +9,7 @@ use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{
     add_provide_attrs, check_existing_fields, extract_and_strip_attr, inject_fields,
 };
-use super::snafu_attrs::extract_snafu_attr;
-use super::type_check::check_derive_snafu;
+use super::type_check::ensure_derive_oopsie;
 
 pub(super) fn expand_struct(
     args: &ErrorArgs,
@@ -23,30 +22,14 @@ pub(super) fn expand_struct(
         .clone()
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
-    // 1. Validate derives
-    check_derive_snafu(&input.attrs)?;
+    // 1. Ensure #[derive(Oopsie)] is present
+    ensure_derive_oopsie(&mut input.attrs);
 
-    // 2. Extract and validate SNAFU attributes
-    let snafu_attr = match extract_snafu_attr(&input.attrs) {
-        Ok(attr) => attr,
-        Err(e) => {
-            return Ok(e.write_errors());
-        }
-    };
-
-    // module attr is not applicable for structs (no variants to generate context selectors for)
-    if let Some(module) = &snafu_attr.module {
-        return Err(syn::Error::new(
-            module.span,
-            "`#[snafu(module)]` is not applicable for struct errors",
-        ));
-    }
-
-    // 3. Build config
+    // 2. Build config
     let magnetite_utils_path_for_impl = magnetite_utils_path.clone();
     let config = FieldInjectorConfig::new(args, magnetite_utils_path);
 
-    // 4. Check existing fields and inject
+    // 3. Check existing fields and inject
     let existence = check_existing_fields(&input.fields, &config.timestamp_type);
     let to_inject = FieldsToInject {
         backtrace: args.backtrace.is_enabled() && !existence.has_backtrace,
@@ -56,11 +39,11 @@ pub(super) fn expand_struct(
 
     inject_fields(&mut input.fields, &config, &to_inject)?;
 
-    // 5. Extract #[help("...")] and #[code("...")] before passing to add_provide_attrs
+    // 4. Extract #[help("...")] and #[code("...")] before passing to add_provide_attrs
     let help_text = extract_and_strip_attr(&mut input.attrs, "help")?;
     let code_override = extract_and_strip_attr(&mut input.attrs, "code")?;
 
-    // 6. Add struct-level provide attrs (no variant name for structs)
+    // 5. Add struct-level provide attrs (no variant name for structs)
     add_provide_attrs(
         &mut input.attrs,
         &config,
@@ -73,14 +56,12 @@ pub(super) fn expand_struct(
         code_override.as_ref(),
     );
 
-    // 7. Add visibility if not specified
-    if snafu_attr.visibility.is_none() {
-        input
-            .attrs
-            .push(parse_quote! { #[snafu(visibility(pub(crate)))] });
-    }
+    // 6. Add visibility
+    input
+        .attrs
+        .push(parse_quote! { #[oopsie(vis = pub(crate))] });
 
-    // 8. Generate LowerExp impl for fancy error reporting via {:e} format
+    // 7. Generate LowerExp impl for fancy error reporting via {:e} format
     let ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     #[cfg(feature = "daisy")]

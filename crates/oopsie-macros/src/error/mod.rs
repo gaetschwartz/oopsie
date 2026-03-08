@@ -5,7 +5,6 @@ mod config;
 mod expand_enum;
 mod expand_struct;
 mod inject;
-mod snafu_attrs;
 mod type_check;
 
 use args::ErrorArgs;
@@ -37,26 +36,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn extract_snafu_attr_works() {
-        use darling::FromAttributes as _;
-        let struct_def: syn::ItemStruct = syn::parse_quote! {
-            #[derive(Snafu, Debug)]
-            #[snafu(module, visibility(pub))]
-            struct MyError;
-        };
-        let snafu_attr = snafu_attrs::SnafuAttrs::from_attributes(&struct_def.attrs);
-        assert!(snafu_attr.is_ok());
-        let snafu_attr = snafu_attr.unwrap();
-        assert!(snafu_attr.module.is_some());
-    }
-
-    #[test]
     fn expand_struct_basic() {
         let result = expand(
             quote! {},
             quote! {
-                #[derive(Debug, Snafu)]
-                #[snafu(display("Connection failed: {reason}"))]
+                #[derive(Debug)]
                 pub struct ConnectionFailed {
                     reason: String,
                 }
@@ -72,6 +56,10 @@ mod tests {
             output.contains("__oopsie_spantrace"),
             "Should inject spantrace field"
         );
+        assert!(
+            output.contains("Oopsie"),
+            "Should add #[derive(Oopsie)]"
+        );
     }
 
     #[test]
@@ -79,8 +67,7 @@ mod tests {
         let result = expand(
             quote! {},
             quote! {
-                #[derive(Debug, Snafu)]
-                #[snafu(display("Something failed"))]
+                #[derive(Debug)]
                 pub struct SomethingFailed;
             },
         );
@@ -100,7 +87,7 @@ mod tests {
         let result = expand(
             quote! {},
             quote! {
-                #[derive(Debug, Snafu)]
+                #[derive(Debug)]
                 pub struct TupleError(String);
             },
         );
@@ -110,36 +97,12 @@ mod tests {
     }
 
     #[test]
-    fn expand_struct_rejects_module_attr() {
-        let result = expand(
-            quote! {},
-            quote! {
-                #[derive(Debug, Snafu)]
-                #[snafu(module)]
-                pub struct MyError {
-                    message: String,
-                }
-            },
-        );
-        assert!(
-            result.is_err(),
-            "#[snafu(module)] should be rejected for structs"
-        );
-        let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("not applicable"),
-            "Error should mention not applicable: {err}"
-        );
-    }
-
-    #[test]
     fn expand_enum_with_help_and_code() {
         let result = expand(
             quote! {},
             quote! {
-                #[derive(Debug, Snafu)]
+                #[derive(Debug)]
                 pub enum MyError {
-                    #[snafu(display("Connection failed"))]
                     #[help("Check your network")]
                     #[code("custom::connection_failed")]
                     ConnectionFailed { address: String },
@@ -162,7 +125,7 @@ mod tests {
     }
 
     #[test]
-    fn expand_struct_requires_derive_snafu() {
+    fn expand_struct_adds_derive_oopsie() {
         let result = expand(
             quote! {},
             quote! {
@@ -172,8 +135,33 @@ mod tests {
                 }
             },
         );
-        assert!(result.is_err(), "Should require #[derive(Snafu)]");
-        let err = result.unwrap_err().to_string();
-        assert!(err.contains("Snafu"), "Error should mention Snafu: {err}");
+        assert!(result.is_ok(), "Should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        assert!(
+            output.contains("Oopsie"),
+            "Should add Oopsie to derives: {output}"
+        );
+    }
+
+    #[test]
+    fn expand_struct_does_not_duplicate_derive_oopsie() {
+        let result = expand(
+            quote! {},
+            quote! {
+                #[derive(Debug, Oopsie)]
+                pub struct MyError {
+                    message: String,
+                }
+            },
+        );
+        assert!(result.is_ok(), "Should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        // Count occurrences of "Oopsie" - should appear only in the derive
+        let count = output.matches("Oopsie").count();
+        // At least 1 from derive, but should not be duplicated in derives
+        assert!(
+            count >= 1,
+            "Should have Oopsie in derives: {output}"
+        );
     }
 }

@@ -115,7 +115,7 @@ pub(super) fn extract_and_strip_attr(
     Ok(Some(lit))
 }
 
-/// Add SNAFU provide attributes for backtrace, spantrace, error code, and help text.
+/// Add Oopsie provide attributes for backtrace, spantrace, error code, and help text.
 #[expect(clippy::too_many_arguments)]
 pub(super) fn add_provide_attrs(
     attrs: &mut Vec<syn::Attribute>,
@@ -138,20 +138,20 @@ pub(super) fn add_provide_attrs(
 
     if added_backtrace {
         attrs.push(
-            parse_quote! { #[snafu(provide(ref, #magnetite_utils_path::Backtrace => #backtrace_ident.as_ref()))] },
+            parse_quote! { #[oopsie(provide(ref, #magnetite_utils_path::Backtrace => #backtrace_ident.as_ref()))] },
         );
     }
 
     if added_spantrace {
         attrs.push(
-            parse_quote! { #[snafu(provide(ref, #magnetite_utils_path::Spantrace => #spantrace_ident.as_ref()))] },
+            parse_quote! { #[oopsie(provide(ref, #magnetite_utils_path::Spantrace => #spantrace_ident.as_ref()))] },
         );
     }
 
     if args.code.is_enabled() {
         if let Some(code_lit) = code_override {
             let attr =
-                parse_quote! { #[snafu(provide(#code_type => #code_type::from(#code_lit)))] };
+                parse_quote! { #[oopsie(provide(#code_type => #code_type::from(#code_lit)))] };
             attrs.push(attr);
         } else {
             let mut name = type_name.to_owned();
@@ -159,14 +159,14 @@ pub(super) fn add_provide_attrs(
                 name.push_str("::");
                 name.push_str(v);
             }
-            let attr = parse_quote! { #[snafu(provide(#code_type => #code_type::from(concat!(module_path!(), "::", #name))))] };
+            let attr = parse_quote! { #[oopsie(provide(#code_type => #code_type::from(concat!(module_path!(), "::", #name))))] };
             attrs.push(attr);
         }
     }
 
     if let Some(help_lit) = help_text {
         attrs.push(
-            parse_quote! { #[snafu(provide(#magnetite_utils_path::HelpText => #magnetite_utils_path::HelpText(#help_lit)))] },
+            parse_quote! { #[oopsie(provide(#magnetite_utils_path::HelpText => #magnetite_utils_path::HelpText(#help_lit)))] },
         );
     }
 }
