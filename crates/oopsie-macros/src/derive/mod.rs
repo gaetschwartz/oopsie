@@ -2,6 +2,7 @@
 
 mod gen_display;
 mod gen_error;
+mod gen_module;
 mod gen_selectors;
 pub(crate) mod parse;
 
@@ -11,6 +12,7 @@ use syn::{DeriveInput, parse_quote};
 
 use self::gen_display::{gen_enum_display, gen_struct_display};
 use self::gen_error::{gen_enum_error, gen_struct_error};
+use self::gen_module::wrap_in_module;
 use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
 use self::parse::ContainerAttrs;
 
@@ -44,8 +46,12 @@ fn expand_enum(
     let display = gen_enum_display(input)?;
     let error = gen_enum_error(input)?;
 
+    // Wrap selectors in module if enabled
+    let effective_module = container_attrs.effective_module(true);
+    let wrapped_selectors = wrap_in_module(&effective_module, &input.ident, selectors);
+
     Ok(quote! {
-        #(#selectors)*
+        #wrapped_selectors
         #display
         #error
     })
@@ -60,6 +66,7 @@ fn expand_struct(
     let display = gen_struct_display(input)?;
     let error = gen_struct_error(input)?;
 
+    // No module wrapping for structs
     Ok(quote! {
         #selector
         #display
