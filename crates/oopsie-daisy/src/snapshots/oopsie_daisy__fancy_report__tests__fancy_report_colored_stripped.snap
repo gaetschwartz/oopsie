@@ -19,16 +19,16 @@ Error[oopsie_daisy::fancy_report::tests::TestError]: Test error: colored test
     at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:294
  5: <backtrace[PTR]::capture::Backtrace>::new
     at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:259
- 6: <oopsie_core[PTR]::backtrace::Backtrace as snafu[PTR]::GenerateImplicitData>::generate
+ 6: <oopsie_core[PTR]::backtrace::Backtrace as oopsie_core[PTR]::traits::GenerateImplicitData>::generate
     at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/backtrace.rs:11
- 7: <alloc[PTR]::boxed::Box<oopsie_core[PTR]::backtrace::Backtrace> as snafu[PTR]::GenerateImplicitData>::generate
-    at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/snafu-0.8.9/src/boxed_impls.rs:26
- 8: <oopsie_daisy[PTR]::fancy_report::tests::TestSnafu<&str>>::build
+ 7: <alloc[PTR]::boxed::Box<oopsie_core[PTR]::backtrace::Backtrace> as oopsie_core[PTR]::traits::GenerateImplicitData>::generate
+    at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/traits.rs:34
+ 8: <oopsie_daisy[PTR]::fancy_report::tests::TestErrorOopsie<&str>>::build
     at [CRATE_DIR]/src/fancy_report.rs:398
  9: oopsie_daisy[PTR]::fancy_report::tests::test_fancy_report_colored
-    at [CRATE_DIR]/src/fancy_report.rs:439
+    at [CRATE_DIR]/src/fancy_report.rs:438
 10: oopsie_daisy[PTR]::fancy_report::tests::test_fancy_report_colored::{closure#0}
-    at [CRATE_DIR]/src/fancy_report.rs:435
+    at [CRATE_DIR]/src/fancy_report.rs:434
 11: <oopsie_daisy[PTR]::fancy_report::tests::test_fancy_report_colored::{closure#0} as core[PTR]::ops::function::FnOnce<()>>::call_once
     at /Users/gaetan/.rustup/toolchains/nightly-2026-02-04-aarch64-apple-darwin/lib/rustlib/src/rust/library/core/src/ops/function.rs:250
 12: <fn() -> core[PTR]::result::Result<(), alloc[PTR]::string::String> as core[PTR]::ops::function::FnOnce<()>>::call_once

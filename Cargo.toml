@@ -16,7 +16,6 @@ authors = ["Gaëtan Schwartz"]
 oopsie-core = { path = "crates/oopsie-core" }
 oopsie-macros = { path = "crates/oopsie-macros" }
 oopsie-daisy = { path = "crates/oopsie-daisy" }
-snafu = { version = "0.8", features = ["unstable-provider-api"] }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

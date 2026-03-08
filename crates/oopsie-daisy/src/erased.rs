@@ -384,8 +384,7 @@ impl fmt::Display for ErasedError {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use oopsie_macros::oopsie;
-    use snafu::Snafu;
+    use oopsie_macros::{Oopsie, oopsie};
     use tracing::instrument;
     use tracing_error::ErrorLayer;
     use tracing_subscriber::prelude::*;
@@ -401,16 +400,14 @@ pub(crate) mod tests {
     }
 
     #[oopsie(path = "crate")]
-    #[derive(Debug, Snafu)]
-    #[snafu(visibility(pub))]
+    #[derive(Debug)]
     pub enum ErrorWithSpanTrace {
-        #[snafu(display("Inner error happened"), context(false))]
+        #[oopsie("Inner error happened", transparent)]
         Inner { source: ErrorWithSpanTraceInner },
     }
 
-    #[oopsie(path = "crate")]
-    #[derive(Debug, Snafu)]
-    #[snafu(display("Error: {message}"), visibility(pub))]
+    #[oopsie(path = "crate", display = "Error: {message}")]
+    #[derive(Debug)]
     pub struct ErrorWithSpanTraceInner {
         message: String,
     }
@@ -421,7 +418,7 @@ pub(crate) mod tests {
         // Create error within instrumented functions to capture spantrace
         #[instrument(target = "sys", fields(id = 42))]
         fn inner_function(foo: bool, name: &str) -> Result<(), ErrorWithSpanTraceInner> {
-            ErrorWithSpanTraceInnerSnafu {
+            ErrorWithSpanTraceInnerOopsie {
                 message: format!("Inner function failed (foo={foo}, name={name})"),
             }
             .fail()
@@ -458,24 +455,22 @@ pub(crate) mod tests {
         });
     }
 
-    #[oopsie(path = "crate")]
-    #[derive(Debug, Snafu)]
-    #[snafu(display("Something went wrong: {message}"), visibility(pub))]
+    #[oopsie(path = "crate", display = "Something went wrong: {message}")]
+    #[derive(Debug)]
     #[help("Try restarting the service")]
     pub struct ErrorWithHelp {
         message: String,
     }
 
-    #[oopsie(path = "crate")]
-    #[derive(Debug, Snafu)]
-    #[snafu(display("Code-only error: {message}"), visibility(pub))]
+    #[oopsie(path = "crate", display = "Code-only error: {message}")]
+    #[derive(Debug)]
     pub struct ErrorWithCodeOnly {
         message: String,
     }
 
     #[test]
     fn test_help_extraction() {
-        let error = ErrorWithHelpSnafu {
+        let error = ErrorWithHelpOopsie {
             message: "connection refused",
         }
         .build();
@@ -490,7 +485,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_code_only_extraction() {
-        let error = ErrorWithCodeOnlySnafu { message: "timeout" }.build();
+        let error = ErrorWithCodeOnlyOopsie { message: "timeout" }.build();
         let erased = ErasedError::from_error(error);
 
         assert!(erased.diagnostics.code().is_some());
@@ -499,7 +494,7 @@ pub(crate) mod tests {
 
     #[test]
     fn test_format_short_includes_help() {
-        let error = ErrorWithHelpSnafu {
+        let error = ErrorWithHelpOopsie {
             message: "connection refused",
         }
         .build();

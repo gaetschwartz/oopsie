@@ -11,4 +11,6 @@ pub use fancy_report::{FancyReport, error_backtrace_frame_filter};
 
 // Re-exports needed by the `#[oopsie(path = "crate")]` macro when used within this crate's tests.
 #[doc(hidden)]
-pub use oopsie_core::{Backtrace, ErrorCode, HelpText, Spantrace};
+pub use oopsie_core::{
+    Backtrace, ErrorCode, GenerateImplicitData, HelpText, IntoError, NoneError, Spantrace,
+};

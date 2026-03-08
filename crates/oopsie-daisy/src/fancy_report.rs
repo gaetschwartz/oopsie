@@ -319,7 +319,8 @@ impl<E: std::error::Error> From<E> for FancyReport<E> {
 const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
     "std::backtrace_rs::backtrace::",
     "<std::backtrace::Backtrace>::create",
-    "<std::backtrace::Backtrace as snafu::GenerateImplicitData>::",
+    "<std::backtrace::Backtrace as oopsie_core::GenerateImplicitData>::",
+    "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::GenerateImplicitData>::",
 ];
 
 /// Prefixes for runtime initialization frames that should be skipped.
@@ -383,8 +384,8 @@ fn is_runtime_init_code(frame: &Frame) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use oopsie_macros::oopsie;
-    use snafu::{IntoError as _, Snafu};
+    use oopsie_core::IntoError as _;
+    use oopsie_macros::{Oopsie, oopsie};
 
     use super::*;
     use crate::erased::tests::make_error;
@@ -394,23 +395,21 @@ mod tests {
         String::from_utf8(strip_ansi_escapes::strip(s)).unwrap()
     }
 
-    #[oopsie(path = "crate")]
-    #[derive(Debug, Snafu)]
-    #[snafu(display("Test error: {message}"), visibility(pub))]
+    #[oopsie(path = "crate", display = "Test error: {message}")]
+    #[derive(Debug)]
     pub struct TestError {
         message: String,
     }
 
-    #[oopsie(path = "crate")]
-    #[derive(Debug, Snafu)]
-    #[snafu(display("Outer error"), visibility(pub))]
+    #[oopsie(path = "crate", display = "Outer error")]
+    #[derive(Debug)]
     pub struct OuterError {
         source: TestError,
     }
 
     #[test]
     fn test_fancy_report_basic() {
-        let error = TestSnafu {
+        let error = TestErrorOopsie {
             message: "something failed",
         }
         .build();
@@ -421,11 +420,11 @@ mod tests {
 
     #[test]
     fn test_fancy_report_chain() {
-        let inner = TestSnafu {
+        let inner = TestErrorOopsie {
             message: "root cause",
         }
         .build();
-        let outer: OuterError = OuterSnafu.into_error(inner);
+        let outer: OuterError = OuterErrorOopsie.into_error(inner);
         let report = FancyReport::from_std(outer).no_colors();
 
         insta::assert_snapshot!("fancy_report_chain", report.to_string());
@@ -433,7 +432,7 @@ mod tests {
 
     #[test]
     fn test_fancy_report_colored() {
-        let error = TestSnafu {
+        let error = TestErrorOopsie {
             message: "colored test",
         }
         .build();
@@ -455,7 +454,7 @@ mod tests {
 
     #[test]
     fn test_fancy_report_from() {
-        let error = TestSnafu {
+        let error = TestErrorOopsie {
             message: "from test",
         }
         .build();
@@ -463,9 +462,8 @@ mod tests {
         assert!(report.to_string().contains("from test"));
     }
 
-    #[oopsie(path = "crate")]
-    #[derive(Debug, Snafu)]
-    #[snafu(display("Something went wrong: {message}"), visibility(pub))]
+    #[oopsie(path = "crate", display = "Something went wrong: {message}")]
+    #[derive(Debug)]
     #[help("Try restarting the service")]
     pub struct ErrorWithHelp {
         message: String,
@@ -473,7 +471,7 @@ mod tests {
 
     #[test]
     fn test_fancy_report_with_help() {
-        let error = ErrorWithHelpSnafu {
+        let error = ErrorWithHelpOopsie {
             message: "connection refused",
         }
         .build();
