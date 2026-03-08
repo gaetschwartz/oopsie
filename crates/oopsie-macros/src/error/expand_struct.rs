@@ -60,9 +60,7 @@ pub(super) fn expand_struct(
     input
         .attrs
         .push(parse_quote! { #[oopsie(vis = pub(crate))] });
-    input
-        .attrs
-        .push(parse_quote! { #[oopsie(suffix)] });
+    input.attrs.push(parse_quote! { #[oopsie(suffix)] });
     if let Some(path) = &args.path {
         let path_str = quote::quote!(#path).to_string();
         input
@@ -73,9 +71,7 @@ pub(super) fn expand_struct(
     // 7. Forward display format if specified in macro args
     if let Some(display) = &args.display {
         let display_lit = syn::LitStr::new(display, proc_macro2::Span::call_site());
-        input
-            .attrs
-            .push(parse_quote! { #[oopsie(#display_lit)] });
+        input.attrs.push(parse_quote! { #[oopsie(#display_lit)] });
     }
 
     // 8. Generate LowerExp impl for fancy error reporting via {:e} format

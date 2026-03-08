@@ -56,10 +56,7 @@ mod tests {
             output.contains("__oopsie_spantrace"),
             "Should inject spantrace field"
         );
-        assert!(
-            output.contains("Oopsie"),
-            "Should add #[derive(Oopsie)]"
-        );
+        assert!(output.contains("Oopsie"), "Should add #[derive(Oopsie)]");
     }
 
     #[test]
@@ -200,9 +197,6 @@ mod tests {
         // Count occurrences of "Oopsie" - should appear only in the derive
         let count = output.matches("Oopsie").count();
         // At least 1 from derive, but should not be duplicated in derives
-        assert!(
-            count >= 1,
-            "Should have Oopsie in derives: {output}"
-        );
+        assert!(count >= 1, "Should have Oopsie in derives: {output}");
     }
 }

@@ -51,9 +51,9 @@ impl ContainerAttrs {
             }
             // Try parsing as Meta items. If the attr starts with a string literal
             // (short display form), skip it — it's a variant/struct-level attr.
-            let Ok(nested) = attr.parse_args_with(
-                Punctuated::<syn::Meta, Token![,]>::parse_terminated,
-            ) else {
+            let Ok(nested) =
+                attr.parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)
+            else {
                 continue;
             };
             for meta in &nested {
@@ -92,16 +92,30 @@ impl ContainerAttrs {
                     let vis: Visibility = syn::parse2(expr_to_tokens(&nv.value))?;
                     self.visibility = Some(vis);
                 } else if nv.path.is_ident("suffix") {
-                    if let Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(s), .. }) = &nv.value {
+                    if let Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s),
+                        ..
+                    }) = &nv.value
+                    {
                         self.suffix = SuffixSetting::Custom(s.value());
                     } else {
-                        return Err(syn::Error::new_spanned(&nv.value, "expected string literal"));
+                        return Err(syn::Error::new_spanned(
+                            &nv.value,
+                            "expected string literal",
+                        ));
                     }
                 } else if nv.path.is_ident("path") {
-                    if let Expr::Lit(syn::ExprLit { lit: syn::Lit::Str(s), .. }) = &nv.value {
+                    if let Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(s),
+                        ..
+                    }) = &nv.value
+                    {
                         self.path = Some(s.parse()?);
                     } else {
-                        return Err(syn::Error::new_spanned(&nv.value, "expected string literal"));
+                        return Err(syn::Error::new_spanned(
+                            &nv.value,
+                            "expected string literal",
+                        ));
                     }
                 } else {
                     // Ignore unknown name-value attrs - they may be variant-level on structs
@@ -193,9 +207,8 @@ impl VariantAttrs {
             if !attr.path().is_ident("oopsie") {
                 continue;
             }
-            let nested = attr.parse_args_with(
-                Punctuated::<OopsieVariantMeta, Token![,]>::parse_terminated,
-            )?;
+            let nested =
+                attr.parse_args_with(Punctuated::<OopsieVariantMeta, Token![,]>::parse_terminated)?;
             for item in nested {
                 match item {
                     OopsieVariantMeta::ShortDisplay(d) => {
@@ -267,7 +280,10 @@ impl Parse for OopsieVariantMeta {
         // Use the long form `display("fmt", arg1, arg2)` for format args.
         if input.peek(LitStr) {
             let format_str: LitStr = input.parse()?;
-            return Ok(Self::ShortDisplay(DisplayAttr { format_str, args: Vec::new() }));
+            return Ok(Self::ShortDisplay(DisplayAttr {
+                format_str,
+                args: Vec::new(),
+            }));
         }
 
         // Keyword-based forms
@@ -346,7 +362,10 @@ impl Parse for OopsieVariantMeta {
                 let _ = content.parse::<proc_macro2::TokenStream>()?;
                 Ok(Self::Provide(()))
             }
-            _ => Err(syn::Error::new(ident.span(), format!("unknown oopsie attribute: {ident_str}"))),
+            _ => Err(syn::Error::new(
+                ident.span(),
+                format!("unknown oopsie attribute: {ident_str}"),
+            )),
         }
     }
 }
@@ -396,9 +415,8 @@ impl FieldAttrs {
             if !attr.path().is_ident("oopsie") {
                 continue;
             }
-            let nested = attr.parse_args_with(
-                Punctuated::<FieldMeta, Token![,]>::parse_terminated,
-            )?;
+            let nested =
+                attr.parse_args_with(Punctuated::<FieldMeta, Token![,]>::parse_terminated)?;
             for item in nested {
                 match item {
                     FieldMeta::From(kind) => {
@@ -439,7 +457,10 @@ impl Parse for FieldMeta {
                     let source_type: Type = content.parse()?;
                     let _: Token![,] = content.parse()?;
                     let transform: Expr = content.parse()?;
-                    Ok(Self::From(SourceKind::Transformed { source_type: Box::new(source_type), transform }))
+                    Ok(Self::From(SourceKind::Transformed {
+                        source_type: Box::new(source_type),
+                        transform,
+                    }))
                 } else {
                     Ok(Self::From(SourceKind::Yes))
                 }
@@ -458,9 +479,16 @@ impl Parse for FieldMeta {
                 let provided_type: Type = content.parse()?;
                 let _: Token![=>] = content.parse()?;
                 let expr: Expr = content.parse()?;
-                Ok(Self::Provide(Box::new(ProvideAttr { is_ref, provided_type, expr })))
+                Ok(Self::Provide(Box::new(ProvideAttr {
+                    is_ref,
+                    provided_type,
+                    expr,
+                })))
             }
-            other => Err(syn::Error::new(ident.span(), format!("unknown oopsie field attribute: {other}"))),
+            other => Err(syn::Error::new(
+                ident.span(),
+                format!("unknown oopsie field attribute: {other}"),
+            )),
         }
     }
 }
@@ -514,7 +542,14 @@ impl CategorizedFields {
 
         let named = match fields {
             syn::Fields::Named(f) => &f.named,
-            syn::Fields::Unit => return Ok(Self { source, auto_fields, user_fields, provides }),
+            syn::Fields::Unit => {
+                return Ok(Self {
+                    source,
+                    auto_fields,
+                    user_fields,
+                    provides,
+                });
+            }
             syn::Fields::Unnamed(_) => {
                 return Err(syn::Error::new(
                     Span::call_site(),
@@ -557,6 +592,11 @@ impl CategorizedFields {
             }
         }
 
-        Ok(Self { source, auto_fields, user_fields, provides })
+        Ok(Self {
+            source,
+            auto_fields,
+            user_fields,
+            provides,
+        })
     }
 }

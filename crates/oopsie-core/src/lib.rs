@@ -10,8 +10,8 @@ mod color;
 #[cfg(feature = "unstable")]
 mod result;
 pub mod spantrace;
-mod traits;
 mod tracing_level;
+mod traits;
 
 use std::borrow::Cow;
 use std::io;
@@ -22,12 +22,12 @@ pub use color::{ColorConfig, get_color_mode, set_color_mode};
 use color_backtrace::termcolor;
 #[cfg(feature = "unstable")]
 pub use result::MayBoxResult;
-pub use traits::*;
 pub use spantrace::{ErasedMetadata, OptionalSpanTrace, Spantrace};
 pub use tracing_error::ErrorLayer;
 pub use tracing_level::TracingLevel;
 use tracing_subscriber::fmt::format::JsonFields;
 use tracing_subscriber::registry::LookupSpan;
+pub use traits::*;
 
 /// Install the color backtrace printer.
 pub fn install() {
@@ -92,7 +92,6 @@ where
         ErrorLayer::new(JsonFields::default())
     }
 }
-
 
 #[expect(dead_code)]
 pub(crate) trait WriteColorExt {

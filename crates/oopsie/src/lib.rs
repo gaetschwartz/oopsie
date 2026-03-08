@@ -1,6 +1,6 @@
 // Re-export the #[oopsie] proc-macro attribute and #[derive(Oopsie)].
-pub use oopsie_macros::oopsie;
 pub use oopsie_macros::Oopsie;
+pub use oopsie_macros::oopsie;
 
 // Re-export all core types.
 pub use oopsie_core::*;

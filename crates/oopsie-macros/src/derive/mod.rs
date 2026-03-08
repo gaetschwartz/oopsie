@@ -37,10 +37,7 @@ fn oopsie_path(container: &ContainerAttrs) -> syn::Path {
         .unwrap_or_else(|| parse_quote! { ::oopsie })
 }
 
-fn expand_enum(
-    input: &DeriveInput,
-    container_attrs: &ContainerAttrs,
-) -> syn::Result<TokenStream2> {
+fn expand_enum(input: &DeriveInput, container_attrs: &ContainerAttrs) -> syn::Result<TokenStream2> {
     let path = oopsie_path(container_attrs);
     let selectors = gen_enum_selectors(input, container_attrs, &path)?;
     let display = gen_enum_display(input)?;
@@ -101,7 +98,10 @@ mod tests {
             }
         };
         let result = expand(input);
-        assert!(result.is_ok(), "Derive with display should succeed: {result:?}");
+        assert!(
+            result.is_ok(),
+            "Derive with display should succeed: {result:?}"
+        );
         let output = result.unwrap().to_string();
         eprintln!("DERIVE DISPLAY OUTPUT:\n{output}");
     }
@@ -121,7 +121,10 @@ mod tests {
         assert!(result.is_ok(), "Derive should succeed: {result:?}");
         let output = result.unwrap().to_string();
         eprintln!("DERIVE SIMPLE OUTPUT:\n{output}");
-        assert!(output.contains("Display"), "Should generate Display: {output}");
+        assert!(
+            output.contains("Display"),
+            "Should generate Display: {output}"
+        );
     }
 
     #[test]
@@ -139,10 +142,16 @@ mod tests {
             }
         };
         let result = expand(input);
-        assert!(result.is_ok(), "Derive with provide should succeed: {result:?}");
+        assert!(
+            result.is_ok(),
+            "Derive with provide should succeed: {result:?}"
+        );
         let output = result.unwrap().to_string();
         eprintln!("DERIVE PROVIDE OUTPUT:\n{output}");
-        assert!(output.contains("Display"), "Should generate Display: {output}");
+        assert!(
+            output.contains("Display"),
+            "Should generate Display: {output}"
+        );
     }
 
     #[test]
@@ -167,6 +176,9 @@ mod tests {
         assert!(result.is_ok(), "Derive should succeed: {result:?}");
         let output = result.unwrap().to_string();
         eprintln!("DERIVE ENUM OUTPUT:\n{output}");
-        assert!(output.contains("Display"), "Should generate Display: {output}");
+        assert!(
+            output.contains("Display"),
+            "Should generate Display: {output}"
+        );
     }
 }

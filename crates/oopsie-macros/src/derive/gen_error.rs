@@ -214,9 +214,8 @@ fn parse_item_level_provides(attrs: &[syn::Attribute]) -> syn::Result<Vec<Provid
         }
         // Try to parse the attr content. Skip if it doesn't parse as meta items
         // (e.g., short display form like `#[oopsie("display string")]`).
-        let Ok(nested) = attr.parse_args_with(
-            Punctuated::<syn::Meta, Token![,]>::parse_terminated,
-        ) else {
+        let Ok(nested) = attr.parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)
+        else {
             continue;
         };
         for meta in &nested {
@@ -248,7 +247,11 @@ impl Parse for ProvideContent {
         let provided_type: Type = input.parse()?;
         let _: Token![=>] = input.parse()?;
         let expr: Expr = input.parse()?;
-        Ok(Self(ProvideAttr { is_ref, provided_type, expr }))
+        Ok(Self(ProvideAttr {
+            is_ref,
+            provided_type,
+            expr,
+        }))
     }
 }
 

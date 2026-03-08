@@ -55,37 +55,40 @@ pub fn gen_enum_selectors(
         }
 
         let selector_ident = selector_name(variant_ident, &container.suffix);
-        let selector_vis = variant_attrs.visibility.clone().unwrap_or_else(|| vis.clone());
+        let selector_vis = variant_attrs
+            .visibility
+            .clone()
+            .unwrap_or_else(|| vis.clone());
 
         let has_source = categorized.source.is_some();
         let user_fields = &categorized.user_fields;
 
         // Generate selector struct
-        let (generic_params, _generic_args, where_clauses, struct_fields) = if user_fields.is_empty()
-        {
-            // Unit struct for source-only or no-field variants
-            (quote! {}, quote! {}, quote! {}, quote! {})
-        } else {
-            let mut params = Vec::new();
-            let mut args = Vec::new();
-            let mut bounds = Vec::new();
-            let mut fields = Vec::new();
-            for (i, uf) in user_fields.iter().enumerate() {
-                let ty_param = format_ident!("__T{}", i);
-                let field_ident = &uf.ident;
-                let field_ty = &uf.ty;
-                params.push(quote! { #ty_param });
-                args.push(quote! { #ty_param });
-                bounds.push(quote! { #ty_param: ::core::convert::Into<#field_ty> });
-                fields.push(quote! { pub #field_ident: #ty_param });
-            }
-            (
-                quote! { <#(#params),*> },
-                quote! { <#(#args),*> },
-                quote! { where #(#bounds),* },
-                quote! { { #(#fields),* } },
-            )
-        };
+        let (generic_params, _generic_args, where_clauses, struct_fields) =
+            if user_fields.is_empty() {
+                // Unit struct for source-only or no-field variants
+                (quote! {}, quote! {}, quote! {}, quote! {})
+            } else {
+                let mut params = Vec::new();
+                let mut args = Vec::new();
+                let mut bounds = Vec::new();
+                let mut fields = Vec::new();
+                for (i, uf) in user_fields.iter().enumerate() {
+                    let ty_param = format_ident!("__T{}", i);
+                    let field_ident = &uf.ident;
+                    let field_ty = &uf.ty;
+                    params.push(quote! { #ty_param });
+                    args.push(quote! { #ty_param });
+                    bounds.push(quote! { #ty_param: ::core::convert::Into<#field_ty> });
+                    fields.push(quote! { pub #field_ident: #ty_param });
+                }
+                (
+                    quote! { <#(#params),*> },
+                    quote! { <#(#args),*> },
+                    quote! { where #(#bounds),* },
+                    quote! { { #(#fields),* } },
+                )
+            };
 
         let selector_struct = if user_fields.is_empty() {
             quote! {
