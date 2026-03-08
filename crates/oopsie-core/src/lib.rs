@@ -10,6 +10,7 @@ mod color;
 #[cfg(feature = "unstable")]
 mod result;
 pub mod spantrace;
+mod traits;
 mod tracing_level;
 
 use std::borrow::Cow;
@@ -21,7 +22,7 @@ pub use color::{ColorConfig, get_color_mode, set_color_mode};
 use color_backtrace::termcolor;
 #[cfg(feature = "unstable")]
 pub use result::MayBoxResult;
-pub use snafu::{OptionExt, ResultExt};
+pub use traits::*;
 pub use spantrace::{ErasedMetadata, OptionalSpanTrace, Spantrace};
 pub use tracing_error::ErrorLayer;
 pub use tracing_level::TracingLevel;
