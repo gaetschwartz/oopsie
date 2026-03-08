@@ -13,9 +13,9 @@ edition = "2024"
 authors = ["Gaëtan Schwartz"]
 
 [workspace.dependencies]
-oopsie-core = { path = "crates/oopsie-core" }
+oopsie-core = { path = "crates/oopsie-core", default-features = false }
 oopsie-macros = { path = "crates/oopsie-macros" }
-oopsie-daisy = { path = "crates/oopsie-daisy" }
+oopsie-daisy = { path = "crates/oopsie-daisy", default-features = false }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

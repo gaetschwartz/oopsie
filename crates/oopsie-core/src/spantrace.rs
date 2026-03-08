@@ -4,6 +4,7 @@
 //! implicit data generation, allowing automatic capture of tracing span context
 //! in error types.
 
+#[cfg(feature = "unstable")]
 use core::error;
 use std::borrow::Cow;
 use std::fmt;
@@ -79,6 +80,7 @@ impl Spantrace {
         }
         #[cfg(not(feature = "unstable"))]
         {
+            _ = err;
             None
         }
     }

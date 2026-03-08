@@ -8,10 +8,10 @@ use syn::Ident;
 use super::parse::ModuleSetting;
 
 /// Wrap tokens in a module if module wrapping is enabled.
-pub(crate) fn wrap_in_module(
+pub fn wrap_in_module(
     module_setting: &ModuleSetting,
     enum_ident: &Ident,
-    tokens: Vec<TokenStream2>,
+    tokens: &[TokenStream2],
 ) -> TokenStream2 {
     match module_setting {
         ModuleSetting::Off | ModuleSetting::Default => {

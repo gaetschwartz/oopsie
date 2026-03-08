@@ -4,7 +4,7 @@ mod gen_display;
 mod gen_error;
 mod gen_module;
 mod gen_selectors;
-pub(crate) mod parse;
+pub mod parse;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
@@ -48,7 +48,7 @@ fn expand_enum(
 
     // Wrap selectors in module if enabled
     let effective_module = container_attrs.effective_module(true);
-    let wrapped_selectors = wrap_in_module(&effective_module, &input.ident, selectors);
+    let wrapped_selectors = wrap_in_module(&effective_module, &input.ident, &selectors);
 
     Ok(quote! {
         #wrapped_selectors

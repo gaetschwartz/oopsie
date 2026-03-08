@@ -9,7 +9,7 @@ use syn::{DeriveInput, Expr, Token, Type};
 use super::parse::{CategorizedFields, ProvideAttr};
 
 /// Generate `std::error::Error` impl for an enum.
-pub(crate) fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
+pub fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let enum_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -48,8 +48,8 @@ pub(crate) fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
         }
 
         // Provide from field-level provide attrs
-        for (field_ident, provide_attr) in &categorized.provides {
-            provide_stmts.push(gen_provide_call(field_ident, provide_attr));
+        for (_field_ident, provide_attr) in &categorized.provides {
+            provide_stmts.push(gen_provide_call(provide_attr));
         }
 
         // Provide from variant-level provide attrs (backtrace, spantrace, error code, help text)
@@ -72,20 +72,22 @@ pub(crate) fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
             quote! { Self::#variant_ident { #(#field_names),*, .. } }
         };
 
-        if !provide_stmts.is_empty() {
+        if provide_stmts.is_empty() {
+            provide_arms.push(quote! {
+                #pattern => {}
+            });
+        } else {
             provide_arms.push(quote! {
                 #pattern => {
                     #(#provide_stmts)*
                 }
             });
-        } else {
-            provide_arms.push(quote! {
-                #pattern => {}
-            });
         }
     }
 
-    let provide_method = if !provide_arms.is_empty() {
+    let provide_method = if provide_arms.is_empty() {
+        quote! {}
+    } else {
         quote! {
             #[cfg(feature = "unstable")]
             fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
@@ -94,8 +96,6 @@ pub(crate) fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 }
             }
         }
-    } else {
-        quote! {}
     };
 
     Ok(quote! {
@@ -112,7 +112,7 @@ pub(crate) fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
 }
 
 /// Generate `std::error::Error` impl for a struct.
-pub(crate) fn gen_struct_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
+pub fn gen_struct_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let struct_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -138,7 +138,7 @@ pub(crate) fn gen_struct_error(input: &DeriveInput) -> syn::Result<TokenStream2>
     }
     // Parse provides from both field-level and struct-level attrs
     for (_field_ident, provide_attr) in &categorized.provides {
-        provide_stmts.push(gen_provide_call_self(_field_ident, provide_attr));
+        provide_stmts.push(gen_provide_call_self(provide_attr));
     }
     // Also parse struct-level provide attrs
     let struct_provides = parse_item_level_provides(&input.attrs)?;
@@ -152,15 +152,15 @@ pub(crate) fn gen_struct_error(input: &DeriveInput) -> syn::Result<TokenStream2>
         }
     }
 
-    let provide_method = if !provide_stmts.is_empty() {
+    let provide_method = if provide_stmts.is_empty() {
+        quote! {}
+    } else {
         quote! {
             #[cfg(feature = "unstable")]
             fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
                 #(#provide_stmts)*
             }
         }
-    } else {
-        quote! {}
     };
 
     Ok(quote! {
@@ -174,7 +174,7 @@ pub(crate) fn gen_struct_error(input: &DeriveInput) -> syn::Result<TokenStream2>
     })
 }
 
-fn gen_provide_call(_field_ident: &syn::Ident, attr: &ProvideAttr) -> TokenStream2 {
+fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
     let ty = &attr.provided_type;
     let expr = &attr.expr;
     if attr.is_ref {
@@ -184,7 +184,7 @@ fn gen_provide_call(_field_ident: &syn::Ident, attr: &ProvideAttr) -> TokenStrea
     }
 }
 
-fn gen_provide_call_self(_field_ident: &syn::Ident, attr: &ProvideAttr) -> TokenStream2 {
+fn gen_provide_call_self(attr: &ProvideAttr) -> TokenStream2 {
     let ty = &attr.provided_type;
     let expr = &attr.expr;
     // For struct provide, we prefix field access with self.
@@ -220,11 +220,11 @@ fn parse_item_level_provides(attrs: &[syn::Attribute]) -> syn::Result<Vec<Provid
             continue;
         };
         for meta in &nested {
-            if let syn::Meta::List(list) = meta {
-                if list.path.is_ident("provide") {
-                    let provide: ProvideContent = syn::parse2(list.tokens.clone())?;
-                    provides.push(provide.0);
-                }
+            if let syn::Meta::List(list) = meta
+                && list.path.is_ident("provide")
+            {
+                let provide: ProvideContent = syn::parse2(list.tokens.clone())?;
+                provides.push(provide.0);
             }
         }
     }

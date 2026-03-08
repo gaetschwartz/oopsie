@@ -13,7 +13,7 @@ use syn::{Expr, Ident, LitStr, Path, Token, Type, Visibility};
 // ─── Container-level attributes ──────────────────────────────────
 
 #[derive(Debug, Default)]
-pub(crate) struct ContainerAttrs {
+pub struct ContainerAttrs {
     pub module: ModuleSetting,
     pub visibility: Option<Visibility>,
     pub suffix: SuffixSetting,
@@ -21,7 +21,7 @@ pub(crate) struct ContainerAttrs {
 }
 
 #[derive(Debug, Default)]
-pub(crate) enum ModuleSetting {
+pub enum ModuleSetting {
     /// Module enabled with optional custom name.
     On(Option<Ident>),
     /// Module disabled.
@@ -32,7 +32,7 @@ pub(crate) enum ModuleSetting {
 }
 
 #[derive(Debug, Default)]
-pub(crate) enum SuffixSetting {
+pub enum SuffixSetting {
     /// No suffix (selector name = variant name).
     #[default]
     Off,
@@ -85,7 +85,6 @@ impl ContainerAttrs {
                 } else {
                     // Don't error on unknown list attrs at container level -
                     // they might be variant-level attrs on a struct
-                    return self.parse_container_name_value_or_other(meta);
                 }
             }
             syn::Meta::NameValue(nv) => {
@@ -109,12 +108,6 @@ impl ContainerAttrs {
                 }
             }
         }
-        Ok(())
-    }
-
-    fn parse_container_name_value_or_other(&mut self, _meta: &syn::Meta) -> syn::Result<()> {
-        // Gracefully ignore unknown attrs at container level; they'll be parsed
-        // at the variant/struct level by VariantAttrs
         Ok(())
     }
 
@@ -178,7 +171,7 @@ impl Parse for SuffixContent {
 // ─── Variant-level attributes ────────────────────────────────────
 
 #[derive(Debug, Default)]
-pub(crate) struct VariantAttrs {
+pub struct VariantAttrs {
     pub display: Option<DisplayAttr>,
     pub transparent: bool,
     pub help: Option<String>,
@@ -187,7 +180,7 @@ pub(crate) struct VariantAttrs {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct DisplayAttr {
+pub struct DisplayAttr {
     pub format_str: LitStr,
     pub args: Vec<Expr>,
 }
@@ -223,12 +216,12 @@ impl VariantAttrs {
                     OopsieVariantMeta::Vis(v) => {
                         result.visibility = Some(v);
                     }
-                    OopsieVariantMeta::Module(_)
-                    | OopsieVariantMeta::Suffix(_)
-                    | OopsieVariantMeta::Path(_)
+                    OopsieVariantMeta::Module(())
+                    | OopsieVariantMeta::Suffix(())
+                    | OopsieVariantMeta::Path(())
                     | OopsieVariantMeta::Auto
-                    | OopsieVariantMeta::From(_)
-                    | OopsieVariantMeta::Provide(_) => {
+                    | OopsieVariantMeta::From(())
+                    | OopsieVariantMeta::Provide(()) => {
                         // Container or field-level attr; skip at variant level
                     }
                 }
@@ -361,14 +354,14 @@ impl Parse for OopsieVariantMeta {
 // ─── Field-level attributes ──────────────────────────────────────
 
 #[derive(Debug, Default)]
-pub(crate) struct FieldAttrs {
+pub struct FieldAttrs {
     pub from: SourceKind,
     pub auto: bool,
     pub provide: Vec<ProvideAttr>,
 }
 
 #[derive(Debug, Default)]
-pub(crate) enum SourceKind {
+pub enum SourceKind {
     /// Not a source field.
     #[default]
     No,
@@ -376,13 +369,13 @@ pub(crate) enum SourceKind {
     Yes,
     /// Source with type transformation: `#[oopsie(from(Type, transform))]`.
     Transformed {
-        source_type: Type,
+        source_type: Box<Type>,
         transform: Expr,
     },
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ProvideAttr {
+pub struct ProvideAttr {
     pub is_ref: bool,
     pub provided_type: Type,
     pub expr: Expr,
@@ -393,10 +386,10 @@ impl FieldAttrs {
         let mut result = Self::default();
 
         // Auto-detect source field by name
-        if let Some(ident) = &field.ident {
-            if ident == "source" {
-                result.from = SourceKind::Yes;
-            }
+        if let Some(ident) = &field.ident
+            && ident == "source"
+        {
+            result.from = SourceKind::Yes;
         }
 
         for attr in &field.attrs {
@@ -415,7 +408,7 @@ impl FieldAttrs {
                         result.auto = true;
                     }
                     FieldMeta::Provide(p) => {
-                        result.provide.push(p);
+                        result.provide.push(*p);
                     }
                 }
             }
@@ -423,7 +416,7 @@ impl FieldAttrs {
         Ok(result)
     }
 
-    pub fn is_source(&self) -> bool {
+    pub const fn is_source(&self) -> bool {
         !matches!(self.from, SourceKind::No)
     }
 }
@@ -432,7 +425,7 @@ impl FieldAttrs {
 enum FieldMeta {
     From(SourceKind),
     Auto,
-    Provide(ProvideAttr),
+    Provide(Box<ProvideAttr>),
 }
 
 impl Parse for FieldMeta {
@@ -446,7 +439,7 @@ impl Parse for FieldMeta {
                     let source_type: Type = content.parse()?;
                     let _: Token![,] = content.parse()?;
                     let transform: Expr = content.parse()?;
-                    Ok(Self::From(SourceKind::Transformed { source_type, transform }))
+                    Ok(Self::From(SourceKind::Transformed { source_type: Box::new(source_type), transform }))
                 } else {
                     Ok(Self::From(SourceKind::Yes))
                 }
@@ -465,7 +458,7 @@ impl Parse for FieldMeta {
                 let provided_type: Type = content.parse()?;
                 let _: Token![=>] = content.parse()?;
                 let expr: Expr = content.parse()?;
-                Ok(Self::Provide(ProvideAttr { is_ref, provided_type, expr }))
+                Ok(Self::Provide(Box::new(ProvideAttr { is_ref, provided_type, expr })))
             }
             other => Err(syn::Error::new(ident.span(), format!("unknown oopsie field attribute: {other}"))),
         }
@@ -475,13 +468,13 @@ impl Parse for FieldMeta {
 // ─── Helpers ─────────────────────────────────────────────────────
 
 fn expr_to_tokens(expr: &Expr) -> proc_macro2::TokenStream {
-    use quote::ToTokens;
+    use quote::ToTokens as _;
     expr.to_token_stream()
 }
 
 /// Categorized fields for a variant/struct.
 #[derive(Debug)]
-pub(crate) struct CategorizedFields {
+pub struct CategorizedFields {
     /// The source field (if any).
     pub source: Option<SourceField>,
     /// Fields marked with `#[oopsie(auto)]` — excluded from selector.
@@ -493,20 +486,20 @@ pub(crate) struct CategorizedFields {
 }
 
 #[derive(Debug)]
-pub(crate) struct SourceField {
+pub struct SourceField {
     pub ident: Ident,
     pub ty: Type,
     pub kind: SourceKind,
 }
 
 #[derive(Debug)]
-pub(crate) struct AutoField {
+pub struct AutoField {
     pub ident: Ident,
     pub ty: Type,
 }
 
 #[derive(Debug)]
-pub(crate) struct UserField {
+pub struct UserField {
     pub ident: Ident,
     pub ty: Type,
 }

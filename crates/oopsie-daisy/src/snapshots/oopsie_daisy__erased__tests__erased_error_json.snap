@@ -19,7 +19,7 @@ expression: error
           "level": "INFO",
           "module_path": "oopsie_daisy::erased::tests",
           "file": "crates/oopsie-daisy/src/erased.rs",
-          "line": 419
+          "line": 421
         },
         "fields": "{\"foo\":true,\"id\":42,\"name\":\"Alice\"}"
       },
@@ -30,7 +30,7 @@ expression: error
           "level": "INFO",
           "module_path": "oopsie_daisy::erased::tests",
           "file": "crates/oopsie-daisy/src/erased.rs",
-          "line": 427
+          "line": 429
         },
         "fields": "{\"foo\":true,\"name\":\"Alice\"}"
       }

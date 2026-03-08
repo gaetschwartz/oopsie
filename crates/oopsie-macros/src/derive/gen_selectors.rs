@@ -7,7 +7,7 @@ use syn::{DeriveInput, Ident};
 use super::parse::{CategorizedFields, ContainerAttrs, SourceKind, SuffixSetting, VariantAttrs};
 
 /// Generate context selectors for all variants of an enum.
-pub(crate) fn gen_enum_selectors(
+pub fn gen_enum_selectors(
     input: &DeriveInput,
     container: &ContainerAttrs,
     oopsie_path: &syn::Path,
@@ -55,7 +55,7 @@ pub(crate) fn gen_enum_selectors(
         }
 
         let selector_ident = selector_name(variant_ident, &container.suffix);
-        let selector_vis = variant_attrs.visibility.clone().unwrap_or(vis.clone());
+        let selector_vis = variant_attrs.visibility.clone().unwrap_or_else(|| vis.clone());
 
         let has_source = categorized.source.is_some();
         let user_fields = &categorized.user_fields;
@@ -134,7 +134,7 @@ pub(crate) fn gen_enum_selectors(
 }
 
 /// Generate context selector for a struct error.
-pub(crate) fn gen_struct_selector(
+pub fn gen_struct_selector(
     input: &DeriveInput,
     container: &ContainerAttrs,
     oopsie_path: &syn::Path,
@@ -282,7 +282,7 @@ fn gen_auto_field_names(categorized: &CategorizedFields) -> Vec<&Ident> {
 }
 
 /// Generate `IntoError` impl for an enum variant with a source field.
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn gen_into_error(
     selector_ident: &Ident,
     enum_ident: &Ident,
@@ -346,7 +346,7 @@ fn gen_into_error(
 }
 
 /// Generate `build()` and `fail()` for leaf enum variants (no source).
-#[allow(clippy::too_many_arguments)]
+#[expect(clippy::too_many_arguments)]
 fn gen_build_fail(
     selector_ident: &Ident,
     enum_ident: &Ident,

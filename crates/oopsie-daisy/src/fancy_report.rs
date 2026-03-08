@@ -3,6 +3,7 @@
 //! This module provides [`FancyReport`], a wrapper that formats errors with
 //! colorized output including the error chain, span traces, and backtraces.
 
+#[cfg(feature = "unstable")]
 use core::error;
 use std::borrow::Cow;
 use std::fmt;
@@ -112,7 +113,7 @@ impl<E: std::error::Error> FancyReport<E> {
 
     /// Extract backtrace - not available on stable.
     #[cfg(not(feature = "unstable"))]
-    fn extract_backtrace(&self) -> Option<&Backtrace> {
+    fn extract_backtrace(&self) -> Option<&oopsie_core::Backtrace> {
         None
     }
 
@@ -145,7 +146,7 @@ impl<E: std::error::Error> FancyReport<E> {
 
     /// Diagnostic information - not available on stable.
     #[cfg(not(feature = "unstable"))]
-    fn extract_diagnostic(&self) -> Option<Diagnostics> {
+    fn extract_diagnostic(&self) -> Option<crate::Diagnostics> {
         None
     }
 
@@ -276,9 +277,17 @@ where
             Err(ref e) => {
                 eprintln!("{self}");
 
-                error::request_ref::<ExitCode>(&e)
-                    .copied()
-                    .unwrap_or(ExitCode::FAILURE)
+                #[cfg(feature = "unstable")]
+                {
+                    error::request_ref::<ExitCode>(e)
+                        .copied()
+                        .unwrap_or(ExitCode::FAILURE)
+                }
+                #[cfg(not(feature = "unstable"))]
+                {
+                    let _ = e;
+                    ExitCode::FAILURE
+                }
             }
         }
     }

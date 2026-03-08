@@ -7,7 +7,7 @@ use syn::DeriveInput;
 use super::parse::{DisplayAttr, VariantAttrs};
 
 /// Generate a `Display` impl for an enum.
-pub(crate) fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
+pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let enum_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -57,7 +57,7 @@ pub(crate) fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2>
 }
 
 /// Generate a `Display` impl for a struct.
-pub(crate) fn gen_struct_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
+pub fn gen_struct_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let struct_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let variant_attrs = VariantAttrs::from_attrs(&input.attrs)?;
