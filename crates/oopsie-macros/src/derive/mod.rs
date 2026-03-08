@@ -1,10 +1,13 @@
 //! `#[derive(Oopsie)]` implementation.
 
+mod gen_selectors;
 pub(crate) mod parse;
 
 use proc_macro2::TokenStream as TokenStream2;
-use syn::DeriveInput;
+use quote::quote;
+use syn::{DeriveInput, parse_quote};
 
+use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
 use self::parse::ContainerAttrs;
 
 pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
@@ -21,12 +24,33 @@ pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     }
 }
 
-fn expand_enum(input: &DeriveInput, _container_attrs: &ContainerAttrs) -> syn::Result<TokenStream2> {
-    let _ = input;
-    Ok(TokenStream2::new())
+fn oopsie_path(container: &ContainerAttrs) -> syn::Path {
+    container
+        .path
+        .clone()
+        .unwrap_or_else(|| parse_quote! { ::oopsie })
 }
 
-fn expand_struct(input: &DeriveInput, _container_attrs: &ContainerAttrs) -> syn::Result<TokenStream2> {
-    let _ = input;
-    Ok(TokenStream2::new())
+fn expand_enum(
+    input: &DeriveInput,
+    container_attrs: &ContainerAttrs,
+) -> syn::Result<TokenStream2> {
+    let path = oopsie_path(container_attrs);
+    let selectors = gen_enum_selectors(input, container_attrs, &path)?;
+
+    Ok(quote! {
+        #(#selectors)*
+    })
+}
+
+fn expand_struct(
+    input: &DeriveInput,
+    container_attrs: &ContainerAttrs,
+) -> syn::Result<TokenStream2> {
+    let path = oopsie_path(container_attrs);
+    let selector = gen_struct_selector(input, container_attrs, &path)?;
+
+    Ok(quote! {
+        #selector
+    })
 }
