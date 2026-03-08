@@ -1,0 +1,42 @@
+---
+source: crates/oopsie-daisy/src/erased.rs
+expression: error
+---
+{
+  "message": "Inner error happened",
+  "source_chain": [
+    "Error: Inner function failed (foo=true, name=Alice)"
+  ],
+  "diagnostics": {
+    "code": "oopsie_daisy::erased::tests::ErrorWithSpanTraceInner"
+  },
+  "spantrace": {
+    "spans": [
+      {
+        "metadata": {
+          "name": "inner_function",
+          "target": "sys",
+          "level": "INFO",
+          "module_path": "oopsie_daisy::erased::tests",
+          "file": "crates/oopsie-daisy/src/erased.rs",
+          "line": 422
+        },
+        "fields": "{\"foo\":true,\"id\":42,\"name\":\"Alice\"}"
+      },
+      {
+        "metadata": {
+          "name": "outer_function",
+          "target": "controller",
+          "level": "INFO",
+          "module_path": "oopsie_daisy::erased::tests",
+          "file": "crates/oopsie-daisy/src/erased.rs",
+          "line": 430
+        },
+        "fields": "{\"foo\":true,\"name\":\"Alice\"}"
+      }
+    ]
+  },
+  "backtrace": {
+    "frames": "[..]"
+  }
+}

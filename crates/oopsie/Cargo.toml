@@ -1,0 +1,18 @@
+[package]
+name = "oopsie"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+
+[features]
+default = ["unstable", "daisy"]
+unstable = ["oopsie-core/unstable", "oopsie-macros/unstable"]
+daisy = ["dep:oopsie-daisy", "oopsie-macros/daisy"]
+
+[dependencies]
+oopsie-core = { workspace = true }
+oopsie-macros = { workspace = true }
+oopsie-daisy = { workspace = true, optional = true }
+
+[lints]
+workspace = true

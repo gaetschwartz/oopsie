@@ -1,0 +1,32 @@
+[package]
+name = "oopsie-daisy"
+version = "0.1.0"
+edition.workspace = true
+authors.workspace = true
+
+[features]
+default = ["unstable"]
+unstable = ["oopsie-core/unstable"]
+
+[dependencies]
+oopsie-core = { workspace = true }
+color-backtrace = { version = "0.7.2", features = [
+    "use-backtrace-crate",
+    "use-btparse-crate",
+] }
+color-spantrace = "0.3"
+owo-colors = "4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+snafu = { workspace = true }
+
+[dev-dependencies]
+insta = { version = "1", features = ["filters", "json", "redactions"] }
+oopsie-macros = { workspace = true }
+strip-ansi-escapes = "0.2"
+tracing = "0.1"
+tracing-error = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[lints]
+workspace = true
