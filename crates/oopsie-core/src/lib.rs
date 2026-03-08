@@ -93,10 +93,6 @@ where
     }
 }
 
-#[doc(hidden)]
-pub mod private {
-    pub use snafu;
-}
 
 #[expect(dead_code)]
 pub(crate) trait WriteColorExt {

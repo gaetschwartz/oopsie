@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 #[serde(transparent)]
 pub struct Backtrace(backtrace::Backtrace);
 
-impl snafu::GenerateImplicitData for Backtrace {
+impl crate::GenerateImplicitData for Backtrace {
     fn generate() -> Self {
         Backtrace(backtrace::Backtrace::new())
     }

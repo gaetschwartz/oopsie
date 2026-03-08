@@ -6,11 +6,7 @@ authors.workspace = true
 
 [features]
 default = ["unstable"]
-unstable = [
-    "snafu/unstable-provider-api",
-    "snafu/unstable-try-trait",
-    "dep:smallbox",
-]
+unstable = ["dep:smallbox"]
 
 [dependencies]
 backtrace = { version = "0.3.76", features = ["serialize-serde"] }
@@ -25,7 +21,6 @@ smallbox = { version = "0.8.8", features = [
     "nightly",
     "coerce",
 ], optional = true }
-snafu = { workspace = true }
 strum = { version = "0.28", features = ["derive"] }
 tracing = "0.1"
 tracing-error = "0.2"

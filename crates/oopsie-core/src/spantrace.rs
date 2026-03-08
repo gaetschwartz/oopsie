@@ -1,23 +1,8 @@
-//! SpanTrace wrapper with SNAFU `GenerateImplicitData` support.
+//! SpanTrace wrapper with `GenerateImplicitData` support.
 //!
-//! This module provides a [`SpanTrace`] wrapper that integrates with SNAFU's
+//! This module provides a [`SpanTrace`] wrapper that integrates with oopsie's
 //! implicit data generation, allowing automatic capture of tracing span context
 //! in error types.
-//!
-//! # Example
-//!
-//! ```ignore
-//! use oopsie_core::Spantrace;
-//! use snafu::Snafu;
-//!
-//! #[derive(Debug, Snafu)]
-//! #[snafu(display("Operation failed: {reason}"))]
-//! struct MyError {
-//!     reason: String,
-//!     #[snafu(implicit)]
-//!     span_trace: SpanTrace,
-//! }
-//! ```
 
 use core::error;
 use std::borrow::Cow;
@@ -151,7 +136,7 @@ impl fmt::Display for Spantrace {
     }
 }
 
-impl snafu::GenerateImplicitData for Spantrace {
+impl crate::GenerateImplicitData for Spantrace {
     #[track_caller]
     fn generate() -> Self {
         Self::capture()
@@ -366,19 +351,6 @@ impl fmt::Display for FallbackSpantrace {
 /// This type only captures a span trace if the capture was successful
 /// (i.e., there was an active span and the subscriber supports it).
 /// Use this when you want to optionally include span traces.
-///
-/// # Example
-///
-/// ```ignore
-/// use oopsie_core::OptionalSpanTrace;
-/// use snafu::Snafu;
-///
-/// #[derive(Debug, Snafu)]
-/// struct MyError {
-///     #[snafu(implicit)]
-///     span_trace: OptionalSpanTrace,
-/// }
-/// ```
 #[derive(Clone, Debug, Default)]
 pub struct OptionalSpanTrace(Option<Spantrace>);
 
@@ -429,7 +401,7 @@ impl fmt::Display for OptionalSpanTrace {
     }
 }
 
-impl snafu::GenerateImplicitData for OptionalSpanTrace {
+impl crate::GenerateImplicitData for OptionalSpanTrace {
     #[track_caller]
     fn generate() -> Self {
         let trace = Spantrace::capture();
@@ -478,7 +450,7 @@ impl From<Option<Spantrace>> for OptionalSpanTrace {
 
 #[cfg(test)]
 mod tests {
-    use snafu::Snafu;
+    use crate::GenerateImplicitData;
 
     use super::*;
 
@@ -491,31 +463,20 @@ mod tests {
 
     #[test]
     fn test_generate_implicit_data() {
-        let trace: Spantrace = snafu::GenerateImplicitData::generate();
+        let trace: Spantrace = GenerateImplicitData::generate();
         let _ = trace.status();
     }
 
     #[test]
     fn test_optional_span_trace() {
-        let trace: OptionalSpanTrace = snafu::GenerateImplicitData::generate();
+        let trace: OptionalSpanTrace = GenerateImplicitData::generate();
         // May or may not be Some depending on subscriber
         let _ = trace;
     }
 
-    #[derive(Debug, Snafu)]
-    #[snafu(provide(ref, Spantrace => span.as_ref()))]
-    struct BoxedSpantraceError {
-        #[snafu(implicit)]
-        span: Box<Spantrace>,
-    }
-
-    #[test]
-    fn test_extract_boxed_spantrace_via_provide_ref() {
-        let err = BoxedSpantraceSnafu.fail::<()>().unwrap_err();
-
-        let extracted = Spantrace::extract(&err);
-        assert!(extracted.is_some());
-    }
+    // TODO(task-9): Rewrite using #[derive(Oopsie)] once the derive macro is ready.
+    // This test previously used #[derive(Snafu)] with #[snafu(provide(...))] to verify
+    // that boxed span traces can be extracted via the Provider API.
 
     #[test]
     fn test_fallback_spantrace_deserialization() {
