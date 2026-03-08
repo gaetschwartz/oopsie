@@ -28,6 +28,18 @@ pub trait GenerateImplicitData {
     }
 }
 
+impl<T: GenerateImplicitData> GenerateImplicitData for Box<T> {
+    #[track_caller]
+    fn generate() -> Self {
+        Box::new(T::generate())
+    }
+
+    #[track_caller]
+    fn generate_with_source(source: &dyn std::error::Error) -> Self {
+        Box::new(T::generate_with_source(source))
+    }
+}
+
 /// Unit type used as `IntoError::Source` for errors without a source.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NoneError;

@@ -104,4 +104,8 @@ fn apply_enum_oopsie_attrs(
         // no_suffix enabled means we want no suffix — which is already the default, so nothing to add
     }
     attrs.push(parse_quote! { #[oopsie(vis = pub(crate))] });
+    if let Some(path) = &args.path {
+        let path_str = quote::quote!(#path).to_string();
+        attrs.push(parse_quote! { #[oopsie(path = #path_str)] });
+    }
 }

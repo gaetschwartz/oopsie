@@ -2,7 +2,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{DeriveInput, Ident, Visibility};
+use syn::{DeriveInput, Ident};
 
 use super::parse::{CategorizedFields, ContainerAttrs, SourceKind, SuffixSetting, VariantAttrs};
 
@@ -35,6 +35,7 @@ pub(crate) fn gen_enum_selectors(
                 let source_ty = &source.ty;
                 let source_ident = &source.ident;
                 let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
+                let auto_names = gen_auto_field_names(&categorized);
                 let user_inits = gen_user_default_inits(&categorized);
                 selectors.push(quote! {
                     impl #ty_generics ::core::convert::From<#source_ty> for #enum_ident #ty_generics {
@@ -44,7 +45,7 @@ pub(crate) fn gen_enum_selectors(
                             #enum_ident::#variant_ident {
                                 #source_ident,
                                 #(#user_inits)*
-                                #(#auto_inits)*
+                                #(#auto_names,)*
                             }
                         }
                     }
@@ -60,7 +61,7 @@ pub(crate) fn gen_enum_selectors(
         let user_fields = &categorized.user_fields;
 
         // Generate selector struct
-        let (generic_params, generic_args, where_clauses, struct_fields) = if user_fields.is_empty()
+        let (generic_params, _generic_args, where_clauses, struct_fields) = if user_fields.is_empty()
         {
             // Unit struct for source-only or no-field variants
             (quote! {}, quote! {}, quote! {}, quote! {})
@@ -86,9 +87,16 @@ pub(crate) fn gen_enum_selectors(
             )
         };
 
-        let selector_struct = quote! {
-            #[derive(Debug, Copy, Clone)]
-            #selector_vis struct #selector_ident #generic_params #struct_fields
+        let selector_struct = if user_fields.is_empty() {
+            quote! {
+                #[derive(Debug, Copy, Clone)]
+                #selector_vis struct #selector_ident;
+            }
+        } else {
+            quote! {
+                #[derive(Debug, Copy, Clone)]
+                #selector_vis struct #selector_ident #generic_params #struct_fields
+            }
         };
 
         // Generate IntoError or build/fail depending on whether there's a source
@@ -150,12 +158,13 @@ pub(crate) fn gen_struct_selector(
             let source_ty = &source.ty;
             let source_ident = &source.ident;
             let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
+            let auto_names = gen_auto_field_names(&categorized);
             return Ok(quote! {
                 impl ::core::convert::From<#source_ty> for #struct_ident {
                     #[track_caller]
                     fn from(#source_ident: #source_ty) -> Self {
                         #(#auto_inits)*
-                        Self { #source_ident, #(#auto_inits)* }
+                        Self { #source_ident, #(#auto_names,)* }
                     }
                 }
             });
@@ -191,9 +200,16 @@ pub(crate) fn gen_struct_selector(
         )
     };
 
-    let selector_struct = quote! {
-        #[derive(Debug, Copy, Clone)]
-        #vis struct #selector_ident #generic_params #struct_fields
+    let selector_struct = if user_fields.is_empty() {
+        quote! {
+            #[derive(Debug, Copy, Clone)]
+            #vis struct #selector_ident;
+        }
+    } else {
+        quote! {
+            #[derive(Debug, Copy, Clone)]
+            #vis struct #selector_ident #generic_params #struct_fields
+        }
     };
 
     let methods = if has_source {

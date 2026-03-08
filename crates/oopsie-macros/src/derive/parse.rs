@@ -8,7 +8,6 @@
 use proc_macro2::Span;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::spanned::Spanned as _;
 use syn::{Expr, Ident, LitStr, Path, Token, Type, Visibility};
 
 // ─── Container-level attributes ──────────────────────────────────
@@ -50,9 +49,13 @@ impl ContainerAttrs {
             if !attr.path().is_ident("oopsie") {
                 continue;
             }
-            let nested = attr.parse_args_with(
+            // Try parsing as Meta items. If the attr starts with a string literal
+            // (short display form), skip it — it's a variant/struct-level attr.
+            let Ok(nested) = attr.parse_args_with(
                 Punctuated::<syn::Meta, Token![,]>::parse_terminated,
-            )?;
+            ) else {
+                continue;
+            };
             for meta in &nested {
                 result.parse_container_meta(meta)?;
             }
@@ -266,26 +269,12 @@ enum OopsieVariantMeta {
 
 impl Parse for OopsieVariantMeta {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        // Short form: starts with a string literal
+        // Short form: starts with a string literal.
+        // Only consumes the format string — no additional args.
+        // Use the long form `display("fmt", arg1, arg2)` for format args.
         if input.peek(LitStr) {
             let format_str: LitStr = input.parse()?;
-            let mut args = Vec::new();
-            while input.peek(Token![,]) {
-                let comma: Token![,] = input.parse()?;
-                // Check if next token is another keyword (not an arg)
-                if input.is_empty() || input.peek(Ident) && !input.peek2(Token![.]) && !input.peek2(Token![+]) {
-                    // Could be the next meta item - put comma back logically
-                    // Actually in Punctuated parsing, commas are separators,
-                    // so we shouldn't see them here. If we do, it's an arg separator.
-                    let _ = comma;
-                }
-                if input.is_empty() {
-                    break;
-                }
-                let arg: Expr = input.parse()?;
-                args.push(arg);
-            }
-            return Ok(Self::ShortDisplay(DisplayAttr { format_str, args }));
+            return Ok(Self::ShortDisplay(DisplayAttr { format_str, args: Vec::new() }));
         }
 
         // Keyword-based forms
@@ -466,15 +455,10 @@ impl Parse for FieldMeta {
             "provide" => {
                 let content;
                 syn::parenthesized!(content in input);
-                let is_ref = if content.peek(Ident) {
-                    let maybe_ref: Ident = content.fork().parse()?;
-                    if maybe_ref == "ref" {
-                        let _: Ident = content.parse()?; // consume "ref"
-                        let _: Token![,] = content.parse()?;
-                        true
-                    } else {
-                        false
-                    }
+                let is_ref = if content.peek(Token![ref]) {
+                    let _: Token![ref] = content.parse()?;
+                    let _: Token![,] = content.parse()?;
+                    true
                 } else {
                     false
                 };

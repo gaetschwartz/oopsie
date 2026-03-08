@@ -144,6 +144,47 @@ mod tests {
     }
 
     #[test]
+    fn expand_struct_with_display() {
+        let result = expand(
+            quote! { path = "crate", display = "Test error: {message}" },
+            quote! {
+                #[derive(Debug)]
+                pub struct MyError {
+                    message: String,
+                }
+            },
+        );
+        assert!(result.is_ok(), "Should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        eprintln!("STRUCT OUTPUT:\n{output}");
+        assert!(
+            output.contains("Test error"),
+            "Should contain display format: {output}"
+        );
+    }
+
+    #[test]
+    fn expand_enum_with_path_crate() {
+        let result = expand(
+            quote! { path = "crate" },
+            quote! {
+                #[derive(Debug)]
+                pub enum ErrorWithSpanTrace {
+                    #[oopsie("Inner error happened", transparent)]
+                    Inner { source: ErrorWithSpanTraceInner },
+                }
+            },
+        );
+        assert!(result.is_ok(), "Should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        eprintln!("ENUM OUTPUT:\n{output}");
+        assert!(
+            output.contains("Oopsie"),
+            "Should add Oopsie derive: {output}"
+        );
+    }
+
+    #[test]
     fn expand_struct_does_not_duplicate_derive_oopsie() {
         let result = expand(
             quote! {},

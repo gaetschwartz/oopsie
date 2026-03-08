@@ -11,6 +11,8 @@ pub(super) struct ErrorArgs {
     pub path: Option<syn::Path>,
     pub module: BetterFlag<true>,
     pub no_suffix: BetterFlag<false>,
+    /// Display format string, forwarded to the derive as `#[oopsie("...")]`.
+    pub display: Option<String>,
 }
 
 #[derive(Debug, darling::FromMeta)]

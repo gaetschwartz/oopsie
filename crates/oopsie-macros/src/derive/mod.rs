@@ -73,3 +73,100 @@ fn expand_struct(
         #error
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use quote::quote;
+
+    #[test]
+    fn test_derive_struct_minimal() {
+        let input = quote! {
+            pub struct MyError {
+                message: String,
+            }
+        };
+        let result = expand(input);
+        assert!(result.is_ok(), "Derive minimal should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        eprintln!("DERIVE MINIMAL OUTPUT:\n{output}");
+    }
+
+    #[test]
+    fn test_derive_struct_with_display() {
+        let input = quote! {
+            #[oopsie("Test error: {message}")]
+            pub struct MyError {
+                message: String,
+            }
+        };
+        let result = expand(input);
+        assert!(result.is_ok(), "Derive with display should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        eprintln!("DERIVE DISPLAY OUTPUT:\n{output}");
+    }
+
+    #[test]
+    fn test_derive_struct_simple() {
+        let input = quote! {
+            #[oopsie(vis = pub(crate))]
+            #[oopsie(suffix)]
+            #[oopsie(path = "crate")]
+            #[oopsie("Test error: {message}")]
+            pub struct MyError {
+                message: String,
+            }
+        };
+        let result = expand(input);
+        assert!(result.is_ok(), "Derive should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        eprintln!("DERIVE SIMPLE OUTPUT:\n{output}");
+        assert!(output.contains("Display"), "Should generate Display: {output}");
+    }
+
+    #[test]
+    fn test_derive_struct_with_provide() {
+        let input = quote! {
+            #[oopsie(vis = pub(crate))]
+            #[oopsie(suffix)]
+            #[oopsie(path = "crate")]
+            #[oopsie("Test error: {message}")]
+            #[oopsie(provide(ref, crate::Backtrace => __oopsie_backtrace.as_ref()))]
+            pub struct MyError {
+                message: String,
+                #[oopsie(auto)]
+                __oopsie_backtrace: ::std::boxed::Box<crate::Backtrace>,
+            }
+        };
+        let result = expand(input);
+        assert!(result.is_ok(), "Derive with provide should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        eprintln!("DERIVE PROVIDE OUTPUT:\n{output}");
+        assert!(output.contains("Display"), "Should generate Display: {output}");
+    }
+
+    #[test]
+    fn test_derive_enum_with_transparent() {
+        let input = quote! {
+            #[oopsie(module(error_with_span_trace_snafus))]
+            #[oopsie(vis = pub(crate))]
+            #[oopsie(path = "crate")]
+            pub enum ErrorWithSpanTrace {
+                #[oopsie("Inner error happened", transparent)]
+                #[oopsie(provide(ref, crate::Backtrace => __oopsie_backtrace.as_ref()))]
+                Inner {
+                    source: ErrorWithSpanTraceInner,
+                    #[oopsie(auto)]
+                    __oopsie_backtrace: ::std::boxed::Box<crate::Backtrace>,
+                    #[oopsie(auto)]
+                    __oopsie_spantrace: ::std::boxed::Box<crate::Spantrace>,
+                },
+            }
+        };
+        let result = expand(input);
+        assert!(result.is_ok(), "Derive should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        eprintln!("DERIVE ENUM OUTPUT:\n{output}");
+        assert!(output.contains("Display"), "Should generate Display: {output}");
+    }
+}
