@@ -492,7 +492,7 @@ mod tests {
 
         #[test]
         fn test_extract_boxed_spantrace_via_provide_ref() {
-            let err = BoxedSpantraceErrorOopsie.build();
+            let err = BoxedSpantraceOopsie.build();
             let extracted = Spantrace::extract(&err);
             assert!(extracted.is_some());
         }

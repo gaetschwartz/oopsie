@@ -23,7 +23,7 @@ Error[oopsie_daisy::fancy_report::tests::TestError]: Test error: colored test
     at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/backtrace.rs:11
  7: <alloc[PTR]::boxed::Box<oopsie_core[PTR]::backtrace::Backtrace> as oopsie_core[PTR]::traits::GenerateImplicitData>::generate
     at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/traits.rs:34
- 8: <oopsie_daisy[PTR]::fancy_report::tests::TestErrorOopsie<&str>>::build
+ 8: <oopsie_daisy[PTR]::fancy_report::tests::TestOopsie<&str>>::build
     at [CRATE_DIR]/src/fancy_report.rs:407
  9: oopsie_daisy[PTR]::fancy_report::tests::test_fancy_report_colored
     at [CRATE_DIR]/src/fancy_report.rs:450
