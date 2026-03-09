@@ -417,6 +417,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_fancy_report_basic() {
         let error = TestErrorOopsie {
             message: "something failed",
@@ -428,6 +429,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_fancy_report_chain() {
         let inner = TestErrorOopsie {
             message: "root cause",
@@ -440,6 +442,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_fancy_report_colored() {
         let error = TestErrorOopsie {
             message: "colored test",
@@ -479,6 +482,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_fancy_report_with_help() {
         let error = ErrorWithHelpOopsie {
             message: "connection refused",
@@ -499,6 +503,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_fancy_report_with_spantrace() {
         let error = make_error();
         let report = FancyReport::from_std(error).no_colors();

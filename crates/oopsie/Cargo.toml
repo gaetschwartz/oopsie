@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 [features]
-default = ["unstable", "daisy"]
+default = ["daisy"]
 unstable = ["oopsie-core/unstable", "oopsie-macros/unstable", "oopsie-daisy?/unstable"]
 daisy = ["dep:oopsie-daisy", "oopsie-macros/daisy"]
 

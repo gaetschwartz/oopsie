@@ -435,6 +435,7 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_erased_error_display() {
         let error = ErasedError::from_error(make_error());
         insta::with_settings!({
@@ -450,6 +451,7 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_erased_error_json() {
         let error = ErasedError::from_error(make_error());
         insta::assert_json_snapshot!(error, {
@@ -471,6 +473,7 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_help_extraction() {
         let error = ErrorWithHelpOopsie {
             message: "connection refused",
@@ -486,6 +489,7 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_code_only_extraction() {
         let error = ErrorWithCodeOnlyOopsie { message: "timeout" }.build();
         let erased = ErasedError::from_error(error);
@@ -495,6 +499,7 @@ pub(crate) mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_format_short_includes_help() {
         let error = ErrorWithHelpOopsie {
             message: "connection refused",
