@@ -100,24 +100,24 @@ mod tests {
             quote! {
                 #[derive(Debug)]
                 pub enum MyError {
-                    #[help("Check your network")]
-                    #[code("custom::connection_failed")]
+                    #[oopsie(display("connection failed"), help = "Check your network", code = "custom::connection_failed")]
                     ConnectionFailed { address: String },
                 }
             },
         );
         assert!(
             result.is_ok(),
-            "Should handle #[help] and #[code]: {result:?}"
+            "Should handle help and code in #[oopsie(...)]: {result:?}"
         );
         let output = result.unwrap().to_string();
+        // help/code are passed through to the derive via #[oopsie(help = "...", code = "...")]
         assert!(
-            output.contains("HelpText"),
-            "Should inject HelpText provider: {output}"
+            output.contains("Check your network"),
+            "Should pass through help text: {output}"
         );
         assert!(
-            output.contains("\"custom::connection_failed\""),
-            "Should use custom code: {output}"
+            output.contains("custom::connection_failed"),
+            "Should pass through custom code: {output}"
         );
     }
 
@@ -167,7 +167,7 @@ mod tests {
             quote! {
                 #[derive(Debug)]
                 pub enum ErrorWithSpanTrace {
-                    #[oopsie("Inner error happened", transparent)]
+                    #[oopsie(display("Inner error happened"), transparent)]
                     Inner { source: ErrorWithSpanTraceInner },
                 }
             },

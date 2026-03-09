@@ -56,9 +56,11 @@ fn attr_injects_backtrace() {
 #[oopsie]
 #[derive(Debug)]
 pub enum HelpCodeError {
-    #[help("Check network")]
-    #[code("net::conn_refused")]
-    #[oopsie("connection refused")]
+    #[oopsie(
+        display("connection refused"),
+        help = "Check network",
+        code = "net::conn_refused"
+    )]
     Refused { target: String },
 }
 

@@ -476,7 +476,7 @@ mod tests {
 
     #[oopsie(path = "crate", display = "Something went wrong: {message}")]
     #[derive(Debug)]
-    #[help("Try restarting the service")]
+    #[oopsie(help = "Try restarting the service")]
     pub struct ErrorWithHelp {
         message: String,
     }

@@ -275,15 +275,52 @@ enum OopsieVariantMeta {
 
 impl Parse for OopsieVariantMeta {
     fn parse(input: ParseStream) -> syn::Result<Self> {
-        // Short form: starts with a string literal.
-        // Only consumes the format string — no additional args.
-        // Use the long form `display("fmt", arg1, arg2)` for format args.
+        // Short form: starts with a string literal, followed by optional format args.
+        // `#[oopsie("format {}", expr)]` is equivalent to `#[oopsie(display("format {}", expr))]`.
+        //
+        // The short form consumes ALL remaining tokens — no other meta items (help, code, etc.)
+        // are allowed alongside it. This prevents confusing ambiguities like:
+        //   `#[oopsie("i need {help}", help = "you")]`
+        // where `help` could be a format arg or a meta keyword.
+        // Use `display(...)` explicitly when combining with other attributes:
+        //   `#[oopsie(display("i need {help}"), help = "you")]`
         if input.peek(LitStr) {
             let format_str: LitStr = input.parse()?;
-            return Ok(Self::ShortDisplay(DisplayAttr {
-                format_str,
-                args: Vec::new(),
-            }));
+            let mut args = Vec::new();
+            while input.peek(Token![,]) {
+                let _: Token![,] = input.parse()?;
+                if input.is_empty() {
+                    break;
+                }
+                // Check for meta keywords that indicate the user is mixing
+                // short-form display with other oopsie attributes.
+                if input.peek(Ident) {
+                    let ahead = input.fork();
+                    let ident = ahead.parse::<Ident>()?;
+                    let kw = ident.to_string();
+                    let is_keyword = match kw.as_str() {
+                        "transparent" | "auto" => true,
+                        "module" | "suffix" | "from" => true,
+                        "display" | "provide" => ahead.peek(syn::token::Paren),
+                        "help" | "code" | "vis" | "path" => {
+                            ahead.peek(Token![=]) && !ahead.peek(Token![==])
+                        }
+                        _ => false,
+                    };
+                    if is_keyword {
+                        return Err(syn::Error::new(
+                            ident.span(),
+                            format!(
+                                "`{kw}` cannot be combined with the short display form; \
+                                 use `#[oopsie(display(...), {kw}...)]` instead"
+                            ),
+                        ));
+                    }
+                }
+                let arg: Expr = input.parse()?;
+                args.push(arg);
+            }
+            return Ok(Self::ShortDisplay(DisplayAttr { format_str, args }));
         }
 
         // Keyword-based forms

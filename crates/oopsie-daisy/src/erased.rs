@@ -404,7 +404,7 @@ pub(crate) mod tests {
     #[oopsie(path = "crate")]
     #[derive(Debug)]
     pub enum ErrorWithSpanTrace {
-        #[oopsie("Inner error happened", transparent)]
+        #[oopsie(display("Inner error happened"), transparent)]
         Inner { source: ErrorWithSpanTraceInner },
     }
 
@@ -461,7 +461,7 @@ pub(crate) mod tests {
 
     #[oopsie(path = "crate", display = "Something went wrong: {message}")]
     #[derive(Debug)]
-    #[help("Try restarting the service")]
+    #[oopsie(help = "Try restarting the service")]
     pub struct ErrorWithHelp {
         message: String,
     }

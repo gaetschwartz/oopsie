@@ -6,10 +6,10 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{DeriveInput, Expr, Token, Type};
 
-use super::parse::{CategorizedFields, ProvideAttr};
+use super::parse::{CategorizedFields, ProvideAttr, VariantAttrs};
 
 /// Generate `std::error::Error` impl for an enum.
-pub fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
+pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Result<TokenStream2> {
     let enum_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -23,6 +23,7 @@ pub fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
     for variant in &data.variants {
         let variant_ident = &variant.ident;
         let categorized = CategorizedFields::from_fields(&variant.fields)?;
+        let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
 
         // source() arm
         if let Some(source_field) = &categorized.source {
@@ -52,16 +53,22 @@ pub fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
             provide_stmts.push(gen_provide_call(provide_attr));
         }
 
-        // Provide from variant-level provide attrs (backtrace, spantrace, error code, help text)
+        // Provide from variant-level provide attrs (backtrace, spantrace, auto error code)
         let variant_provides = parse_item_level_provides(&variant.attrs)?;
         for provide_attr in &variant_provides {
-            let ty = &provide_attr.provided_type;
-            let expr = &provide_attr.expr;
-            if provide_attr.is_ref {
-                provide_stmts.push(quote! { request.provide_ref::<#ty>(#expr); });
-            } else {
-                provide_stmts.push(quote! { request.provide_value::<#ty>(#expr); });
-            }
+            provide_stmts.push(gen_provide_call(provide_attr));
+        }
+
+        // Provide from help/code in VariantAttrs (user-specified via #[oopsie(help = "...", code = "...")])
+        if let Some(help) = &variant_attrs.help {
+            provide_stmts.push(quote! {
+                request.provide_value::<#crate_path::HelpText>(#crate_path::HelpText(#help));
+            });
+        }
+        if let Some(code) = &variant_attrs.code {
+            provide_stmts.push(quote! {
+                request.provide_value::<#crate_path::ErrorCode>(#crate_path::ErrorCode::from(#code));
+            });
         }
 
         // Collect all field names needed for pattern
@@ -112,7 +119,7 @@ pub fn gen_enum_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
 }
 
 /// Generate `std::error::Error` impl for a struct.
-pub fn gen_struct_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
+pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Result<TokenStream2> {
     let struct_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -121,6 +128,7 @@ pub fn gen_struct_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
 
     let categorized = CategorizedFields::from_fields(&data.fields)?;
+    let variant_attrs = VariantAttrs::from_attrs(&input.attrs)?;
 
     let source_body = if let Some(source_field) = &categorized.source {
         let source_ident = &source_field.ident;
@@ -130,27 +138,45 @@ pub fn gen_struct_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
     };
 
     let mut provide_stmts = Vec::new();
+
+    // Forward source's provide (uses destructured field name)
     if let Some(source_field) = &categorized.source {
         let source_ident = &source_field.ident;
         provide_stmts.push(quote! {
-            ::core::error::Error::provide(&self.#source_ident, request);
+            ::core::error::Error::provide(#source_ident, request);
         });
     }
-    // Parse provides from both field-level and struct-level attrs
+
+    // Field-level provides
     for (_field_ident, provide_attr) in &categorized.provides {
-        provide_stmts.push(gen_provide_call_self(provide_attr));
+        provide_stmts.push(gen_provide_call(provide_attr));
     }
-    // Also parse struct-level provide attrs
+
+    // Struct-level provides (from #[oopsie(provide(...))] on the struct)
     let struct_provides = parse_item_level_provides(&input.attrs)?;
     for provide_attr in &struct_provides {
-        let ty = &provide_attr.provided_type;
-        let expr = &provide_attr.expr;
-        if provide_attr.is_ref {
-            provide_stmts.push(quote! { request.provide_ref::<#ty>(&self.#expr); });
-        } else {
-            provide_stmts.push(quote! { request.provide_value::<#ty>(#expr); });
-        }
+        provide_stmts.push(gen_provide_call(provide_attr));
     }
+
+    // Help/code from VariantAttrs (user-specified via #[oopsie(help = "...", code = "...")])
+    if let Some(help) = &variant_attrs.help {
+        provide_stmts.push(quote! {
+            request.provide_value::<#crate_path::HelpText>(#crate_path::HelpText(#help));
+        });
+    }
+    if let Some(code) = &variant_attrs.code {
+        provide_stmts.push(quote! {
+            request.provide_value::<#crate_path::ErrorCode>(#crate_path::ErrorCode::from(#code));
+        });
+    }
+
+    // Destructure self to bring field names into scope (same pattern as enum match arms)
+    let provide_field_names = collect_provide_field_names(&categorized);
+    let destructure = if provide_stmts.is_empty() || provide_field_names.is_empty() {
+        quote! {}
+    } else {
+        quote! { let Self { #(#provide_field_names),*, .. } = self; }
+    };
 
     let provide_method = if provide_stmts.is_empty() {
         quote! {}
@@ -158,6 +184,7 @@ pub fn gen_struct_error(input: &DeriveInput) -> syn::Result<TokenStream2> {
         quote! {
             #[cfg(feature = "unstable")]
             fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
+                #destructure
                 #(#provide_stmts)*
             }
         }
@@ -184,26 +211,10 @@ fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
     }
 }
 
-fn gen_provide_call_self(attr: &ProvideAttr) -> TokenStream2 {
-    let ty = &attr.provided_type;
-    let expr = &attr.expr;
-    // For struct provide, we prefix field access with self.
-    // But the expr in the provide attr already uses the field ident directly,
-    // and in struct context we destructure, so we need to be careful.
-    // Actually, for structs we use self.field_ident in the expr.
-    // The provide exprs reference fields by name, so we need the fields in scope.
-    // For now, let's just use the expr as-is (it references field names from destructured self).
-    if attr.is_ref {
-        quote! { request.provide_ref::<#ty>(#expr); }
-    } else {
-        quote! { request.provide_value::<#ty>(#expr); }
-    }
-}
-
 /// Parse `#[oopsie(provide(...))]` attributes from struct/variant-level attributes.
 ///
 /// These are emitted by the `#[oopsie]` attribute macro for backtrace, spantrace,
-/// error code, and help text. The format is:
+/// and auto-generated error codes. The format is:
 /// - `#[oopsie(provide(ref, Type => expr))]` for ref provides
 /// - `#[oopsie(provide(Type => expr))]` for value provides
 fn parse_item_level_provides(attrs: &[syn::Attribute]) -> syn::Result<Vec<ProvideAttr>> {

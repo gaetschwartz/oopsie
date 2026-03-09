@@ -465,7 +465,7 @@ use oopsie::prelude::*;
 #[oopsie]
 #[derive(Debug)]
 pub enum AppError {
-    #[oopsie("Connection to {host}:{port} failed", help = "Check network settings")]
+    #[oopsie(display("Connection to {host}:{port} failed"), help = "Check network settings")]
     Connection {
         host: String,
         port: u16,
@@ -482,7 +482,7 @@ pub enum AppError {
         source: io::Error,
     },
 
-    #[oopsie("File not found: {path}", code = "app::not_found")]
+    #[oopsie(display("File not found: {path}"), code = "app::not_found")]
     NotFound {
         path: String,
     },

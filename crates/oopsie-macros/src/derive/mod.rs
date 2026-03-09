@@ -41,7 +41,7 @@ fn expand_enum(input: &DeriveInput, container_attrs: &ContainerAttrs) -> syn::Re
     let path = oopsie_path(container_attrs);
     let selectors = gen_enum_selectors(input, container_attrs, &path)?;
     let display = gen_enum_display(input)?;
-    let error = gen_enum_error(input)?;
+    let error = gen_enum_error(input, &path)?;
 
     // Wrap selectors in module if enabled
     let effective_module = container_attrs.effective_module(true);
@@ -61,7 +61,7 @@ fn expand_struct(
     let path = oopsie_path(container_attrs);
     let selector = gen_struct_selector(input, container_attrs, &path)?;
     let display = gen_struct_display(input)?;
-    let error = gen_struct_error(input)?;
+    let error = gen_struct_error(input, &path)?;
 
     // No module wrapping for structs
     Ok(quote! {
@@ -161,7 +161,7 @@ mod tests {
             #[oopsie(vis = pub(crate))]
             #[oopsie(path = "crate")]
             pub enum ErrorWithSpanTrace {
-                #[oopsie("Inner error happened", transparent)]
+                #[oopsie(display("Inner error happened"), transparent)]
                 #[oopsie(provide(ref, crate::Backtrace => __oopsie_backtrace.as_ref()))]
                 Inner {
                     source: ErrorWithSpanTraceInner,

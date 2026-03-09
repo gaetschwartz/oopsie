@@ -8,7 +8,7 @@ use std::io;
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
 enum TransparentError {
-    #[oopsie("io error", transparent)]
+    #[oopsie(display("io error"), transparent)]
     Io { source: io::Error },
 }
 
@@ -31,7 +31,7 @@ fn transparent_display() {
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
 enum TracedError {
-    #[oopsie("traced io error", transparent)]
+    #[oopsie(display("traced io error"), transparent)]
     TracedIo {
         source: io::Error,
         #[oopsie(auto)]
@@ -52,7 +52,7 @@ fn transparent_with_auto_fields() {
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
 enum MixedError {
-    #[oopsie("wrapped io", transparent)]
+    #[oopsie(display("wrapped io"), transparent)]
     Wrapped { source: io::Error },
 
     #[oopsie("custom: {msg}")]

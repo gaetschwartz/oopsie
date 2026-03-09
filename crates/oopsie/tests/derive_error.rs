@@ -315,3 +315,75 @@ fn nested_attr_macro_backtrace_propagated() {
         "backtrace from #[oopsie] inner should propagate to outer"
     );
 }
+
+// ---- Bug fix: help/code with bare #[derive(Oopsie)] using = syntax ----
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum BareHelpError {
+    #[oopsie(display("need help"), help = "Try rebooting")]
+    NeedHelp { detail: String },
+}
+
+#[cfg(feature = "unstable")]
+#[test]
+fn provide_help_text_bare_derive() {
+    let err = NeedHelp { detail: "stuck" }.build();
+    let help = core::error::request_value::<oopsie::HelpText>(&err);
+    assert!(help.is_some(), "should provide HelpText");
+    assert_eq!(&*help.unwrap(), "Try rebooting");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum BareCodeError {
+    #[oopsie(display("coded error"), code = "bare::code")]
+    Coded { msg: String },
+}
+
+#[cfg(feature = "unstable")]
+#[test]
+fn provide_error_code_bare_derive() {
+    let err = Coded { msg: "fail" }.build();
+    let code = core::error::request_value::<oopsie::ErrorCode>(&err);
+    assert!(code.is_some(), "should provide ErrorCode");
+    assert_eq!(&*code.unwrap(), "bare::code");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum BareHelpCodeError {
+    #[oopsie(display("both"), help = "help text", code = "app::both")]
+    Both { info: String },
+}
+
+#[cfg(feature = "unstable")]
+#[test]
+fn provide_help_and_code_combined() {
+    let err = Both { info: "combo" }.build();
+    let help = core::error::request_value::<oopsie::HelpText>(&err);
+    assert!(help.is_some(), "should provide HelpText");
+    assert_eq!(&*help.unwrap(), "help text");
+    let code = core::error::request_value::<oopsie::ErrorCode>(&err);
+    assert!(code.is_some(), "should provide ErrorCode");
+    assert_eq!(&*code.unwrap(), "app::both");
+}
+
+// ---- Bug fix: struct provide() works correctly ----
+
+#[oopsie::oopsie]
+#[derive(Debug)]
+pub struct AttrStructWithBt {
+    msg: String,
+}
+
+#[cfg(feature = "unstable")]
+#[test]
+fn struct_provide_backtrace() {
+    let err = AttrStructWithBtOopsie { msg: "test" }.build();
+    let bt = core::error::request_ref::<oopsie::Backtrace>(&err);
+    assert!(
+        bt.is_some(),
+        "struct provide() should correctly provide backtrace"
+    );
+}

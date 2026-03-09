@@ -93,29 +93,34 @@ fn inject_into_named(
     }
 }
 
-/// Extract and remove a named attribute (e.g. `#[help("...")]`) from an attribute list.
-///
-/// Returns the string literal value if found, or an error if the attribute
-/// is present but malformed.
-pub(super) fn extract_and_strip_attr(
-    attrs: &mut Vec<syn::Attribute>,
-    name: &str,
-) -> syn::Result<Option<syn::LitStr>> {
-    let pos = attrs.iter().position(|a| a.path().is_ident(name));
-    let Some(pos) = pos else {
-        return Ok(None);
-    };
-    let attr = attrs.remove(pos);
-    let lit: syn::LitStr = attr.parse_args().map_err(|e| {
-        syn::Error::new(
-            e.span(),
-            format!("expected a string literal, e.g. #[{name}(\"...\")]"),
-        )
-    })?;
-    Ok(Some(lit))
+/// Check whether any `#[oopsie(...)]` attribute on this item contains a
+/// name-value entry like `code = "..."` or `help = "..."`.
+pub(super) fn has_oopsie_name_value(attrs: &[syn::Attribute], key: &str) -> bool {
+    for attr in attrs {
+        if !attr.path().is_ident("oopsie") {
+            continue;
+        }
+        let Ok(tokens) = attr.parse_args::<proc_macro2::TokenStream>() else {
+            continue;
+        };
+        let mut iter = tokens.into_iter().peekable();
+        while let Some(tok) = iter.next() {
+            if let proc_macro2::TokenTree::Ident(ident) = &tok
+                && ident == key
+                && let Some(proc_macro2::TokenTree::Punct(p)) = iter.peek()
+                && p.as_char() == '='
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
-/// Add Oopsie provide attributes for backtrace, spantrace, error code, and help text.
+/// Add Oopsie provide attributes for backtrace, spantrace, and auto-generated error code.
+///
+/// Help text and user-specified error codes are handled by the derive macro
+/// via `#[oopsie(help = "...", code = "...")]` on variants/structs.
 #[expect(clippy::too_many_arguments)]
 pub(super) fn add_provide_attrs(
     attrs: &mut Vec<syn::Attribute>,
@@ -125,8 +130,7 @@ pub(super) fn add_provide_attrs(
     variant_name: Option<&str>,
     added_backtrace: bool,
     added_spantrace: bool,
-    help_text: Option<&syn::LitStr>,
-    code_override: Option<&syn::LitStr>,
+    has_user_code: bool,
 ) {
     let FieldInjectorConfig {
         backtrace_ident,
@@ -148,25 +152,15 @@ pub(super) fn add_provide_attrs(
         );
     }
 
-    if args.code.is_enabled() {
-        if let Some(code_lit) = code_override {
-            let attr =
-                parse_quote! { #[oopsie(provide(#code_type => #code_type::from(#code_lit)))] };
-            attrs.push(attr);
-        } else {
-            let mut name = type_name.to_owned();
-            if let Some(v) = variant_name {
-                name.push_str("::");
-                name.push_str(v);
-            }
-            let attr = parse_quote! { #[oopsie(provide(#code_type => #code_type::from(concat!(module_path!(), "::", #name))))] };
-            attrs.push(attr);
+    // Only generate auto-code from module_path!() when the code feature is enabled
+    // AND the user did not specify their own `code = "..."` on the variant/struct.
+    if args.code.is_enabled() && !has_user_code {
+        let mut name = type_name.to_owned();
+        if let Some(v) = variant_name {
+            name.push_str("::");
+            name.push_str(v);
         }
-    }
-
-    if let Some(help_lit) = help_text {
-        attrs.push(
-            parse_quote! { #[oopsie(provide(#magnetite_utils_path::HelpText => #magnetite_utils_path::HelpText(#help_lit)))] },
-        );
+        let attr = parse_quote! { #[oopsie(provide(#code_type => #code_type::from(concat!(module_path!(), "::", #name))))] };
+        attrs.push(attr);
     }
 }

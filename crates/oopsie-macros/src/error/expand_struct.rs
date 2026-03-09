@@ -7,7 +7,7 @@ use syn::parse_quote;
 use super::args::ErrorArgs;
 use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{
-    add_provide_attrs, check_existing_fields, extract_and_strip_attr, inject_fields,
+    add_provide_attrs, check_existing_fields, has_oopsie_name_value, inject_fields,
 };
 use super::type_check::ensure_derive_oopsie;
 
@@ -39,9 +39,8 @@ pub(super) fn expand_struct(
 
     inject_fields(&mut input.fields, &config, &to_inject)?;
 
-    // 4. Extract #[help("...")] and #[code("...")] before passing to add_provide_attrs
-    let help_text = extract_and_strip_attr(&mut input.attrs, "help")?;
-    let code_override = extract_and_strip_attr(&mut input.attrs, "code")?;
+    // 4. Check if user specified `code = "..."` in #[oopsie(...)] to suppress auto-code
+    let has_user_code = has_oopsie_name_value(&input.attrs, "code");
 
     // 5. Add struct-level provide attrs (no variant name for structs)
     add_provide_attrs(
@@ -52,8 +51,7 @@ pub(super) fn expand_struct(
         None,
         to_inject.backtrace,
         to_inject.spantrace,
-        help_text.as_ref(),
-        code_override.as_ref(),
+        has_user_code,
     );
 
     // 6. Add visibility, suffix, and path
