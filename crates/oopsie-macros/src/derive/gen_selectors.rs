@@ -242,10 +242,12 @@ pub fn gen_struct_selector(
 }
 
 fn selector_name(base: &Ident, suffix: &SuffixSetting) -> Ident {
+    let base_str = base.to_string();
+    let stripped = base_str.strip_suffix("Error").unwrap_or(&base_str);
     match suffix {
-        SuffixSetting::Off => base.clone(),
-        SuffixSetting::Default => format_ident!("{}Oopsie", base),
-        SuffixSetting::Custom(s) => format_ident!("{}{}", base, s),
+        SuffixSetting::Off => Ident::new(stripped, base.span()),
+        SuffixSetting::Default => format_ident!("{}Oopsie", stripped),
+        SuffixSetting::Custom(s) => format_ident!("{}{}", stripped, s),
     }
 }
 

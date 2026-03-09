@@ -72,15 +72,15 @@ fn result_context_unit_selector() {
     // UnitError is a leaf (no source), so we cannot use it with ResultExt.
     // Instead, verify that unit selectors work with OptionExt.
     let opt: Option<i32> = None;
-    let result: Result<i32, AppError> = opt.context(UnitError);
+    let result: Result<i32, AppError> = opt.context(Unit);
     let err = result.unwrap_err();
     assert!(matches!(err, AppError::UnitError));
     assert_eq!(err.to_string(), "unit error");
 
     // Also verify build() and fail() work on unit selectors.
-    let built = UnitError.build();
+    let built = Unit.build();
     assert!(matches!(built, AppError::UnitError));
 
-    let failed: Result<i32, AppError> = UnitError.fail();
+    let failed: Result<i32, AppError> = Unit.fail();
     assert!(failed.is_err());
 }

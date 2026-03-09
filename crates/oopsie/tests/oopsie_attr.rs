@@ -30,8 +30,8 @@ pub struct ConnError {
 
 #[test]
 fn attr_struct_basic() {
-    // The attr macro adds #[oopsie(suffix)] for structs, so selector is ConnErrorOopsie.
-    let err = ConnErrorOopsie { reason: "refused" }.build();
+    // The attr macro adds #[oopsie(suffix)] for structs, so selector is ConnOopsie ("Error" stripped).
+    let err = ConnOopsie { reason: "refused" }.build();
     assert_eq!(err.reason, "refused");
 }
 
@@ -91,7 +91,7 @@ pub struct DupDeriveError {
 #[test]
 fn attr_does_not_duplicate_derive() {
     // If derive were duplicated, this would fail to compile.
-    let err = DupDeriveErrorOopsie { detail: "dup" }.build();
+    let err = DupDeriveOopsie { detail: "dup" }.build();
     assert_eq!(err.detail, "dup");
 }
 

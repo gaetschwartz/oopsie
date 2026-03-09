@@ -419,7 +419,7 @@ mod tests {
     #[test]
     #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_fancy_report_basic() {
-        let error = TestErrorOopsie {
+        let error = TestOopsie {
             message: "something failed",
         }
         .build();
@@ -431,11 +431,11 @@ mod tests {
     #[test]
     #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_fancy_report_chain() {
-        let inner = TestErrorOopsie {
+        let inner = TestOopsie {
             message: "root cause",
         }
         .build();
-        let outer: OuterError = OuterErrorOopsie.into_error(inner);
+        let outer: OuterError = OuterOopsie.into_error(inner);
         let report = FancyReport::from_std(outer).no_colors();
 
         insta::assert_snapshot!("fancy_report_chain", report.to_string());
@@ -444,7 +444,7 @@ mod tests {
     #[test]
     #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_fancy_report_colored() {
-        let error = TestErrorOopsie {
+        let error = TestOopsie {
             message: "colored test",
         }
         .build();
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn test_fancy_report_from() {
-        let error = TestErrorOopsie {
+        let error = TestOopsie {
             message: "from test",
         }
         .build();

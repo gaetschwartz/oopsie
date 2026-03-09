@@ -168,7 +168,7 @@ Can be used without `#[oopsie]` for cases where you want context selectors and E
 
 Defaults when using `#[oopsie]`:
 - `module`: **on** (module name = snake_case of enum name)
-- `suffix`: **off** (selector name = variant name)
+- `suffix`: **off** (selector name = variant name, with trailing "Error" stripped)
 - `vis`: `pub(crate)`
 
 ### Variant-level attributes
