@@ -113,7 +113,7 @@ impl<E: std::error::Error> FancyReport<E> {
 
     /// Extract backtrace - not available on stable.
     #[cfg(not(feature = "unstable"))]
-    fn extract_backtrace(&self) -> Option<&oopsie_core::Backtrace> {
+    const fn extract_backtrace(&self) -> Option<&oopsie_core::Backtrace> {
         None
     }
 
@@ -126,7 +126,7 @@ impl<E: std::error::Error> FancyReport<E> {
 
     /// Extract SpanTrace - not available on stable.
     #[cfg(not(feature = "unstable"))]
-    fn extract_span_trace(&self) -> Option<Cow<'_, Spantrace>> {
+    const fn extract_span_trace(&self) -> Option<Cow<'_, Spantrace>> {
         None
     }
 
@@ -146,7 +146,7 @@ impl<E: std::error::Error> FancyReport<E> {
 
     /// Diagnostic information - not available on stable.
     #[cfg(not(feature = "unstable"))]
-    fn extract_diagnostic(&self) -> Option<crate::Diagnostics> {
+    const fn extract_diagnostic(&self) -> Option<crate::Diagnostics> {
         None
     }
 

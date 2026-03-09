@@ -76,7 +76,7 @@ fn extract_backtrace(err: &dyn std::error::Error) -> Option<&oopsie_core::Backtr
 }
 
 #[cfg(not(feature = "unstable"))]
-#[allow(dead_code)]
+#[expect(dead_code)]
 fn extract_backtrace(_err: &dyn std::error::Error) -> Option<&oopsie_core::Backtrace> {
     None
 }
@@ -88,7 +88,7 @@ fn extract_error_code(err: &dyn std::error::Error) -> Option<ErrorCode> {
 }
 
 #[cfg(not(feature = "unstable"))]
-#[allow(dead_code)]
+#[expect(dead_code)]
 fn extract_error_code(_err: &dyn std::error::Error) -> Option<ErrorCode> {
     None
 }
