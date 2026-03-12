@@ -399,6 +399,26 @@ mod tests {
     use super::*;
     use crate::erased::tests::make_error;
 
+    /// Helper to construct a `Frame` despite it being `#[non_exhaustive]`.
+    /// We use field-by-field pointer writes to match the actual layout.
+    fn make_frame(n: usize, name: Option<String>, lineno: Option<u32>) -> Frame {
+        use std::mem::MaybeUninit;
+
+        let mut frame = MaybeUninit::<Frame>::zeroed();
+        let ptr = frame.as_mut_ptr();
+
+        // SAFETY: We write to each public field of Frame by pointer.
+        // Frame's fields are all public, so we know they exist.
+        unsafe {
+            std::ptr::addr_of_mut!((*ptr).n).write(n);
+            std::ptr::addr_of_mut!((*ptr).name).write(name);
+            std::ptr::addr_of_mut!((*ptr).lineno).write(lineno);
+            std::ptr::addr_of_mut!((*ptr).filename).write(None);
+            std::ptr::addr_of_mut!((*ptr).ip).write(None);
+            frame.assume_init()
+        }
+    }
+
     /// Strip ANSI escape codes for consistent snapshot testing.
     fn strip_ansi(s: &str) -> String {
         String::from_utf8(strip_ansi_escapes::strip(s)).unwrap()
@@ -536,5 +556,170 @@ mod tests {
         }, {
             insta::assert_snapshot!("fancy_report_with_spantrace_debug", format!("{error:#}"));
         });
+    }
+
+    // --- Accessor method tests ---
+
+    #[test]
+    fn test_error_returns_some_when_err() {
+        let error = TestOopsie {
+            message: "accessor test",
+        }
+        .build();
+        let report = FancyReport::from_std(error);
+        assert!(report.error().is_some());
+    }
+
+    #[test]
+    fn test_error_returns_none_when_ok() {
+        let report = FancyReport::<TestError>::ok();
+        assert!(report.error().is_none());
+    }
+
+    #[test]
+    fn test_into_error_returns_some_when_err() {
+        let error = TestOopsie {
+            message: "into_error test",
+        }
+        .build();
+        let report = FancyReport::from_std(error);
+        let err = report.into_error();
+        assert!(err.is_some());
+        assert!(err.unwrap().to_string().contains("into_error test"));
+    }
+
+    #[test]
+    fn test_into_error_returns_none_when_ok() {
+        let report = FancyReport::<TestError>::ok();
+        assert!(report.into_error().is_none());
+    }
+
+    // --- Frame filter tests ---
+
+    #[test]
+    fn test_is_backtrace_capture_code() {
+        let matching = make_frame(
+            0,
+            Some("std::backtrace_rs::backtrace::libunwind::trace".into()),
+            None,
+        );
+        let not_matching = make_frame(0, Some("my_crate::do_stuff".into()), None);
+        let no_name = make_frame(0, None, None);
+        assert!(is_backtrace_capture_code(&matching));
+        assert!(!is_backtrace_capture_code(&not_matching));
+        assert!(!is_backtrace_capture_code(&no_name));
+    }
+
+    #[test]
+    fn test_is_runtime_init_code() {
+        let matching = make_frame(
+            0,
+            Some("std::rt::lang_start_internal::something".into()),
+            None,
+        );
+        let not_matching = make_frame(0, Some("my_crate::main_logic".into()), None);
+        let no_name = make_frame(0, None, None);
+        assert!(is_runtime_init_code(&matching));
+        assert!(!is_runtime_init_code(&not_matching));
+        assert!(!is_runtime_init_code(&no_name));
+    }
+
+    #[test]
+    fn test_error_backtrace_frame_filter() {
+        let capture = make_frame(
+            0,
+            Some("std::backtrace_rs::backtrace::libunwind::trace".into()),
+            None,
+        );
+        let app1 = make_frame(1, Some("my_crate::function_a".into()), None);
+        let app2 = make_frame(2, Some("my_crate::function_b".into()), None);
+        let runtime = make_frame(3, Some("std::rt::lang_start_internal::invoke".into()), None);
+
+        let mut frames: Vec<&Frame> = vec![&capture, &app1, &app2, &runtime];
+        error_backtrace_frame_filter(&mut frames);
+
+        // Should keep only app frames, stripping capture from top and runtime from bottom
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].n, 1);
+        assert_eq!(frames[1].n, 2);
+    }
+
+    #[test]
+    fn test_error_backtrace_frame_filter_no_capture_no_runtime() {
+        let app1 = make_frame(0, Some("my_crate::function_a".into()), None);
+        let app2 = make_frame(1, Some("my_crate::function_b".into()), None);
+
+        let mut frames: Vec<&Frame> = vec![&app1, &app2];
+        error_backtrace_frame_filter(&mut frames);
+
+        // All frames should be kept
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].n, 0);
+        assert_eq!(frames[1].n, 1);
+    }
+
+    #[test]
+    fn test_error_backtrace_frame_filter_multiple_capture_frames() {
+        // Two capture frames at the top — idx+1 arithmetic matters here
+        let capture1 = make_frame(
+            0,
+            Some("<std::backtrace::Backtrace>::create::something".into()),
+            None,
+        );
+        let capture2 = make_frame(
+            1,
+            Some("std::backtrace_rs::backtrace::libunwind::trace".into()),
+            None,
+        );
+        let app = make_frame(2, Some("my_crate::function_a".into()), None);
+
+        let mut frames: Vec<&Frame> = vec![&capture1, &capture2, &app];
+        error_backtrace_frame_filter(&mut frames);
+
+        // Should keep only the app frame (after last capture frame at idx 1, so idx+1=2)
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].n, 2);
+    }
+
+    // --- Debug/Display tests ---
+
+    #[test]
+    fn test_debug_fmt_non_empty() {
+        let error = TestOopsie {
+            message: "debug test",
+        }
+        .build();
+        let report = FancyReport::from_std(error).no_colors();
+        let debug_output = format!("{report:?}");
+        assert!(!debug_output.is_empty());
+        assert!(debug_output.contains("debug test"));
+    }
+
+    #[test]
+    fn test_display_ok_is_empty() {
+        let report = FancyReport::<TestError>::ok();
+        let output = report.to_string();
+        assert!(output.is_empty());
+    }
+
+    // --- Termination::report() tests ---
+
+    #[test]
+    fn test_termination_report_ok() {
+        // ExitCode doesn't implement PartialEq, but we can verify it runs.
+        // The mutant replaces with Default::default() which is SUCCESS — same as ok(),
+        // so this mainly ensures the function doesn't panic.
+        let _code = FancyReport::<TestError>::ok().report();
+    }
+
+    #[test]
+    fn test_termination_report_error() {
+        // For the error path, the mutant would return Default (SUCCESS) instead of FAILURE.
+        // ExitCode is opaque, but we can at least exercise the path.
+        let error = TestOopsie {
+            message: "termination test",
+        }
+        .build();
+        let _code = FancyReport::from_std(error).no_colors().report();
     }
 }
