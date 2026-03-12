@@ -188,7 +188,7 @@ impl Parse for SuffixContent {
 pub struct VariantAttrs {
     pub display: Option<DisplayAttr>,
     pub transparent: bool,
-    pub help: Option<String>,
+    pub help: Option<DisplayAttr>,
     pub code: Option<String>,
     pub visibility: Option<Visibility>,
 }
@@ -253,8 +253,8 @@ enum OopsieVariantMeta {
     Display(DisplayAttr),
     /// `transparent`
     Transparent,
-    /// `help = "..."`
-    Help(String),
+    /// `help = "..."` or `help("format {}", args...)`
+    Help(DisplayAttr),
     /// `code = "..."`
     Code(String),
     /// `vis = <visibility>`
@@ -345,9 +345,30 @@ impl Parse for OopsieVariantMeta {
             }
             "transparent" => Ok(Self::Transparent),
             "help" => {
-                let _: Token![=] = input.parse()?;
-                let lit: LitStr = input.parse()?;
-                Ok(Self::Help(lit.value()))
+                if input.peek(syn::token::Paren) {
+                    // help("format {}", arg1, arg2)
+                    let content;
+                    syn::parenthesized!(content in input);
+                    let format_str: LitStr = content.parse()?;
+                    let mut args = Vec::new();
+                    while content.peek(Token![,]) {
+                        let _: Token![,] = content.parse()?;
+                        if content.is_empty() {
+                            break;
+                        }
+                        let arg: Expr = content.parse()?;
+                        args.push(arg);
+                    }
+                    Ok(Self::Help(DisplayAttr { format_str, args }))
+                } else {
+                    // help = "plain string"
+                    let _: Token![=] = input.parse()?;
+                    let lit: LitStr = input.parse()?;
+                    Ok(Self::Help(DisplayAttr {
+                        format_str: lit,
+                        args: vec![],
+                    }))
+                }
             }
             "code" => {
                 let _: Token![=] = input.parse()?;

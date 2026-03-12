@@ -4,7 +4,6 @@
 //! implicit data generation, allowing automatic capture of tracing span context
 //! in error types.
 
-#[cfg(feature = "unstable")]
 use core::error;
 use std::borrow::Cow;
 use std::fmt;
@@ -14,17 +13,17 @@ use serde::{Deserialize, Serialize};
 use crate::tracing_level::TracingLevel;
 
 #[derive(Debug, Clone)]
-pub struct Spantrace {
-    pub inner: SpantraceInner,
+pub struct SpanTrace {
+    pub inner: SpanTraceInner,
 }
 
 #[derive(Debug, Clone)]
-pub enum SpantraceInner {
+pub enum SpanTraceInner {
     Tracing(tracing_error::SpanTrace),
-    Fallback(FallbackSpantrace),
+    Fallback(FallbackSpanTrace),
 }
 
-impl Spantrace {
+impl SpanTrace {
     /// Capture the current span trace.
     ///
     /// This captures the current tracing span context. For this to work,
@@ -33,7 +32,7 @@ impl Spantrace {
     #[track_caller]
     pub fn capture() -> Self {
         Self {
-            inner: SpantraceInner::Tracing(tracing_error::SpanTrace::capture()),
+            inner: SpanTraceInner::Tracing(tracing_error::SpanTrace::capture()),
         }
     }
 
@@ -41,7 +40,7 @@ impl Spantrace {
     #[must_use]
     pub const fn new(inner: tracing_error::SpanTrace) -> Self {
         Self {
-            inner: SpantraceInner::Tracing(inner),
+            inner: SpanTraceInner::Tracing(inner),
         }
     }
 
@@ -52,8 +51,8 @@ impl Spantrace {
     #[must_use]
     pub fn status(&self) -> tracing_error::SpanTraceStatus {
         match &self.inner {
-            SpantraceInner::Tracing(inner) => inner.status(),
-            SpantraceInner::Fallback(_) => tracing_error::SpanTraceStatus::CAPTURED,
+            SpanTraceInner::Tracing(inner) => inner.status(),
+            SpanTraceInner::Fallback(_) => tracing_error::SpanTraceStatus::CAPTURED,
         }
     }
 
@@ -61,28 +60,31 @@ impl Spantrace {
     #[must_use]
     pub fn into_span_trace(self) -> Option<tracing_error::SpanTrace> {
         match self.inner {
-            SpantraceInner::Tracing(inner) => Some(inner),
-            SpantraceInner::Fallback(_) => None,
+            SpanTraceInner::Tracing(inner) => Some(inner),
+            SpanTraceInner::Fallback(_) => None,
         }
     }
 
     /// Extracts the span information from the error.
     #[must_use]
-    pub fn extract(err: &dyn std::error::Error) -> Option<Cow<'_, Self>> {
+    #[inline]
+    pub fn extract_from_error(err: &dyn error::Error) -> Option<Cow<'_, Self>> {
         #[cfg(feature = "unstable")]
         {
-            error::request_ref::<Self>(err)
-                .map(Cow::Borrowed)
-                .or_else(|| {
-                    error::request_ref::<tracing_error::SpanTrace>(err)
-                        .map(|trace| Cow::Owned(Self::new(trace.clone())))
-                })
+            if let Some(spantrace_ref) = error::request_ref::<Self>(err) {
+                return Some(Cow::Borrowed(spantrace_ref));
+            }
+            if let Some(trace_ref) = error::request_ref::<tracing_error::SpanTrace>(err) {
+                return Some(Cow::Owned(Self::new(trace_ref.clone())));
+            }
         }
+
         #[cfg(not(feature = "unstable"))]
         {
             _ = err;
-            None
         }
+
+        None
     }
 
     pub fn with_spans<F>(&self, mut f: F)
@@ -90,13 +92,13 @@ impl Spantrace {
         F: FnMut(&ErasedMetadata, &str) -> bool,
     {
         match &self.inner {
-            SpantraceInner::Tracing(inner) => {
+            SpanTraceInner::Tracing(inner) => {
                 inner.with_spans(|md, fields| {
                     let fallback_md: ErasedMetadata = md.into();
                     f(&fallback_md, fields)
                 });
             }
-            SpantraceInner::Fallback(fallback) => {
+            SpanTraceInner::Fallback(fallback) => {
                 for FallbackSpan { metadata, fields } in &fallback.spans {
                     if !f(metadata, fields) {
                         break;
@@ -107,10 +109,10 @@ impl Spantrace {
     }
 }
 
-impl PartialEq for Spantrace {
+impl PartialEq for SpanTrace {
     fn eq(&self, other: &Self) -> bool {
         match (&self.inner, &other.inner) {
-            (SpantraceInner::Tracing(a), SpantraceInner::Tracing(b)) => {
+            (SpanTraceInner::Tracing(a), SpanTraceInner::Tracing(b)) => {
                 let mut eq = false;
                 a.with_spans(|a_md, a_fields| {
                     b.with_spans(|b_md, b_fields| {
@@ -123,61 +125,45 @@ impl PartialEq for Spantrace {
                 });
                 eq
             }
-            (SpantraceInner::Fallback(a), SpantraceInner::Fallback(b)) => a == b,
+            (SpanTraceInner::Fallback(a), SpanTraceInner::Fallback(b)) => a == b,
             _ => false,
         }
     }
 }
 
-impl fmt::Display for Spantrace {
+impl fmt::Display for SpanTrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.inner {
-            SpantraceInner::Tracing(inner) => fmt::Display::fmt(inner, f),
-            SpantraceInner::Fallback(fallback) => fmt::Display::fmt(fallback, f),
+            SpanTraceInner::Tracing(inner) => fmt::Display::fmt(inner, f),
+            SpanTraceInner::Fallback(fallback) => fmt::Display::fmt(fallback, f),
         }
     }
 }
 
-impl crate::GenerateImplicitData for Spantrace {
+impl crate::GenerateImplicitData for SpanTrace {
     #[track_caller]
     fn generate() -> Self {
         Self::capture()
     }
 
-    #[cfg(feature = "unstable")]
-    fn generate_with_source(source: &dyn std::error::Error) -> Self
+    fn generate_with_source(source: &dyn error::Error) -> Self
     where
         Self: Sized,
     {
-        // Check if source already has a SpanTrace via Provider API
-        // to avoid capturing duplicate traces
-        if let Some(existing) = std::error::request_ref::<Self>(source) {
-            return existing.clone();
+        if let Some(spantrace) = Self::extract_from_error(source) {
+            return spantrace.into_owned();
         }
-        // Also check for raw tracing_error::SpanTrace
-        if let Some(existing) = std::error::request_ref::<tracing_error::SpanTrace>(source) {
-            return Self::new(existing.clone());
-        }
-        Self::generate()
-    }
-
-    #[cfg(not(feature = "unstable"))]
-    fn generate_with_source(_source: &dyn std::error::Error) -> Self
-    where
-        Self: Sized,
-    {
-        // Provider API not available on stable, always capture new trace
         Self::generate()
     }
 }
 
-impl Serialize for Spantrace {
+impl Serialize for SpanTrace {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         match &self.inner {
-            SpantraceInner::Tracing(span_trace) => {
+            SpanTraceInner::Tracing(span_trace) => {
                 let mut spans = Vec::new();
                 span_trace.with_spans(|metadata, fields| {
                     spans.push(FallbackSpan {
@@ -194,28 +180,28 @@ impl Serialize for Spantrace {
                     true // continue iterating
                 });
 
-                let serialized = FallbackSpantrace { spans };
+                let serialized = FallbackSpanTrace { spans };
                 serialized.serialize(serializer)
             }
-            SpantraceInner::Fallback(f) => f.serialize(serializer),
+            SpanTraceInner::Fallback(f) => f.serialize(serializer),
         }
     }
 }
 
-impl<'de> Deserialize<'de> for Spantrace {
+impl<'de> Deserialize<'de> for SpanTrace {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let de = FallbackSpantrace::deserialize(deserializer)?;
+        let de = FallbackSpanTrace::deserialize(deserializer)?;
         Ok(Self {
-            inner: SpantraceInner::Fallback(de),
+            inner: SpanTraceInner::Fallback(de),
         })
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct FallbackSpantrace {
+pub struct FallbackSpanTrace {
     spans: Vec<FallbackSpan>,
 }
 
@@ -225,7 +211,7 @@ struct FallbackSpan {
     fields: Box<str>,
 }
 
-impl FallbackSpantrace {
+impl FallbackSpanTrace {
     pub fn with_spans<F>(&self, mut f: F)
     where
         F: FnMut(&ErasedMetadata, &str) -> bool,
@@ -301,7 +287,7 @@ impl ErasedMetadata {
     }
 }
 
-impl fmt::Display for FallbackSpantrace {
+impl fmt::Display for FallbackSpanTrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut err = Ok(());
         let mut span = 0;
@@ -354,7 +340,7 @@ impl fmt::Display for FallbackSpantrace {
 /// (i.e., there was an active span and the subscriber supports it).
 /// Use this when you want to optionally include span traces.
 #[derive(Clone, Debug, Default)]
-pub struct OptionalSpanTrace(Option<Spantrace>);
+pub struct OptionalSpanTrace(Option<SpanTrace>);
 
 impl OptionalSpanTrace {
     /// Create an empty `OptionalSpanTrace`.
@@ -365,19 +351,19 @@ impl OptionalSpanTrace {
 
     /// Create an `OptionalSpanTrace` from an existing `SpanTrace`.
     #[must_use]
-    pub const fn some(trace: Spantrace) -> Self {
+    pub const fn some(trace: SpanTrace) -> Self {
         Self(Some(trace))
     }
 
     /// Returns the inner `Option<SpanTrace>`.
     #[must_use]
-    pub fn into_inner(self) -> Option<Spantrace> {
+    pub fn into_inner(self) -> Option<SpanTrace> {
         self.0
     }
 
     /// Returns a reference to the inner `SpanTrace` if present.
     #[must_use]
-    pub const fn as_ref(&self) -> Option<&Spantrace> {
+    pub const fn as_ref(&self) -> Option<&SpanTrace> {
         self.0.as_ref()
     }
 
@@ -406,46 +392,43 @@ impl fmt::Display for OptionalSpanTrace {
 impl crate::GenerateImplicitData for OptionalSpanTrace {
     #[track_caller]
     fn generate() -> Self {
-        let trace = Spantrace::capture();
+        let trace = SpanTrace::capture();
         match trace.status() {
             tracing_error::SpanTraceStatus::CAPTURED => Self(Some(trace)),
             _ => Self(None),
         }
     }
 
-    #[cfg(feature = "unstable")]
     fn generate_with_source(source: &dyn std::error::Error) -> Self
     where
         Self: Sized,
     {
-        // If source already has a SpanTrace, don't capture a new one
-        if std::error::request_ref::<Spantrace>(source).is_some() {
-            return Self(None);
+        #[cfg(feature = "unstable")]
+        {
+            // If source already has a SpanTrace, don't capture a new one
+            if std::error::request_ref::<SpanTrace>(source).is_some() {
+                return Self(None);
+            }
+            if std::error::request_ref::<tracing_error::SpanTrace>(source).is_some() {
+                return Self(None);
+            }
         }
-        if std::error::request_ref::<tracing_error::SpanTrace>(source).is_some() {
-            return Self(None);
+        #[cfg(not(feature = "unstable"))]
+        {
+            _ = source;
         }
-        Self::generate()
-    }
-
-    #[cfg(not(feature = "unstable"))]
-    fn generate_with_source(_source: &dyn std::error::Error) -> Self
-    where
-        Self: Sized,
-    {
-        // Provider API not available on stable, always generate
         Self::generate()
     }
 }
 
-impl From<Spantrace> for OptionalSpanTrace {
-    fn from(trace: Spantrace) -> Self {
+impl From<SpanTrace> for OptionalSpanTrace {
+    fn from(trace: SpanTrace) -> Self {
         Self(Some(trace))
     }
 }
 
-impl From<Option<Spantrace>> for OptionalSpanTrace {
-    fn from(opt: Option<Spantrace>) -> Self {
+impl From<Option<SpanTrace>> for OptionalSpanTrace {
+    fn from(opt: Option<SpanTrace>) -> Self {
         Self(opt)
     }
 }
@@ -459,13 +442,13 @@ mod tests {
     #[test]
     fn test_span_trace_capture() {
         // Without ErrorLayer, status will be UNSUPPORTED, but capture shouldn't panic
-        let trace = Spantrace::capture();
+        let trace = SpanTrace::capture();
         let _ = trace.status();
     }
 
     #[test]
     fn test_generate_implicit_data() {
-        let trace: Spantrace = GenerateImplicitData::generate();
+        let trace: SpanTrace = GenerateImplicitData::generate();
         let _ = trace.status();
     }
 
@@ -484,16 +467,16 @@ mod tests {
         #[derive(Debug, Oopsie)]
         #[oopsie("Boxed spantrace error")]
         #[oopsie(suffix, module(false), path = "crate")]
-        #[oopsie(provide(ref, crate::Spantrace => span.as_ref()))]
+        #[oopsie(provide(ref, crate::SpanTrace => span.as_ref()))]
         struct BoxedSpantraceError {
             #[oopsie(auto)]
-            span: Box<Spantrace>,
+            span: Box<SpanTrace>,
         }
 
         #[test]
         fn test_extract_boxed_spantrace_via_provide_ref() {
             let err = BoxedSpantraceOopsie.build();
-            let extracted = Spantrace::extract(&err);
+            let extracted = SpanTrace::extract_from_error(&err);
             assert!(extracted.is_some());
         }
     }
@@ -524,8 +507,8 @@ mod tests {
             ]
         });
 
-        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
-        assert!(matches!(spantrace.inner, SpantraceInner::Fallback(_)));
+        let spantrace: SpanTrace = serde_json::from_value(json).unwrap();
+        assert!(matches!(spantrace.inner, SpanTraceInner::Fallback(_)));
     }
 
     #[test]
@@ -545,9 +528,9 @@ mod tests {
             ]
         });
 
-        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        let spantrace: SpanTrace = serde_json::from_value(json).unwrap();
         let serialized = serde_json::to_string(&spantrace).unwrap();
-        let roundtrip: Spantrace = serde_json::from_str(&serialized).unwrap();
+        let roundtrip: SpanTrace = serde_json::from_str(&serialized).unwrap();
 
         // Verify roundtrip by serializing again
         let serialized2 = serde_json::to_string(&roundtrip).unwrap();
@@ -579,7 +562,7 @@ mod tests {
             ]
         });
 
-        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        let spantrace: SpanTrace = serde_json::from_value(json).unwrap();
         let display = spantrace.to_string();
 
         insta::assert_snapshot!(display, @r"
@@ -606,7 +589,7 @@ mod tests {
             ]
         });
 
-        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        let spantrace: SpanTrace = serde_json::from_value(json).unwrap();
         let display = spantrace.to_string();
 
         insta::assert_snapshot!(display, @"
@@ -626,7 +609,7 @@ mod tests {
             ]
         });
 
-        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        let spantrace: SpanTrace = serde_json::from_value(json).unwrap();
 
         let mut collected = Vec::new();
         spantrace.with_spans(|metadata, _fields| {
@@ -650,7 +633,7 @@ mod tests {
             ]
         });
 
-        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        let spantrace: SpanTrace = serde_json::from_value(json).unwrap();
 
         let mut count = 0;
         spantrace.with_spans(|_metadata, _fields| {
@@ -679,7 +662,7 @@ mod tests {
             }]
         });
 
-        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        let spantrace: SpanTrace = serde_json::from_value(json).unwrap();
         spantrace.with_spans(|metadata, _fields| {
             assert_eq!(metadata.module_path(), Some("my_crate::module"));
             assert_eq!(metadata.file(), Some("src/lib.rs"));
@@ -701,7 +684,7 @@ mod tests {
             }]
         });
 
-        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        let spantrace: SpanTrace = serde_json::from_value(json).unwrap();
         spantrace.with_spans(|metadata, _fields| {
             assert_eq!(metadata.module_path(), None);
             assert_eq!(metadata.file(), None);
@@ -714,7 +697,7 @@ mod tests {
 
     #[test]
     fn test_optional_span_trace_some_into_inner() {
-        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+        let trace: SpanTrace = serde_json::from_value(serde_json::json!({
             "spans": []
         }))
         .unwrap();
@@ -730,7 +713,7 @@ mod tests {
 
     #[test]
     fn test_optional_span_trace_as_ref_some() {
-        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+        let trace: SpanTrace = serde_json::from_value(serde_json::json!({
             "spans": []
         }))
         .unwrap();
@@ -746,7 +729,7 @@ mod tests {
 
     #[test]
     fn test_optional_span_trace_is_some() {
-        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+        let trace: SpanTrace = serde_json::from_value(serde_json::json!({
             "spans": []
         }))
         .unwrap();
@@ -764,7 +747,7 @@ mod tests {
 
     #[test]
     fn test_optional_span_trace_display_some() {
-        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+        let trace: SpanTrace = serde_json::from_value(serde_json::json!({
             "spans": [{
                 "metadata": {
                     "name": "test_span",
@@ -789,7 +772,7 @@ mod tests {
 
     #[test]
     fn test_optional_span_trace_from_spantrace() {
-        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+        let trace: SpanTrace = serde_json::from_value(serde_json::json!({
             "spans": []
         }))
         .unwrap();
@@ -799,13 +782,13 @@ mod tests {
 
     #[test]
     fn test_optional_span_trace_from_option_none() {
-        let opt: OptionalSpanTrace = None::<Spantrace>.into();
+        let opt: OptionalSpanTrace = None::<SpanTrace>.into();
         assert!(opt.is_none());
     }
 
     #[test]
     fn test_optional_span_trace_from_option_some() {
-        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+        let trace: SpanTrace = serde_json::from_value(serde_json::json!({
             "spans": []
         }))
         .unwrap();
@@ -834,8 +817,8 @@ mod tests {
                 "fields": "key=val"
             }]
         });
-        let a: Spantrace = serde_json::from_value(json.clone()).unwrap();
-        let b: Spantrace = serde_json::from_value(json).unwrap();
+        let a: SpanTrace = serde_json::from_value(json.clone()).unwrap();
+        let b: SpanTrace = serde_json::from_value(json).unwrap();
         assert_eq!(a, b);
     }
 
@@ -861,18 +844,18 @@ mod tests {
                 "fields": ""
             }]
         });
-        let a: Spantrace = serde_json::from_value(json_a).unwrap();
-        let b: Spantrace = serde_json::from_value(json_b).unwrap();
+        let a: SpanTrace = serde_json::from_value(json_a).unwrap();
+        let b: SpanTrace = serde_json::from_value(json_b).unwrap();
         assert_ne!(a, b);
     }
 
     #[test]
     fn test_partial_eq_fallback_vs_tracing() {
-        let fallback: Spantrace = serde_json::from_value(serde_json::json!({
+        let fallback: SpanTrace = serde_json::from_value(serde_json::json!({
             "spans": []
         }))
         .unwrap();
-        let tracing = Spantrace::capture();
+        let tracing = SpanTrace::capture();
         assert_ne!(fallback, tracing);
     }
 
@@ -880,7 +863,7 @@ mod tests {
 
     #[test]
     fn test_into_span_trace_fallback_returns_none() {
-        let fallback: Spantrace = serde_json::from_value(serde_json::json!({
+        let fallback: SpanTrace = serde_json::from_value(serde_json::json!({
             "spans": []
         }))
         .unwrap();
@@ -889,7 +872,7 @@ mod tests {
 
     #[test]
     fn test_into_span_trace_tracing_returns_some() {
-        let tracing = Spantrace::capture();
+        let tracing = SpanTrace::capture();
         assert!(tracing.into_span_trace().is_some());
     }
 
@@ -907,7 +890,7 @@ mod tests {
                 "fields": ""
             }]
         });
-        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        let spantrace: SpanTrace = serde_json::from_value(json).unwrap();
         let display = spantrace.to_string();
         // Span 0 must NOT start with a newline
         assert!(!display.starts_with('\n'));

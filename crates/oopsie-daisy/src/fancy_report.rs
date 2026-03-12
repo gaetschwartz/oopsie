@@ -3,22 +3,16 @@
 //! This module provides [`FancyReport`], a wrapper that formats errors with
 //! colorized output including the error chain, span traces, and backtraces.
 
-#[cfg(feature = "unstable")]
-use core::error;
-use std::borrow::Cow;
 use std::fmt;
 use std::process::{ExitCode, Termination};
 
 use color_backtrace::Frame;
 use owo_colors::OwoColorize as _;
 
-#[cfg(feature = "unstable")]
-use crate::erased::Diagnostics;
 use oopsie_core::ColorConfig;
-use oopsie_core::Spantrace;
-use oopsie_core::spantrace::SpantraceInner;
-#[cfg(feature = "unstable")]
-use oopsie_core::{Backtrace, ErrorCode, HelpText};
+use oopsie_core::spantrace::SpanTraceInner;
+
+use crate::extract_from_error_ref;
 
 /// A wrapper around an error that provides rich, colorized output.
 ///
@@ -105,57 +99,17 @@ impl<E: std::error::Error> FancyReport<E> {
         self.res.err()
     }
 
-    /// Extract backtrace from error chain using Provider API.
-    #[cfg(feature = "unstable")]
-    fn extract_backtrace(&self) -> Option<&Backtrace> {
-        std::error::request_ref::<Backtrace>(self.error()?)
-    }
-
-    /// Extract backtrace - not available on stable.
-    #[cfg(not(feature = "unstable"))]
-    const fn extract_backtrace(&self) -> Option<&oopsie_core::Backtrace> {
-        None
-    }
-
-    /// Extract SpanTrace from error chain using Provider API.
-    #[cfg(feature = "unstable")]
-    fn extract_span_trace(&self) -> Option<Cow<'_, Spantrace>> {
-        let err = self.error()?;
-        Spantrace::extract(err)
-    }
-
-    /// Extract SpanTrace - not available on stable.
-    #[cfg(not(feature = "unstable"))]
-    const fn extract_span_trace(&self) -> Option<Cow<'_, Spantrace>> {
-        None
-    }
-
-    /// Diagnostic information from error chain using Provider API.
-    #[cfg(feature = "unstable")]
-    fn extract_diagnostic(&self) -> Option<Diagnostics> {
-        let err = self.error()?;
-        let code = error::request_value::<ErrorCode>(err)
-            .or_else(|| error::request_ref::<ErrorCode>(err).cloned());
-        let help = error::request_value::<HelpText>(err)
-            .or_else(|| error::request_ref::<HelpText>(err).cloned());
-        (code.is_some() || help.is_some()).then(|| Diagnostics {
-            code,
-            help: help.map(|h| Box::from(h.0)),
-        })
-    }
-
-    /// Diagnostic information - not available on stable.
-    #[cfg(not(feature = "unstable"))]
-    const fn extract_diagnostic(&self) -> Option<crate::Diagnostics> {
-        None
-    }
-
     /// Format the error chain.
     fn write_error_chain(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let colors_enabled = self.color_config.should_colorize();
         let Err(err) = &self.res else { return Ok(()) };
 
-        let diag = self.extract_diagnostic();
+        let error_code = err
+            .source()
+            .and_then(|source| extract_from_error_ref::<oopsie_core::ErrorCode>(source));
+        let help_text = err
+            .source()
+            .and_then(|source| extract_from_error_ref::<oopsie_core::HelpText>(source));
 
         // Write main error
         if colors_enabled {
@@ -164,9 +118,7 @@ impl<E: std::error::Error> FancyReport<E> {
             write!(f, "Error")?;
         }
 
-        if let Some(ref diag) = diag
-            && let Some(code) = diag.code()
-        {
+        if let Some(code) = error_code {
             if colors_enabled {
                 write!(
                     f,
@@ -199,9 +151,7 @@ impl<E: std::error::Error> FancyReport<E> {
         }
 
         // Write help text if present
-        if let Some(ref diag) = diag
-            && let Some(help) = diag.help()
-        {
+        if let Some(help) = help_text {
             if colors_enabled {
                 write!(f, "\n  {}: {help}", "help".cyan())?;
             } else {
@@ -216,13 +166,16 @@ impl<E: std::error::Error> FancyReport<E> {
     /// Format the span trace if available.
     fn write_span_trace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Try our SpanTrace wrapper first
-        let Some(span_trace) = self.extract_span_trace() else {
+        let Some(span_trace) = self
+            .error()
+            .and_then(|e| oopsie_core::SpanTrace::extract_from_error(e))
+        else {
             return Ok(());
         };
 
         writeln!(f)?;
         match &span_trace.inner {
-            SpantraceInner::Tracing(span_trace) => {
+            SpanTraceInner::Tracing(span_trace) => {
                 if self.color_config.should_colorize() {
                     write!(f, "{}", color_spantrace::colorize(span_trace))?;
                 } else {
@@ -230,7 +183,7 @@ impl<E: std::error::Error> FancyReport<E> {
                     write!(f, "{span_trace}")?;
                 }
             }
-            SpantraceInner::Fallback(fallback_spantrace) => {
+            SpanTraceInner::Fallback(fallback_spantrace) => {
                 writeln!(f, "{:━^80}", " SPANTRACE ")?;
                 write!(f, "{fallback_spantrace}")?;
             }
@@ -241,9 +194,13 @@ impl<E: std::error::Error> FancyReport<E> {
 
     /// Format the backtrace if available and captured.
     fn write_backtrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Some(backtrace) = self.extract_backtrace() else {
+        let Some(backtrace) = self
+            .error()
+            .and_then(|e| oopsie_core::BackTrace::extract_from_error(e))
+        else {
             return Ok(());
         };
+
         writeln!(f)?;
         // Only display if backtrace was actually captured
         if self.color_config.should_colorize() {
@@ -253,7 +210,7 @@ impl<E: std::error::Error> FancyReport<E> {
             let printer = color_backtrace::BacktracePrinter::default()
                 .clear_frame_filters()
                 .add_frame_filter(Box::new(error_backtrace_frame_filter));
-            if let Ok(formatted) = printer.format_trace_to_string(backtrace) {
+            if let Ok(formatted) = printer.format_trace_to_string(&*backtrace) {
                 write!(f, "{formatted}")?;
             } else {
                 writeln!(f, "{:━^80}", " BACKTRACE ")?;
@@ -279,7 +236,7 @@ where
 
                 #[cfg(feature = "unstable")]
                 {
-                    error::request_ref::<ExitCode>(e)
+                    core::error::request_ref::<ExitCode>(e)
                         .copied()
                         .unwrap_or(ExitCode::FAILURE)
                 }

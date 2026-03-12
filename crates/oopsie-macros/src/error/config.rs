@@ -31,11 +31,11 @@ impl FieldInjectorConfig {
         let timestamp_ident = format_ident!("__oopsie_timestamp");
 
         let backtrace_type = args.backtrace.r#type().map_or_else(
-            || quote! { ::std::boxed::Box<#magnetite_utils_path::Backtrace> },
+            || quote! { ::std::boxed::Box<#magnetite_utils_path::BackTrace> },
             |p| quote! { #p },
         );
         let spantrace_type = args.spantrace.r#type().map_or_else(
-            || quote! { ::std::boxed::Box<#magnetite_utils_path::Spantrace> },
+            || quote! { ::std::boxed::Box<#magnetite_utils_path::SpanTrace> },
             |p| quote! { #p },
         );
         let timestamp_type: syn::Type = if let Some(s) = &args.timestamp.opt_settings()

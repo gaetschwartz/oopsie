@@ -4,7 +4,8 @@
 //! format, preserving the full error context including message, source chain,
 //! spantrace, and backtrace.
 
-use std::fmt::{self};
+use std::borrow::Cow;
+use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
@@ -12,17 +13,18 @@ use color_backtrace::termcolor;
 use serde::{Deserialize, Serialize};
 use termcolor::{Color, ColorSpec, NoColor};
 
+use crate::extract_from_error_ref;
 use crate::fancy_report::error_backtrace_frame_filter;
-use oopsie_core::ErrorCode;
-use oopsie_core::Spantrace;
-use oopsie_core::spantrace::SpantraceInner;
+use oopsie_core::SpanTrace;
+use oopsie_core::spantrace::SpanTraceInner;
+use oopsie_core::{ErrorCode, HelpText};
 
 /// A serializable, cloneable error representation that preserves the full
 /// error context including backtrace, spantrace, and source chain.
 ///
 /// This type is designed for API error responses where the original error
 /// cannot be directly serialized.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ErasedError {
     /// Primary error message (Display representation).
     pub message: Box<str>,
@@ -35,10 +37,10 @@ pub struct ErasedError {
     pub diagnostics: Diagnostics,
 
     /// Serialized span trace.
-    pub spantrace: Option<Spantrace>,
+    pub spantrace: Option<SpanTrace>,
 
     /// Serialized backtrace.
-    pub backtrace: Option<oopsie_core::Backtrace>,
+    pub backtrace: Option<oopsie_core::BackTrace>,
 }
 
 impl std::error::Error for ErasedError {}
@@ -48,7 +50,7 @@ pub struct Diagnostics {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code: Option<ErrorCode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub help: Option<Box<str>>,
+    pub help: Option<HelpText>,
 }
 
 impl Diagnostics {
@@ -67,33 +69,6 @@ impl Diagnostics {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Extraction helpers (FancyReport-style, using Provider API)
-// ─────────────────────────────────────────────────────────────────────────────
-
-#[cfg(feature = "unstable")]
-fn extract_backtrace(err: &dyn std::error::Error) -> Option<&oopsie_core::Backtrace> {
-    std::error::request_ref::<oopsie_core::Backtrace>(err)
-}
-
-#[cfg(not(feature = "unstable"))]
-#[expect(dead_code)]
-fn extract_backtrace(_err: &dyn std::error::Error) -> Option<&oopsie_core::Backtrace> {
-    None
-}
-
-#[cfg(feature = "unstable")]
-fn extract_error_code(err: &dyn std::error::Error) -> Option<ErrorCode> {
-    std::error::request_value::<oopsie_core::ErrorCode>(err)
-        .or_else(|| std::error::request_ref::<oopsie_core::ErrorCode>(err).cloned())
-}
-
-#[cfg(not(feature = "unstable"))]
-#[expect(dead_code)]
-fn extract_error_code(_err: &dyn std::error::Error) -> Option<ErrorCode> {
-    None
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // ErasedError construction
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -102,64 +77,28 @@ impl ErasedError {
     ///
     /// This extracts the message, source chain, and (on unstable) backtrace,
     /// spantrace, and ErrorCode via the Provider API.
-    #[cfg(feature = "unstable")]
     pub fn from_error<E: std::error::Error>(err: E) -> Self {
-        use std::borrow::Cow;
-
-        use oopsie_core::HelpText;
-
-        let message = err.to_string().into();
-
-        // Build source chain
-        let source_chain = std::iter::successors(err.source(), |e| e.source())
-            .map(ToString::to_string)
-            .map(Box::from)
-            .collect();
-
-        // Extract from Provider API
-        let code = extract_error_code(&err);
-        let help = std::error::request_value::<HelpText>(&err)
-            .or_else(|| std::error::request_ref::<HelpText>(&err).cloned())
-            .map(|h| h.0.into());
-        let diagnostics = Diagnostics { code, help };
-        let spantrace = Spantrace::extract(&err).map(Cow::into_owned);
-        let backtrace = extract_backtrace(&err).cloned();
-
-        Self {
-            message,
-            source_chain,
-            diagnostics,
-            spantrace,
-            backtrace,
-        }
+        Self::from_error_ref(&err)
     }
 
     /// Create an `ErasedError` from a reference to any error implementing `std::error::Error`.
     ///
     /// Like `from_error` but takes a reference, useful when ownership cannot be transferred
     /// (e.g., in `Serialize` implementations).
-    #[cfg(feature = "unstable")]
     pub fn from_error_ref<E: std::error::Error>(err: &E) -> Self {
-        use std::borrow::Cow;
-
-        use oopsie_core::HelpText;
-
         let message = err.to_string().into();
 
-        // Build source chain
         let source_chain = std::iter::successors(err.source(), |e| e.source())
             .map(ToString::to_string)
             .map(Box::from)
             .collect();
 
-        // Extract from Provider API
-        let code = extract_error_code(err);
-        let help = std::error::request_value::<HelpText>(err)
-            .or_else(|| std::error::request_ref::<HelpText>(err).cloned())
-            .map(|h| h.0.into());
-        let diagnostics = Diagnostics { code, help };
-        let spantrace = Spantrace::extract(err).map(Cow::into_owned);
-        let backtrace = extract_backtrace(err).cloned();
+        let diagnostics = Diagnostics {
+            code: extract_from_error_ref::<oopsie_core::ErrorCode>(err).cloned(),
+            help: extract_from_error_ref::<oopsie_core::HelpText>(err).cloned(),
+        };
+        let spantrace = oopsie_core::SpanTrace::extract_from_error(err).map(Cow::into_owned);
+        let backtrace = oopsie_core::BackTrace::extract_from_error(err).map(Cow::into_owned);
 
         Self {
             message,
@@ -167,34 +106,6 @@ impl ErasedError {
             diagnostics,
             spantrace,
             backtrace,
-        }
-    }
-
-    /// Create an `ErasedError` from any error implementing `std::error::Error`.
-    ///
-    /// On stable Rust, backtrace, spantrace, and ErrorCode extraction via
-    /// Provider API is not available.
-    #[cfg(not(feature = "unstable"))]
-    pub fn from_error<E: std::error::Error>(err: E) -> Self {
-        Self::from_error_ref(&err)
-    }
-
-    /// Create an `ErasedError` from a reference to any error.
-    #[cfg(not(feature = "unstable"))]
-    pub fn from_error_ref<E: std::error::Error>(err: &E) -> Self {
-        let message = err.to_string().into();
-
-        // Build source chain
-        let source_chain = std::iter::successors(err.source(), |e| e.source())
-            .map(|e| Box::from(e.to_string()))
-            .collect();
-
-        Self {
-            message,
-            source_chain,
-            diagnostics: Diagnostics::default(),
-            spantrace: None,
-            backtrace: None,
         }
     }
 
@@ -216,7 +127,7 @@ impl ErasedError {
             message: &'a str,
             source_chain: &'a [Box<str>],
             diagnostics: &'a Diagnostics,
-            spantrace: &'a Option<Spantrace>,
+            spantrace: &'a Option<SpanTrace>,
             backtrace: PrettyBacktrace,
         }
 
@@ -288,7 +199,7 @@ impl ErasedError {
         if let Some(spantrace) = &self.spantrace {
             writeln!(f)?;
             match &spantrace.inner {
-                SpantraceInner::Tracing(spantrace) => {
+                SpanTraceInner::Tracing(spantrace) => {
                     if f.supports_color() {
                         write!(f, "{}", color_spantrace::colorize(spantrace))?;
                     } else {
@@ -296,7 +207,7 @@ impl ErasedError {
                         writeln!(f, "{spantrace}")?;
                     }
                 }
-                SpantraceInner::Fallback(fallback_spantrace) => {
+                SpanTraceInner::Fallback(fallback_spantrace) => {
                     writeln!(f, "{:━^80}", " SPANTRACE ")?;
                     writeln!(f, "{fallback_spantrace}")?;
                 }
@@ -839,16 +750,14 @@ pub(crate) mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Tests for extract_backtrace / extract_error_code (feature = "unstable")
+    // Tests for BackTrace/ErrorCode extraction (feature = "unstable")
     // ─────────────────────────────────────────────────────────────────────
 
     #[test]
     #[cfg_attr(not(feature = "unstable"), ignore = "requires unstable provider API")]
     fn test_extract_backtrace_returns_some_when_provided() {
-        // ErrorWithSpanTrace provides a backtrace via the oopsie macro
         let error = make_error();
-        let bt = extract_backtrace(&error);
-        // The oopsie macro captures a backtrace, so this should be Some
+        let bt = oopsie_core::BackTrace::extract_from_error(&error);
         assert!(
             bt.is_some(),
             "extract_backtrace should return Some for oopsie errors"
@@ -859,7 +768,7 @@ pub(crate) mod tests {
     #[cfg_attr(not(feature = "unstable"), ignore = "requires unstable provider API")]
     fn test_extract_error_code_returns_some_for_oopsie_errors() {
         let error = ErrorWithHelpOopsie { message: "test" }.build();
-        let code = extract_error_code(&error);
+        let code = crate::extract_from_error_ref::<oopsie_core::ErrorCode>(&error);
         assert!(
             code.is_some(),
             "extract_error_code should return Some for oopsie errors with code"
@@ -869,7 +778,7 @@ pub(crate) mod tests {
     #[test]
     fn test_extract_backtrace_returns_none_for_plain_errors() {
         let error = std::io::Error::new(std::io::ErrorKind::Other, "plain error");
-        let bt = extract_backtrace(&error);
+        let bt = oopsie_core::BackTrace::extract_from_error(&error);
         assert!(
             bt.is_none(),
             "extract_backtrace should return None for plain errors"
@@ -879,7 +788,7 @@ pub(crate) mod tests {
     #[test]
     fn test_extract_error_code_returns_none_for_plain_errors() {
         let error = std::io::Error::new(std::io::ErrorKind::Other, "plain error");
-        let code = extract_error_code(&error);
+        let code = crate::extract_from_error_ref::<oopsie_core::ErrorCode>(&error);
         assert!(
             code.is_none(),
             "extract_error_code should return None for plain errors"

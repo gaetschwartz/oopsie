@@ -13,7 +13,7 @@ enum AutoExcludedError {
     Missing {
         name: String,
         #[oopsie(auto)]
-        bt: Box<oopsie::Backtrace>,
+        bt: Box<oopsie::BackTrace>,
     },
 }
 
@@ -32,7 +32,7 @@ enum AutoBtError {
     #[oopsie("something broke")]
     Broke {
         #[oopsie(auto)]
-        bt: Box<oopsie::Backtrace>,
+        bt: Box<oopsie::BackTrace>,
     },
 }
 
@@ -52,7 +52,7 @@ enum AutoWithSourceError {
     IoProblem {
         source: io::Error,
         #[oopsie(auto)]
-        bt: Box<oopsie::Backtrace>,
+        bt: Box<oopsie::BackTrace>,
     },
 }
 
@@ -72,9 +72,9 @@ enum MultiAutoError {
     Multi {
         label: String,
         #[oopsie(auto)]
-        bt: Box<oopsie::Backtrace>,
+        bt: Box<oopsie::BackTrace>,
         #[oopsie(auto)]
-        st: Box<oopsie::Spantrace>,
+        st: Box<oopsie::SpanTrace>,
     },
 }
 

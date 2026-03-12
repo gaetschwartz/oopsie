@@ -6,7 +6,7 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{DeriveInput, Expr, Token, Type};
 
-use super::parse::{CategorizedFields, ProvideAttr, VariantAttrs};
+use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr, VariantAttrs};
 
 /// Generate `std::error::Error` impl for an enum.
 pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Result<TokenStream2> {
@@ -61,9 +61,7 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
 
         // Provide from help/code in VariantAttrs (user-specified via #[oopsie(help = "...", code = "...")])
         if let Some(help) = &variant_attrs.help {
-            provide_stmts.push(quote! {
-                request.provide_value::<#crate_path::HelpText>(#crate_path::HelpText(#help));
-            });
+            provide_stmts.push(gen_help_provide(help, crate_path));
         }
         if let Some(code) = &variant_attrs.code {
             provide_stmts.push(quote! {
@@ -160,9 +158,7 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
 
     // Help/code from VariantAttrs (user-specified via #[oopsie(help = "...", code = "...")])
     if let Some(help) = &variant_attrs.help {
-        provide_stmts.push(quote! {
-            request.provide_value::<#crate_path::HelpText>(#crate_path::HelpText(#help));
-        });
+        provide_stmts.push(gen_help_provide(help, crate_path));
     }
     if let Some(code) = &variant_attrs.code {
         provide_stmts.push(quote! {
@@ -199,6 +195,20 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
             #provide_method
         }
     })
+}
+
+fn gen_help_provide(help: &DisplayAttr, crate_path: &syn::Path) -> TokenStream2 {
+    let fmt = &help.format_str;
+    let args = &help.args;
+    if args.is_empty() {
+        quote! {
+            request.provide_value::<#crate_path::HelpText>(#crate_path::HelpText(::std::borrow::Cow::Borrowed(#fmt)));
+        }
+    } else {
+        quote! {
+            request.provide_value::<#crate_path::HelpText>(#crate_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*))));
+        }
+    }
 }
 
 fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {

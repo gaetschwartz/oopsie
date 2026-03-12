@@ -30,11 +30,11 @@ pub(super) fn ensure_derive_oopsie(attrs: &mut Vec<syn::Attribute>) {
 }
 
 pub(super) fn is_backtrace_type(ty: &syn::Type) -> bool {
-    is_ident_type(ty, "Backtrace") || is_boxed_ident_type(ty, "Backtrace")
+    is_ident_type(ty, "BackTrace") || is_boxed_ident_type(ty, "BackTrace")
 }
 
 pub(super) fn is_spantrace_type(ty: &syn::Type) -> bool {
-    is_ident_type(ty, "Spantrace") || is_boxed_ident_type(ty, "Spantrace")
+    is_ident_type(ty, "SpanTrace") || is_boxed_ident_type(ty, "SpanTrace")
 }
 
 fn is_ident_type(ty: &syn::Type, ident: &str) -> bool {
@@ -76,19 +76,19 @@ mod tests {
 
     #[test]
     fn backtrace_type_direct() {
-        let ty: syn::Type = parse_quote!(Backtrace);
+        let ty: syn::Type = parse_quote!(BackTrace);
         assert!(is_backtrace_type(&ty));
     }
 
     #[test]
     fn backtrace_type_boxed() {
-        let ty: syn::Type = parse_quote!(Box<Backtrace>);
+        let ty: syn::Type = parse_quote!(Box<BackTrace>);
         assert!(is_backtrace_type(&ty));
     }
 
     #[test]
     fn backtrace_type_qualified() {
-        let ty: syn::Type = parse_quote!(oopsie_core::Backtrace);
+        let ty: syn::Type = parse_quote!(oopsie_core::BackTrace);
         assert!(is_backtrace_type(&ty));
     }
 
@@ -102,19 +102,19 @@ mod tests {
 
     #[test]
     fn spantrace_type_direct() {
-        let ty: syn::Type = parse_quote!(Spantrace);
+        let ty: syn::Type = parse_quote!(SpanTrace);
         assert!(is_spantrace_type(&ty));
     }
 
     #[test]
     fn spantrace_type_boxed() {
-        let ty: syn::Type = parse_quote!(Box<Spantrace>);
+        let ty: syn::Type = parse_quote!(Box<SpanTrace>);
         assert!(is_spantrace_type(&ty));
     }
 
     #[test]
     fn spantrace_type_qualified() {
-        let ty: syn::Type = parse_quote!(tracing_error::Spantrace);
+        let ty: syn::Type = parse_quote!(tracing_error::SpanTrace);
         assert!(is_spantrace_type(&ty));
     }
 
@@ -128,14 +128,14 @@ mod tests {
 
     #[test]
     fn ident_type_matching() {
-        let ty: syn::Type = parse_quote!(Backtrace);
-        assert!(is_ident_type(&ty, "Backtrace"));
+        let ty: syn::Type = parse_quote!(BackTrace);
+        assert!(is_ident_type(&ty, "BackTrace"));
     }
 
     #[test]
     fn ident_type_not_matching() {
         let ty: syn::Type = parse_quote!(String);
-        assert!(!is_ident_type(&ty, "Backtrace"));
+        assert!(!is_ident_type(&ty, "BackTrace"));
     }
 
     #[test]
@@ -154,26 +154,26 @@ mod tests {
 
     #[test]
     fn boxed_ident_type_matching() {
-        let ty: syn::Type = parse_quote!(Box<Backtrace>);
-        assert!(is_boxed_ident_type(&ty, "Backtrace"));
+        let ty: syn::Type = parse_quote!(Box<BackTrace>);
+        assert!(is_boxed_ident_type(&ty, "BackTrace"));
     }
 
     #[test]
     fn boxed_ident_type_wrong_inner() {
         let ty: syn::Type = parse_quote!(Box<String>);
-        assert!(!is_boxed_ident_type(&ty, "Backtrace"));
+        assert!(!is_boxed_ident_type(&ty, "BackTrace"));
     }
 
     #[test]
     fn boxed_ident_type_not_box() {
-        let ty: syn::Type = parse_quote!(Vec<Backtrace>);
-        assert!(!is_boxed_ident_type(&ty, "Backtrace"));
+        let ty: syn::Type = parse_quote!(Vec<BackTrace>);
+        assert!(!is_boxed_ident_type(&ty, "BackTrace"));
     }
 
     #[test]
     fn boxed_ident_type_plain_type() {
-        let ty: syn::Type = parse_quote!(Backtrace);
-        assert!(!is_boxed_ident_type(&ty, "Backtrace"));
+        let ty: syn::Type = parse_quote!(BackTrace);
+        assert!(!is_boxed_ident_type(&ty, "BackTrace"));
     }
 
     #[test]

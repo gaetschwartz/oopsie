@@ -79,15 +79,15 @@ fn error_is_send_sync() {
 #[oopsie(module(false))]
 enum ProvideError {
     #[oopsie("bt error")]
-    #[oopsie(provide(ref, oopsie::Backtrace => bt.as_ref()))]
+    #[oopsie(provide(ref, oopsie::BackTrace => bt.as_ref()))]
     WithBacktrace {
         msg: String,
         #[oopsie(auto)]
-        bt: Box<oopsie::Backtrace>,
+        bt: Box<oopsie::BackTrace>,
     },
 
     #[oopsie("help error")]
-    #[oopsie(provide(::oopsie::HelpText => ::oopsie::HelpText("try rebooting")))]
+    #[oopsie(provide(::oopsie::HelpText => ::oopsie::HelpText(::std::borrow::Cow::Borrowed("try rebooting"))))]
     WithHelp { msg: String },
 
     #[oopsie("coded error")]
@@ -99,7 +99,7 @@ enum ProvideError {
 #[test]
 fn provide_backtrace_ref() {
     let err = WithBacktrace { msg: "boom" }.build();
-    let bt = core::error::request_ref::<oopsie::Backtrace>(&err);
+    let bt = core::error::request_ref::<oopsie::BackTrace>(&err);
     assert!(bt.is_some(), "should provide a Backtrace ref");
 }
 
@@ -131,13 +131,13 @@ fn provide_error_code() {
 #[oopsie(module(false))]
 enum InnerError {
     #[oopsie("inner: {detail}")]
-    #[oopsie(provide(ref, oopsie::Backtrace => bt.as_ref()))]
-    #[oopsie(provide(::oopsie::HelpText => ::oopsie::HelpText("fix the inner thing")))]
+    #[oopsie(provide(ref, oopsie::BackTrace => bt.as_ref()))]
+    #[oopsie(provide(::oopsie::HelpText => ::oopsie::HelpText(::std::borrow::Cow::Borrowed("fix the inner thing"))))]
     #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from("inner::code")))]
     Root {
         detail: String,
         #[oopsie(auto)]
-        bt: Box<oopsie::Backtrace>,
+        bt: Box<oopsie::BackTrace>,
     },
 }
 
@@ -212,7 +212,7 @@ fn nested_backtrace_propagated_through_source_chain() {
 
     // The backtrace should be accessible from the inner error directly
     let inner_ref = outer.source().unwrap().source().unwrap();
-    let bt_direct = core::error::request_ref::<oopsie::Backtrace>(inner_ref);
+    let bt_direct = core::error::request_ref::<oopsie::BackTrace>(inner_ref);
     assert!(
         bt_direct.is_some(),
         "inner error should provide backtrace directly"
@@ -220,7 +220,7 @@ fn nested_backtrace_propagated_through_source_chain() {
 
     // The backtrace should also be accessible from the outer error,
     // because provide() forwards to source.provide() at each level
-    let bt_outer = core::error::request_ref::<oopsie::Backtrace>(&outer);
+    let bt_outer = core::error::request_ref::<oopsie::BackTrace>(&outer);
     assert!(
         bt_outer.is_some(),
         "backtrace should propagate through source chain to outer"
@@ -309,7 +309,7 @@ fn nested_attr_macro_backtrace_propagated() {
     // The #[oopsie] attr macro injects backtrace with provide(ref, Backtrace => ...)
     // on each variant. The outer error's provide() forwards to source.provide(),
     // so the inner's backtrace should be reachable from the outer.
-    let bt = core::error::request_ref::<oopsie::Backtrace>(&outer);
+    let bt = core::error::request_ref::<oopsie::BackTrace>(&outer);
     assert!(
         bt.is_some(),
         "backtrace from #[oopsie] inner should propagate to outer"
@@ -381,7 +381,7 @@ pub struct AttrStructWithBt {
 #[test]
 fn struct_provide_backtrace() {
     let err = AttrStructWithBtOopsie { msg: "test" }.build();
-    let bt = core::error::request_ref::<oopsie::Backtrace>(&err);
+    let bt = core::error::request_ref::<oopsie::BackTrace>(&err);
     assert!(
         bt.is_some(),
         "struct provide() should correctly provide backtrace"

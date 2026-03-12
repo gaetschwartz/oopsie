@@ -17,12 +17,11 @@ use std::borrow::Cow;
 use std::io;
 use std::ops::Deref;
 
-pub use backtrace::Backtrace;
+pub use backtrace::BackTrace;
 pub use color::{ColorConfig, get_color_mode, set_color_mode};
 use color_backtrace::termcolor;
-#[cfg(feature = "unstable")]
-pub use result::MayBoxResult;
-pub use spantrace::{ErasedMetadata, OptionalSpanTrace, Spantrace};
+
+pub use spantrace::{ErasedMetadata, OptionalSpanTrace, SpanTrace};
 pub use tracing_error::ErrorLayer;
 pub use tracing_level::TracingLevel;
 use tracing_subscriber::fmt::format::JsonFields;
@@ -46,7 +45,9 @@ pub fn install_panic_hook() -> color_eyre::Result<()> {
 #[derive(
     Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
-pub struct ErrorCode(Cow<'static, str>);
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct ErrorCode(pub Cow<'static, str>);
 
 impl Deref for ErrorCode {
     type Target = str;
@@ -68,15 +69,43 @@ impl From<String> for ErrorCode {
     }
 }
 
+impl std::fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 /// Help text associated with an error, provided via the Provider API.
-#[derive(Clone, Debug)]
-pub struct HelpText(pub &'static str);
+#[derive(
+    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+)]
+#[serde(transparent)]
+#[repr(transparent)]
+pub struct HelpText(pub Cow<'static, str>);
 
 impl Deref for HelpText {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
-        self.0
+        &self.0
+    }
+}
+
+impl From<&'static str> for HelpText {
+    fn from(s: &'static str) -> Self {
+        Self(Cow::Borrowed(s))
+    }
+}
+
+impl From<String> for HelpText {
+    fn from(s: String) -> Self {
+        Self(Cow::Owned(s))
+    }
+}
+
+impl std::fmt::Display for HelpText {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
     }
 }
 

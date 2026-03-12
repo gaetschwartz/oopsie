@@ -134,11 +134,11 @@ mod tests {
             #[oopsie(suffix)]
             #[oopsie(path = "crate")]
             #[oopsie("Test error: {message}")]
-            #[oopsie(provide(ref, crate::Backtrace => __oopsie_backtrace.as_ref()))]
+            #[oopsie(provide(ref, crate::BackTrace => __oopsie_backtrace.as_ref()))]
             pub struct MyError {
                 message: String,
                 #[oopsie(auto)]
-                __oopsie_backtrace: ::std::boxed::Box<crate::Backtrace>,
+                __oopsie_backtrace: ::std::boxed::Box<crate::BackTrace>,
             }
         };
         let result = expand(input);
@@ -162,13 +162,13 @@ mod tests {
             #[oopsie(path = "crate")]
             pub enum ErrorWithSpanTrace {
                 #[oopsie(display("Inner error happened"), transparent)]
-                #[oopsie(provide(ref, crate::Backtrace => __oopsie_backtrace.as_ref()))]
+                #[oopsie(provide(ref, crate::BackTrace => __oopsie_backtrace.as_ref()))]
                 Inner {
                     source: ErrorWithSpanTraceInner,
                     #[oopsie(auto)]
-                    __oopsie_backtrace: ::std::boxed::Box<crate::Backtrace>,
+                    __oopsie_backtrace: ::std::boxed::Box<crate::BackTrace>,
                     #[oopsie(auto)]
-                    __oopsie_spantrace: ::std::boxed::Box<crate::Spantrace>,
+                    __oopsie_spantrace: ::std::boxed::Box<crate::SpanTrace>,
                 },
             }
         };

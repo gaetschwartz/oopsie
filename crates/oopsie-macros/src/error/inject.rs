@@ -142,13 +142,13 @@ pub(super) fn add_provide_attrs(
 
     if added_backtrace {
         attrs.push(
-            parse_quote! { #[oopsie(provide(ref, #magnetite_utils_path::Backtrace => #backtrace_ident.as_ref()))] },
+            parse_quote! { #[oopsie(provide(ref, #magnetite_utils_path::BackTrace => #backtrace_ident.as_ref()))] },
         );
     }
 
     if added_spantrace {
         attrs.push(
-            parse_quote! { #[oopsie(provide(ref, #magnetite_utils_path::Spantrace => #spantrace_ident.as_ref()))] },
+            parse_quote! { #[oopsie(provide(ref, #magnetite_utils_path::SpanTrace => #spantrace_ident.as_ref()))] },
         );
     }
 
@@ -184,10 +184,10 @@ mod tests {
     fn test_config() -> FieldInjectorConfig {
         FieldInjectorConfig {
             backtrace_ident: format_ident!("__oopsie_backtrace"),
-            backtrace_type: quote! { ::std::boxed::Box<Backtrace> },
+            backtrace_type: quote! { ::std::boxed::Box<BackTrace> },
             backtrace_attrs: quote! { #[oopsie(auto)] },
             spantrace_ident: format_ident!("__oopsie_spantrace"),
-            spantrace_type: quote! { ::std::boxed::Box<Spantrace> },
+            spantrace_type: quote! { ::std::boxed::Box<SpanTrace> },
             spantrace_attrs: quote! { #[oopsie(auto)] },
             timestamp_ident: format_ident!("__oopsie_timestamp"),
             timestamp_type: parse_quote! { std::time::SystemTime },
@@ -214,7 +214,7 @@ mod tests {
 
     #[test]
     fn check_existing_fields_detects_backtrace() {
-        let fields = parse_fields(quote! { struct S { backtrace: Backtrace, message: String } });
+        let fields = parse_fields(quote! { struct S { backtrace: BackTrace, message: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
         let existence = check_existing_fields(&fields, &ts);
         assert!(existence.has_backtrace);
@@ -224,7 +224,7 @@ mod tests {
 
     #[test]
     fn check_existing_fields_detects_spantrace() {
-        let fields = parse_fields(quote! { struct S { trace: Spantrace, message: String } });
+        let fields = parse_fields(quote! { struct S { trace: SpanTrace, message: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
         let existence = check_existing_fields(&fields, &ts);
         assert!(!existence.has_backtrace);
@@ -245,7 +245,7 @@ mod tests {
     #[test]
     fn check_existing_fields_detects_all() {
         let fields = parse_fields(
-            quote! { struct S { bt: Backtrace, st: Spantrace, ts: std::time::Instant } },
+            quote! { struct S { bt: BackTrace, st: SpanTrace, ts: std::time::Instant } },
         );
         let ts: syn::Type = parse_quote!(std::time::Instant);
         let existence = check_existing_fields(&fields, &ts);
@@ -276,7 +276,7 @@ mod tests {
 
     #[test]
     fn check_existing_fields_unnamed() {
-        let fields = parse_fields(quote! { struct S(Backtrace, Spantrace); });
+        let fields = parse_fields(quote! { struct S(BackTrace, SpanTrace); });
         let ts: syn::Type = parse_quote!(std::time::Instant);
         let existence = check_existing_fields(&fields, &ts);
         assert!(existence.has_backtrace);

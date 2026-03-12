@@ -126,11 +126,11 @@ fn attr_enum_module_naming() {
 #[derive(Debug)]
 pub enum PreExistingBtError {
     #[oopsie("has backtrace")]
-    #[oopsie(provide(ref, oopsie::Backtrace => bt.as_ref()))]
+    #[oopsie(provide(ref, oopsie::BackTrace => bt.as_ref()))]
     HasBt {
         msg: String,
         #[oopsie(auto)]
-        bt: Box<oopsie::Backtrace>,
+        bt: Box<oopsie::BackTrace>,
     },
 }
 
@@ -147,11 +147,11 @@ fn attr_does_not_duplicate_backtrace() {
 #[derive(Debug)]
 pub enum PreExistingStError {
     #[oopsie("has spantrace")]
-    #[oopsie(provide(ref, oopsie::Spantrace => st.as_ref()))]
+    #[oopsie(provide(ref, oopsie::SpanTrace => st.as_ref()))]
     HasSt {
         msg: String,
         #[oopsie(auto)]
-        st: Box<oopsie::Spantrace>,
+        st: Box<oopsie::SpanTrace>,
     },
 }
 
@@ -169,7 +169,7 @@ fn attr_does_not_duplicate_spantrace() {
 pub struct PreExistingBtStructError {
     msg: String,
     #[oopsie(auto)]
-    bt: Box<oopsie::Backtrace>,
+    bt: Box<oopsie::BackTrace>,
 }
 
 #[test]
