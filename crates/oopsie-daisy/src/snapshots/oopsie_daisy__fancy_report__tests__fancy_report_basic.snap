@@ -2,7 +2,7 @@
 source: crates/oopsie-daisy/src/fancy_report.rs
 expression: report.to_string()
 ---
-Error[oopsie_daisy::fancy_report::tests::TestError]: Test error: something failed
+Error: Test error: something failed
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -17,16 +17,16 @@ Error[oopsie_daisy::fancy_report::tests::TestError]: Test error: something faile
              at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:294:9
    3: <backtrace::capture::Backtrace>::new
              at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:259:22
-   4: <oopsie_core::backtrace::Backtrace as oopsie_core::traits::GenerateImplicitData>::generate
-             at /Users/gaetan/dev/oopsie/.worktrees/test-mutation-coverage/crates/oopsie-core/src/backtrace.rs:11:19
-   5: <alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::traits::GenerateImplicitData>::generate
-             at /Users/gaetan/dev/oopsie/.worktrees/test-mutation-coverage/crates/oopsie-core/src/traits.rs:34:18
+   4: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::GenerateImplicitData>::generate
+             at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/backtrace.rs:9:19
+   5: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::GenerateImplicitData>::generate
+             at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/traits.rs:34:18
    6: <oopsie_daisy::fancy_report::tests::TestOopsie<&str>>::build
-             at src/fancy_report.rs:407:5
+             at src/fancy_report.rs:384:5
    7: oopsie_daisy::fancy_report::tests::test_fancy_report_basic
-             at src/fancy_report.rs:425:10
+             at src/fancy_report.rs:402:10
    8: oopsie_daisy::fancy_report::tests::test_fancy_report_basic::{closure#0}
-             at src/fancy_report.rs:421:33
+             at src/fancy_report.rs:398:33
    9: <oopsie_daisy::fancy_report::tests::test_fancy_report_basic::{closure#0} as core::ops::function::FnOnce<()>>::call_once
              at /Users/gaetan/.rustup/toolchains/nightly-2026-02-04-aarch64-apple-darwin/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
   10: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once

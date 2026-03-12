@@ -13,7 +13,7 @@ use color_backtrace::termcolor;
 use serde::{Deserialize, Serialize};
 use termcolor::{Color, ColorSpec, NoColor};
 
-use crate::extract_from_error_ref;
+use crate::extract_value_from_error;
 use crate::fancy_report::error_backtrace_frame_filter;
 use oopsie_core::SpanTrace;
 use oopsie_core::spantrace::SpanTraceInner;
@@ -94,8 +94,8 @@ impl ErasedError {
             .collect();
 
         let diagnostics = Diagnostics {
-            code: extract_from_error_ref::<oopsie_core::ErrorCode>(err).cloned(),
-            help: extract_from_error_ref::<oopsie_core::HelpText>(err).cloned(),
+            code: extract_value_from_error::<oopsie_core::ErrorCode>(err),
+            help: extract_value_from_error::<oopsie_core::HelpText>(err),
         };
         let spantrace = oopsie_core::SpanTrace::extract_from_error(err).map(Cow::into_owned);
         let backtrace = oopsie_core::BackTrace::extract_from_error(err).map(Cow::into_owned);
@@ -768,7 +768,7 @@ pub(crate) mod tests {
     #[cfg_attr(not(feature = "unstable"), ignore = "requires unstable provider API")]
     fn test_extract_error_code_returns_some_for_oopsie_errors() {
         let error = ErrorWithHelpOopsie { message: "test" }.build();
-        let code = crate::extract_from_error_ref::<oopsie_core::ErrorCode>(&error);
+        let code = crate::extract_value_from_error::<oopsie_core::ErrorCode>(&error);
         assert!(
             code.is_some(),
             "extract_error_code should return Some for oopsie errors with code"
@@ -788,7 +788,7 @@ pub(crate) mod tests {
     #[test]
     fn test_extract_error_code_returns_none_for_plain_errors() {
         let error = std::io::Error::new(std::io::ErrorKind::Other, "plain error");
-        let code = crate::extract_from_error_ref::<oopsie_core::ErrorCode>(&error);
+        let code = crate::extract_value_from_error::<oopsie_core::ErrorCode>(&error);
         assert!(
             code.is_none(),
             "extract_error_code should return None for plain errors"

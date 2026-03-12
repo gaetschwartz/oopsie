@@ -65,7 +65,7 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
         }
         if let Some(code) = &variant_attrs.code {
             provide_stmts.push(quote! {
-                request.provide_value::<#crate_path::ErrorCode>(#crate_path::ErrorCode::from(#code));
+                request.provide_value_with::<#crate_path::ErrorCode>(|| #crate_path::ErrorCode::from(#code));
             });
         }
 
@@ -162,7 +162,7 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
     }
     if let Some(code) = &variant_attrs.code {
         provide_stmts.push(quote! {
-            request.provide_value::<#crate_path::ErrorCode>(#crate_path::ErrorCode::from(#code));
+            request.provide_value_with::<#crate_path::ErrorCode>(|| #crate_path::ErrorCode::from(#code));
         });
     }
 
@@ -202,11 +202,11 @@ fn gen_help_provide(help: &DisplayAttr, crate_path: &syn::Path) -> TokenStream2 
     let args = &help.args;
     if args.is_empty() {
         quote! {
-            request.provide_value::<#crate_path::HelpText>(#crate_path::HelpText(::std::borrow::Cow::Borrowed(#fmt)));
+            request.provide_value_with::<#crate_path::HelpText>(|| #crate_path::HelpText(::std::borrow::Cow::Borrowed(#fmt)));
         }
     } else {
         quote! {
-            request.provide_value::<#crate_path::HelpText>(#crate_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*))));
+            request.provide_value_with::<#crate_path::HelpText>(|| #crate_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*))));
         }
     }
 }
@@ -215,9 +215,9 @@ fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
     let ty = &attr.provided_type;
     let expr = &attr.expr;
     if attr.is_ref {
-        quote! { request.provide_ref::<#ty>(#expr); }
+        quote! { request.provide_ref_with::<#ty>(|| #expr); }
     } else {
-        quote! { request.provide_value::<#ty>(#expr); }
+        quote! { request.provide_value_with::<#ty>(|| #expr); }
     }
 }
 

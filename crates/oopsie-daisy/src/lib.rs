@@ -16,10 +16,10 @@ pub use oopsie_core::{
 };
 
 #[inline]
-pub(crate) fn extract_from_error_ref<T: 'static>(err: &dyn std::error::Error) -> Option<&T> {
+pub(crate) fn extract_value_from_error<T: 'static>(err: &dyn std::error::Error) -> Option<T> {
     #[cfg(feature = "unstable")]
     {
-        std::error::request_ref::<T>(err)
+        std::error::request_value::<T>(err)
     }
     #[cfg(not(feature = "unstable"))]
     {

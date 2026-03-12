@@ -12,7 +12,7 @@ use owo_colors::OwoColorize as _;
 use oopsie_core::ColorConfig;
 use oopsie_core::spantrace::SpanTraceInner;
 
-use crate::extract_from_error_ref;
+use crate::extract_value_from_error;
 
 /// A wrapper around an error that provides rich, colorized output.
 ///
@@ -106,10 +106,10 @@ impl<E: std::error::Error> FancyReport<E> {
 
         let error_code = err
             .source()
-            .and_then(|source| extract_from_error_ref::<oopsie_core::ErrorCode>(source));
+            .and_then(|source| extract_value_from_error::<oopsie_core::ErrorCode>(source));
         let help_text = err
             .source()
-            .and_then(|source| extract_from_error_ref::<oopsie_core::HelpText>(source));
+            .and_then(|source| extract_value_from_error::<oopsie_core::HelpText>(source));
 
         // Write main error
         if colors_enabled {
