@@ -29,7 +29,10 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let pattern = if field_names.is_empty() {
             quote! { Self::#variant_ident { .. } }
         } else {
-            quote! { Self::#variant_ident { #(#field_names),*, .. } }
+            quote! {
+                #[allow(unused_variables)]
+                Self::#variant_ident { #(#field_names),*, .. }
+            }
         };
 
         let write_call = if let Some(display) = &variant_attrs.display {
@@ -75,7 +78,10 @@ pub fn gen_struct_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let destructure = if field_names.is_empty() {
         quote! {}
     } else {
-        quote! { let Self { #(#field_names),*, .. } = self; }
+        quote! {
+            #[allow(unused_variables)]
+            let Self { #(#field_names),*, .. } = self;
+        }
     };
 
     let write_call = if let Some(display) = &variant_attrs.display {
