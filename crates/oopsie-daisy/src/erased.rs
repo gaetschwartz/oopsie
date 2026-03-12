@@ -542,4 +542,347 @@ pub(crate) mod tests {
         assert!(!code_only.is_none());
         assert_eq!(code_only.help(), None);
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Tests for from_error / from_error_ref (kills Default::default mutants)
+    // ─────────────────────────────────────────────────────────────────────
+
+    /// A simple chained error type for testing from_error / from_error_ref.
+    #[derive(Debug)]
+    struct ChainedError {
+        msg: &'static str,
+        source: Option<Box<ChainedError>>,
+    }
+
+    impl fmt::Display for ChainedError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(self.msg)
+        }
+    }
+
+    impl std::error::Error for ChainedError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.source
+                .as_ref()
+                .map(|s| s.as_ref() as &dyn std::error::Error)
+        }
+    }
+
+    #[test]
+    fn test_from_error_preserves_message_and_chain() {
+        let error = ChainedError {
+            msg: "outer error",
+            source: Some(Box::new(ChainedError {
+                msg: "inner cause",
+                source: None,
+            })),
+        };
+
+        let erased = ErasedError::from_error(error);
+        assert_eq!(&*erased.message, "outer error");
+        assert_eq!(erased.source_chain.len(), 1);
+        assert_eq!(&*erased.source_chain[0], "inner cause");
+    }
+
+    #[test]
+    fn test_from_error_ref_preserves_message_and_chain() {
+        let error = ChainedError {
+            msg: "outer error",
+            source: Some(Box::new(ChainedError {
+                msg: "inner cause",
+                source: None,
+            })),
+        };
+
+        let erased = ErasedError::from_error_ref(&error);
+        assert_eq!(&*erased.message, "outer error");
+        assert_eq!(erased.source_chain.len(), 1);
+        assert_eq!(&*erased.source_chain[0], "inner cause");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Tests for write_json (kills Ok(()) mutant)
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_write_json_produces_valid_json() {
+        let erased = ErasedError {
+            message: "something broke".into(),
+            source_chain: vec!["inner cause".into()],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let mut buf = Vec::new();
+        erased.write_json(&mut buf).unwrap();
+        assert!(!buf.is_empty(), "write_json must produce output");
+
+        let json: serde_json::Value = serde_json::from_slice(&buf).unwrap();
+        assert_eq!(json["message"], "something broke");
+        assert_eq!(json["source_chain"][0], "inner cause");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Tests for write_text arrow logic (kills <, -, == mutants)
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_write_text_single_cause_uses_last_arrow() {
+        let erased = ErasedError {
+            message: "top".into(),
+            source_chain: vec!["only cause".into()],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let mut buf = Vec::new();
+        erased.write_text(&mut NoColor::new(&mut buf)).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(
+            output.contains("╰─▶"),
+            "single cause should use last-arrow ╰─▶"
+        );
+        assert!(
+            !output.contains("├─▶"),
+            "single cause should NOT use middle-arrow ├─▶"
+        );
+    }
+
+    #[test]
+    fn test_write_text_two_causes_arrows() {
+        let erased = ErasedError {
+            message: "top".into(),
+            source_chain: vec!["middle".into(), "root".into()],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let mut buf = Vec::new();
+        erased.write_text(&mut NoColor::new(&mut buf)).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        assert!(
+            output.contains("├─▶"),
+            "first of two causes should use middle-arrow"
+        );
+        assert!(output.contains("╰─▶"), "last cause should use last-arrow");
+    }
+
+    #[test]
+    fn test_write_text_three_causes_arrows() {
+        let erased = ErasedError {
+            message: "top".into(),
+            source_chain: vec!["first".into(), "second".into(), "third".into()],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let mut buf = Vec::new();
+        erased.write_text(&mut NoColor::new(&mut buf)).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+
+        // Count occurrences of each arrow
+        let middle_count = output.matches("├─▶").count();
+        let last_count = output.matches("╰─▶").count();
+        assert_eq!(
+            middle_count, 2,
+            "first two causes should use middle-arrow ├─▶"
+        );
+        assert_eq!(last_count, 1, "only last cause should use last-arrow ╰─▶");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Tests for format_short arrow logic (kills <, -, == mutants)
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_format_short_single_cause_uses_last_arrow() {
+        let erased = ErasedError {
+            message: "top".into(),
+            source_chain: vec!["only cause".into()],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let short = erased.format_short();
+        assert!(
+            short.contains("╰─▶"),
+            "single cause should use last-arrow ╰─▶"
+        );
+        assert!(
+            !short.contains("├─▶"),
+            "single cause should NOT use middle-arrow ├─▶"
+        );
+    }
+
+    #[test]
+    fn test_format_short_two_causes_arrows() {
+        let erased = ErasedError {
+            message: "top".into(),
+            source_chain: vec!["middle".into(), "root".into()],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let short = erased.format_short();
+        assert!(
+            short.contains("├─▶"),
+            "first of two causes should use middle-arrow"
+        );
+        assert!(short.contains("╰─▶"), "last cause should use last-arrow");
+    }
+
+    #[test]
+    fn test_format_short_three_causes_arrows() {
+        let erased = ErasedError {
+            message: "top".into(),
+            source_chain: vec!["first".into(), "second".into(), "third".into()],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let short = erased.format_short();
+        let middle_count = short.matches("├─▶").count();
+        let last_count = short.matches("╰─▶").count();
+        assert_eq!(middle_count, 2, "first two causes should use middle-arrow");
+        assert_eq!(last_count, 1, "only last cause should use last-arrow");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Test for write_html (kills Ok(()) mutant)
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_write_html_produces_output() {
+        let erased = ErasedError {
+            message: "html error".into(),
+            source_chain: vec![],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let mut buf = Vec::new();
+        erased.write_html(&mut NoColor::new(&mut buf)).unwrap();
+        assert!(!buf.is_empty(), "write_html must produce output");
+        let output = String::from_utf8(buf).unwrap();
+        assert!(
+            output.contains("html error"),
+            "write_html output should contain the error message"
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Test for IoToFmt::write (kills Ok(0) and Ok(1) mutants)
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_io_to_fmt_write_returns_correct_byte_count() {
+        use std::io::Write;
+
+        let mut s = String::new();
+        {
+            let mut adapter = IoToFmt(&mut s);
+            let n = adapter.write(b"hello").unwrap();
+            assert_eq!(n, 5, "IoToFmt::write must return the input byte count");
+        }
+        assert_eq!(s, "hello");
+
+        {
+            let mut adapter = IoToFmt(&mut s);
+            // Test with empty input
+            let n = adapter.write(b"").unwrap();
+            assert_eq!(n, 0, "IoToFmt::write on empty input must return 0");
+
+            // Test with longer input
+            let n = adapter.write(b"world!").unwrap();
+            assert_eq!(n, 6);
+        }
+        assert_eq!(s, "helloworld!");
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Test for Display impl (kills Ok(Default::default()) mutant)
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn test_display_for_erased_error_is_non_empty() {
+        let erased = ErasedError {
+            message: "display test".into(),
+            source_chain: vec!["cause".into()],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let displayed = erased.to_string();
+        assert!(
+            !displayed.is_empty(),
+            "Display must produce non-empty output"
+        );
+        assert!(
+            displayed.contains("display test"),
+            "Display output should contain the error message"
+        );
+        assert!(
+            displayed.contains("cause"),
+            "Display output should contain source chain entries"
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Tests for extract_backtrace / extract_error_code (feature = "unstable")
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "requires unstable provider API")]
+    fn test_extract_backtrace_returns_some_when_provided() {
+        // ErrorWithSpanTrace provides a backtrace via the oopsie macro
+        let error = make_error();
+        let bt = extract_backtrace(&error);
+        // The oopsie macro captures a backtrace, so this should be Some
+        assert!(
+            bt.is_some(),
+            "extract_backtrace should return Some for oopsie errors"
+        );
+    }
+
+    #[test]
+    #[cfg_attr(not(feature = "unstable"), ignore = "requires unstable provider API")]
+    fn test_extract_error_code_returns_some_for_oopsie_errors() {
+        let error = ErrorWithHelpOopsie { message: "test" }.build();
+        let code = extract_error_code(&error);
+        assert!(
+            code.is_some(),
+            "extract_error_code should return Some for oopsie errors with code"
+        );
+    }
+
+    #[test]
+    fn test_extract_backtrace_returns_none_for_plain_errors() {
+        let error = std::io::Error::new(std::io::ErrorKind::Other, "plain error");
+        let bt = extract_backtrace(&error);
+        assert!(
+            bt.is_none(),
+            "extract_backtrace should return None for plain errors"
+        );
+    }
+
+    #[test]
+    fn test_extract_error_code_returns_none_for_plain_errors() {
+        let error = std::io::Error::new(std::io::ErrorKind::Other, "plain error");
+        let code = extract_error_code(&error);
+        assert!(
+            code.is_none(),
+            "extract_error_code should return None for plain errors"
+        );
+    }
 }
