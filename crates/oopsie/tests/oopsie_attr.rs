@@ -118,3 +118,62 @@ fn attr_enum_module_naming() {
     // MyError → strip "Error" → "My" → snake_case → "my" → "my_oopsies"
     let _ = my_oopsies::My.build();
 }
+
+// ---- Test 7: attr macro does not duplicate pre-existing backtrace field ----
+// When a variant already has a Backtrace field, the attr macro should skip injection.
+
+#[oopsie]
+#[derive(Debug)]
+pub enum PreExistingBtError {
+    #[oopsie("has backtrace")]
+    #[oopsie(provide(ref, oopsie::Backtrace => bt.as_ref()))]
+    HasBt {
+        msg: String,
+        #[oopsie(auto)]
+        bt: Box<oopsie::Backtrace>,
+    },
+}
+
+#[test]
+fn attr_does_not_duplicate_backtrace() {
+    // If backtrace were duplicated, this would fail to compile due to conflicting fields.
+    let err = pre_existing_bt_oopsies::HasBt { msg: "test" }.build();
+    assert_eq!(err.to_string(), "has backtrace");
+}
+
+// ---- Test 8: attr macro does not duplicate pre-existing spantrace field ----
+
+#[oopsie]
+#[derive(Debug)]
+pub enum PreExistingStError {
+    #[oopsie("has spantrace")]
+    #[oopsie(provide(ref, oopsie::Spantrace => st.as_ref()))]
+    HasSt {
+        msg: String,
+        #[oopsie(auto)]
+        st: Box<oopsie::Spantrace>,
+    },
+}
+
+#[test]
+fn attr_does_not_duplicate_spantrace() {
+    // If spantrace were duplicated, this would fail to compile due to conflicting fields.
+    let err = pre_existing_st_oopsies::HasSt { msg: "test" }.build();
+    assert_eq!(err.to_string(), "has spantrace");
+}
+
+// ---- Test 9: struct attr macro does not duplicate pre-existing backtrace ----
+
+#[oopsie]
+#[derive(Debug)]
+pub struct PreExistingBtStructError {
+    msg: String,
+    #[oopsie(auto)]
+    bt: Box<oopsie::Backtrace>,
+}
+
+#[test]
+fn attr_struct_does_not_duplicate_backtrace() {
+    let err = PreExistingBtStructOopsie { msg: "struct bt" }.build();
+    assert_eq!(err.msg, "struct bt");
+}
