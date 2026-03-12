@@ -119,7 +119,6 @@ pub(super) fn has_oopsie_name_value(attrs: &[syn::Attribute], key: &str) -> bool
 
 /// Add Oopsie provide attributes for backtrace, spantrace, and auto-generated error code.
 ///
-///
 /// Help text and user-specified error codes are handled by the derive macro
 /// via `#[oopsie(help = "...", code = "...")]` on variants/structs.
 #[expect(clippy::too_many_arguments)]

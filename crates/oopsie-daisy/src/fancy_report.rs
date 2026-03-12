@@ -399,16 +399,16 @@ mod tests {
     use super::*;
     use crate::erased::tests::make_error;
 
-    /// Helper to construct a `Frame` despite it being `#[non_exhaustive]`.
-    /// We use field-by-field pointer writes to match the actual layout.
+    /// Construct a `Frame` for testing. `Frame` is `#[non_exhaustive]` so
+    /// struct literal syntax is unavailable from outside the crate.
     fn make_frame(n: usize, name: Option<String>, lineno: Option<u32>) -> Frame {
         use std::mem::MaybeUninit;
 
         let mut frame = MaybeUninit::<Frame>::zeroed();
         let ptr = frame.as_mut_ptr();
 
-        // SAFETY: We write to each public field of Frame by pointer.
-        // Frame's fields are all public, so we know they exist.
+        // SAFETY: Frame has only public fields (n, name, lineno, filename, ip).
+        // We write every field, and zeroed memory is valid for Option<_> (= None).
         unsafe {
             std::ptr::addr_of_mut!((*ptr).n).write(n);
             std::ptr::addr_of_mut!((*ptr).name).write(name);
