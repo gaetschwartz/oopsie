@@ -349,14 +349,7 @@ pub(crate) mod tests {
     #[cfg_attr(not(feature = "unstable"), ignore = "snapshot depends on provider API")]
     fn test_erased_error_display() {
         let error = ErasedError::from_error(make_error());
-        insta::with_settings!({
-            filters => [
-                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
-                (r"rs:\d+:\d+", "rs:[LOC]"),
-                (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
-                (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
-            ]
-        }, {
+        crate::redact!(backtrace, {
             insta::assert_snapshot!(error);
         });
     }
@@ -419,14 +412,7 @@ pub(crate) mod tests {
         let erased = ErasedError::from_error(error);
         let short = erased.format_short();
 
-        insta::with_settings!({
-            filters => [
-                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
-                (r"rs:\d+:\d+", "rs:[LOC]"),
-                (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
-                (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
-            ]
-        }, {
+        crate::redact!(backtrace, {
             insta::assert_snapshot!("format_short_with_help", short);
         });
     }

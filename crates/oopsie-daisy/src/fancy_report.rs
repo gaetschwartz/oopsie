@@ -425,14 +425,7 @@ mod tests {
 
         // Strip ANSI for snapshot consistency
         let output = strip_ansi(&report.to_string());
-        insta::with_settings!({
-            filters => [
-                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
-                (r"rs:\d+:\d+", "rs:[LOC]"),
-                (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
-                (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
-            ]
-        }, {
+        crate::redact!(backtrace, {
             insta::assert_snapshot!("fancy_report_colored_stripped", output);
         });
     }
@@ -463,14 +456,7 @@ mod tests {
         .build();
         let report = FancyReport::from_std(error).no_colors();
 
-        insta::with_settings!({
-            filters => [
-                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
-                (r"rs:\d+:\d+", "rs:[LOC]"),
-                (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
-                (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
-            ]
-        }, {
+        crate::redact!(backtrace, {
             insta::assert_snapshot!("fancy_report_with_help", report.to_string());
         });
     }
@@ -481,15 +467,7 @@ mod tests {
         let error = make_error();
         let report = FancyReport::from_std(error).no_colors();
 
-        // Redact file paths and line numbers for stable snapshots
-        insta::with_settings!({
-            filters => [
-                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
-                (r"rs:\d+:\d+", "rs:[LOC]"),
-                (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
-                (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
-            ]
-        }, {
+        crate::redact!(backtrace, {
             insta::assert_snapshot!("fancy_report_with_spantrace", report);
         });
     }
@@ -498,15 +476,7 @@ mod tests {
     fn test_fancy_report_with_spantrace_debug() {
         let error = make_error();
 
-        // Redact file paths and line numbers for stable snapshots
-        insta::with_settings!({
-            filters => [
-                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
-                (r"rs:\d+:\d+", "rs:[LOC]"),
-                (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
-                (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
-            ]
-        }, {
+        crate::redact!(backtrace, {
             insta::assert_snapshot!("fancy_report_with_spantrace_debug", format!("{error:#}"));
         });
     }

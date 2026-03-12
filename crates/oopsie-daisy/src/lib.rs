@@ -15,6 +15,34 @@ pub use oopsie_core::{
     BackTrace, ErrorCode, GenerateImplicitData, HelpText, IntoError, NoneError, SpanTrace,
 };
 
+/// Snapshot redaction helpers for tests. Centralises filter patterns so they
+/// don't have to be repeated at every `insta::with_settings!` call site.
+#[cfg(test)]
+macro_rules! redact {
+    (backtrace_json, $bl:block) => {
+        insta::with_settings! {
+            { filters => [
+                (r#""line": \d+"#, r#""line": [LINE]"#),
+                (r#""filename": "[^"]+""#, r#""filename": "[FILE]""#),
+                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
+            ] }, $bl
+        }
+    };
+    (backtrace, $bl:block) => {
+        insta::with_settings! {
+            { filters => [
+                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
+                (r"rs:\d+:\d+", "rs:[LOC]"),
+                (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
+                (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
+            ] }, $bl
+        }
+    };
+}
+
+#[cfg(test)]
+pub(crate) use redact;
+
 #[inline]
 pub(crate) fn extract_value_from_error<T: 'static>(err: &dyn std::error::Error) -> Option<T> {
     #[cfg(feature = "unstable")]
