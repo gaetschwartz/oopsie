@@ -1,0 +1,8 @@
+---
+source: crates/oopsie/tests/daisy_erased.rs
+expression: error
+---
+Error: 
+
+  ✕ Inner error happened
+  ╰─▶ Error: Inner function failed (foo=true, name=Alice)

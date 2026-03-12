@@ -1,5 +1,5 @@
 ---
-source: crates/oopsie-daisy/src/erased.rs
+source: crates/oopsie/tests/daisy_erased.rs
 expression: error
 ---
 {
@@ -8,7 +8,7 @@ expression: error
     "Error: Inner function failed (foo=true, name=Alice)"
   ],
   "diagnostics": {
-    "code": "oopsie_daisy::erased::tests::ErrorWithSpanTraceInner"
+    "code": "daisy_erased::common::MyErrorInner"
   },
   "spantrace": {
     "spans": [
@@ -17,9 +17,9 @@ expression: error
           "name": "inner_function",
           "target": "sys",
           "level": "INFO",
-          "module_path": "oopsie_daisy::erased::tests",
-          "file": "crates/oopsie-daisy/src/erased.rs",
-          "line": 332
+          "module_path": "daisy_erased::common",
+          "file": "crates/oopsie/tests/common/mod.rs",
+          "line": 31
         },
         "fields": "{\"foo\":true,\"id\":42,\"name\":\"Alice\"}"
       },
@@ -28,9 +28,9 @@ expression: error
           "name": "outer_function",
           "target": "controller",
           "level": "INFO",
-          "module_path": "oopsie_daisy::erased::tests",
-          "file": "crates/oopsie-daisy/src/erased.rs",
-          "line": 340
+          "module_path": "daisy_erased::common",
+          "file": "crates/oopsie/tests/common/mod.rs",
+          "line": 39
         },
         "fields": "{\"foo\":true,\"name\":\"Alice\"}"
       }

@@ -459,28 +459,6 @@ mod tests {
         let _ = trace;
     }
 
-    #[cfg(feature = "unstable")]
-    mod provide_test {
-        use super::*;
-        use oopsie_macros::Oopsie;
-
-        #[derive(Debug, Oopsie)]
-        #[oopsie("Boxed spantrace error")]
-        #[oopsie(suffix, module(false), path = "crate")]
-        #[oopsie(provide(ref, crate::SpanTrace => span.as_ref()))]
-        struct BoxedSpantraceError {
-            #[oopsie(auto)]
-            span: Box<SpanTrace>,
-        }
-
-        #[test]
-        fn test_extract_boxed_spantrace_via_provide_ref() {
-            let err = BoxedSpantraceOopsie.build();
-            let extracted = SpanTrace::extract_from_error(&err);
-            assert!(extracted.is_some());
-        }
-    }
-
     #[test]
     fn test_fallback_spantrace_deserialization() {
         let json = serde_json::json!({

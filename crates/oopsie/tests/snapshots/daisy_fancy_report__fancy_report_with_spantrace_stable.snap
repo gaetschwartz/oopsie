@@ -1,0 +1,6 @@
+---
+source: crates/oopsie/tests/daisy_fancy_report.rs
+expression: report
+---
+Error: Inner error happened
+  ╰─▶ Error: Inner function failed (foo=true, name=Alice)

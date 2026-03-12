@@ -1,0 +1,5 @@
+---
+source: crates/oopsie/tests/daisy_fancy_report.rs
+expression: output
+---
+Error: Test error: colored test

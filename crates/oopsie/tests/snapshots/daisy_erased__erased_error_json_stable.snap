@@ -1,0 +1,13 @@
+---
+source: crates/oopsie/tests/daisy_erased.rs
+expression: error
+---
+{
+  "message": "Inner error happened",
+  "source_chain": [
+    "Error: Inner function failed (foo=true, name=Alice)"
+  ],
+  "diagnostics": {},
+  "spantrace": null,
+  "backtrace": null
+}

@@ -1,0 +1,5 @@
+---
+source: crates/oopsie/tests/daisy_fancy_report.rs
+expression: report.to_string()
+---
+Error: Test error: something failed

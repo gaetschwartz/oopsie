@@ -1,0 +1,6 @@
+---
+source: crates/oopsie/tests/daisy_fancy_report.rs
+expression: report.to_string()
+---
+Error: Outer error
+  ╰─▶ Test error: root cause

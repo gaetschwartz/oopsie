@@ -28,7 +28,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 [dev-dependencies]
 insta = { version = "1", features = ["filters", "json", "redactions"] }
-oopsie-macros = { path = "../oopsie-macros" }
 serde_json = { version = "1" }
 tracing-error = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
