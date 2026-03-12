@@ -96,3 +96,159 @@ impl<T, E> FromResidual<MayBoxResult<Infallible, E>> for MayBoxResult<T, E> {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn ok(v: i32) -> MayBoxResult<i32, String> {
+        MayBoxResult::from(Ok(v))
+    }
+
+    fn err(s: &str) -> MayBoxResult<i32, String> {
+        MayBoxResult::new(s.to_string())
+    }
+
+    // --- map ---
+
+    #[test]
+    fn map_ok() {
+        let r = ok(2).map(|v| v * 3);
+        assert_eq!(r, MayBoxResult::from(Ok(6)));
+    }
+
+    #[test]
+    fn map_err() {
+        let r = err("bad").map(|v: i32| v * 3);
+        assert_eq!(r, MayBoxResult::new("bad".to_string()));
+    }
+
+    // --- map_err ---
+
+    #[test]
+    fn map_err_on_ok() {
+        let r = ok(5).map_err(|e: String| e.len());
+        assert_eq!(r, MayBoxResult::from(Ok(5)));
+    }
+
+    #[test]
+    fn map_err_on_err() {
+        let r = err("hello").map_err(|e| e.len());
+        assert_eq!(r, MayBoxResult::new(5usize));
+    }
+
+    // --- and_then ---
+
+    #[test]
+    fn and_then_ok() {
+        let r = ok(3).and_then(|v| MayBoxResult::from(Ok(v + 10)));
+        assert_eq!(r, MayBoxResult::from(Ok(13)));
+    }
+
+    #[test]
+    fn and_then_err() {
+        let r = err("fail").and_then(|v| MayBoxResult::from(Ok(v + 10)));
+        assert_eq!(r, MayBoxResult::new("fail".to_string()));
+    }
+
+    // --- or_else ---
+
+    #[test]
+    fn or_else_ok() {
+        let r = ok(7).or_else(|_| MayBoxResult::<i32, i32>::from(Ok(99)));
+        assert_eq!(r, MayBoxResult::from(Ok(7)));
+    }
+
+    #[test]
+    fn or_else_err() {
+        let r = err("oops").or_else(|e| MayBoxResult::new(e.len() as i32));
+        assert_eq!(r, MayBoxResult::new(4i32));
+    }
+
+    // --- unwrap ---
+
+    #[test]
+    fn unwrap_ok() {
+        assert_eq!(ok(42).unwrap(), 42);
+    }
+
+    #[test]
+    #[should_panic(expected = "called `MayBoxResult::unwrap()` on an `Err` value")]
+    fn unwrap_err() {
+        err("boom").unwrap();
+    }
+
+    // --- From<Result<T, E>> ---
+
+    #[test]
+    fn from_result_ok() {
+        let r: MayBoxResult<i32, String> = MayBoxResult::from(Ok(10));
+        assert_eq!(r.unwrap(), 10);
+    }
+
+    #[test]
+    fn from_result_err() {
+        let r: MayBoxResult<i32, String> = MayBoxResult::from(Err("e".to_string()));
+        assert_eq!(r, MayBoxResult::new("e".to_string()));
+    }
+
+    // --- Try::from_output ---
+
+    #[test]
+    fn try_from_output() {
+        let r = MayBoxResult::<i32, String>::from_output(99);
+        assert_eq!(r.unwrap(), 99);
+    }
+
+    // --- Try::branch ---
+
+    #[test]
+    fn branch_ok() {
+        let cf = ok(5).branch();
+        assert_eq!(cf, ControlFlow::Continue(5));
+    }
+
+    #[test]
+    fn branch_err() {
+        let cf = err("x").branch();
+        match cf {
+            ControlFlow::Break(residual) => {
+                assert_eq!(residual, MayBoxResult::new("x".to_string()));
+            }
+            ControlFlow::Continue(_) => panic!("expected Break"),
+        }
+    }
+
+    // --- FromResidual<Result<Infallible, E>> ---
+
+    #[test]
+    fn from_residual_result() {
+        fn inner() -> MayBoxResult<i32, String> {
+            let _: i32 = Err::<i32, String>("err".to_string())?;
+            MayBoxResult::from_output(0)
+        }
+        assert_eq!(inner(), MayBoxResult::new("err".to_string()));
+    }
+
+    // --- FromResidual<MayBoxResult<Infallible, E>> ---
+
+    #[test]
+    fn from_residual_mayboxresult() {
+        fn inner() -> MayBoxResult<i32, String> {
+            let _: i32 = MayBoxResult::new("nested".to_string())?;
+            MayBoxResult::from_output(0)
+        }
+        assert_eq!(inner(), MayBoxResult::new("nested".to_string()));
+    }
+
+    // Also test the happy path for ? operator to ensure from_output works in context
+    #[test]
+    fn try_operator_happy_path() {
+        fn inner() -> MayBoxResult<i32, String> {
+            let a: i32 = MayBoxResult::from(Ok::<_, String>(10))?;
+            let b: i32 = MayBoxResult::from(Ok::<_, String>(20))?;
+            MayBoxResult::from_output(a + b)
+        }
+        assert_eq!(inner().unwrap(), 30);
+    }
+}
