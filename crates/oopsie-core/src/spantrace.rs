@@ -660,4 +660,257 @@ mod tests {
 
         assert_eq!(count, 2);
     }
+
+    // ── ErasedMetadata getters ──────────────────────────────────────────
+
+    #[test]
+    fn test_erased_metadata_getters_with_optional_fields() {
+        let json = serde_json::json!({
+            "spans": [{
+                "metadata": {
+                    "name": "my_span",
+                    "target": "my_crate::module",
+                    "level": "INFO",
+                    "module_path": "my_crate::module",
+                    "file": "src/lib.rs",
+                    "line": 42
+                },
+                "fields": ""
+            }]
+        });
+
+        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        spantrace.with_spans(|metadata, _fields| {
+            assert_eq!(metadata.module_path(), Some("my_crate::module"));
+            assert_eq!(metadata.file(), Some("src/lib.rs"));
+            assert_eq!(metadata.line(), Some(42));
+            false
+        });
+    }
+
+    #[test]
+    fn test_erased_metadata_getters_without_optional_fields() {
+        let json = serde_json::json!({
+            "spans": [{
+                "metadata": {
+                    "name": "bare_span",
+                    "target": "some_target",
+                    "level": "DEBUG"
+                },
+                "fields": ""
+            }]
+        });
+
+        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        spantrace.with_spans(|metadata, _fields| {
+            assert_eq!(metadata.module_path(), None);
+            assert_eq!(metadata.file(), None);
+            assert_eq!(metadata.line(), None);
+            false
+        });
+    }
+
+    // ── OptionalSpanTrace ───────────────────────────────────────────────
+
+    #[test]
+    fn test_optional_span_trace_some_into_inner() {
+        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+            "spans": []
+        }))
+        .unwrap();
+        let opt = OptionalSpanTrace::some(trace);
+        assert!(opt.into_inner().is_some());
+    }
+
+    #[test]
+    fn test_optional_span_trace_none_into_inner() {
+        let opt = OptionalSpanTrace::none();
+        assert!(opt.into_inner().is_none());
+    }
+
+    #[test]
+    fn test_optional_span_trace_as_ref_some() {
+        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+            "spans": []
+        }))
+        .unwrap();
+        let opt = OptionalSpanTrace::some(trace);
+        assert!(opt.as_ref().is_some());
+    }
+
+    #[test]
+    fn test_optional_span_trace_as_ref_none() {
+        let opt = OptionalSpanTrace::none();
+        assert!(opt.as_ref().is_none());
+    }
+
+    #[test]
+    fn test_optional_span_trace_is_some() {
+        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+            "spans": []
+        }))
+        .unwrap();
+        let opt = OptionalSpanTrace::some(trace);
+        assert!(opt.is_some());
+        assert!(!opt.is_none());
+    }
+
+    #[test]
+    fn test_optional_span_trace_is_none() {
+        let opt = OptionalSpanTrace::none();
+        assert!(opt.is_none());
+        assert!(!opt.is_some());
+    }
+
+    #[test]
+    fn test_optional_span_trace_display_some() {
+        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+            "spans": [{
+                "metadata": {
+                    "name": "test_span",
+                    "target": "test_target",
+                    "level": "INFO"
+                },
+                "fields": ""
+            }]
+        }))
+        .unwrap();
+        let opt = OptionalSpanTrace::some(trace);
+        let display = opt.to_string();
+        assert!(!display.is_empty());
+    }
+
+    #[test]
+    fn test_optional_span_trace_display_none() {
+        let opt = OptionalSpanTrace::none();
+        let display = opt.to_string();
+        assert!(display.is_empty());
+    }
+
+    #[test]
+    fn test_optional_span_trace_from_spantrace() {
+        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+            "spans": []
+        }))
+        .unwrap();
+        let opt: OptionalSpanTrace = trace.into();
+        assert!(opt.is_some());
+    }
+
+    #[test]
+    fn test_optional_span_trace_from_option_none() {
+        let opt: OptionalSpanTrace = None::<Spantrace>.into();
+        assert!(opt.is_none());
+    }
+
+    #[test]
+    fn test_optional_span_trace_from_option_some() {
+        let trace: Spantrace = serde_json::from_value(serde_json::json!({
+            "spans": []
+        }))
+        .unwrap();
+        let opt: OptionalSpanTrace = Some(trace).into();
+        assert!(opt.is_some());
+    }
+
+    #[test]
+    fn test_optional_span_trace_generate_without_subscriber() {
+        // Without a subscriber with ErrorLayer, generate() should return None
+        let opt: OptionalSpanTrace = GenerateImplicitData::generate();
+        assert!(opt.is_none());
+    }
+
+    // ── PartialEq ───────────────────────────────────────────────────────
+
+    #[test]
+    fn test_partial_eq_identical_fallback() {
+        let json = serde_json::json!({
+            "spans": [{
+                "metadata": {
+                    "name": "span",
+                    "target": "target",
+                    "level": "INFO"
+                },
+                "fields": "key=val"
+            }]
+        });
+        let a: Spantrace = serde_json::from_value(json.clone()).unwrap();
+        let b: Spantrace = serde_json::from_value(json).unwrap();
+        assert_eq!(a, b);
+    }
+
+    #[test]
+    fn test_partial_eq_different_fallback() {
+        let json_a = serde_json::json!({
+            "spans": [{
+                "metadata": {
+                    "name": "span",
+                    "target": "target_a",
+                    "level": "INFO"
+                },
+                "fields": ""
+            }]
+        });
+        let json_b = serde_json::json!({
+            "spans": [{
+                "metadata": {
+                    "name": "span",
+                    "target": "target_b",
+                    "level": "INFO"
+                },
+                "fields": ""
+            }]
+        });
+        let a: Spantrace = serde_json::from_value(json_a).unwrap();
+        let b: Spantrace = serde_json::from_value(json_b).unwrap();
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn test_partial_eq_fallback_vs_tracing() {
+        let fallback: Spantrace = serde_json::from_value(serde_json::json!({
+            "spans": []
+        }))
+        .unwrap();
+        let tracing = Spantrace::capture();
+        assert_ne!(fallback, tracing);
+    }
+
+    // ── into_span_trace ─────────────────────────────────────────────────
+
+    #[test]
+    fn test_into_span_trace_fallback_returns_none() {
+        let fallback: Spantrace = serde_json::from_value(serde_json::json!({
+            "spans": []
+        }))
+        .unwrap();
+        assert!(fallback.into_span_trace().is_none());
+    }
+
+    #[test]
+    fn test_into_span_trace_tracing_returns_some() {
+        let tracing = Spantrace::capture();
+        assert!(tracing.into_span_trace().is_some());
+    }
+
+    // ── FallbackSpantrace Display edge case ─────────────────────────────
+
+    #[test]
+    fn test_fallback_display_span_zero_has_no_leading_newline() {
+        let json = serde_json::json!({
+            "spans": [{
+                "metadata": {
+                    "name": "only_span",
+                    "target": "t",
+                    "level": "INFO"
+                },
+                "fields": ""
+            }]
+        });
+        let spantrace: Spantrace = serde_json::from_value(json).unwrap();
+        let display = spantrace.to_string();
+        // Span 0 must NOT start with a newline
+        assert!(!display.starts_with('\n'));
+        assert!(display.starts_with("   0:"));
+    }
 }
