@@ -109,4 +109,24 @@ mod tests {
         // Restore
         set_color_mode(original);
     }
+
+    #[test]
+    fn test_always_should_colorize() {
+        assert!(ColorConfig::Always.should_colorize());
+    }
+
+    #[test]
+    fn test_never_should_not_colorize() {
+        assert!(!ColorConfig::Never.should_colorize());
+    }
+
+    #[test]
+    fn test_auto_roundtrip_through_global() {
+        let original = get_color_mode();
+
+        set_color_mode(ColorConfig::Auto);
+        assert_eq!(get_color_mode(), ColorConfig::Auto);
+
+        set_color_mode(original);
+    }
 }
