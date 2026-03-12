@@ -104,12 +104,8 @@ impl<E: std::error::Error> FancyReport<E> {
         let colors_enabled = self.color_config.should_colorize();
         let Err(err) = &self.res else { return Ok(()) };
 
-        let error_code = err
-            .source()
-            .and_then(|source| extract_value_from_error::<oopsie_core::ErrorCode>(source));
-        let help_text = err
-            .source()
-            .and_then(|source| extract_value_from_error::<oopsie_core::HelpText>(source));
+        let error_code = extract_value_from_error::<oopsie_core::ErrorCode>(err);
+        let help_text = extract_value_from_error::<oopsie_core::HelpText>(err);
 
         // Write main error
         if colors_enabled {

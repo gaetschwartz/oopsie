@@ -2,7 +2,9 @@
 source: crates/oopsie-daisy/src/fancy_report.rs
 expression: report.to_string()
 ---
-Error: Something went wrong: connection refused
+Error[oopsie_daisy::fancy_report::tests::ErrorWithHelp]: Something went wrong: connection refused
+
+  help: Try restarting the service
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 

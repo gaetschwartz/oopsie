@@ -2,7 +2,7 @@
 source: crates/oopsie-daisy/src/fancy_report.rs
 expression: output
 ---
-Error: Test error: colored test
+Error[oopsie_daisy::fancy_report::tests::TestError]: Test error: colored test
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -24,11 +24,11 @@ Error: Test error: colored test
  7: <alloc[PTR]::boxed::Box<oopsie_core[PTR]::backtrace::BackTrace> as oopsie_core[PTR]::traits::GenerateImplicitData>::generate
     at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/traits.rs:34
  8: <oopsie_daisy[PTR]::fancy_report::tests::TestOopsie<&str>>::build
-    at [CRATE_DIR]/src/fancy_report.rs:384
+    at [CRATE_DIR]/src/fancy_report.rs:380
  9: oopsie_daisy[PTR]::fancy_report::tests::test_fancy_report_colored
-    at [CRATE_DIR]/src/fancy_report.rs:427
-10: oopsie_daisy[PTR]::fancy_report::tests::test_fancy_report_colored::{closure#0}
     at [CRATE_DIR]/src/fancy_report.rs:423
+10: oopsie_daisy[PTR]::fancy_report::tests::test_fancy_report_colored::{closure#0}
+    at [CRATE_DIR]/src/fancy_report.rs:419
 11: <oopsie_daisy[PTR]::fancy_report::tests::test_fancy_report_colored::{closure#0} as core[PTR]::ops::function::FnOnce<()>>::call_once
     at /Users/gaetan/.rustup/toolchains/nightly-2026-02-04-aarch64-apple-darwin/lib/rustlib/src/rust/library/core/src/ops/function.rs:250
 12: <fn() -> core[PTR]::result::Result<(), alloc[PTR]::string::String> as core[PTR]::ops::function::FnOnce<()>>::call_once
