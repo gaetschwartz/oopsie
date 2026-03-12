@@ -431,7 +431,7 @@ mod tests {
         let output = strip_ansi(&report.to_string());
         insta::with_settings!({
             filters => [
-                (r"\[[0-9a-f]{16}\]", "[PTR]"),
+                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
                 (r"rs:\d+:\d+", "rs:[LOC]"),
                 (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
                 (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
@@ -469,7 +469,7 @@ mod tests {
 
         insta::with_settings!({
             filters => [
-                (r"\[[0-9a-f]{16}\]", "[PTR]"),
+                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
                 (r"rs:\d+:\d+", "rs:[LOC]"),
                 (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
                 (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
@@ -488,7 +488,7 @@ mod tests {
         // Redact file paths and line numbers for stable snapshots
         insta::with_settings!({
             filters => [
-                (r"\[[0-9a-f]{16}\]", "[PTR]"),
+                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
                 (r"rs:\d+:\d+", "rs:[LOC]"),
                 (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
                 (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
@@ -505,7 +505,7 @@ mod tests {
         // Redact file paths and line numbers for stable snapshots
         insta::with_settings!({
             filters => [
-                (r"\[[0-9a-f]{16}\]", "[PTR]"),
+                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
                 (r"rs:\d+:\d+", "rs:[LOC]"),
                 (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
                 (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),

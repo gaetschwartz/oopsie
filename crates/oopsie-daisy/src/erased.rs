@@ -351,7 +351,7 @@ pub(crate) mod tests {
         let error = ErasedError::from_error(make_error());
         insta::with_settings!({
             filters => [
-                (r"\[[0-9a-f]{16}\]", "[PTR]"),
+                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
                 (r"rs:\d+:\d+", "rs:[LOC]"),
                 (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
                 (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
@@ -421,7 +421,7 @@ pub(crate) mod tests {
 
         insta::with_settings!({
             filters => [
-                (r"\[[0-9a-f]{16}\]", "[PTR]"),
+                (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
                 (r"rs:\d+:\d+", "rs:[LOC]"),
                 (r"\/rustc\/[a-f0-9]+\/", "/rustc/[COMMIT]/"),
                 (&env!("CARGO_MANIFEST_DIR").replace("/", r"\/"), "[CRATE_DIR]"),
