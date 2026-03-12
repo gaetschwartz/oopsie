@@ -272,6 +272,170 @@ mod tests {
 
     use super::*;
 
+    // ── BetterFlag tests ──────────────────────────────────────────────
+
+    #[test]
+    fn better_flag_is_enabled() {
+        assert!(BetterFlag::<true>::Enabled.is_enabled());
+        assert!(!BetterFlag::<true>::Disabled.is_enabled());
+        assert!(BetterFlag::<true>::Default.is_enabled());
+
+        assert!(BetterFlag::<false>::Enabled.is_enabled());
+        assert!(!BetterFlag::<false>::Disabled.is_enabled());
+        assert!(!BetterFlag::<false>::Default.is_enabled());
+    }
+
+    #[test]
+    fn better_flag_to_option() {
+        assert_eq!(BetterFlag::<true>::Enabled.to_option(), Some(true));
+        assert_eq!(BetterFlag::<true>::Disabled.to_option(), Some(false));
+        assert_eq!(BetterFlag::<true>::Default.to_option(), None);
+
+        assert_eq!(BetterFlag::<false>::Enabled.to_option(), Some(true));
+        assert_eq!(BetterFlag::<false>::Disabled.to_option(), Some(false));
+        assert_eq!(BetterFlag::<false>::Default.to_option(), None);
+    }
+
+    #[test]
+    fn better_flag_from_none() {
+        let flag = BetterFlag::<true>::from_none();
+        assert!(matches!(flag, Some(BetterFlag::Default)));
+
+        let flag = BetterFlag::<false>::from_none();
+        assert!(matches!(flag, Some(BetterFlag::Default)));
+    }
+
+    #[test]
+    fn better_flag_from_value_bool() {
+        let true_lit: syn::Lit = parse_quote!(true);
+        let flag = BetterFlag::<true>::from_value(&true_lit).unwrap();
+        assert!(matches!(flag, BetterFlag::Enabled));
+
+        let false_lit: syn::Lit = parse_quote!(false);
+        let flag = BetterFlag::<true>::from_value(&false_lit).unwrap();
+        assert!(matches!(flag, BetterFlag::Disabled));
+
+        // Non-bool literal should error
+        let str_lit: syn::Lit = parse_quote!("hello");
+        assert!(BetterFlag::<true>::from_value(&str_lit).is_err());
+    }
+
+    #[test]
+    fn better_flag_from_meta_path() {
+        let meta: syn::Meta = parse_quote!(my_flag);
+        let flag = BetterFlag::<true>::from_meta(&meta).unwrap();
+        assert!(matches!(flag, BetterFlag::Enabled));
+    }
+
+    #[test]
+    fn better_flag_from_meta_name_value() {
+        let meta: syn::Meta = parse_quote!(my_flag = true);
+        let flag = BetterFlag::<true>::from_meta(&meta).unwrap();
+        assert!(matches!(flag, BetterFlag::Enabled));
+
+        let meta: syn::Meta = parse_quote!(my_flag = false);
+        let flag = BetterFlag::<true>::from_meta(&meta).unwrap();
+        assert!(matches!(flag, BetterFlag::Disabled));
+    }
+
+    #[test]
+    fn better_flag_from_meta_list() {
+        let meta: syn::Meta = parse_quote!(my_flag(true));
+        let flag = BetterFlag::<true>::from_meta(&meta).unwrap();
+        assert!(matches!(flag, BetterFlag::Enabled));
+
+        let meta: syn::Meta = parse_quote!(my_flag(false));
+        let flag = BetterFlag::<true>::from_meta(&meta).unwrap();
+        assert!(matches!(flag, BetterFlag::Disabled));
+    }
+
+    // ── FieldSetting tests ───────────────────────────────────────────
+
+    #[derive(Debug, Clone, Default, darling::FromMeta)]
+    struct TestSettings {
+        #[darling(default)]
+        value: Option<String>,
+    }
+
+    #[test]
+    fn field_setting_opt_settings_returns_some_for_settings_variant() {
+        let setting = FieldSetting::<true, TestSettings>::Settings(Settings {
+            enabled: Some(true),
+            settings: TestSettings {
+                value: Some("hello".into()),
+            },
+        });
+        let s = setting.opt_settings();
+        assert!(s.is_some());
+        assert_eq!(s.unwrap().value.as_deref(), Some("hello"));
+    }
+
+    #[test]
+    fn field_setting_opt_settings_returns_none_for_flag_variant() {
+        let flag = FieldSetting::<true, TestSettings>::Flag(true);
+        assert!(flag.opt_settings().is_none());
+    }
+
+    #[test]
+    fn field_setting_is_enabled() {
+        // Settings with enabled=Some(true)
+        let setting = FieldSetting::<true, TestSettings>::Settings(Settings {
+            enabled: Some(true),
+            settings: TestSettings::default(),
+        });
+        assert!(setting.is_enabled());
+
+        // Settings with enabled=Some(false)
+        let setting = FieldSetting::<true, TestSettings>::Settings(Settings {
+            enabled: Some(false),
+            settings: TestSettings::default(),
+        });
+        assert!(!setting.is_enabled());
+
+        // Settings with enabled=None defaults to true
+        let setting = FieldSetting::<true, TestSettings>::Settings(Settings {
+            enabled: None,
+            settings: TestSettings::default(),
+        });
+        assert!(setting.is_enabled());
+
+        // Flag(true)
+        let flag = FieldSetting::<true, TestSettings>::Flag(true);
+        assert!(flag.is_enabled());
+
+        // Flag(false)
+        let flag = FieldSetting::<true, TestSettings>::Flag(false);
+        assert!(!flag.is_enabled());
+    }
+
+    // ── OopsieValue Deref test ───────────────────────────────────────
+
+    #[test]
+    fn oopsie_value_deref() {
+        let val = OopsieValue::new_some(42);
+        let inner: &Option<i32> = &*val;
+        assert_eq!(*inner, Some(42));
+
+        let empty: OopsieValue<i32> = OopsieValue::default();
+        let inner: &Option<i32> = &*empty;
+        assert_eq!(*inner, None);
+    }
+
+    // ── OopsieSynValue Deref test ────────────────────────────────────
+
+    #[test]
+    fn oopsie_syn_value_deref() {
+        let val = OopsieSynValue::new_some(42i32);
+        let inner: &Option<i32> = &*val;
+        assert_eq!(*inner, Some(42));
+
+        let empty: OopsieSynValue<i32> = OopsieSynValue::default();
+        let inner: &Option<i32> = &*empty;
+        assert_eq!(*inner, None);
+    }
+
+    // ── Existing tests ───────────────────────────────────────────────
+
     #[test]
     fn oopsie_value_from_meta_name_value() {
         let meta: Vec<syn::Attribute> = parse_quote! {
