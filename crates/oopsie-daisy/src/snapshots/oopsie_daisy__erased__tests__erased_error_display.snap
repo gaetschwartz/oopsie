@@ -26,9 +26,9 @@ Error: oopsie_daisy::erased::tests::ErrorWithSpanTraceInner
    3: <backtrace::capture::Backtrace>::new
              at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
    4: <oopsie_core::backtrace::Backtrace as oopsie_core::traits::GenerateImplicitData>::generate
-             at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/backtrace.rs:[LOC]
+             at /Users/gaetan/dev/oopsie/.worktrees/test-mutation-coverage/crates/oopsie-core/src/backtrace.rs:[LOC]
    5: <alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::traits::GenerateImplicitData>::generate
-             at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/traits.rs:[LOC]
+             at /Users/gaetan/dev/oopsie/.worktrees/test-mutation-coverage/crates/oopsie-core/src/traits.rs:[LOC]
    6: <oopsie_daisy::erased::tests::ErrorWithSpanTraceInnerOopsie<alloc::string::String>>::build
              at src/erased.rs:[LOC]
    7: <oopsie_daisy::erased::tests::ErrorWithSpanTraceInnerOopsie<alloc::string::String>>::fail::<()>
