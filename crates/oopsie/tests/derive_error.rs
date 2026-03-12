@@ -1,8 +1,8 @@
 #![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
 #![allow(unused, clippy::all)]
 
-use oopsie::{IntoError, Oopsie, ResultExt};
-use std::error::Error;
+use oopsie::{IntoError as _, Oopsie, ResultExt as _};
+use std::error::Error as _;
 use std::io;
 
 // ---- Enum for source tests ----

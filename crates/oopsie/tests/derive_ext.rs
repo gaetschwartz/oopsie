@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
 #![allow(unused, clippy::all)]
 
-use oopsie::{Oopsie, OptionExt, ResultExt};
+use oopsie::{Oopsie, OptionExt as _, ResultExt as _};
 use std::io;
 
 // Error with a source variant (io::Error) and a leaf variant (no source).
@@ -82,5 +82,5 @@ fn result_context_unit_selector() {
     assert!(matches!(built, AppError::UnitError));
 
     let failed: Result<i32, AppError> = Unit.fail();
-    assert!(failed.is_err());
+    failed.unwrap_err();
 }

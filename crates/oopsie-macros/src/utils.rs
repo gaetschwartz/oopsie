@@ -317,7 +317,7 @@ mod tests {
 
         // Non-bool literal should error
         let str_lit: syn::Lit = parse_quote!("hello");
-        assert!(BetterFlag::<true>::from_value(&str_lit).is_err());
+        BetterFlag::<true>::from_value(&str_lit).unwrap_err();
     }
 
     #[test]
@@ -413,11 +413,11 @@ mod tests {
     #[test]
     fn oopsie_value_deref() {
         let val = OopsieValue::new_some(42);
-        let inner: &Option<i32> = &*val;
+        let inner: &Option<i32> = &val;
         assert_eq!(*inner, Some(42));
 
         let empty: OopsieValue<i32> = OopsieValue::default();
-        let inner: &Option<i32> = &*empty;
+        let inner: &Option<i32> = &empty;
         assert_eq!(*inner, None);
     }
 
@@ -426,11 +426,11 @@ mod tests {
     #[test]
     fn oopsie_syn_value_deref() {
         let val = OopsieSynValue::new_some(42i32);
-        let inner: &Option<i32> = &*val;
+        let inner: &Option<i32> = &val;
         assert_eq!(*inner, Some(42));
 
         let empty: OopsieSynValue<i32> = OopsieSynValue::default();
-        let inner: &Option<i32> = &*empty;
+        let inner: &Option<i32> = &empty;
         assert_eq!(*inner, None);
     }
 

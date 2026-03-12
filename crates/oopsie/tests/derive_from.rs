@@ -1,8 +1,8 @@
 #![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
 #![allow(unused, clippy::all)]
 
-use oopsie::{IntoError, Oopsie};
-use std::error::Error;
+use oopsie::{IntoError as _, Oopsie};
+use std::error::Error as _;
 use std::io;
 
 // ---- Test 1: #[oopsie(from)] on non-"source"-named field ----
