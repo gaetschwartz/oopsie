@@ -1,19 +1,20 @@
 //! Shared helpers for oopsie-daisy integration tests.
 
-use oopsie::{NewJsonErrorLayer as _, Oopsie, ResultExt as _, oopsie};
+use oopsie::{NewJsonErrorLayer as _, Oopsie, ResultExt as _, traced};
 use tracing::instrument;
 use tracing_error::ErrorLayer;
 use tracing_subscriber::prelude::*;
 
-#[oopsie]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
 pub enum MyError {
     #[oopsie(display("Inner error happened"))]
     Inner { source: MyErrorInner },
 }
 
-#[oopsie(display = "Error: {message}")]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
+#[oopsie("Error: {message}")]
 pub struct MyErrorInner {
     message: String,
 }

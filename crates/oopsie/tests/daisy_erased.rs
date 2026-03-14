@@ -3,17 +3,19 @@
 
 mod common;
 
-use oopsie::{ErasedError, Oopsie, oopsie};
+use oopsie::{ErasedError, Oopsie, traced};
 
-#[oopsie(display = "Something went wrong: {message}")]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
+#[oopsie("Something went wrong: {message}")]
 #[oopsie(help = "Try restarting the service")]
 pub struct ErrorWithHelp {
     message: String,
 }
 
-#[oopsie(display = "Code-only error: {message}")]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
+#[oopsie("Code-only error: {message}")]
 pub struct ErrorWithCodeOnly {
     message: String,
 }

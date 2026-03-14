@@ -1,60 +1,60 @@
 #![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
 #![allow(unused, clippy::all)]
 
-use oopsie::{Oopsie, oopsie};
+use oopsie::{Oopsie, traced};
 
-// ---- Test 1: attr macro on enum — basic usage ----
+// ---- Test 1: traced macro on enum — basic usage ----
 
-#[oopsie]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
 pub enum AppError {
     #[oopsie("conn failed: {addr}")]
     ConnFailed { addr: String },
 }
 
 #[test]
-fn attr_enum_basic() {
-    // The attr macro generates module `app_oopsies` with selectors inside.
+fn traced_enum_basic() {
+    // The derive generates module `app_oopsies` with selectors inside.
     let err = app_oopsies::ConnFailed { addr: "127.0.0.1" }.build();
     assert!(matches!(err, AppError::ConnFailed { ref addr, .. } if addr == "127.0.0.1"));
     assert_eq!(err.to_string(), "conn failed: 127.0.0.1");
 }
 
-// ---- Test 2: attr macro on struct — basic usage ----
+// ---- Test 2: traced macro on struct — basic usage ----
 
-#[oopsie]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
 pub struct ConnError {
     reason: String,
 }
 
 #[test]
-fn attr_struct_basic() {
-    // The attr macro adds #[oopsie(suffix)] for structs, so selector is ConnOopsie ("Error" stripped).
+fn traced_struct_basic() {
+    // The derive defaults to suffix="Oopsie" for structs, so selector is ConnOopsie.
     let err = ConnOopsie { reason: "refused" }.build();
     assert_eq!(err.reason, "refused");
 }
 
-// ---- Test 3: attr macro injects backtrace (no panic) ----
+// ---- Test 3: traced macro injects backtrace (no panic) ----
 
-#[oopsie]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
 pub enum InjectError {
     #[oopsie("injected")]
     Injected { info: String },
 }
 
 #[test]
-fn attr_injects_backtrace() {
-    // Should not panic — backtrace and spantrace are auto-injected by the attr macro.
+fn traced_injects_backtrace() {
+    // Should not panic — backtrace and spantrace are auto-injected by #[traced].
     let err = inject_oopsies::Injected { info: "test" }.build();
     assert!(matches!(err, InjectError::Injected { ref info, .. } if info == "test"));
 }
 
 // ---- Test 4: #[help] and #[code] on variant ----
 
-#[oopsie]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
 pub enum HelpCodeError {
     #[oopsie(
         display("connection refused"),
@@ -65,7 +65,7 @@ pub enum HelpCodeError {
 }
 
 #[test]
-fn attr_with_help_and_code() {
+fn traced_with_help_and_code() {
     let err = help_code_oopsies::Refused { target: "db" }.build();
     assert!(matches!(err, HelpCodeError::Refused { ref target, .. } if target == "db"));
 
@@ -78,52 +78,34 @@ fn attr_with_help_and_code() {
     }
 }
 
-// ---- Test 5: does not duplicate #[derive(Oopsie)] ----
-// When the user writes `#[derive(Debug, Oopsie)]` and `#[oopsie]`, the attr macro
-// detects the existing Oopsie derive and doesn't add it again.
+// ---- Test 5: enum module naming convention ----
 
-#[::oopsie::oopsie]
+#[traced]
 #[derive(Debug, Oopsie)]
-pub struct DupDeriveError {
-    detail: String,
-}
-
-#[test]
-fn attr_does_not_duplicate_derive() {
-    // If derive were duplicated, this would fail to compile.
-    let err = DupDeriveOopsie { detail: "dup" }.build();
-    assert_eq!(err.detail, "dup");
-}
-
-// ---- Test 6: enum module naming convention ----
-
-#[oopsie]
-#[derive(Debug)]
 pub enum FooBarError {
     #[oopsie("foo")]
     Foo,
 }
 
-#[oopsie]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
 pub enum MyError {
     #[oopsie("my")]
     My,
 }
 
 #[test]
-fn attr_enum_module_naming() {
+fn traced_enum_module_naming() {
     // FooBarError → strip "Error" → "FooBar" → snake_case → "foo_bar" → "foo_bar_oopsies"
     let _ = foo_bar_oopsies::Foo.build();
     // MyError → strip "Error" → "My" → snake_case → "my" → "my_oopsies"
     let _ = my_oopsies::My.build();
 }
 
-// ---- Test 7: attr macro does not duplicate pre-existing backtrace field ----
-// When a variant already has a Backtrace field, the attr macro should skip injection.
+// ---- Test 6: does not duplicate pre-existing backtrace field ----
 
-#[oopsie]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
 pub enum PreExistingBtError {
     #[oopsie("has backtrace")]
     #[oopsie(provide(ref, oopsie::BackTrace => bt.as_ref()))]
@@ -135,16 +117,15 @@ pub enum PreExistingBtError {
 }
 
 #[test]
-fn attr_does_not_duplicate_backtrace() {
-    // If backtrace were duplicated, this would fail to compile due to conflicting fields.
+fn traced_does_not_duplicate_backtrace() {
     let err = pre_existing_bt_oopsies::HasBt { msg: "test" }.build();
     assert_eq!(err.to_string(), "has backtrace");
 }
 
-// ---- Test 8: attr macro does not duplicate pre-existing spantrace field ----
+// ---- Test 7: does not duplicate pre-existing spantrace field ----
 
-#[oopsie]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
 pub enum PreExistingStError {
     #[oopsie("has spantrace")]
     #[oopsie(provide(ref, oopsie::SpanTrace => st.as_ref()))]
@@ -156,16 +137,15 @@ pub enum PreExistingStError {
 }
 
 #[test]
-fn attr_does_not_duplicate_spantrace() {
-    // If spantrace were duplicated, this would fail to compile due to conflicting fields.
+fn traced_does_not_duplicate_spantrace() {
     let err = pre_existing_st_oopsies::HasSt { msg: "test" }.build();
     assert_eq!(err.to_string(), "has spantrace");
 }
 
-// ---- Test 9: struct attr macro does not duplicate pre-existing backtrace ----
+// ---- Test 8: struct does not duplicate pre-existing backtrace ----
 
-#[oopsie]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
 pub struct PreExistingBtStructError {
     msg: String,
     #[oopsie(auto)]
@@ -173,7 +153,62 @@ pub struct PreExistingBtStructError {
 }
 
 #[test]
-fn attr_struct_does_not_duplicate_backtrace() {
+fn traced_struct_does_not_duplicate_backtrace() {
     let err = PreExistingBtStructOopsie { msg: "struct bt" }.build();
     assert_eq!(err.msg, "struct bt");
+}
+
+// ---- Test 9: explicit override — backtrace only ----
+
+#[traced(backtrace)]
+#[derive(Debug, Oopsie)]
+pub enum BacktraceOnlyError {
+    #[oopsie("bt only")]
+    BtOnly { msg: String },
+}
+
+#[test]
+fn traced_explicit_backtrace_only() {
+    // Only backtrace should be injected, not spantrace
+    let err = backtrace_only_oopsies::BtOnly { msg: "test" }.build();
+    assert_eq!(err.to_string(), "bt only");
+}
+
+// ---- Test 10: explicit override — spantrace only ----
+
+#[traced(spantrace)]
+#[derive(Debug, Oopsie)]
+pub enum SpantraceOnlyError {
+    #[oopsie("st only")]
+    StOnly { msg: String },
+}
+
+#[test]
+fn traced_explicit_spantrace_only() {
+    let err = spantrace_only_oopsies::StOnly { msg: "test" }.build();
+    assert_eq!(err.to_string(), "st only");
+}
+
+// ---- Test 11: code = false disables auto error code ----
+
+#[traced(code = false)]
+#[derive(Debug, Oopsie)]
+pub enum NoCodeError {
+    #[oopsie("no code")]
+    NoCode { msg: String },
+}
+
+#[test]
+fn traced_code_disabled() {
+    let err = no_code_oopsies::NoCode { msg: "test" }.build();
+    assert_eq!(err.to_string(), "no code");
+
+    #[cfg(feature = "unstable")]
+    {
+        let code = core::error::request_value::<oopsie::ErrorCode>(&err);
+        assert!(
+            code.is_none(),
+            "ErrorCode should not be provided when code=false"
+        );
+    }
 }

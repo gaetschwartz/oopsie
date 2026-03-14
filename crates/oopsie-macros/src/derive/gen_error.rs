@@ -223,7 +223,7 @@ fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
 
 /// Parse `#[oopsie(provide(...))]` attributes from struct/variant-level attributes.
 ///
-/// These are emitted by the `#[oopsie]` attribute macro for backtrace, spantrace,
+/// These are emitted by the `#[traced]` attribute macro for backtrace, spantrace,
 /// and auto-generated error codes. The format is:
 /// - `#[oopsie(provide(ref, Type => expr))]` for ref provides
 /// - `#[oopsie(provide(Type => expr))]` for value provides

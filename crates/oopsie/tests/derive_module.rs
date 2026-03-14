@@ -3,7 +3,7 @@
 
 use oopsie::Oopsie;
 
-// Test 1: Default module name = snake_case of enum name.
+// Test 1: Default module name = strip "Error" + snake_case + "_oopsies".
 #[derive(Debug, Oopsie)]
 #[oopsie(module)]
 enum MyAppError {
@@ -16,12 +16,12 @@ enum MyAppError {
 
 #[test]
 fn default_module_name() {
-    // Selectors live in `my_app_error::` module.
-    let err = my_app_error::NotFound { name: "widget" }.build();
+    // MyAppError → strip "Error" → "MyApp" → snake_case → "my_app" → "my_app_oopsies"
+    let err = my_app_oopsies::NotFound { name: "widget" }.build();
     assert!(matches!(err, MyAppError::NotFound { .. }));
     assert_eq!(err.to_string(), "not found: widget");
 
-    let err = my_app_error::TimedOut.build();
+    let err = my_app_oopsies::TimedOut.build();
     assert!(matches!(err, MyAppError::TimedOut));
     assert_eq!(err.to_string(), "timed out");
 }

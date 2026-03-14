@@ -54,7 +54,7 @@ pub fn gen_enum_selectors(
             continue;
         }
 
-        let selector_ident = selector_name(variant_ident, &container.suffix);
+        let selector_ident = selector_name(variant_ident, container.effective_suffix(true));
         let selector_vis = variant_attrs
             .visibility
             .clone()
@@ -175,7 +175,7 @@ pub fn gen_struct_selector(
         return Ok(TokenStream2::new());
     }
 
-    let selector_ident = selector_name(struct_ident, &container.suffix);
+    let selector_ident = selector_name(struct_ident, container.effective_suffix(false));
     let has_source = categorized.source.is_some();
     let user_fields = &categorized.user_fields;
 
@@ -245,7 +245,7 @@ fn selector_name(base: &Ident, suffix: &SuffixSetting) -> Ident {
     let base_str = base.to_string();
     let stripped = base_str.strip_suffix("Error").unwrap_or(&base_str);
     match suffix {
-        SuffixSetting::Off => Ident::new(stripped, base.span()),
+        SuffixSetting::Off | SuffixSetting::Unset => Ident::new(stripped, base.span()),
         SuffixSetting::Default => format_ident!("{}Oopsie", stripped),
         SuffixSetting::Custom(s) => format_ident!("{}{}", stripped, s),
     }

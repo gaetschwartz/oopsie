@@ -40,6 +40,18 @@ impl<const DEFAULT: bool, T: FromMeta> FromMeta for FieldSetting<DEFAULT, T> {
     fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
         if let syn::Meta::Path(_) = meta {
             Ok(Self::Flag(true))
+        } else if let syn::Meta::NameValue(nv) = meta {
+            // Handle `field = true` / `field = false`
+            if let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Bool(b),
+                ..
+            }) = &nv.value
+            {
+                Ok(Self::Flag(b.value))
+            } else {
+                let settings = Settings::<T>::from_meta(meta)?;
+                Ok(Self::Settings(settings))
+            }
         } else {
             let settings = Settings::<T>::from_meta(meta)?;
             Ok(Self::Settings(settings))

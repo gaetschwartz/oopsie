@@ -4,7 +4,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::parse_quote;
 
-use super::args::ErrorArgs;
+use super::args::{ResolvedTraceArgs, TracedArgs};
 
 /// Configuration for injecting backtrace, spantrace, and timestamp fields.
 pub(super) struct FieldInjectorConfig {
@@ -25,29 +25,29 @@ pub(super) struct FieldInjectorConfig {
 }
 
 impl FieldInjectorConfig {
-    pub fn new(args: &ErrorArgs, magnetite_utils_path: syn::Path) -> Self {
+    pub fn new(
+        args: &TracedArgs,
+        resolved: &ResolvedTraceArgs<'_>,
+        magnetite_utils_path: syn::Path,
+    ) -> Self {
         let backtrace_ident = format_ident!("__oopsie_backtrace");
         let spantrace_ident = format_ident!("__oopsie_spantrace");
         let timestamp_ident = format_ident!("__oopsie_timestamp");
 
-        let backtrace_type = args.backtrace.r#type().map_or_else(
+        let backtrace_type = resolved.backtrace_type().map_or_else(
             || quote! { ::std::boxed::Box<#magnetite_utils_path::BackTrace> },
             |p| quote! { #p },
         );
-        let spantrace_type = args.spantrace.r#type().map_or_else(
+        let spantrace_type = resolved.spantrace_type().map_or_else(
             || quote! { ::std::boxed::Box<#magnetite_utils_path::SpanTrace> },
             |p| quote! { #p },
         );
-        let timestamp_type: syn::Type = if let Some(s) = &args.timestamp.opt_settings()
-            && s.chrono.is_enabled()
-        {
+        let timestamp_type: syn::Type = if resolved.timestamp_chrono() {
             parse_quote! { chrono::DateTime<chrono::Local> }
         } else {
             parse_quote! { std::time::SystemTime }
         };
-        let timestamp_provide_attr = if let Some(s) = &args.timestamp.opt_settings()
-            && s.provide.is_enabled()
-        {
+        let timestamp_provide_attr = if resolved.timestamp_provide() {
             Some(quote! { #[oopsie(provide)] })
         } else {
             None

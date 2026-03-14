@@ -1,33 +1,4 @@
-//! Type checking helpers.
-
-use darling::FromMeta as _;
-use darling::util::PathList;
-
-/// Ensure that the item has `#[derive(Oopsie)]` in its derives, adding it if not present.
-pub(super) fn ensure_derive_oopsie(attrs: &mut Vec<syn::Attribute>) {
-    let has_oopsie = attrs.iter().any(|attr| {
-        attr.path().is_ident("derive")
-            && PathList::from_meta(&attr.meta).is_ok_and(|p| {
-                p.iter()
-                    .any(|p| p.segments.last().is_some_and(|s| s.ident == "Oopsie"))
-            })
-    });
-    if has_oopsie {
-        return;
-    }
-
-    // Find an existing derive attribute to extend, or add a new one
-    if let Some(derive_attr) = attrs.iter_mut().find(|attr| attr.path().is_ident("derive")) {
-        // Extend existing derive with Oopsie
-        if let syn::Meta::List(list) = &mut derive_attr.meta {
-            let existing: proc_macro2::TokenStream = list.tokens.clone();
-            list.tokens = quote::quote! { #existing, Oopsie };
-        }
-    } else {
-        // No derive attribute at all, add one
-        attrs.push(syn::parse_quote! { #[derive(Oopsie)] });
-    }
-}
+//! Field detection helpers for backtrace/spantrace types.
 
 pub(super) fn is_backtrace_type(ty: &syn::Type) -> bool {
     is_ident_type(ty, "BackTrace") || is_boxed_ident_type(ty, "BackTrace")

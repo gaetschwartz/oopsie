@@ -34,12 +34,14 @@ pub enum ModuleSetting {
 #[derive(Debug, Default)]
 pub enum SuffixSetting {
     /// No suffix (selector name = variant name).
-    #[default]
     Off,
     /// Default suffix "Oopsie".
     Default,
     /// Custom suffix.
     Custom(String),
+    /// Not specified — use default (off for enums, "Oopsie" for structs).
+    #[default]
+    Unset,
 }
 
 impl ContainerAttrs {
@@ -123,6 +125,22 @@ impl ContainerAttrs {
             }
         }
         Ok(())
+    }
+
+    /// Resolve the suffix setting with defaults for the given item kind.
+    /// - Enums: default → `Off` (no suffix, selector name = variant name)
+    /// - Structs: default → `Default` ("Oopsie" suffix, e.g. `ConnOopsie`)
+    pub fn effective_suffix(&self, is_enum: bool) -> &SuffixSetting {
+        match &self.suffix {
+            SuffixSetting::Unset => {
+                if is_enum {
+                    &SuffixSetting::Off
+                } else {
+                    &SuffixSetting::Default
+                }
+            }
+            other => other,
+        }
     }
 
     /// Resolve the module setting with defaults for the given item kind.
@@ -467,6 +485,16 @@ impl FieldAttrs {
             && ident == "source"
         {
             result.from = SourceKind::Yes;
+        }
+
+        // Auto-detect backtrace/spantrace fields by name
+        if let Some(ident) = &field.ident
+            && (ident == "backtrace"
+                || ident == "back_trace"
+                || ident == "spantrace"
+                || ident == "span_trace")
+        {
+            result.auto = true;
         }
 
         for attr in &field.attrs {

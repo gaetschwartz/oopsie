@@ -5,16 +5,18 @@ mod common;
 
 use std::process::Termination;
 
-use oopsie::{FancyReport, IntoError as _, Oopsie, oopsie};
+use oopsie::{FancyReport, IntoError as _, Oopsie, traced};
 
-#[oopsie(display = "Test error: {message}")]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
+#[oopsie("Test error: {message}")]
 pub struct TestError {
     message: String,
 }
 
-#[oopsie(display = "Outer error")]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
+#[oopsie("Outer error")]
 pub struct OuterError {
     source: TestError,
 }
@@ -71,8 +73,9 @@ fn test_fancy_report_from() {
     assert!(report.to_string().contains("from test"));
 }
 
-#[oopsie(display = "Something went wrong: {message}")]
-#[derive(Debug)]
+#[traced]
+#[derive(Debug, Oopsie)]
+#[oopsie("Something went wrong: {message}")]
 #[oopsie(help = "Try restarting the service")]
 pub struct ErrorWithHelp {
     message: String,
