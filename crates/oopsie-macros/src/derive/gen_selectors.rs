@@ -102,9 +102,9 @@ pub fn gen_enum_selectors(
             }
         };
 
-        // Generate IntoError or build/fail depending on whether there's a source
+        // Generate Contextual or build/fail depending on whether there's a source
         let methods = if has_source {
-            gen_into_error(
+            gen_build_error(
                 &selector_ident,
                 enum_ident,
                 variant_ident,
@@ -216,7 +216,7 @@ pub fn gen_struct_selector(
     };
 
     let methods = if has_source {
-        gen_into_error_struct(
+        gen_build_error_struct(
             &selector_ident,
             struct_ident,
             &categorized,
@@ -263,9 +263,9 @@ fn gen_auto_inits(
             let ident = &af.ident;
             let ty = &af.ty;
             if has_source {
-                quote! { let #ident = <#ty as #oopsie_path::GenerateImplicitData>::generate_with_source(&source); }
+                quote! { let #ident = <#ty as #oopsie_path::Capturable>::capture_from(&source); }
             } else {
-                quote! { let #ident = <#ty as #oopsie_path::GenerateImplicitData>::generate(); }
+                quote! { let #ident = <#ty as #oopsie_path::Capturable>::capture(); }
             }
         })
         .collect()
@@ -286,9 +286,9 @@ fn gen_auto_field_names(categorized: &CategorizedFields) -> Vec<&Ident> {
     categorized.auto_fields.iter().map(|af| &af.ident).collect()
 }
 
-/// Generate `IntoError` impl for an enum variant with a source field.
+/// Generate `Contextual` impl for an enum variant with a source field.
 #[expect(clippy::too_many_arguments)]
-fn gen_into_error(
+fn gen_build_error(
     selector_ident: &Ident,
     enum_ident: &Ident,
     variant_ident: &Ident,
@@ -331,13 +331,13 @@ fn gen_into_error(
     };
 
     quote! {
-        impl #generic_params #oopsie_path::IntoError<#enum_ident> for #selector_ident #generic_params
+        impl #generic_params #oopsie_path::Contextual<#enum_ident> for #selector_ident #generic_params
         #where_clauses
         {
             type Source = #source_type;
 
             #[track_caller]
-            fn into_error(self, source: Self::Source) -> #enum_ident {
+            fn build_error(self, source: Self::Source) -> #enum_ident {
                 #source_assign
                 #(#auto_inits)*
                 #enum_ident::#variant_ident {
@@ -373,15 +373,15 @@ fn gen_build_fail(
         })
         .collect();
 
-    // Also implement IntoError with NoneError for OptionExt support
+    // Also implement Contextual with NoSource for OptionExt support
     let none_error_impl = quote! {
-        impl #generic_params #oopsie_path::IntoError<#enum_ident> for #selector_ident #generic_params
+        impl #generic_params #oopsie_path::Contextual<#enum_ident> for #selector_ident #generic_params
         #where_clauses
         {
-            type Source = #oopsie_path::NoneError;
+            type Source = #oopsie_path::NoSource;
 
             #[track_caller]
-            fn into_error(self, _: Self::Source) -> #enum_ident {
+            fn build_error(self, _: Self::Source) -> #enum_ident {
                 self.build()
             }
         }
@@ -411,8 +411,8 @@ fn gen_build_fail(
     }
 }
 
-/// Generate `IntoError` impl for a struct with source.
-fn gen_into_error_struct(
+/// Generate `Contextual` impl for a struct with source.
+fn gen_build_error_struct(
     selector_ident: &Ident,
     struct_ident: &Ident,
     categorized: &CategorizedFields,
@@ -453,13 +453,13 @@ fn gen_into_error_struct(
     };
 
     quote! {
-        impl #generic_params #oopsie_path::IntoError<#struct_ident> for #selector_ident #generic_params
+        impl #generic_params #oopsie_path::Contextual<#struct_ident> for #selector_ident #generic_params
         #where_clauses
         {
             type Source = #source_type;
 
             #[track_caller]
-            fn into_error(self, source: Self::Source) -> #struct_ident {
+            fn build_error(self, source: Self::Source) -> #struct_ident {
                 #source_assign
                 #(#auto_inits)*
                 #struct_ident {
@@ -493,13 +493,13 @@ fn gen_build_fail_struct(
         .collect();
 
     let none_error_impl = quote! {
-        impl #generic_params #oopsie_path::IntoError<#struct_ident> for #selector_ident #generic_params
+        impl #generic_params #oopsie_path::Contextual<#struct_ident> for #selector_ident #generic_params
         #where_clauses
         {
-            type Source = #oopsie_path::NoneError;
+            type Source = #oopsie_path::NoSource;
 
             #[track_caller]
-            fn into_error(self, _: Self::Source) -> #struct_ident {
+            fn build_error(self, _: Self::Source) -> #struct_ident {
                 self.build()
             }
         }

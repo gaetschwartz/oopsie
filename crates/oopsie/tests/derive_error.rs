@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
 #![allow(unused, clippy::all)]
 
-use oopsie::{IntoError as _, Oopsie, ResultExt as _};
+use oopsie::{Contextual as _, Oopsie, ResultExt as _};
 use std::error::Error as _;
 use std::io;
 
@@ -35,7 +35,7 @@ struct StructNoSource {
 #[test]
 fn source_returns_some() {
     let io_err = io::Error::new(io::ErrorKind::BrokenPipe, "pipe broke");
-    let err: MyError = WithSource { info: "ctx" }.into_error(io_err);
+    let err: MyError = WithSource { info: "ctx" }.build_error(io_err);
     let src = err.source();
     assert!(src.is_some());
     assert_eq!(src.unwrap().to_string(), "pipe broke");
@@ -50,7 +50,7 @@ fn source_returns_none_leaf() {
 #[test]
 fn struct_source_some() {
     let io_err = io::Error::new(io::ErrorKind::AddrInUse, "in use");
-    let err: StructWithSource = StructWithSourceOopsie { detail: "binding" }.into_error(io_err);
+    let err: StructWithSource = StructWithSourceOopsie { detail: "binding" }.build_error(io_err);
     let src = err.source();
     assert!(src.is_some());
     assert_eq!(src.unwrap().to_string(), "in use");
@@ -82,7 +82,7 @@ enum ProvideError {
     #[oopsie(provide(ref, oopsie::BackTrace => bt.as_ref()))]
     WithBacktrace {
         msg: String,
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         bt: Box<oopsie::BackTrace>,
     },
 
@@ -136,7 +136,7 @@ enum InnerError {
     #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from("inner::code")))]
     Root {
         detail: String,
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         bt: Box<oopsie::BackTrace>,
     },
 }
@@ -163,8 +163,8 @@ fn nested_source_chain_two_levels() {
         detail: "db failed",
     }
     .build();
-    let middle: MiddleError = Wrapped { context: "query" }.into_error(inner);
-    let outer: OuterError = Top { label: "request" }.into_error(middle);
+    let middle: MiddleError = Wrapped { context: "query" }.build_error(inner);
+    let outer: OuterError = Top { label: "request" }.build_error(middle);
 
     // Display
     assert_eq!(outer.to_string(), "outer: request");
@@ -207,8 +207,8 @@ fn nested_backtrace_propagated_through_source_chain() {
     let middle: MiddleError = Wrapped {
         context: "processing",
     }
-    .into_error(inner);
-    let outer: OuterError = Top { label: "handler" }.into_error(middle);
+    .build_error(inner);
+    let outer: OuterError = Top { label: "handler" }.build_error(middle);
 
     // The backtrace should be accessible from the inner error directly
     let inner_ref = outer.source().unwrap().source().unwrap();
@@ -234,8 +234,8 @@ fn nested_help_text_propagated_through_source_chain() {
     let middle: MiddleError = Wrapped {
         context: "handling",
     }
-    .into_error(inner);
-    let outer: OuterError = Top { label: "api" }.into_error(middle);
+    .build_error(inner);
+    let outer: OuterError = Top { label: "api" }.build_error(middle);
 
     // HelpText from inner should be accessible from outer via provide chain
     let help = core::error::request_value::<oopsie::HelpText>(&outer);
@@ -256,8 +256,8 @@ fn nested_error_code_propagated_through_source_chain() {
     let middle: MiddleError = Wrapped {
         context: "decoding",
     }
-    .into_error(inner);
-    let outer: OuterError = Top { label: "ingest" }.into_error(middle);
+    .build_error(inner);
+    let outer: OuterError = Top { label: "ingest" }.build_error(middle);
 
     // ErrorCode from inner should be accessible from outer via provide chain
     let code = core::error::request_value::<oopsie::ErrorCode>(&outer);
@@ -290,7 +290,7 @@ fn nested_attr_macro_source_chain() {
     use attr_outer_oopsies::Wrapper;
 
     let inner = Boom { msg: "exploded" }.build();
-    let outer: AttrOuterError = Wrapper { ctx: "defusing" }.into_error(inner);
+    let outer: AttrOuterError = Wrapper { ctx: "defusing" }.build_error(inner);
 
     assert_eq!(outer.to_string(), "attr outer: defusing");
     let src = outer.source().unwrap();
@@ -304,7 +304,7 @@ fn nested_attr_macro_backtrace_propagated() {
     use attr_outer_oopsies::Wrapper;
 
     let inner = Boom { msg: "kaboom" }.build();
-    let outer: AttrOuterError = Wrapper { ctx: "handling" }.into_error(inner);
+    let outer: AttrOuterError = Wrapper { ctx: "handling" }.build_error(inner);
 
     // #[traced] injects backtrace with provide(ref, Backtrace => ...)
     // on each variant. The outer error's provide() forwards to source.provide(),

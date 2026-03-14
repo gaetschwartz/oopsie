@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
 #![allow(unused, clippy::all)]
 
-use oopsie::{IntoError as _, NoneError, Oopsie};
+use oopsie::{Contextual as _, NoSource, Oopsie};
 use std::error::Error as _;
 use std::io;
 
@@ -54,12 +54,12 @@ fn leaf_enum_fail() {
 }
 
 #[test]
-fn source_enum_into_error() {
+fn source_enum_build_error() {
     let io_err = io::Error::new(io::ErrorKind::PermissionDenied, "denied");
     let err: AppError = IoFailed {
         context: "reading config",
     }
-    .into_error(io_err);
+    .build_error(io_err);
     match &err {
         AppError::IoFailed { source, context } => {
             assert_eq!(source.kind(), io::ErrorKind::PermissionDenied);
@@ -75,7 +75,7 @@ fn source_enum_into_error() {
 fn source_only_unit_selector() {
     // Timeout has only a source field, so its selector is a unit struct.
     let io_err = io::Error::new(io::ErrorKind::TimedOut, "timed out");
-    let err: AppError = Timeout.into_error(io_err);
+    let err: AppError = Timeout.build_error(io_err);
     assert!(matches!(err, AppError::Timeout { .. }));
     assert!(err.source().is_some());
 }
@@ -117,12 +117,12 @@ fn struct_leaf_build_fail() {
 }
 
 #[test]
-fn struct_source_into_error() {
+fn struct_source_build_error() {
     let io_err = io::Error::new(io::ErrorKind::NotFound, "file missing");
     let err: WrapError = WrapOopsie {
         detail: "while reading",
     }
-    .into_error(io_err);
+    .build_error(io_err);
     assert_eq!(err.detail, "while reading");
     assert!(err.source().is_some());
     assert_eq!(err.source().unwrap().to_string(), "file missing");
@@ -175,8 +175,8 @@ fn error_suffix_stripped_with_oopsie_suffix() {
 }
 
 #[test]
-fn leaf_selector_into_error_none_error() {
-    // Leaf selectors implement IntoError<E, Source=NoneError> for OptionExt support.
-    let err: AppError = NotFound { path: "x" }.into_error(NoneError);
+fn leaf_selector_build_error_no_source() {
+    // Leaf selectors implement Contextual<E, Source=NoSource> for OptionExt support.
+    let err: AppError = NotFound { path: "x" }.build_error(NoSource);
     assert!(matches!(err, AppError::NotFound { ref path } if path == "x"));
 }

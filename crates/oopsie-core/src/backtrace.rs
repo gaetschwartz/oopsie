@@ -4,17 +4,17 @@ use std::{borrow::Cow, fmt};
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct BackTrace(backtrace::Backtrace);
 
-impl crate::GenerateImplicitData for BackTrace {
-    fn generate() -> Self {
+impl crate::Capturable for BackTrace {
+    fn capture() -> Self {
         BackTrace(backtrace::Backtrace::new())
     }
 
-    fn generate_with_source(source: &dyn error::Error) -> Self {
+    fn capture_from(source: &dyn error::Error) -> Self {
         if let Some(source_bt) = Self::extract_from_error(source) {
             return source_bt.into_owned();
         }
 
-        Self::generate()
+        Self::capture()
     }
 }
 

@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: WrongSizeError size must be exactly 1 bytes
+ --> tests/compile-fail/size_exact_mismatch.rs:3:17
+  |
+3 | #[derive(Debug, Oopsie)]
+  |                 ^^^^^^ evaluation of `_` failed here

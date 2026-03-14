@@ -52,8 +52,8 @@ impl FieldInjectorConfig {
         } else {
             None
         };
-        let backtrace_attrs = quote! { #[oopsie(auto)] };
-        let spantrace_attrs = quote! { #[oopsie(auto)] };
+        let backtrace_attrs = quote! { #[oopsie(capture)] };
+        let spantrace_attrs = quote! { #[oopsie(capture)] };
         let code_type = args
             .code
             .opt_settings()

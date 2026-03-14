@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
 #![allow(unused, clippy::all)]
 
-use oopsie::{IntoError as _, Oopsie};
+use oopsie::{Contextual as _, Oopsie};
 use std::io;
 
 // ---- Test 1: auto field excluded from selector ----
@@ -12,7 +12,7 @@ enum AutoExcludedError {
     #[oopsie("missing item: {name}")]
     Missing {
         name: String,
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         bt: Box<oopsie::BackTrace>,
     },
 }
@@ -31,14 +31,14 @@ fn auto_excluded_from_selector() {
 enum AutoBtError {
     #[oopsie("something broke")]
     Broke {
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         bt: Box<oopsie::BackTrace>,
     },
 }
 
 #[test]
 fn auto_backtrace_generated() {
-    // Should not panic — backtrace is auto-generated via GenerateImplicitData.
+    // Should not panic — backtrace is auto-generated via Capturable.
     let err = Broke.build();
     assert!(matches!(err, AutoBtError::Broke { .. }));
 }
@@ -51,7 +51,7 @@ enum AutoWithSourceError {
     #[oopsie("io problem")]
     IoProblem {
         source: io::Error,
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         bt: Box<oopsie::BackTrace>,
     },
 }
@@ -59,7 +59,7 @@ enum AutoWithSourceError {
 #[test]
 fn auto_with_source() {
     let io_err = io::Error::new(io::ErrorKind::Other, "disk full");
-    let err: AutoWithSourceError = IoProblem.into_error(io_err);
+    let err: AutoWithSourceError = IoProblem.build_error(io_err);
     assert!(matches!(err, AutoWithSourceError::IoProblem { .. }));
 }
 
@@ -71,9 +71,9 @@ enum MultiAutoError {
     #[oopsie("multi auto")]
     Multi {
         label: String,
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         bt: Box<oopsie::BackTrace>,
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         st: Box<oopsie::SpanTrace>,
     },
 }

@@ -14,7 +14,7 @@ use self::gen_display::{gen_enum_display, gen_struct_display};
 use self::gen_error::{gen_enum_error, gen_struct_error};
 use self::gen_module::wrap_in_module;
 use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
-use self::parse::ContainerAttrs;
+use self::parse::{ContainerAttrs, SizeConstraint};
 
 pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     let input: DeriveInput = syn::parse2(input)?;
@@ -37,6 +37,60 @@ fn oopsie_path(container: &ContainerAttrs) -> syn::Path {
         .unwrap_or_else(|| parse_quote! { ::oopsie })
 }
 
+fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenStream2 {
+    match constraint {
+        SizeConstraint::Exact(n) => {
+            let msg = format!("{} size must be exactly {} bytes", ident, n);
+            quote! {
+                const _: () = {
+                    assert!(
+                        ::core::mem::size_of::<#ident>() == #n,
+                        #msg
+                    );
+                };
+            }
+        }
+        SizeConstraint::AtMost(n) => {
+            let msg = format!("{} exceeds size limit of {} bytes", ident, n);
+            quote! {
+                const _: () = {
+                    assert!(
+                        ::core::mem::size_of::<#ident>() <= #n,
+                        #msg
+                    );
+                };
+            }
+        }
+        SizeConstraint::AtLeast(n) => {
+            let msg = format!("{} must be at least {} bytes", ident, n);
+            quote! {
+                const _: () = {
+                    assert!(
+                        ::core::mem::size_of::<#ident>() >= #n,
+                        #msg
+                    );
+                };
+            }
+        }
+        SizeConstraint::Range(lo, hi) => {
+            let msg_lo = format!("{} must be at least {} bytes", ident, lo);
+            let msg_hi = format!("{} exceeds size limit of {} bytes", ident, hi);
+            quote! {
+                const _: () = {
+                    assert!(
+                        ::core::mem::size_of::<#ident>() >= #lo,
+                        #msg_lo
+                    );
+                    assert!(
+                        ::core::mem::size_of::<#ident>() <= #hi,
+                        #msg_hi
+                    );
+                };
+            }
+        }
+    }
+}
+
 fn expand_enum(input: &DeriveInput, container_attrs: &ContainerAttrs) -> syn::Result<TokenStream2> {
     let path = oopsie_path(container_attrs);
     let selectors = gen_enum_selectors(input, container_attrs, &path)?;
@@ -47,10 +101,16 @@ fn expand_enum(input: &DeriveInput, container_attrs: &ContainerAttrs) -> syn::Re
     let effective_module = container_attrs.effective_module(true);
     let wrapped_selectors = wrap_in_module(&effective_module, &input.ident, &selectors);
 
+    let size_assert = container_attrs
+        .size
+        .as_ref()
+        .map(|c| gen_size_assertion(&input.ident, c));
+
     Ok(quote! {
         #wrapped_selectors
         #display
         #error
+        #size_assert
     })
 }
 
@@ -63,11 +123,17 @@ fn expand_struct(
     let display = gen_struct_display(input)?;
     let error = gen_struct_error(input, &path)?;
 
+    let size_assert = container_attrs
+        .size
+        .as_ref()
+        .map(|c| gen_size_assertion(&input.ident, c));
+
     // No module wrapping for structs
     Ok(quote! {
         #selector
         #display
         #error
+        #size_assert
     })
 }
 
@@ -124,7 +190,7 @@ mod tests {
             #[oopsie(provide(ref, crate::BackTrace => __oopsie_backtrace.as_ref()))]
             pub struct MyError {
                 message: String,
-                #[oopsie(auto)]
+                #[oopsie(capture)]
                 __oopsie_backtrace: ::std::boxed::Box<crate::BackTrace>,
             }
         };
@@ -143,9 +209,9 @@ mod tests {
                 #[oopsie(provide(ref, crate::BackTrace => __oopsie_backtrace.as_ref()))]
                 Inner {
                     source: ErrorWithSpanTraceInner,
-                    #[oopsie(auto)]
+                    #[oopsie(capture)]
                     __oopsie_backtrace: ::std::boxed::Box<crate::BackTrace>,
-                    #[oopsie(auto)]
+                    #[oopsie(capture)]
                     __oopsie_spantrace: ::std::boxed::Box<crate::SpanTrace>,
                 },
             }

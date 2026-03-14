@@ -3,14 +3,27 @@
 //! Parses `#[oopsie(...)]` attributes at three levels:
 //! - Container (enum/struct): module, vis, suffix, path
 //! - Variant/struct: display, transparent, help, code
-//! - Field: from, auto, provide
+//! - Field: from, capture, provide
 
 use proc_macro2::Span;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{Expr, Ident, LitStr, Path, Token, Type, Visibility};
+use syn::{Expr, Ident, LitInt, LitStr, Path, Token, Type, Visibility};
 
 // ─── Container-level attributes ──────────────────────────────────
+
+/// A compile-time size constraint for the error type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SizeConstraint {
+    /// `size(N)` — exact size.
+    Exact(usize),
+    /// `size(..=N)` — at most N bytes.
+    AtMost(usize),
+    /// `size(N..)` — at least N bytes.
+    AtLeast(usize),
+    /// `size(N..=M)` — between N and M bytes inclusive.
+    Range(usize, usize),
+}
 
 #[derive(Debug, Default)]
 pub struct ContainerAttrs {
@@ -18,6 +31,7 @@ pub struct ContainerAttrs {
     pub visibility: Option<Visibility>,
     pub suffix: SuffixSetting,
     pub path: Option<Path>,
+    pub size: Option<SizeConstraint>,
 }
 
 #[derive(Debug, Default)]
@@ -84,6 +98,9 @@ impl ContainerAttrs {
                 } else if list.path.is_ident("suffix") {
                     let content: SuffixContent = syn::parse2(list.tokens.clone())?;
                     self.suffix = content.0;
+                } else if list.path.is_ident("size") {
+                    let content: SizeContent = syn::parse2(list.tokens.clone())?;
+                    self.size = Some(content.0);
                 } else {
                     // Don't error on unknown list attrs at container level -
                     // they might be variant-level attrs on a struct
@@ -200,6 +217,39 @@ impl Parse for SuffixContent {
     }
 }
 
+struct SizeContent(SizeConstraint);
+
+impl Parse for SizeContent {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        // Try `..=N` first (starts with `..=`)
+        if input.peek(Token![..=]) {
+            let _: Token![..=] = input.parse()?;
+            let lit: LitInt = input.parse()?;
+            let n: usize = lit.base10_parse()?;
+            return Ok(Self(SizeConstraint::AtMost(n)));
+        }
+
+        // Otherwise must start with an integer
+        let lit: LitInt = input.parse()?;
+        let n: usize = lit.base10_parse()?;
+
+        if input.peek(Token![..=]) {
+            // N..=M
+            let _: Token![..=] = input.parse()?;
+            let lit2: LitInt = input.parse()?;
+            let m: usize = lit2.base10_parse()?;
+            Ok(Self(SizeConstraint::Range(n, m)))
+        } else if input.peek(Token![..]) {
+            // N..
+            let _: Token![..] = input.parse()?;
+            Ok(Self(SizeConstraint::AtLeast(n)))
+        } else {
+            // Exact(N)
+            Ok(Self(SizeConstraint::Exact(n)))
+        }
+    }
+}
+
 // ─── Variant-level attributes ────────────────────────────────────
 
 #[derive(Debug, Default)]
@@ -250,7 +300,8 @@ impl VariantAttrs {
                     OopsieVariantMeta::Module(())
                     | OopsieVariantMeta::Suffix(())
                     | OopsieVariantMeta::Path(())
-                    | OopsieVariantMeta::Auto
+                    | OopsieVariantMeta::Size(())
+                    | OopsieVariantMeta::Capture
                     | OopsieVariantMeta::From(())
                     | OopsieVariantMeta::Provide(()) => {
                         // Container or field-level attr; skip at variant level
@@ -283,8 +334,10 @@ enum OopsieVariantMeta {
     Suffix(()),
     /// `path = "..."` — container level, skipped here
     Path(()),
-    /// `auto` — field level, skipped here
-    Auto,
+    /// `size(...)` — container level, skipped here
+    Size(()),
+    /// `capture` — field level, skipped here
+    Capture,
     /// `from` / `from(...)` — field level, skipped here
     From(()),
     /// `provide(...)` — field level, skipped here
@@ -317,9 +370,9 @@ impl Parse for OopsieVariantMeta {
                     let ident = ahead.parse::<Ident>()?;
                     let kw = ident.to_string();
                     let is_keyword = match kw.as_str() {
-                        "transparent" | "auto" => true,
+                        "transparent" | "capture" => true,
                         "module" | "suffix" | "from" => true,
-                        "display" | "provide" => ahead.peek(syn::token::Paren),
+                        "display" | "provide" | "size" => ahead.peek(syn::token::Paren),
                         "help" | "code" | "vis" | "path" => {
                             ahead.peek(Token![=]) && !ahead.peek(Token![==])
                         }
@@ -423,7 +476,13 @@ impl Parse for OopsieVariantMeta {
                 let _: LitStr = input.parse()?;
                 Ok(Self::Path(()))
             }
-            "auto" => Ok(Self::Auto),
+            "size" => {
+                let content;
+                syn::parenthesized!(content in input);
+                let _ = content.parse::<proc_macro2::TokenStream>()?;
+                Ok(Self::Size(()))
+            }
+            "capture" => Ok(Self::Capture),
             "from" => {
                 if input.peek(syn::token::Paren) {
                     let content;
@@ -451,7 +510,7 @@ impl Parse for OopsieVariantMeta {
 #[derive(Debug, Default)]
 pub struct FieldAttrs {
     pub from: SourceKind,
-    pub auto: bool,
+    pub capture: bool,
     pub provide: Vec<ProvideAttr>,
 }
 
@@ -494,7 +553,7 @@ impl FieldAttrs {
                 || ident == "spantrace"
                 || ident == "span_trace")
         {
-            result.auto = true;
+            result.capture = true;
         }
 
         for attr in &field.attrs {
@@ -508,8 +567,8 @@ impl FieldAttrs {
                     FieldMeta::From(kind) => {
                         result.from = kind;
                     }
-                    FieldMeta::Auto => {
-                        result.auto = true;
+                    FieldMeta::Capture => {
+                        result.capture = true;
                     }
                     FieldMeta::Provide(p) => {
                         result.provide.push(*p);
@@ -517,6 +576,19 @@ impl FieldAttrs {
                 }
             }
         }
+
+        // Auto-boxing: if field type is Box<T> and source was auto-detected
+        // (SourceKind::Yes), upgrade to Transformed with Box::new.
+        // Explicit `from(T, transform)` already sets Transformed, so it takes precedence.
+        if matches!(result.from, SourceKind::Yes) {
+            if let Some(inner) = crate::traced::field_detect::extract_boxed_inner(&field.ty) {
+                result.from = SourceKind::Transformed {
+                    source_type: Box::new(inner.clone()),
+                    transform: syn::parse_quote! { ::std::boxed::Box::new },
+                };
+            }
+        }
+
         Ok(result)
     }
 
@@ -528,7 +600,7 @@ impl FieldAttrs {
 #[derive(Debug)]
 enum FieldMeta {
     From(SourceKind),
-    Auto,
+    Capture,
     Provide(Box<ProvideAttr>),
 }
 
@@ -551,7 +623,7 @@ impl Parse for FieldMeta {
                     Ok(Self::From(SourceKind::Yes))
                 }
             }
-            "auto" => Ok(Self::Auto),
+            "capture" => Ok(Self::Capture),
             "provide" => {
                 let content;
                 syn::parenthesized!(content in input);
@@ -586,12 +658,46 @@ fn expr_to_tokens(expr: &Expr) -> proc_macro2::TokenStream {
     expr.to_token_stream()
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parse_size(tokens: proc_macro2::TokenStream) -> syn::Result<SizeConstraint> {
+        let content: SizeContent = syn::parse2(tokens)?;
+        Ok(content.0)
+    }
+
+    #[test]
+    fn test_size_exact() {
+        let result = parse_size(quote::quote! { 64 }).unwrap();
+        assert_eq!(result, SizeConstraint::Exact(64));
+    }
+
+    #[test]
+    fn test_size_at_most() {
+        let result = parse_size(quote::quote! { ..=128 }).unwrap();
+        assert_eq!(result, SizeConstraint::AtMost(128));
+    }
+
+    #[test]
+    fn test_size_at_least() {
+        let result = parse_size(quote::quote! { 32.. }).unwrap();
+        assert_eq!(result, SizeConstraint::AtLeast(32));
+    }
+
+    #[test]
+    fn test_size_range() {
+        let result = parse_size(quote::quote! { 32..=64 }).unwrap();
+        assert_eq!(result, SizeConstraint::Range(32, 64));
+    }
+}
+
 /// Categorized fields for a variant/struct.
 #[derive(Debug)]
 pub struct CategorizedFields {
     /// The source field (if any).
     pub source: Option<SourceField>,
-    /// Fields marked with `#[oopsie(auto)]` — excluded from selector.
+    /// Fields marked with `#[oopsie(capture)]` — excluded from selector.
     pub auto_fields: Vec<AutoField>,
     /// User fields — included in selector.
     pub user_fields: Vec<UserField>,
@@ -665,7 +771,7 @@ impl CategorizedFields {
                     ty: field.ty.clone(),
                     kind: attrs.from,
                 });
-            } else if attrs.auto {
+            } else if attrs.capture {
                 auto_fields.push(AutoField {
                     ident,
                     ty: field.ty.clone(),

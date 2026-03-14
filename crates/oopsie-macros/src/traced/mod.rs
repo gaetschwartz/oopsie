@@ -4,7 +4,7 @@ mod args;
 mod config;
 mod expand_enum;
 mod expand_struct;
-mod field_detect;
+pub(crate) mod field_detect;
 mod inject;
 
 use args::TracedArgs;

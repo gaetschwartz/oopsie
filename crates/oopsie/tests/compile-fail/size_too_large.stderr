@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: TooLargeError exceeds size limit of 1 bytes
+ --> tests/compile-fail/size_too_large.rs:3:17
+  |
+3 | #[derive(Debug, Oopsie)]
+  |                 ^^^^^^ evaluation of `_` failed here

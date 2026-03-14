@@ -1,4 +1,4 @@
-//! SpanTrace wrapper with `GenerateImplicitData` support.
+//! SpanTrace wrapper with `Capturable` support.
 //!
 //! This module provides a [`SpanTrace`] wrapper that integrates with oopsie's
 //! implicit data generation, allowing automatic capture of tracing span context
@@ -140,20 +140,20 @@ impl fmt::Display for SpanTrace {
     }
 }
 
-impl crate::GenerateImplicitData for SpanTrace {
+impl crate::Capturable for SpanTrace {
     #[track_caller]
-    fn generate() -> Self {
+    fn capture() -> Self {
         Self::capture()
     }
 
-    fn generate_with_source(source: &dyn error::Error) -> Self
+    fn capture_from(source: &dyn error::Error) -> Self
     where
         Self: Sized,
     {
         if let Some(spantrace) = Self::extract_from_error(source) {
             return spantrace.into_owned();
         }
-        Self::generate()
+        Self::capture()
     }
 }
 
@@ -334,7 +334,7 @@ impl fmt::Display for FallbackSpanTrace {
     }
 }
 
-/// A wrapper around `Option<SpanTrace>` that implements `GenerateImplicitData`.
+/// A wrapper around `Option<SpanTrace>` that implements [`Capturable`].
 ///
 /// This type only captures a span trace if the capture was successful
 /// (i.e., there was an active span and the subscriber supports it).
@@ -389,9 +389,9 @@ impl fmt::Display for OptionalSpanTrace {
     }
 }
 
-impl crate::GenerateImplicitData for OptionalSpanTrace {
+impl crate::Capturable for OptionalSpanTrace {
     #[track_caller]
-    fn generate() -> Self {
+    fn capture() -> Self {
         let trace = SpanTrace::capture();
         match trace.status() {
             tracing_error::SpanTraceStatus::CAPTURED => Self(Some(trace)),
@@ -399,7 +399,7 @@ impl crate::GenerateImplicitData for OptionalSpanTrace {
         }
     }
 
-    fn generate_with_source(source: &dyn std::error::Error) -> Self
+    fn capture_from(source: &dyn std::error::Error) -> Self
     where
         Self: Sized,
     {
@@ -417,7 +417,7 @@ impl crate::GenerateImplicitData for OptionalSpanTrace {
         {
             _ = source;
         }
-        Self::generate()
+        Self::capture()
     }
 }
 
@@ -435,7 +435,7 @@ impl From<Option<SpanTrace>> for OptionalSpanTrace {
 
 #[cfg(test)]
 mod tests {
-    use crate::GenerateImplicitData;
+    use crate::Capturable;
 
     use super::*;
 
@@ -448,13 +448,13 @@ mod tests {
 
     #[test]
     fn test_generate_implicit_data() {
-        let trace: SpanTrace = GenerateImplicitData::generate();
+        let trace: SpanTrace = Capturable::capture();
         let _ = trace.status();
     }
 
     #[test]
     fn test_optional_span_trace() {
-        let trace: OptionalSpanTrace = GenerateImplicitData::generate();
+        let trace: OptionalSpanTrace = Capturable::capture();
         // May or may not be Some depending on subscriber
         let _ = trace;
     }
@@ -777,7 +777,7 @@ mod tests {
     #[test]
     fn test_optional_span_trace_generate_without_subscriber() {
         // Without a subscriber with ErrorLayer, generate() should return None
-        let opt: OptionalSpanTrace = GenerateImplicitData::generate();
+        let opt: OptionalSpanTrace = Capturable::capture();
         assert!(opt.is_none());
     }
 

@@ -281,8 +281,8 @@ impl<E: std::error::Error> From<E> for FancyReport<E> {
 const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
     "std::backtrace_rs::backtrace::",
     "<std::backtrace::Backtrace>::create",
-    "<std::backtrace::Backtrace as oopsie_core::GenerateImplicitData>::",
-    "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::GenerateImplicitData>::",
+    "<std::backtrace::Backtrace as oopsie_core::Capturable>::",
+    "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::Capturable>::",
 ];
 
 /// Prefixes for runtime initialization frames that should be skipped.

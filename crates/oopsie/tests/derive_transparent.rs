@@ -34,7 +34,7 @@ enum TracedError {
     #[oopsie(display("traced io error"), transparent)]
     TracedIo {
         source: io::Error,
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         bt: Box<oopsie::BackTrace>,
     },
 }

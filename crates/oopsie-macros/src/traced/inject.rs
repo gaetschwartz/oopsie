@@ -185,10 +185,10 @@ mod tests {
         FieldInjectorConfig {
             backtrace_ident: format_ident!("__oopsie_backtrace"),
             backtrace_type: quote! { ::std::boxed::Box<BackTrace> },
-            backtrace_attrs: quote! { #[oopsie(auto)] },
+            backtrace_attrs: quote! { #[oopsie(capture)] },
             spantrace_ident: format_ident!("__oopsie_spantrace"),
             spantrace_type: quote! { ::std::boxed::Box<SpanTrace> },
-            spantrace_attrs: quote! { #[oopsie(auto)] },
+            spantrace_attrs: quote! { #[oopsie(capture)] },
             timestamp_ident: format_ident!("__oopsie_timestamp"),
             timestamp_type: parse_quote! { std::time::SystemTime },
             timestamp_provide_attr: None,

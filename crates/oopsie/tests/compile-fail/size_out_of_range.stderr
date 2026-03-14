@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: OutOfRangeError exceeds size limit of 2 bytes
+ --> tests/compile-fail/size_out_of_range.rs:3:17
+  |
+3 | #[derive(Debug, Oopsie)]
+  |                 ^^^^^^ evaluation of `_` failed here

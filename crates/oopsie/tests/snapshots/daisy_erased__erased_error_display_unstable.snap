@@ -25,9 +25,9 @@ Error: daisy_erased::common::MyErrorInner
              at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
    3: <backtrace::capture::Backtrace>::new
              at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-   4: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::GenerateImplicitData>::generate
+   4: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
-   5: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::GenerateImplicitData>::generate
+   5: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/traits.rs:[LOC]
    6: <daisy_erased::common::MyErrorInnerOopsie<alloc::string::String>>::build
              at tests/common/mod.rs:[LOC]

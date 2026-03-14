@@ -1,5 +1,23 @@
 //! Field detection helpers for backtrace/spantrace types.
 
+/// If `ty` is `Box<T>`, return the inner type `T`.
+pub(crate) fn extract_boxed_inner(ty: &syn::Type) -> Option<&syn::Type> {
+    let syn::Type::Path(type_path) = ty else {
+        return None;
+    };
+    let last = type_path.path.segments.last()?;
+    if last.ident != "Box" {
+        return None;
+    }
+    let syn::PathArguments::AngleBracketed(args) = &last.arguments else {
+        return None;
+    };
+    args.args.iter().find_map(|arg| match arg {
+        syn::GenericArgument::Type(inner_ty) => Some(inner_ty),
+        _ => None,
+    })
+}
+
 pub(super) fn is_backtrace_type(ty: &syn::Type) -> bool {
     is_ident_type(ty, "BackTrace") || is_boxed_ident_type(ty, "BackTrace")
 }
@@ -42,6 +60,48 @@ fn is_boxed_ident_type(ty: &syn::Type, ident: &str) -> bool {
 mod tests {
     use super::*;
     use syn::parse_quote;
+
+    // extract_boxed_inner tests
+
+    #[test]
+    fn extract_boxed_inner_simple() {
+        let ty: syn::Type = parse_quote!(Box<io::Error>);
+        let inner = extract_boxed_inner(&ty).unwrap();
+        let expected: syn::Type = parse_quote!(io::Error);
+        assert_eq!(
+            quote::quote!(#inner).to_string(),
+            quote::quote!(#expected).to_string()
+        );
+    }
+
+    #[test]
+    fn extract_boxed_inner_plain_type() {
+        let ty: syn::Type = parse_quote!(io::Error);
+        assert!(extract_boxed_inner(&ty).is_none());
+    }
+
+    #[test]
+    fn extract_boxed_inner_not_box() {
+        let ty: syn::Type = parse_quote!(Vec<io::Error>);
+        assert!(extract_boxed_inner(&ty).is_none());
+    }
+
+    #[test]
+    fn extract_boxed_inner_reference() {
+        let ty: syn::Type = parse_quote!(&str);
+        assert!(extract_boxed_inner(&ty).is_none());
+    }
+
+    #[test]
+    fn extract_boxed_inner_simple_type() {
+        let ty: syn::Type = parse_quote!(Box<String>);
+        let inner = extract_boxed_inner(&ty).unwrap();
+        let expected: syn::Type = parse_quote!(String);
+        assert_eq!(
+            quote::quote!(#inner).to_string(),
+            quote::quote!(#expected).to_string()
+        );
+    }
 
     // is_backtrace_type tests
 

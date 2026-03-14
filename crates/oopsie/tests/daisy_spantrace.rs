@@ -12,7 +12,7 @@ mod provide_test {
     #[oopsie(suffix, module(false))]
     #[oopsie(provide(ref, oopsie::SpanTrace => span.as_ref()))]
     struct BoxedSpantraceError {
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         span: Box<SpanTrace>,
     }
 

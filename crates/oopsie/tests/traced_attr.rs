@@ -111,7 +111,7 @@ pub enum PreExistingBtError {
     #[oopsie(provide(ref, oopsie::BackTrace => bt.as_ref()))]
     HasBt {
         msg: String,
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         bt: Box<oopsie::BackTrace>,
     },
 }
@@ -131,7 +131,7 @@ pub enum PreExistingStError {
     #[oopsie(provide(ref, oopsie::SpanTrace => st.as_ref()))]
     HasSt {
         msg: String,
-        #[oopsie(auto)]
+        #[oopsie(capture)]
         st: Box<oopsie::SpanTrace>,
     },
 }
@@ -148,7 +148,7 @@ fn traced_does_not_duplicate_spantrace() {
 #[derive(Debug, Oopsie)]
 pub struct PreExistingBtStructError {
     msg: String,
-    #[oopsie(auto)]
+    #[oopsie(capture)]
     bt: Box<oopsie::BackTrace>,
 }
 

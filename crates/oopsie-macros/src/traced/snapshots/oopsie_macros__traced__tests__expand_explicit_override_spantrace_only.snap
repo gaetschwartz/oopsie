@@ -2,4 +2,4 @@
 source: crates/oopsie-macros/src/traced/mod.rs
 expression: output
 ---
-# [derive (Debug , Oopsie)] # [oopsie (provide (ref , :: oopsie :: SpanTrace => __oopsie_spantrace . as_ref ()))] # [oopsie (provide (:: oopsie :: ErrorCode => :: oopsie :: ErrorCode :: from (concat ! (module_path ! () , "::" , "MyError"))))] pub struct MyError { message : String , # [oopsie (auto)] __oopsie_spantrace : :: std :: boxed :: Box < :: oopsie :: SpanTrace > }
+# [derive (Debug , Oopsie)] # [oopsie (provide (ref , :: oopsie :: SpanTrace => __oopsie_spantrace . as_ref ()))] # [oopsie (provide (:: oopsie :: ErrorCode => :: oopsie :: ErrorCode :: from (concat ! (module_path ! () , "::" , "MyError"))))] pub struct MyError { message : String , # [oopsie (capture)] __oopsie_spantrace : :: std :: boxed :: Box < :: oopsie :: SpanTrace > }

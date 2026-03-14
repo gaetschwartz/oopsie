@@ -5,7 +5,7 @@ mod common;
 
 use std::process::Termination;
 
-use oopsie::{FancyReport, IntoError as _, Oopsie, traced};
+use oopsie::{Contextual as _, FancyReport, Oopsie, traced};
 
 #[traced]
 #[derive(Debug, Oopsie)]
@@ -43,7 +43,7 @@ fn test_fancy_report_chain() {
         message: "root cause",
     }
     .build();
-    let outer: OuterError = OuterOopsie.into_error(inner);
+    let outer: OuterError = OuterOopsie.build_error(inner);
     let report = FancyReport::from_std(outer).no_colors();
 
     insta::assert_snapshot!(snap_name!("fancy_report_chain"), report.to_string());
