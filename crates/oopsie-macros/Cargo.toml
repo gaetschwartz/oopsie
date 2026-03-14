@@ -21,3 +21,6 @@ syn = { version = "2", features = ["full"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+insta = "1.46.3"

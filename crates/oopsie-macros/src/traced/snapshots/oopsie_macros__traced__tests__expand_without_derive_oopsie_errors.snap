@@ -1,0 +1,10 @@
+---
+source: crates/oopsie-macros/src/traced/mod.rs
+expression: err
+---
+`#[traced]` requires `#[derive(Oopsie)]` below it
+
+Usage:
+  #[traced]
+  #[derive(Debug, Oopsie)]
+  pub enum MyError { ... }

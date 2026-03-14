@@ -78,16 +78,8 @@ mod tests {
                 }
             },
         );
-        assert!(result.is_ok(), "expand_struct should succeed: {result:?}");
         let output = result.unwrap().to_string();
-        assert!(
-            output.contains("__oopsie_backtrace"),
-            "Should inject backtrace field"
-        );
-        assert!(
-            output.contains("__oopsie_spantrace"),
-            "Should inject spantrace field"
-        );
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -99,15 +91,8 @@ mod tests {
                 pub struct SomethingFailed;
             },
         );
-        assert!(
-            result.is_ok(),
-            "expand_struct for unit should succeed: {result:?}"
-        );
         let output = result.unwrap().to_string();
-        assert!(
-            output.contains("__oopsie_backtrace"),
-            "Should inject backtrace field"
-        );
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -119,9 +104,8 @@ mod tests {
                 pub struct TupleError(String);
             },
         );
-        assert!(result.is_err(), "Tuple structs should be rejected");
         let err = result.unwrap_err().to_string();
-        assert!(err.contains("tuple"), "Error should mention tuple: {err}");
+        insta::assert_snapshot!(err);
     }
 
     #[test]
@@ -136,20 +120,8 @@ mod tests {
                 }
             },
         );
-        assert!(
-            result.is_ok(),
-            "Should handle help and code in #[oopsie(...)]: {result:?}"
-        );
         let output = result.unwrap().to_string();
-        // help/code are on the variant attrs, traced should pass them through
-        assert!(
-            output.contains("Check your network"),
-            "Should preserve help text: {output}"
-        );
-        assert!(
-            output.contains("custom::connection_failed"),
-            "Should preserve custom code: {output}"
-        );
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -164,7 +136,8 @@ mod tests {
                 }
             },
         );
-        assert!(result.is_ok(), "Should succeed: {result:?}");
+        let output = result.unwrap().to_string();
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -178,16 +151,8 @@ mod tests {
                 }
             },
         );
-        assert!(result.is_ok(), "Should succeed: {result:?}");
         let output = result.unwrap().to_string();
-        assert!(
-            output.contains("__oopsie_backtrace"),
-            "Should inject backtrace: {output}"
-        );
-        assert!(
-            !output.contains("__oopsie_spantrace"),
-            "Should NOT inject spantrace in explicit mode: {output}"
-        );
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -201,16 +166,8 @@ mod tests {
                 }
             },
         );
-        assert!(result.is_ok(), "Should succeed: {result:?}");
         let output = result.unwrap().to_string();
-        assert!(
-            !output.contains("__oopsie_backtrace"),
-            "Should NOT inject backtrace in explicit mode: {output}"
-        );
-        assert!(
-            output.contains("__oopsie_spantrace"),
-            "Should inject spantrace: {output}"
-        );
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -224,12 +181,8 @@ mod tests {
                 }
             },
         );
-        assert!(result.is_err());
         let err = result.unwrap_err().to_string();
-        assert!(
-            err.contains("derive(Oopsie)"),
-            "Error should mention derive(Oopsie): {err}"
-        );
+        insta::assert_snapshot!(err);
     }
 
     #[test]
@@ -243,9 +196,7 @@ mod tests {
                 }
             },
         );
-        assert!(result.is_ok(), "Should succeed: {result:?}");
         let output = result.unwrap().to_string();
-        assert!(output.contains("__oopsie_backtrace"));
-        assert!(output.contains("__oopsie_spantrace"));
+        insta::assert_snapshot!(output);
     }
 }

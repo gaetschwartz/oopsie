@@ -83,10 +83,8 @@ mod tests {
                 message: String,
             }
         };
-        let result = expand(input);
-        assert!(result.is_ok(), "Derive minimal should succeed: {result:?}");
-        let output = result.unwrap().to_string();
-        eprintln!("DERIVE MINIMAL OUTPUT:\n{output}");
+        let output = expand(input).unwrap().to_string();
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -97,13 +95,8 @@ mod tests {
                 message: String,
             }
         };
-        let result = expand(input);
-        assert!(
-            result.is_ok(),
-            "Derive with display should succeed: {result:?}"
-        );
-        let output = result.unwrap().to_string();
-        eprintln!("DERIVE DISPLAY OUTPUT:\n{output}");
+        let output = expand(input).unwrap().to_string();
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -117,14 +110,8 @@ mod tests {
                 message: String,
             }
         };
-        let result = expand(input);
-        assert!(result.is_ok(), "Derive should succeed: {result:?}");
-        let output = result.unwrap().to_string();
-        eprintln!("DERIVE SIMPLE OUTPUT:\n{output}");
-        assert!(
-            output.contains("Display"),
-            "Should generate Display: {output}"
-        );
+        let output = expand(input).unwrap().to_string();
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -141,17 +128,8 @@ mod tests {
                 __oopsie_backtrace: ::std::boxed::Box<crate::BackTrace>,
             }
         };
-        let result = expand(input);
-        assert!(
-            result.is_ok(),
-            "Derive with provide should succeed: {result:?}"
-        );
-        let output = result.unwrap().to_string();
-        eprintln!("DERIVE PROVIDE OUTPUT:\n{output}");
-        assert!(
-            output.contains("Display"),
-            "Should generate Display: {output}"
-        );
+        let output = expand(input).unwrap().to_string();
+        insta::assert_snapshot!(output);
     }
 
     #[test]
@@ -172,13 +150,7 @@ mod tests {
                 },
             }
         };
-        let result = expand(input);
-        assert!(result.is_ok(), "Derive should succeed: {result:?}");
-        let output = result.unwrap().to_string();
-        eprintln!("DERIVE ENUM OUTPUT:\n{output}");
-        assert!(
-            output.contains("Display"),
-            "Should generate Display: {output}"
-        );
+        let output = expand(input).unwrap().to_string();
+        insta::assert_snapshot!(output);
     }
 }

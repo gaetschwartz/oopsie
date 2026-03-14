@@ -1,0 +1,5 @@
+---
+source: crates/oopsie-macros/src/traced/mod.rs
+expression: output
+---
+# [derive (Debug , Oopsie)] pub enum ErrorWithSpanTrace { # [oopsie (display ("Inner error happened") , transparent)] # [oopsie (provide (ref , crate :: BackTrace => __oopsie_backtrace . as_ref ()))] # [oopsie (provide (ref , crate :: SpanTrace => __oopsie_spantrace . as_ref ()))] # [oopsie (provide (crate :: ErrorCode => crate :: ErrorCode :: from (concat ! (module_path ! () , "::" , "ErrorWithSpanTrace::Inner"))))] Inner { source : ErrorWithSpanTraceInner , # [oopsie (auto)] __oopsie_backtrace : :: std :: boxed :: Box < crate :: BackTrace > , # [oopsie (auto)] __oopsie_spantrace : :: std :: boxed :: Box < crate :: SpanTrace > } , }

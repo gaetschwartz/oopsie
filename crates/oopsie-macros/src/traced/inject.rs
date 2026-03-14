@@ -320,7 +320,7 @@ mod tests {
         );
         assert_eq!(attrs.len(), 1);
         let attr_str = quote! { #(#attrs)* }.to_string();
-        assert!(attr_str.contains("MyError::Variant"));
+        insta::assert_snapshot!(attr_str);
     }
 
     // ── has_oopsie_name_value ────────────────────────────────────────
