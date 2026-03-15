@@ -23,6 +23,44 @@ pub use color::{ColorConfig, get_color_mode, set_color_mode};
 use color_backtrace::termcolor;
 pub use error_ext::ErrorExt;
 
+/// Private helpers used by macro-generated code. Not part of the public API.
+#[doc(hidden)]
+pub mod __private {
+    /// Autoref probe for capture deduplication.
+    ///
+    /// When the concrete source type implements `ErrorExt`, the high-priority
+    /// `CaptureFromExt` impl is selected and tries to extract existing traces.
+    /// For non-`ErrorExt` sources (e.g., `io::Error`), the low-priority
+    /// `CaptureFromFallback` impl is selected via autoref and does fresh capture.
+    pub struct CaptureProbe<'a, T: ?Sized>(pub &'a T);
+
+    /// High-priority: source implements `ErrorExt` → try extraction.
+    pub trait CaptureFromExt {
+        fn resolve<C: crate::CaptureExt>(&self) -> C;
+    }
+
+    impl<T: crate::ErrorExt> CaptureFromExt for CaptureProbe<'_, T> {
+        #[inline]
+        #[track_caller]
+        fn resolve<C: crate::CaptureExt>(&self) -> C {
+            C::capture_or_extract(self.0)
+        }
+    }
+
+    /// Low-priority: source doesn't implement `ErrorExt` → fresh capture.
+    pub trait CaptureFromFallback {
+        fn resolve<C: crate::Capturable>(&self) -> C;
+    }
+
+    impl<T: ?Sized> CaptureFromFallback for &CaptureProbe<'_, T> {
+        #[inline]
+        #[track_caller]
+        fn resolve<C: crate::Capturable>(&self) -> C {
+            C::capture()
+        }
+    }
+}
+
 pub use spantrace::{ErasedMetadata, OptionalSpanTrace, SpanTrace};
 pub use tracing_error::ErrorLayer;
 pub use tracing_level::TracingLevel;

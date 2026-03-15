@@ -128,25 +128,14 @@ impl crate::Capturable for SpanTrace {
     fn capture() -> Self {
         Self::capture()
     }
+}
 
-    fn capture_from(source: &dyn std::error::Error) -> Self
-    where
-        Self: Sized,
-    {
-        #[cfg(feature = "unstable")]
-        {
-            if let Some(st) = core::error::request_ref::<Self>(source) {
-                return st.clone();
-            }
-            if let Some(st) = core::error::request_ref::<tracing_error::SpanTrace>(source) {
-                return Self::new(st.clone());
-            }
-        }
-        #[cfg(not(feature = "unstable"))]
-        {
-            _ = source;
-        }
-        Self::capture()
+impl crate::CaptureExt for SpanTrace {
+    fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self {
+        source
+            .oopsie_spantrace()
+            .cloned()
+            .unwrap_or_else(Self::capture)
     }
 }
 
@@ -390,26 +379,6 @@ impl crate::Capturable for OptionalSpanTrace {
             tracing_error::SpanTraceStatus::CAPTURED => Self(Some(trace)),
             _ => Self(None),
         }
-    }
-
-    fn capture_from(source: &dyn std::error::Error) -> Self
-    where
-        Self: Sized,
-    {
-        #[cfg(feature = "unstable")]
-        {
-            if core::error::request_ref::<SpanTrace>(source).is_some() {
-                return Self(None);
-            }
-            if core::error::request_ref::<tracing_error::SpanTrace>(source).is_some() {
-                return Self(None);
-            }
-        }
-        #[cfg(not(feature = "unstable"))]
-        {
-            _ = source;
-        }
-        Self::capture()
     }
 }
 

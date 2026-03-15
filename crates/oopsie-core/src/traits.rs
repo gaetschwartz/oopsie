@@ -17,15 +17,6 @@ pub trait Contextual<E: std::error::Error> {
 pub trait Capturable {
     #[track_caller]
     fn capture() -> Self;
-
-    #[track_caller]
-    fn capture_from(source: &dyn std::error::Error) -> Self
-    where
-        Self: Sized,
-    {
-        let _ = source;
-        Self::capture()
-    }
 }
 
 impl<T: Capturable> Capturable for Box<T> {
@@ -33,10 +24,24 @@ impl<T: Capturable> Capturable for Box<T> {
     fn capture() -> Self {
         Box::new(T::capture())
     }
+}
 
+/// Hidden trait for extracting existing traces from [`ErrorExt`](crate::ErrorExt) sources.
+///
+/// Implemented for `BackTrace` and `SpanTrace` (and their `Box` wrappers)
+/// to try extraction before falling back to fresh capture.
+#[doc(hidden)]
+pub trait CaptureExt: Capturable {
     #[track_caller]
-    fn capture_from(source: &dyn std::error::Error) -> Self {
-        Box::new(T::capture_from(source))
+    fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self
+    where
+        Self: Sized;
+}
+
+impl<T: CaptureExt> CaptureExt for Box<T> {
+    #[track_caller]
+    fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self {
+        Box::new(T::capture_or_extract(source))
     }
 }
 

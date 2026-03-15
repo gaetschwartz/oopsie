@@ -263,7 +263,12 @@ fn gen_auto_inits(
             let ident = &af.ident;
             let ty = &af.ty;
             if has_source {
-                quote! { let #ident = <#ty as #oopsie_path::Capturable>::capture_from(&source); }
+                quote! {
+                    let #ident = {
+                        use #oopsie_path::__private::{CaptureFromExt as _, CaptureFromFallback as _};
+                        (&#oopsie_path::__private::CaptureProbe(&source)).resolve::<#ty>()
+                    };
+                }
             } else {
                 quote! { let #ident = <#ty as #oopsie_path::Capturable>::capture(); }
             }

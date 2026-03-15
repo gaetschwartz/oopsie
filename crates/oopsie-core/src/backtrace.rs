@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::Capturable as _;
+
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct BackTrace(backtrace::Backtrace);
 
@@ -7,19 +9,14 @@ impl crate::Capturable for BackTrace {
     fn capture() -> Self {
         BackTrace(backtrace::Backtrace::new())
     }
+}
 
-    fn capture_from(source: &dyn std::error::Error) -> Self {
-        #[cfg(feature = "unstable")]
-        {
-            if let Some(bt) = core::error::request_ref::<Self>(source) {
-                return bt.clone();
-            }
-        }
-        #[cfg(not(feature = "unstable"))]
-        {
-            _ = source;
-        }
-        Self::capture()
+impl crate::CaptureExt for BackTrace {
+    fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self {
+        source
+            .oopsie_backtrace()
+            .cloned()
+            .unwrap_or_else(Self::capture)
     }
 }
 
