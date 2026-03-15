@@ -70,6 +70,7 @@ macro_rules! redact {
                 .expect("failed to run rustc")
                 .stdout
             ).expect("invalid UTF-8 in rustc sysroot").trim(), "[SYS_ROOT]"),
+            (&format!("{}/.cargo/registry/src/", env!("HOME")), "[CARGO_REGISTRY]/"),
         ] }, $bl }
     };
 }

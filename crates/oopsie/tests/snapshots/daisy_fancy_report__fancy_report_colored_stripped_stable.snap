@@ -9,15 +9,15 @@ Error[daisy_fancy_report::TestError]: Test error: colored test
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   0: backtrace[[PTR]]::backtrace::libunwind::trace
-           at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
+           at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
   1: backtrace[[PTR]]::backtrace::trace_unsynchronized::<<backtrace[[PTR]]::capture::Backtrace>::create::{closure#0}>
-           at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+           at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
   2: backtrace[[PTR]]::backtrace::trace::<<backtrace[[PTR]]::capture::Backtrace>::create::{closure#0}>
-           at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+           at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
   3: <backtrace[[PTR]]::capture::Backtrace>::create
-           at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+           at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
   4: <backtrace[[PTR]]::capture::Backtrace>::new
-           at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+           at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
   5: <oopsie_core[[PTR]]::backtrace::BackTrace as oopsie_core[[PTR]]::traits::Capturable>::capture
            at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
   6: <alloc[[PTR]]::boxed::Box<oopsie_core[[PTR]]::backtrace::BackTrace> as oopsie_core[[PTR]]::traits::Capturable>::capture

@@ -14,15 +14,15 @@ Error[daisy_fancy_report::common::MyError::Inner]: Inner error happened
              at crates/oopsie/tests/common/mod.rs:[LOC]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    0: backtrace::backtrace::libunwind::trace
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
       backtrace::backtrace::trace_unsynchronized::<<backtrace::capture::Backtrace>::create::{closure#0}>
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
    1: backtrace::backtrace::trace::<<backtrace::capture::Backtrace>::create::{closure#0}>
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
    2: <backtrace::capture::Backtrace>::create
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
    3: <backtrace::capture::Backtrace>::new
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
    4: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
    5: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture

@@ -9,65 +9,65 @@ Error[daisy_fancy_report::OuterError]: Outer error
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    0: backtrace::backtrace::libunwind::trace
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:117:9
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
       backtrace::backtrace::trace_unsynchronized::<<backtrace::capture::Backtrace>::create::{closure#0}>
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:66:14
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
    1: backtrace::backtrace::trace::<<backtrace::capture::Backtrace>::create::{closure#0}>
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:53:14
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
    2: <backtrace::capture::Backtrace>::create
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:294:9
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
    3: <backtrace::capture::Backtrace>::new
-             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:259:22
+             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
    4: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
-             at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/backtrace.rs:10:19
+             at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
    5: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture
-             at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/traits.rs:25:18
+             at [CRATE_DIR]-core/src/traits.rs:[LOC]
    6: <daisy_fancy_report::TestOopsie<&str>>::build
-             at tests/daisy_fancy_report.rs:11:17
+             at tests/daisy_fancy_report.rs:[LOC]
    7: daisy_fancy_report::test_fancy_report_chain
-             at tests/daisy_fancy_report.rs:45:6
+             at tests/daisy_fancy_report.rs:[LOC]
    8: daisy_fancy_report::test_fancy_report_chain::{closure#0}
-             at tests/daisy_fancy_report.rs:41:29
+             at tests/daisy_fancy_report.rs:[LOC]
    9: <daisy_fancy_report::test_fancy_report_chain::{closure#0} as core::ops::function::FnOnce<()>>::call_once
-             at /Users/gaetan/.rustup/toolchains/nightly-2026-02-04-aarch64-apple-darwin/lib/rustlib/src/rust/library/core/src/ops/function.rs:250:5
+             at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
   10: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/core/src/ops/function.rs:250:5
+             at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
       test::__rust_begin_short_backtrace::<core::result::Result<(), alloc::string::String>, fn() -> core::result::Result<(), alloc::string::String>>
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/test/src/lib.rs:663:18
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
   11: test::run_test_in_process::{closure#0}
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/test/src/lib.rs:686:74
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
       <core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}> as core::ops::function::FnOnce<()>>::call_once
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/core/src/panic/unwind_safe.rs:274:9
+             at /rustc/[HASH]/library/core/src/panic/unwind_safe.rs:[LOC]
       std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>, core::result::Result<(), alloc::string::String>>
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/panicking.rs:581:40
+             at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
       std::panicking::catch_unwind::<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>>
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/panicking.rs:544:19
+             at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
       std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>, core::result::Result<(), alloc::string::String>>
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/panic.rs:359:14
+             at /rustc/[HASH]/library/std/src/panic.rs:[LOC]
       test::run_test_in_process
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/test/src/lib.rs:686:27
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
       test::run_test::{closure#0}
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/test/src/lib.rs:607:43
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
   12: test::run_test::{closure#1}
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/test/src/lib.rs:637:41
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
       std::sys::backtrace::__rust_begin_short_backtrace::<test::run_test::{closure#1}, ()>
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/sys/backtrace.rs:166:18
+             at /rustc/[HASH]/library/std/src/sys/backtrace.rs:[LOC]
   13: std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/thread/lifecycle.rs:91:13
+             at /rustc/[HASH]/library/std/src/thread/lifecycle.rs:[LOC]
       <core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}> as core::ops::function::FnOnce<()>>::call_once
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/core/src/panic/unwind_safe.rs:274:9
+             at /rustc/[HASH]/library/core/src/panic/unwind_safe.rs:[LOC]
       std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/panicking.rs:581:40
+             at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
       std::panicking::catch_unwind::<(), core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>>
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/panicking.rs:544:19
+             at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
       std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/panic.rs:359:14
+             at /rustc/[HASH]/library/std/src/panic.rs:[LOC]
       std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/thread/lifecycle.rs:89:26
+             at /rustc/[HASH]/library/std/src/thread/lifecycle.rs:[LOC]
       <std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/core/src/ops/function.rs:250:5
+             at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
   14: <alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce<()>>::call_once
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/alloc/src/boxed.rs:2206:9
+             at /rustc/[HASH]/library/alloc/src/boxed.rs:[LOC]
       <std::sys::thread::unix::Thread>::new::thread_start
-             at /rustc/366a1b93e7f466ebe559477add05f064873d0c71/library/std/src/sys/thread/unix.rs:127:17
+             at /rustc/[HASH]/library/std/src/sys/thread/unix.rs:[LOC]
   15: __pthread_cond_wait
