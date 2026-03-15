@@ -387,3 +387,40 @@ fn struct_provide_backtrace() {
         "struct provide() should correctly provide backtrace"
     );
 }
+
+// ---- Dynamic help field annotation ----
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum DynamicHelpError {
+    #[oopsie("validation failed")]
+    WithDynamicHelp {
+        #[oopsie(help)]
+        suggestion: String,
+    },
+
+    #[oopsie("other error")]
+    NoHelp { msg: String },
+}
+
+#[test]
+fn dynamic_help_field_returns_value() {
+    use oopsie::ErrorExt as _;
+    let err = WithDynamicHelp {
+        suggestion: "try a shorter name",
+    }
+    .build();
+    let help = err.oopsie_help_text();
+    assert!(help.is_some(), "should return dynamic help text");
+    assert_eq!(&*help.unwrap(), "try a shorter name");
+}
+
+#[test]
+fn no_help_field_returns_none() {
+    use oopsie::ErrorExt as _;
+    let err = NoHelp { msg: "boom" }.build();
+    assert!(
+        err.oopsie_help_text().is_none(),
+        "variant without help should return None"
+    );
+}

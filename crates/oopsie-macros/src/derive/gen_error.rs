@@ -141,8 +141,12 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
             }
         }
 
-        // Help text
-        if let Some(help) = &variant_attrs.help {
+        // Help text: dynamic field takes precedence over static attribute
+        if let Some(help_field) = &categorized.help_field {
+            help_arms.push(quote! {
+                Self::#variant_ident { #help_field, .. } => ::core::option::Option::Some(#crate_path::HelpText::from(#help_field.to_string())),
+            });
+        } else if let Some(help) = &variant_attrs.help {
             let fmt = &help.format_str;
             let args = &help.args;
             if args.is_empty() {
@@ -373,7 +377,14 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
         }
     };
 
-    let help_method = if let Some(help) = &variant_attrs.help {
+    // Dynamic help field takes precedence over static attribute
+    let help_method = if let Some(help_field) = &categorized.help_field {
+        quote! {
+            fn oopsie_help_text(&self) -> ::core::option::Option<#crate_path::HelpText> {
+                ::core::option::Option::Some(#crate_path::HelpText::from(self.#help_field.to_string()))
+            }
+        }
+    } else if let Some(help) = &variant_attrs.help {
         let fmt = &help.format_str;
         let args = &help.args;
         if args.is_empty() {

@@ -96,15 +96,19 @@ impl PartialEq for SpanTrace {
     fn eq(&self, other: &Self) -> bool {
         match (&self.inner, &other.inner) {
             (SpanTraceInner::Tracing(a), SpanTraceInner::Tracing(b)) => {
+                // Comparing only the first (innermost) span is sufficient:
+                // tracing_error::SpanTrace stores a single Span and with_spans
+                // walks up the ancestor tree. Two traces with the same innermost
+                // span have identical full traces.
                 let mut eq = false;
                 a.with_spans(|a_md, a_fields| {
                     b.with_spans(|b_md, b_fields| {
                         if a_md == b_md && a_fields == b_fields {
                             eq = true;
                         }
-                        false // stop iterating
+                        false
                     });
-                    false // stop iterating
+                    false
                 });
                 eq
             }
