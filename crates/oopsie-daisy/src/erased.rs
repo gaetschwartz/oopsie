@@ -8,13 +8,9 @@ use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
-use color_backtrace::termcolor;
 use serde::{Deserialize, Serialize};
-use termcolor::{Color, ColorSpec, NoColor};
 
-use crate::fancy_report::error_backtrace_frame_filter;
 use oopsie_core::SpanTrace;
-use oopsie_core::spantrace::SpanTraceInner;
 use oopsie_core::{ErrorCode, HelpText};
 
 /// A serializable, cloneable error representation that preserves the full
@@ -160,74 +156,42 @@ impl ErasedError {
     }
 
     /// Write the error in a text format similar to `FancyReport`.
-    pub fn write_text<W: color_backtrace::termcolor::WriteColor>(
-        &self,
-        f: &mut W,
-    ) -> io::Result<()> {
+    pub fn write_text<W: io::Write>(&self, f: &mut W) -> io::Result<()> {
         // Write main error header
         write!(f, "Error: ")?;
-        if let Some(code) = self.diagnostics.code() {
-            f.set_color(ColorSpec::new().set_fg(Some(Color::Red)).set_bold(true))?;
-            write!(f, "{code}")?;
-            f.reset()?;
-        }
-        f.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
-        write!(f, "\n\n  ✕ ")?;
-        f.reset()?;
-        writeln!(f, "{}", self.message)?;
+        writeln!(f)?;
+
+        writeln!(f, "\n  \u{2715} {}", self.message)?;
 
         // Write source chain with box-drawing characters
         let chain_len = self.source_chain.len();
         for (i, cause) in self.source_chain.iter().enumerate() {
-            f.set_color(ColorSpec::new().set_fg(Some(Color::Red)))?;
             let arrow = if i < chain_len - 1 {
-                "├─▶"
+                "\u{251c}\u{2500}\u{25b6}"
             } else {
-                "╰─▶"
+                "\u{2570}\u{2500}\u{25b6}"
             };
             write!(f, "  {arrow} ")?;
-            f.reset()?;
             writeln!(f, "{cause}")?;
         }
 
         // Write help text if present
         if let Some(help) = self.diagnostics.help() {
-            f.set_color(ColorSpec::new().set_fg(Some(Color::Cyan)))?;
             write!(f, "\n  help: ")?;
-            f.reset()?;
             writeln!(f, "{help}")?;
         }
 
         // Write spantrace if present
         if let Some(spantrace) = &self.spantrace {
             writeln!(f)?;
-            match &spantrace.inner {
-                SpanTraceInner::Tracing(spantrace) => {
-                    if f.supports_color() {
-                        write!(f, "{}", color_spantrace::colorize(spantrace))?;
-                    } else {
-                        writeln!(f, "{:━^80}", " SPANTRACE ")?;
-                        writeln!(f, "{spantrace}")?;
-                    }
-                }
-                SpanTraceInner::Fallback(fallback_spantrace) => {
-                    writeln!(f, "{:━^80}", " SPANTRACE ")?;
-                    writeln!(f, "{fallback_spantrace}")?;
-                }
-            }
+            writeln!(f, "{:━^80}", " SPANTRACE ")?;
+            writeln!(f, "{spantrace}")?;
         }
 
         // Write backtrace if present
         if let Some(backtrace) = &self.backtrace {
-            if f.supports_color() {
-                writeln!(f)?;
-                let printer = color_backtrace::BacktracePrinter::new()
-                    .add_frame_filter(Box::new(error_backtrace_frame_filter));
-                printer.print_trace(backtrace, f)?;
-            } else {
-                writeln!(f, "{:━^80}", " BACKTRACE ")?;
-                write!(f, "{backtrace:?}")?;
-            }
+            writeln!(f, "{:━^80}", " BACKTRACE ")?;
+            write!(f, "{backtrace:?}")?;
         }
 
         Ok(())
@@ -269,10 +233,7 @@ impl ErasedError {
     }
 
     /// Write the error in HTML format.
-    pub fn write_html<W: color_backtrace::termcolor::WriteColor>(
-        &self,
-        f: &mut W,
-    ) -> io::Result<()> {
+    pub fn write_html<W: io::Write>(&self, f: &mut W) -> io::Result<()> {
         self.write_text(f)
     }
 }
@@ -293,8 +254,7 @@ impl<W: fmt::Write> io::Write for IoToFmt<W> {
 
 impl fmt::Display for ErasedError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_text(&mut NoColor::new(IoToFmt(f)))
-            .map_err(|_err| fmt::Error)
+        self.write_text(&mut IoToFmt(f)).map_err(|_err| fmt::Error)
     }
 }
 
@@ -422,16 +382,16 @@ mod tests {
         };
 
         let mut buf = Vec::new();
-        erased.write_text(&mut NoColor::new(&mut buf)).unwrap();
+        erased.write_text(&mut buf).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert!(
-            output.contains("╰─▶"),
-            "single cause should use last-arrow ╰─▶"
+            output.contains("\u{2570}\u{2500}\u{25b6}"),
+            "single cause should use last-arrow"
         );
         assert!(
-            !output.contains("├─▶"),
-            "single cause should NOT use middle-arrow ├─▶"
+            !output.contains("\u{251c}\u{2500}\u{25b6}"),
+            "single cause should NOT use middle-arrow"
         );
     }
 
@@ -446,14 +406,17 @@ mod tests {
         };
 
         let mut buf = Vec::new();
-        erased.write_text(&mut NoColor::new(&mut buf)).unwrap();
+        erased.write_text(&mut buf).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         assert!(
-            output.contains("├─▶"),
+            output.contains("\u{251c}\u{2500}\u{25b6}"),
             "first of two causes should use middle-arrow"
         );
-        assert!(output.contains("╰─▶"), "last cause should use last-arrow");
+        assert!(
+            output.contains("\u{2570}\u{2500}\u{25b6}"),
+            "last cause should use last-arrow"
+        );
     }
 
     #[test]
@@ -467,17 +430,14 @@ mod tests {
         };
 
         let mut buf = Vec::new();
-        erased.write_text(&mut NoColor::new(&mut buf)).unwrap();
+        erased.write_text(&mut buf).unwrap();
         let output = String::from_utf8(buf).unwrap();
 
         // Count occurrences of each arrow
-        let middle_count = output.matches("├─▶").count();
-        let last_count = output.matches("╰─▶").count();
-        assert_eq!(
-            middle_count, 2,
-            "first two causes should use middle-arrow ├─▶"
-        );
-        assert_eq!(last_count, 1, "only last cause should use last-arrow ╰─▶");
+        let middle_count = output.matches("\u{251c}\u{2500}\u{25b6}").count();
+        let last_count = output.matches("\u{2570}\u{2500}\u{25b6}").count();
+        assert_eq!(middle_count, 2, "first two causes should use middle-arrow");
+        assert_eq!(last_count, 1, "only last cause should use last-arrow");
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -496,12 +456,12 @@ mod tests {
 
         let short = erased.format_short();
         assert!(
-            short.contains("╰─▶"),
-            "single cause should use last-arrow ╰─▶"
+            short.contains("\u{2570}\u{2500}\u{25b6}"),
+            "single cause should use last-arrow"
         );
         assert!(
-            !short.contains("├─▶"),
-            "single cause should NOT use middle-arrow ├─▶"
+            !short.contains("\u{251c}\u{2500}\u{25b6}"),
+            "single cause should NOT use middle-arrow"
         );
     }
 
@@ -517,10 +477,13 @@ mod tests {
 
         let short = erased.format_short();
         assert!(
-            short.contains("├─▶"),
+            short.contains("\u{251c}\u{2500}\u{25b6}"),
             "first of two causes should use middle-arrow"
         );
-        assert!(short.contains("╰─▶"), "last cause should use last-arrow");
+        assert!(
+            short.contains("\u{2570}\u{2500}\u{25b6}"),
+            "last cause should use last-arrow"
+        );
     }
 
     #[test]
@@ -534,8 +497,8 @@ mod tests {
         };
 
         let short = erased.format_short();
-        let middle_count = short.matches("├─▶").count();
-        let last_count = short.matches("╰─▶").count();
+        let middle_count = short.matches("\u{251c}\u{2500}\u{25b6}").count();
+        let last_count = short.matches("\u{2570}\u{2500}\u{25b6}").count();
         assert_eq!(middle_count, 2, "first two causes should use middle-arrow");
         assert_eq!(last_count, 1, "only last cause should use last-arrow");
     }
@@ -555,7 +518,7 @@ mod tests {
         };
 
         let mut buf = Vec::new();
-        erased.write_html(&mut NoColor::new(&mut buf)).unwrap();
+        erased.write_html(&mut buf).unwrap();
         assert!(!buf.is_empty(), "write_html must produce output");
         let output = String::from_utf8(buf).unwrap();
         assert!(
@@ -637,9 +600,6 @@ mod tests {
 
     #[test]
     fn test_extract_error_code_returns_none_for_plain_errors() {
-        // Plain std::io::Error doesn't implement ErrorExt, so there's no
-        // error code to extract. This is tested implicitly via ErasedError
-        // construction from oopsie error types.
         let erased = ErasedError {
             message: "plain error".into(),
             source_chain: vec![],

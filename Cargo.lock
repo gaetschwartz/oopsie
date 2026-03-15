@@ -463,8 +463,6 @@ dependencies = [
 name = "oopsie-daisy"
 version = "0.1.0"
 dependencies = [
- "color-backtrace",
- "color-spantrace",
  "oopsie-core",
  "owo-colors",
  "serde",
