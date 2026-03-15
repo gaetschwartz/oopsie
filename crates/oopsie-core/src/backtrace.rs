@@ -1,5 +1,4 @@
-use core::error;
-use std::{borrow::Cow, fmt};
+use std::fmt;
 
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct BackTrace(backtrace::Backtrace);
@@ -9,11 +8,17 @@ impl crate::Capturable for BackTrace {
         BackTrace(backtrace::Backtrace::new())
     }
 
-    fn capture_from(source: &dyn error::Error) -> Self {
-        if let Some(source_bt) = Self::extract_from_error(source) {
-            return source_bt.into_owned();
+    fn capture_from(source: &dyn std::error::Error) -> Self {
+        #[cfg(feature = "unstable")]
+        {
+            if let Some(bt) = core::error::request_ref::<Self>(source) {
+                return bt.clone();
+            }
         }
-
+        #[cfg(not(feature = "unstable"))]
+        {
+            _ = source;
+        }
         Self::capture()
     }
 }
@@ -31,22 +36,7 @@ impl fmt::Debug for BackTrace {
 }
 
 impl BackTrace {
-    pub fn extract_from_error(err: &dyn error::Error) -> Option<Cow<'_, Self>> {
-        #[cfg(feature = "unstable")]
-        {
-            if let Some(bt_ref) = error::request_ref::<BackTrace>(err) {
-                return Some(Cow::Borrowed(bt_ref));
-            }
-            if let Some(bt_val) = error::request_ref::<backtrace::Backtrace>(err) {
-                return Some(Cow::Owned(BackTrace(bt_val.clone())));
-            }
-        }
-
-        #[cfg(not(feature = "unstable"))]
-        {
-            _ = err;
-        }
-
-        None
+    pub fn extract_from_error(err: &(impl crate::ErrorExt + ?Sized)) -> Option<&Self> {
+        err.oopsie_backtrace()
     }
 }

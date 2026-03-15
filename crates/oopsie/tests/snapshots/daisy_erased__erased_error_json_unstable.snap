@@ -8,7 +8,7 @@ expression: error
     "Error: Inner function failed (foo=true, name=Alice)"
   ],
   "diagnostics": {
-    "code": "daisy_erased::common::MyErrorInner"
+    "code": "daisy_erased::common::MyError::Inner"
   },
   "spantrace": {
     "spans": [

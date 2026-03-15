@@ -2,7 +2,7 @@
 source: crates/oopsie/tests/daisy_fancy_report.rs
 expression: report
 ---
-Error[daisy_fancy_report::common::MyErrorInner]: Inner error happened
+Error[daisy_fancy_report::common::MyError::Inner]: Inner error happened
   ╰─▶ Error: Inner function failed (foo=true, name=Alice)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

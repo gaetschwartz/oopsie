@@ -7,6 +7,7 @@
 
 mod backtrace;
 mod color;
+mod error_ext;
 #[cfg(feature = "unstable")]
 mod result;
 pub mod spantrace;
@@ -20,6 +21,7 @@ use std::ops::Deref;
 pub use backtrace::BackTrace;
 pub use color::{ColorConfig, get_color_mode, set_color_mode};
 use color_backtrace::termcolor;
+pub use error_ext::ErrorExt;
 
 pub use spantrace::{ErasedMetadata, OptionalSpanTrace, SpanTrace};
 pub use tracing_error::ErrorLayer;

@@ -370,7 +370,7 @@ impl Parse for OopsieVariantMeta {
                     let ident = ahead.parse::<Ident>()?;
                     let kw = ident.to_string();
                     let is_keyword = match kw.as_str() {
-                        "transparent" | "capture" => true,
+                        "transparent" | "capture" | "backtrace" | "spantrace" => true,
                         "module" | "suffix" | "from" => true,
                         "display" | "provide" | "size" => ahead.peek(syn::token::Paren),
                         "help" | "code" | "vis" | "path" => {
@@ -512,6 +512,9 @@ pub struct FieldAttrs {
     pub from: SourceKind,
     pub capture: bool,
     pub provide: Vec<ProvideAttr>,
+    pub backtrace: bool,
+    pub spantrace: bool,
+    pub help: bool,
 }
 
 #[derive(Debug, Default)]
@@ -573,6 +576,17 @@ impl FieldAttrs {
                     FieldMeta::Provide(p) => {
                         result.provide.push(*p);
                     }
+                    FieldMeta::Backtrace => {
+                        result.backtrace = true;
+                        result.capture = true;
+                    }
+                    FieldMeta::Spantrace => {
+                        result.spantrace = true;
+                        result.capture = true;
+                    }
+                    FieldMeta::Help => {
+                        result.help = true;
+                    }
                 }
             }
         }
@@ -602,6 +616,9 @@ enum FieldMeta {
     From(SourceKind),
     Capture,
     Provide(Box<ProvideAttr>),
+    Backtrace,
+    Spantrace,
+    Help,
 }
 
 impl Parse for FieldMeta {
@@ -624,6 +641,9 @@ impl Parse for FieldMeta {
                 }
             }
             "capture" => Ok(Self::Capture),
+            "backtrace" => Ok(Self::Backtrace),
+            "spantrace" => Ok(Self::Spantrace),
+            "help" => Ok(Self::Help),
             "provide" => {
                 let content;
                 syn::parenthesized!(content in input);
@@ -703,6 +723,12 @@ pub struct CategorizedFields {
     pub user_fields: Vec<UserField>,
     /// Provider attributes from fields.
     pub provides: Vec<(Ident, ProvideAttr)>,
+    /// Field identified as backtrace (via `#[oopsie(backtrace)]` or name detection).
+    pub backtrace_field: Option<Ident>,
+    /// Field identified as spantrace (via `#[oopsie(spantrace)]` or name detection).
+    pub spantrace_field: Option<Ident>,
+    /// Field identified as help (via `#[oopsie(help)]`).
+    pub help_field: Option<Ident>,
 }
 
 #[derive(Debug)]
@@ -731,6 +757,9 @@ impl CategorizedFields {
         let mut auto_fields = Vec::new();
         let mut user_fields = Vec::new();
         let mut provides = Vec::new();
+        let mut backtrace_field = None;
+        let mut spantrace_field = None;
+        let mut help_field = None;
 
         let named = match fields {
             syn::Fields::Named(f) => &f.named,
@@ -740,6 +769,9 @@ impl CategorizedFields {
                     auto_fields,
                     user_fields,
                     provides,
+                    backtrace_field,
+                    spantrace_field,
+                    help_field,
                 });
             }
             syn::Fields::Unnamed(_) => {
@@ -757,6 +789,18 @@ impl CategorizedFields {
             // Collect provides
             for p in &attrs.provide {
                 provides.push((ident.clone(), p.clone()));
+            }
+
+            // Detect backtrace/spantrace/help fields
+            let ident_str = ident.to_string();
+            if attrs.backtrace || ident_str == "backtrace" || ident_str == "back_trace" {
+                backtrace_field = Some(ident.clone());
+            }
+            if attrs.spantrace || ident_str == "spantrace" || ident_str == "span_trace" {
+                spantrace_field = Some(ident.clone());
+            }
+            if attrs.help {
+                help_field = Some(ident.clone());
             }
 
             if attrs.is_source() {
@@ -789,6 +833,9 @@ impl CategorizedFields {
             auto_fields,
             user_fields,
             provides,
+            backtrace_field,
+            spantrace_field,
+            help_field,
         })
     }
 }

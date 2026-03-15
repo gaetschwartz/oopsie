@@ -39,7 +39,6 @@ fn test_erased_error_json() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "unstable"), ignore = "requires unstable provider API")]
 fn test_help_extraction() {
     let error = ErrorWithHelpOopsie {
         message: "connection refused",
@@ -55,7 +54,6 @@ fn test_help_extraction() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "unstable"), ignore = "requires unstable provider API")]
 fn test_code_only_extraction() {
     let error = ErrorWithCodeOnlyOopsie { message: "timeout" }.build();
     let erased = ErasedError::from_error(error);
@@ -79,7 +77,6 @@ fn test_format_short_includes_help() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "unstable"), ignore = "requires unstable provider API")]
 fn test_extract_backtrace_returns_some_when_provided() {
     let error = common::make_error();
     let bt = oopsie::BackTrace::extract_from_error(&error);
@@ -90,7 +87,6 @@ fn test_extract_backtrace_returns_some_when_provided() {
 }
 
 #[test]
-#[cfg_attr(not(feature = "unstable"), ignore = "requires unstable provider API")]
 fn test_extract_error_code_returns_some_for_oopsie_errors() {
     let error = ErrorWithHelpOopsie { message: "test" }.build();
     let erased = ErasedError::from_error(error);

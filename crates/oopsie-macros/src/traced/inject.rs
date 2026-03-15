@@ -125,36 +125,19 @@ pub(super) fn has_oopsie_name_value(attrs: &[syn::Attribute], key: &str) -> bool
     false
 }
 
-/// Add Oopsie provide attributes for backtrace, spantrace, and auto-generated error code.
+/// Add Oopsie provide attributes for auto-generated error code.
+///
+/// Backtrace and spantrace are now handled by ErrorExt via field detection,
+/// so only ErrorCode needs a provide attr for nightly Error::provide support.
 pub(super) fn add_provide_attrs(
     attrs: &mut Vec<syn::Attribute>,
     config: &FieldInjectorConfig,
     type_name: &str,
     variant_name: Option<&str>,
-    added_backtrace: bool,
-    added_spantrace: bool,
     code_enabled: bool,
     has_user_code: bool,
 ) {
-    let FieldInjectorConfig {
-        backtrace_ident,
-        spantrace_ident,
-        code_type,
-        magnetite_utils_path,
-        ..
-    } = config;
-
-    if added_backtrace {
-        attrs.push(
-            parse_quote! { #[oopsie(provide(ref, #magnetite_utils_path::BackTrace => #backtrace_ident.as_ref()))] },
-        );
-    }
-
-    if added_spantrace {
-        attrs.push(
-            parse_quote! { #[oopsie(provide(ref, #magnetite_utils_path::SpanTrace => #spantrace_ident.as_ref()))] },
-        );
-    }
+    let FieldInjectorConfig { code_type, .. } = config;
 
     // Only generate auto-code from module_path!() when the code feature is enabled
     // AND the user did not specify their own `code = "..."` on the variant/struct.
@@ -185,10 +168,10 @@ mod tests {
         FieldInjectorConfig {
             backtrace_ident: format_ident!("__oopsie_backtrace"),
             backtrace_type: quote! { ::std::boxed::Box<BackTrace> },
-            backtrace_attrs: quote! { #[oopsie(capture)] },
+            backtrace_attrs: quote! { #[oopsie(backtrace)] },
             spantrace_ident: format_ident!("__oopsie_spantrace"),
             spantrace_type: quote! { ::std::boxed::Box<SpanTrace> },
-            spantrace_attrs: quote! { #[oopsie(capture)] },
+            spantrace_attrs: quote! { #[oopsie(spantrace)] },
             timestamp_ident: format_ident!("__oopsie_timestamp"),
             timestamp_type: parse_quote! { std::time::SystemTime },
             timestamp_provide_attr: None,
@@ -265,32 +248,18 @@ mod tests {
     // ── add_provide_attrs ────────────────────────────────────────────
 
     #[test]
-    fn add_provide_attrs_adds_backtrace_attr() {
+    fn add_provide_attrs_no_code_when_disabled() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(
-            &mut attrs, &config, "MyError", None, true, false, false, false,
-        );
-        assert_eq!(attrs.len(), 1);
-    }
-
-    #[test]
-    fn add_provide_attrs_adds_both_trace_attrs() {
-        let mut attrs: Vec<syn::Attribute> = vec![];
-        let config = test_config();
-        add_provide_attrs(
-            &mut attrs, &config, "MyError", None, true, true, false, false,
-        );
-        assert_eq!(attrs.len(), 2);
+        add_provide_attrs(&mut attrs, &config, "MyError", None, false, false);
+        assert_eq!(attrs.len(), 0);
     }
 
     #[test]
     fn add_provide_attrs_adds_code_when_enabled() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(
-            &mut attrs, &config, "MyError", None, false, false, true, false,
-        );
+        add_provide_attrs(&mut attrs, &config, "MyError", None, true, false);
         assert_eq!(attrs.len(), 1);
     }
 
@@ -298,9 +267,7 @@ mod tests {
     fn add_provide_attrs_skips_code_when_user_code_present() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(
-            &mut attrs, &config, "MyError", None, false, false, true, true,
-        );
+        add_provide_attrs(&mut attrs, &config, "MyError", None, true, true);
         assert_eq!(attrs.len(), 0);
     }
 
@@ -308,16 +275,7 @@ mod tests {
     fn add_provide_attrs_with_variant_name() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(
-            &mut attrs,
-            &config,
-            "MyError",
-            Some("Variant"),
-            false,
-            false,
-            true,
-            false,
-        );
+        add_provide_attrs(&mut attrs, &config, "MyError", Some("Variant"), true, false);
         assert_eq!(attrs.len(), 1);
         let attr_str = quote! { #(#attrs)* }.to_string();
         insta::assert_snapshot!(attr_str);

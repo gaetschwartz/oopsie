@@ -44,8 +44,6 @@ pub(super) fn expand_enum(
             &config,
             &enum_name,
             Some(&variant_name),
-            to_inject.backtrace,
-            to_inject.spantrace,
             args.code.is_enabled(),
             has_user_code,
         );

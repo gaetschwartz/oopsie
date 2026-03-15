@@ -2,4 +2,7 @@
 source: crates/oopsie/tests/daisy_erased.rs
 expression: short
 ---
+daisy_erased::ErrorWithHelp
+
   × Something went wrong: connection refused
+  help: Try restarting the service

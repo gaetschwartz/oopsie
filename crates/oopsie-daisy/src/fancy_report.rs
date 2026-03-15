@@ -12,7 +12,7 @@ use owo_colors::OwoColorize as _;
 use oopsie_core::ColorConfig;
 use oopsie_core::spantrace::SpanTraceInner;
 
-use crate::extract_value_from_error;
+use oopsie_core::ErrorExt;
 
 /// A wrapper around an error that provides rich, colorized output.
 ///
@@ -23,7 +23,7 @@ pub struct FancyReport<E> {
     color_config: ColorConfig,
 }
 
-impl<E: std::error::Error> FancyReport<E> {
+impl<E: ErrorExt> FancyReport<E> {
     /// Create a new `FancyReport` wrapping the given error.
     ///
     /// Uses automatic color detection based on environment variables and
@@ -104,8 +104,8 @@ impl<E: std::error::Error> FancyReport<E> {
         let colors_enabled = self.color_config.should_colorize();
         let Err(err) = &self.res else { return Ok(()) };
 
-        let error_code = extract_value_from_error::<oopsie_core::ErrorCode>(err);
-        let help_text = extract_value_from_error::<oopsie_core::HelpText>(err);
+        let error_code = err.oopsie_error_code();
+        let help_text = err.oopsie_help_text();
 
         // Write main error
         if colors_enabled {
@@ -161,11 +161,7 @@ impl<E: std::error::Error> FancyReport<E> {
 
     /// Format the span trace if available.
     fn write_span_trace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Try our SpanTrace wrapper first
-        let Some(span_trace) = self
-            .error()
-            .and_then(|e| oopsie_core::SpanTrace::extract_from_error(e))
-        else {
+        let Some(span_trace) = self.error().and_then(|e| e.oopsie_spantrace()) else {
             return Ok(());
         };
 
@@ -190,10 +186,7 @@ impl<E: std::error::Error> FancyReport<E> {
 
     /// Format the backtrace if available and captured.
     fn write_backtrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Some(backtrace) = self
-            .error()
-            .and_then(|e| oopsie_core::BackTrace::extract_from_error(e))
-        else {
+        let Some(backtrace) = self.error().and_then(|e| e.oopsie_backtrace()) else {
             return Ok(());
         };
 
@@ -206,7 +199,7 @@ impl<E: std::error::Error> FancyReport<E> {
             let printer = color_backtrace::BacktracePrinter::default()
                 .clear_frame_filters()
                 .add_frame_filter(Box::new(error_backtrace_frame_filter));
-            if let Ok(formatted) = printer.format_trace_to_string(&*backtrace) {
+            if let Ok(formatted) = printer.format_trace_to_string(backtrace) {
                 write!(f, "{formatted}")?;
             } else {
                 writeln!(f, "{:━^80}", " BACKTRACE ")?;
@@ -222,7 +215,7 @@ impl<E: std::error::Error> FancyReport<E> {
 
 impl<E> Termination for FancyReport<E>
 where
-    E: std::error::Error,
+    E: ErrorExt,
 {
     fn report(self) -> ExitCode {
         match self.res {
@@ -256,7 +249,7 @@ impl<T, E> core::ops::FromResidual<Result<T, E>> for FancyReport<E> {
     }
 }
 
-impl<E: std::error::Error> fmt::Display for FancyReport<E> {
+impl<E: ErrorExt> fmt::Display for FancyReport<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_error_chain(f)?;
         self.write_span_trace(f)?;
@@ -265,13 +258,13 @@ impl<E: std::error::Error> fmt::Display for FancyReport<E> {
     }
 }
 
-impl<E: std::error::Error> fmt::Debug for FancyReport<E> {
+impl<E: ErrorExt> fmt::Debug for FancyReport<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
 }
 
-impl<E: std::error::Error> From<E> for FancyReport<E> {
+impl<E: ErrorExt> From<E> for FancyReport<E> {
     fn from(error: E) -> Self {
         Self::from_std(error)
     }

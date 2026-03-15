@@ -7,7 +7,25 @@ expression: error
   "source_chain": [
     "Error: Inner function failed (foo=true, name=Alice)"
   ],
-  "diagnostics": {},
-  "spantrace": null,
-  "backtrace": null
+  "diagnostics": {
+    "code": "daisy_erased::common::MyError::Inner"
+  },
+  "spantrace": {
+    "spans": [
+      {
+        "metadata": {
+          "name": "outer_function",
+          "target": "controller",
+          "level": "INFO",
+          "module_path": "daisy_erased::common",
+          "file": "crates/oopsie/tests/common/mod.rs",
+          "line": 40
+        },
+        "fields": "{\"foo\":true,\"name\":\"Alice\"}"
+      }
+    ]
+  },
+  "backtrace": {
+    "frames": "[..]"
+  }
 }

@@ -1,5 +1,5 @@
 error[E0080]: evaluation panicked: TooSmallError must be at least 9999 bytes
- --> tests/compile-fail/size_too_small.rs:3:17
+ --> tests/compile-fail/size_too_small.rs:5:17
   |
-3 | #[derive(Debug, Oopsie)]
+5 | #[derive(Debug, Oopsie)]
   |                 ^^^^^^ evaluation of `_` failed here

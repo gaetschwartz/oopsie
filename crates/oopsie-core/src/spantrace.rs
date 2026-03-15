@@ -4,8 +4,6 @@
 //! implicit data generation, allowing automatic capture of tracing span context
 //! in error types.
 
-use core::error;
-use std::borrow::Cow;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -68,23 +66,8 @@ impl SpanTrace {
     /// Extracts the span information from the error.
     #[must_use]
     #[inline]
-    pub fn extract_from_error(err: &dyn error::Error) -> Option<Cow<'_, Self>> {
-        #[cfg(feature = "unstable")]
-        {
-            if let Some(spantrace_ref) = error::request_ref::<Self>(err) {
-                return Some(Cow::Borrowed(spantrace_ref));
-            }
-            if let Some(trace_ref) = error::request_ref::<tracing_error::SpanTrace>(err) {
-                return Some(Cow::Owned(Self::new(trace_ref.clone())));
-            }
-        }
-
-        #[cfg(not(feature = "unstable"))]
-        {
-            _ = err;
-        }
-
-        None
+    pub fn extract_from_error(err: &(impl crate::ErrorExt + ?Sized)) -> Option<&Self> {
+        err.oopsie_spantrace()
     }
 
     pub fn with_spans<F>(&self, mut f: F)
@@ -146,12 +129,22 @@ impl crate::Capturable for SpanTrace {
         Self::capture()
     }
 
-    fn capture_from(source: &dyn error::Error) -> Self
+    fn capture_from(source: &dyn std::error::Error) -> Self
     where
         Self: Sized,
     {
-        if let Some(spantrace) = Self::extract_from_error(source) {
-            return spantrace.into_owned();
+        #[cfg(feature = "unstable")]
+        {
+            if let Some(st) = core::error::request_ref::<Self>(source) {
+                return st.clone();
+            }
+            if let Some(st) = core::error::request_ref::<tracing_error::SpanTrace>(source) {
+                return Self::new(st.clone());
+            }
+        }
+        #[cfg(not(feature = "unstable"))]
+        {
+            _ = source;
         }
         Self::capture()
     }
@@ -405,11 +398,10 @@ impl crate::Capturable for OptionalSpanTrace {
     {
         #[cfg(feature = "unstable")]
         {
-            // If source already has a SpanTrace, don't capture a new one
-            if std::error::request_ref::<SpanTrace>(source).is_some() {
+            if core::error::request_ref::<SpanTrace>(source).is_some() {
                 return Self(None);
             }
-            if std::error::request_ref::<tracing_error::SpanTrace>(source).is_some() {
+            if core::error::request_ref::<tracing_error::SpanTrace>(source).is_some() {
                 return Self(None);
             }
         }

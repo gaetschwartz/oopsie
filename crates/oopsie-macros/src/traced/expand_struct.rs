@@ -43,8 +43,6 @@ pub(super) fn expand_struct(
         &config,
         &struct_name,
         None,
-        to_inject.backtrace,
-        to_inject.spantrace,
         args.code.is_enabled(),
         has_user_code,
     );

@@ -2,7 +2,7 @@
 source: crates/oopsie/tests/daisy_erased.rs
 expression: error
 ---
-Error: daisy_erased::common::MyErrorInner
+Error: daisy_erased::common::MyError::Inner
 
   ✕ Inner error happened
   ╰─▶ Error: Inner function failed (foo=true, name=Alice)

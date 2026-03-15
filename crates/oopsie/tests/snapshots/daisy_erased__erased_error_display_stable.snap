@@ -2,7 +2,88 @@
 source: crates/oopsie/tests/daisy_erased.rs
 expression: error
 ---
-Error: 
+Error: daisy_erased::common::MyError::Inner
 
   ✕ Inner error happened
   ╰─▶ Error: Inner function failed (foo=true, name=Alice)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   0: controller::outer_function
+           with {"foo":true,"name":"Alice"}
+             at crates/oopsie/tests/common/mod.rs:[LOC]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   0: backtrace::backtrace::libunwind::trace
+             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
+      backtrace::backtrace::trace_unsynchronized::<<backtrace::capture::Backtrace>::create::{closure#0}>
+             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+   1: backtrace::backtrace::trace::<<backtrace::capture::Backtrace>::create::{closure#0}>
+             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+   2: <backtrace::capture::Backtrace>::create
+             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+   3: <backtrace::capture::Backtrace>::new
+             at /Users/gaetan/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+   4: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
+             at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
+   5: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture_from
+             at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
+   6: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture_from
+             at [CRATE_DIR]-core/src/traits.rs:[LOC]
+   7: <daisy_erased::common::my_oopsies::Inner as oopsie_core::traits::Contextual<daisy_erased::common::MyError>>::build_error
+             at tests/common/mod.rs:[LOC]
+   8: <core::result::Result<(), daisy_erased::common::MyErrorInner> as oopsie_core::traits::ResultExt<(), daisy_erased::common::MyErrorInner>>::context::<daisy_erased::common::my_oopsies::Inner, daisy_erased::common::MyError>::{closure#0}
+             at [CRATE_DIR]-core/src/traits.rs:[LOC]
+   9: <core::result::Result<(), daisy_erased::common::MyErrorInner>>::map_err::<daisy_erased::common::MyError, <core::result::Result<(), daisy_erased::common::MyErrorInner> as oopsie_core::traits::ResultExt<(), daisy_erased::common::MyErrorInner>>::context<daisy_erased::common::my_oopsies::Inner, daisy_erased::common::MyError>::{closure#0}>
+             at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/result.rs:[LOC]
+  10: <core::result::Result<(), daisy_erased::common::MyErrorInner> as oopsie_core::traits::ResultExt<(), daisy_erased::common::MyErrorInner>>::context::<daisy_erased::common::my_oopsies::Inner, daisy_erased::common::MyError>
+             at [CRATE_DIR]-core/src/traits.rs:[LOC]
+  11: daisy_erased::common::make_error::outer_function
+             at tests/common/mod.rs:[LOC]
+  12: daisy_erased::common::make_error
+             at tests/common/mod.rs:[LOC]
+  13: daisy_erased::test_erased_error_display
+             at tests/daisy_erased.rs:[LOC]
+  14: daisy_erased::test_erased_error_display::{closure#0}
+             at tests/daisy_erased.rs:[LOC]
+  15: <daisy_erased::test_erased_error_display::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+             at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
+  16: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
+      test::__rust_begin_short_backtrace::<core::result::Result<(), alloc::string::String>, fn() -> core::result::Result<(), alloc::string::String>>
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+  17: test::run_test_in_process::{closure#0}
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+      <core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/[HASH]/library/core/src/panic/unwind_safe.rs:[LOC]
+      std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>, core::result::Result<(), alloc::string::String>>
+             at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
+      std::panicking::catch_unwind::<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>>
+             at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
+      std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>, core::result::Result<(), alloc::string::String>>
+             at /rustc/[HASH]/library/std/src/panic.rs:[LOC]
+      test::run_test_in_process
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+      test::run_test::{closure#0}
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+  18: test::run_test::{closure#1}
+             at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+      std::sys::backtrace::__rust_begin_short_backtrace::<test::run_test::{closure#1}, ()>
+             at /rustc/[HASH]/library/std/src/sys/backtrace.rs:[LOC]
+  19: std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}
+             at /rustc/[HASH]/library/std/src/thread/lifecycle.rs:[LOC]
+      <core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/[HASH]/library/core/src/panic/unwind_safe.rs:[LOC]
+      std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
+             at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
+      std::panicking::catch_unwind::<(), core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>>
+             at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
+      std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
+             at /rustc/[HASH]/library/std/src/panic.rs:[LOC]
+      std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}
+             at /rustc/[HASH]/library/std/src/thread/lifecycle.rs:[LOC]
+      <std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
+             at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
+  20: <alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/[HASH]/library/alloc/src/boxed.rs:[LOC]
+      <std::sys::thread::unix::Thread>::new::thread_start
+             at /rustc/[HASH]/library/std/src/sys/thread/unix.rs:[LOC]
+  21: __pthread_cond_wait
