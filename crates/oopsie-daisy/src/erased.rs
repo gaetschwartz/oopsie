@@ -141,7 +141,7 @@ impl ErasedError {
                             .flat_map(|frame| {
                                 frame.symbols().iter().map(|sym| PrettyFrame {
                                     name: sym.name().map(|n| n.to_string()),
-                                    filename: sym.filename().map(|p| p.to_owned()),
+                                    filename: sym.filename().map(std::borrow::ToOwned::to_owned),
                                     line: sym.lineno(),
                                     column: sym.colno(),
                                 })
@@ -533,7 +533,7 @@ mod tests {
 
     #[test]
     fn test_io_to_fmt_write_returns_correct_byte_count() {
-        use std::io::Write;
+        use std::io::Write as _;
 
         let mut s = String::new();
         {

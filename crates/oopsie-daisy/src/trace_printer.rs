@@ -59,7 +59,7 @@ impl BacktraceProvider for oopsie_core::BackTrace {
                 frame.symbols().iter().map(move |sym| BacktraceFrame {
                     n,
                     name: sym.name().map(|n| n.to_string()),
-                    filename: sym.filename().map(|p| p.to_owned()),
+                    filename: sym.filename().map(std::borrow::ToOwned::to_owned),
                     lineno: sym.lineno(),
                     colno: sym.colno(),
                 })
@@ -74,7 +74,7 @@ impl SpanTraceProvider for oopsie_core::SpanTrace {
             let meta = SpanMetadata {
                 name: md.name().to_owned(),
                 target: md.target().to_owned(),
-                file: md.file().map(|s| s.to_owned()),
+                file: md.file().map(std::borrow::ToOwned::to_owned),
                 line: md.line(),
             };
             f(&meta, fields)

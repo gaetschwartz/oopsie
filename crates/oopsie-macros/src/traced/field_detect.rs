@@ -1,7 +1,7 @@
 //! Field detection helpers for backtrace/spantrace types.
 
 /// If `ty` is `Box<T>`, return the inner type `T`.
-pub(crate) fn extract_boxed_inner(ty: &syn::Type) -> Option<&syn::Type> {
+pub fn extract_boxed_inner(ty: &syn::Type) -> Option<&syn::Type> {
     let syn::Type::Path(type_path) = ty else {
         return None;
     };

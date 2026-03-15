@@ -3,7 +3,7 @@
 
 mod common;
 
-use std::process::Termination;
+use std::process::Termination as _;
 
 use oopsie::{Contextual as _, FancyReport, Oopsie, traced};
 

@@ -47,11 +47,9 @@ impl FieldInjectorConfig {
         } else {
             parse_quote! { std::time::SystemTime }
         };
-        let timestamp_provide_attr = if resolved.timestamp_provide() {
-            Some(quote! { #[oopsie(provide)] })
-        } else {
-            None
-        };
+        let timestamp_provide_attr = resolved
+            .timestamp_provide()
+            .then(|| quote! { #[oopsie(provide)] });
         let backtrace_attrs = quote! { #[oopsie(backtrace)] };
         let spantrace_attrs = quote! { #[oopsie(spantrace)] };
         let code_type = args

@@ -147,7 +147,7 @@ impl ContainerAttrs {
     /// Resolve the suffix setting with defaults for the given item kind.
     /// - Enums: default → `Off` (no suffix, selector name = variant name)
     /// - Structs: default → `Default` ("Oopsie" suffix, e.g. `ConnOopsie`)
-    pub fn effective_suffix(&self, is_enum: bool) -> &SuffixSetting {
+    pub const fn effective_suffix(&self, is_enum: bool) -> &SuffixSetting {
         match &self.suffix {
             SuffixSetting::Unset => {
                 if is_enum {
@@ -594,13 +594,13 @@ impl FieldAttrs {
         // Auto-boxing: if field type is Box<T> and source was auto-detected
         // (SourceKind::Yes), upgrade to Transformed with Box::new.
         // Explicit `from(T, transform)` already sets Transformed, so it takes precedence.
-        if matches!(result.from, SourceKind::Yes) {
-            if let Some(inner) = crate::traced::field_detect::extract_boxed_inner(&field.ty) {
-                result.from = SourceKind::Transformed {
-                    source_type: Box::new(inner.clone()),
-                    transform: syn::parse_quote! { ::std::boxed::Box::new },
-                };
-            }
+        if matches!(result.from, SourceKind::Yes)
+            && let Some(inner) = crate::traced::field_detect::extract_boxed_inner(&field.ty)
+        {
+            result.from = SourceKind::Transformed {
+                source_type: Box::new(inner.clone()),
+                transform: syn::parse_quote! { ::std::boxed::Box::new },
+            };
         }
 
         Ok(result)

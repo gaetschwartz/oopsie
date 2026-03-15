@@ -26,11 +26,20 @@ impl TracedArgs {
         if any_trace_specified {
             // Explicit mode: each trace is enabled only if explicitly listed and enabled
             ResolvedTraceArgs {
-                backtrace: self.backtrace.as_ref().is_some_and(|s| s.is_enabled()),
+                backtrace: self
+                    .backtrace
+                    .as_ref()
+                    .is_some_and(super::super::utils::FieldSetting::is_enabled),
                 backtrace_settings: self.backtrace.as_ref(),
-                spantrace: self.spantrace.as_ref().is_some_and(|s| s.is_enabled()),
+                spantrace: self
+                    .spantrace
+                    .as_ref()
+                    .is_some_and(super::super::utils::FieldSetting::is_enabled),
                 spantrace_settings: self.spantrace.as_ref(),
-                timestamp: self.timestamp.as_ref().is_some_and(|s| s.is_enabled()),
+                timestamp: self
+                    .timestamp
+                    .as_ref()
+                    .is_some_and(super::super::utils::FieldSetting::is_enabled),
                 timestamp_settings: self.timestamp.as_ref(),
             }
         } else {
@@ -59,11 +68,13 @@ pub(super) struct ResolvedTraceArgs<'a> {
 
 impl ResolvedTraceArgs<'_> {
     pub fn backtrace_type(&self) -> Option<&syn::Path> {
-        self.backtrace_settings.and_then(|s| s.r#type())
+        let s = self.backtrace_settings?;
+        s.r#type()
     }
 
     pub fn spantrace_type(&self) -> Option<&syn::Path> {
-        self.spantrace_settings.and_then(|s| s.r#type())
+        let s = self.spantrace_settings?;
+        s.r#type()
     }
 
     pub fn timestamp_chrono(&self) -> bool {

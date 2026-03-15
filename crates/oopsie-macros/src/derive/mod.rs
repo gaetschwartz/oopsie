@@ -40,7 +40,7 @@ fn oopsie_path(container: &ContainerAttrs) -> syn::Path {
 fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenStream2 {
     match constraint {
         SizeConstraint::Exact(n) => {
-            let msg = format!("{} size must be exactly {} bytes", ident, n);
+            let msg = format!("{ident} size must be exactly {n} bytes");
             quote! {
                 const _: () = {
                     assert!(
@@ -51,7 +51,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
             }
         }
         SizeConstraint::AtMost(n) => {
-            let msg = format!("{} exceeds size limit of {} bytes", ident, n);
+            let msg = format!("{ident} exceeds size limit of {n} bytes");
             quote! {
                 const _: () = {
                     assert!(
@@ -62,7 +62,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
             }
         }
         SizeConstraint::AtLeast(n) => {
-            let msg = format!("{} must be at least {} bytes", ident, n);
+            let msg = format!("{ident} must be at least {n} bytes");
             quote! {
                 const _: () = {
                     assert!(
@@ -73,8 +73,8 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
             }
         }
         SizeConstraint::Range(lo, hi) => {
-            let msg_lo = format!("{} must be at least {} bytes", ident, lo);
-            let msg_hi = format!("{} exceeds size limit of {} bytes", ident, hi);
+            let msg_lo = format!("{ident} must be at least {lo} bytes");
+            let msg_hi = format!("{ident} exceeds size limit of {hi} bytes");
             quote! {
                 const _: () = {
                     assert!(
