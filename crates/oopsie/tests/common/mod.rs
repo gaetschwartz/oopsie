@@ -26,6 +26,7 @@ pub fn init_test_subscriber() -> tracing::subscriber::DefaultGuard {
 }
 
 /// Create an `ErrorWithSpanTrace` within instrumented functions to capture spantrace.
+#[expect(clippy::items_after_statements)]
 pub fn make_error() -> MyError {
     let _guard = init_test_subscriber();
 

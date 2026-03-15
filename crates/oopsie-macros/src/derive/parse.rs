@@ -507,6 +507,7 @@ impl Parse for OopsieVariantMeta {
 
 // ─── Field-level attributes ──────────────────────────────────────
 
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Default)]
 pub struct FieldAttrs {
     pub from: SourceKind,

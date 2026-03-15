@@ -176,7 +176,6 @@ mod tests {
             timestamp_type: parse_quote! { std::time::SystemTime },
             timestamp_provide_attr: None,
             code_type: quote! { ErrorCode },
-            magnetite_utils_path: parse_quote! { oopsie },
         }
     }
 

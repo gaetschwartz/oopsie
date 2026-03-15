@@ -21,25 +21,24 @@ pub(super) struct FieldInjectorConfig {
     pub timestamp_provide_attr: Option<TokenStream2>,
 
     pub code_type: TokenStream2,
-    pub magnetite_utils_path: syn::Path,
 }
 
 impl FieldInjectorConfig {
     pub fn new(
         args: &TracedArgs,
         resolved: &ResolvedTraceArgs<'_>,
-        magnetite_utils_path: syn::Path,
+        oopsie_path: &syn::Path,
     ) -> Self {
         let backtrace_ident = format_ident!("__oopsie_backtrace");
         let spantrace_ident = format_ident!("__oopsie_spantrace");
         let timestamp_ident = format_ident!("__oopsie_timestamp");
 
         let backtrace_type = resolved.backtrace_type().map_or_else(
-            || quote! { ::std::boxed::Box<#magnetite_utils_path::BackTrace> },
+            || quote! { ::std::boxed::Box<#oopsie_path::BackTrace> },
             |p| quote! { #p },
         );
         let spantrace_type = resolved.spantrace_type().map_or_else(
-            || quote! { ::std::boxed::Box<#magnetite_utils_path::SpanTrace> },
+            || quote! { ::std::boxed::Box<#oopsie_path::SpanTrace> },
             |p| quote! { #p },
         );
         let timestamp_type: syn::Type = if resolved.timestamp_chrono() {
@@ -56,10 +55,7 @@ impl FieldInjectorConfig {
             .code
             .opt_settings()
             .and_then(|s| s.r#type.clone())
-            .map_or_else(
-                || quote! { #magnetite_utils_path::ErrorCode },
-                |p| quote! { #p },
-            );
+            .map_or_else(|| quote! { #oopsie_path::ErrorCode }, |p| quote! { #p });
 
         Self {
             backtrace_ident,
@@ -72,7 +68,6 @@ impl FieldInjectorConfig {
             timestamp_type,
             timestamp_provide_attr,
             code_type,
-            magnetite_utils_path,
         }
     }
 }

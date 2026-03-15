@@ -71,6 +71,7 @@ impl ErasedError {
     ///
     /// This extracts the message, source chain, backtrace, spantrace,
     /// error code, and help text via the `ErrorExt` trait.
+    #[expect(clippy::needless_pass_by_value)]
     pub fn from_error<E: oopsie_core::ErrorExt>(err: E) -> Self {
         Self::from_error_ref(&err)
     }

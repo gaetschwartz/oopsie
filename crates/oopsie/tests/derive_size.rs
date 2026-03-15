@@ -1,5 +1,5 @@
 #![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
-#![allow(unused, clippy::all)]
+#![allow(unused, clippy::all, clippy::pedantic)]
 
 use oopsie::Oopsie;
 

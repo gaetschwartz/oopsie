@@ -449,6 +449,7 @@ mod tests {
     // ── Existing tests ───────────────────────────────────────────────
 
     #[test]
+    #[expect(clippy::items_after_statements, clippy::needless_continue)]
     fn oopsie_value_from_meta_name_value() {
         let meta: Vec<syn::Attribute> = parse_quote! {
             #[oopsie(visibility(pub(crate)))]

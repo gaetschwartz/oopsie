@@ -16,13 +16,13 @@ pub(super) fn expand_enum(
     mut input: syn::ItemEnum,
 ) -> syn::Result<TokenStream2> {
     let enum_name = input.ident.to_string();
-    let magnetite_utils_path = args
+    let oopsie_path = args
         .path
         .clone()
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     let resolved = args.resolve();
-    let config = FieldInjectorConfig::new(args, &resolved, magnetite_utils_path);
+    let config = FieldInjectorConfig::new(args, &resolved, &oopsie_path);
 
     // Process variants
     for variant in &mut input.variants {

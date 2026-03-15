@@ -216,10 +216,13 @@ fn split_function_hash(name: &str) -> (&str, Option<&str>) {
 // TracePrinter
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// A closure that filters backtrace frames in-place.
+type FrameFilter = Box<dyn Fn(&mut Vec<&BacktraceFrame>)>;
+
 /// Renders backtraces and span traces with colors.
 pub struct TracePrinter {
     theme: TraceTheme,
-    frame_filters: Vec<Box<dyn Fn(&mut Vec<&BacktraceFrame>)>>,
+    frame_filters: Vec<FrameFilter>,
 }
 
 impl TracePrinter {
@@ -243,7 +246,7 @@ impl TracePrinter {
 
     /// Add a frame filter for backtrace rendering.
     #[must_use]
-    pub fn add_frame_filter(mut self, filter: Box<dyn Fn(&mut Vec<&BacktraceFrame>)>) -> Self {
+    pub fn add_frame_filter(mut self, filter: FrameFilter) -> Self {
         self.frame_filters.push(filter);
         self
     }

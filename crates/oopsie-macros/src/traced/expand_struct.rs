@@ -16,13 +16,13 @@ pub(super) fn expand_struct(
     mut input: syn::ItemStruct,
 ) -> syn::Result<TokenStream2> {
     let struct_name = input.ident.to_string();
-    let magnetite_utils_path = args
+    let oopsie_path = args
         .path
         .clone()
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     let resolved = args.resolve();
-    let config = FieldInjectorConfig::new(args, &resolved, magnetite_utils_path);
+    let config = FieldInjectorConfig::new(args, &resolved, &oopsie_path);
 
     // Check existing fields and inject
     let existence = check_existing_fields(&input.fields, &config.timestamp_type);
