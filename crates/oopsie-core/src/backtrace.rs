@@ -33,6 +33,12 @@ impl fmt::Debug for BackTrace {
 }
 
 impl BackTrace {
+    /// Returns a reference to the inner [`backtrace::Backtrace`].
+    #[must_use]
+    pub const fn inner(&self) -> &backtrace::Backtrace {
+        &self.0
+    }
+
     pub fn extract_from_error(err: &(impl crate::ErrorExt + ?Sized)) -> Option<&Self> {
         err.oopsie_backtrace()
     }

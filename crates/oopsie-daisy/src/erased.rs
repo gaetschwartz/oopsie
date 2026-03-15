@@ -113,6 +113,7 @@ impl ErasedError {
             name: Option<String>,
             filename: Option<PathBuf>,
             line: Option<u32>,
+            column: Option<u32>,
         }
 
         #[derive(serde::Serialize)]
@@ -138,12 +139,16 @@ impl ErasedError {
                 spantrace: &self.spantrace,
                 backtrace: PrettyBacktrace {
                     frames: self.backtrace.as_ref().map_or(vec![], |bt| {
-                        color_backtrace::Backtrace::frames(bt)
-                            .into_iter()
-                            .map(|frame| PrettyFrame {
-                                name: frame.name,
-                                filename: frame.filename,
-                                line: frame.lineno,
+                        bt.inner()
+                            .frames()
+                            .iter()
+                            .flat_map(|frame| {
+                                frame.symbols().iter().map(|sym| PrettyFrame {
+                                    name: sym.name().map(|n| n.to_string()),
+                                    filename: sym.filename().map(|p| p.to_owned()),
+                                    line: sym.lineno(),
+                                    column: sym.colno(),
+                                })
                             })
                             .collect()
                     }),
