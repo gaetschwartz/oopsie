@@ -131,7 +131,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         } else {
             // Check for auto-generated code from #[traced] provide attrs
             for provide_attr in &variant_provides {
-                if is_error_code_provide(provide_attr, oopsie_path) {
+                if is_error_code_provide(provide_attr) {
                     let expr = &provide_attr.expr;
                     code_arms.push(quote! {
                         Self::#variant_ident { .. } => ::core::option::Option::Some(#expr),
@@ -361,7 +361,7 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
         // Check for auto-generated code from #[traced] provide attrs
         let mut code_expr = None;
         for provide_attr in &struct_provides {
-            if is_error_code_provide(provide_attr, oopsie_path) {
+            if is_error_code_provide(provide_attr) {
                 code_expr = Some(&provide_attr.expr);
                 break;
             }
@@ -447,7 +447,7 @@ fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
 }
 
 /// Check if a provide attr is for ErrorCode (used to detect auto-generated code from #[traced]).
-fn is_error_code_provide(attr: &ProvideAttr, _oopsie_path: &syn::Path) -> bool {
+fn is_error_code_provide(attr: &ProvideAttr) -> bool {
     // Check if the provided type ends with "ErrorCode"
     if let Type::Path(type_path) = &attr.provided_type
         && let Some(last_seg) = type_path.path.segments.last()
