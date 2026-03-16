@@ -112,7 +112,6 @@ pub fn gen_enum_selectors(
                 &generic_params,
                 &where_clauses,
                 oopsie_path,
-                &input.generics,
             )
         } else {
             gen_build_fail(
@@ -123,7 +122,6 @@ pub fn gen_enum_selectors(
                 &generic_params,
                 &where_clauses,
                 oopsie_path,
-                &input.generics,
             )
         };
 
@@ -292,7 +290,6 @@ fn gen_auto_field_names(categorized: &CategorizedFields) -> Vec<&Ident> {
 }
 
 /// Generate `Contextual` impl for an enum variant with a source field.
-#[expect(clippy::too_many_arguments)]
 fn gen_build_error(
     selector_ident: &Ident,
     enum_ident: &Ident,
@@ -301,7 +298,6 @@ fn gen_build_error(
     generic_params: &TokenStream2,
     where_clauses: &TokenStream2,
     oopsie_path: &syn::Path,
-    _generics: &syn::Generics,
 ) -> TokenStream2 {
     let source_field = categorized.source.as_ref().unwrap();
     let source_ident = &source_field.ident;
@@ -356,7 +352,6 @@ fn gen_build_error(
 }
 
 /// Generate `build()` and `fail()` for leaf enum variants (no source).
-#[expect(clippy::too_many_arguments)]
 fn gen_build_fail(
     selector_ident: &Ident,
     enum_ident: &Ident,
@@ -365,7 +360,6 @@ fn gen_build_fail(
     generic_params: &TokenStream2,
     where_clauses: &TokenStream2,
     oopsie_path: &syn::Path,
-    _generics: &syn::Generics,
 ) -> TokenStream2 {
     let auto_inits = gen_auto_inits(categorized, oopsie_path, false);
     let auto_names = gen_auto_field_names(categorized);

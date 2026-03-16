@@ -9,4 +9,6 @@ pub mod trace_printer;
 
 pub use erased::{Diagnostics, ErasedError};
 pub use fancy_report::FancyReport;
-pub use trace_printer::{BacktraceProvider, SpanTraceProvider, TracePrinter, TraceTheme};
+pub use trace_printer::{
+    BacktraceProvider, FrameFilter, SpanTraceProvider, TracePrinter, TraceTheme,
+};

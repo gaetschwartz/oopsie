@@ -217,7 +217,7 @@ fn split_function_hash(name: &str) -> (&str, Option<&str>) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A closure that filters backtrace frames in-place.
-type FrameFilter = Box<dyn Fn(&mut Vec<&BacktraceFrame>)>;
+pub type FrameFilter = Box<dyn Fn(&mut Vec<&BacktraceFrame>)>;
 
 /// Renders backtraces and span traces with colors.
 pub struct TracePrinter {

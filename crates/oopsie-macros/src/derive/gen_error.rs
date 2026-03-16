@@ -9,7 +9,7 @@ use syn::{DeriveInput, Expr, Token, Type};
 use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr, VariantAttrs};
 
 /// Generate `std::error::Error` impl for an enum.
-pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Result<TokenStream2> {
+pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Result<TokenStream2> {
     let enum_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -62,12 +62,12 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
         // Provide backtrace/spantrace refs from detected fields
         if let Some(bt_field) = &categorized.backtrace_field {
             provide_stmts.push(quote! {
-                request.provide_ref::<#crate_path::BackTrace>(#bt_field.as_ref());
+                request.provide_ref::<#oopsie_path::BackTrace>(#bt_field.as_ref());
             });
         }
         if let Some(st_field) = &categorized.spantrace_field {
             provide_stmts.push(quote! {
-                request.provide_ref::<#crate_path::SpanTrace>(#st_field.as_ref());
+                request.provide_ref::<#oopsie_path::SpanTrace>(#st_field.as_ref());
             });
         }
 
@@ -79,11 +79,11 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
 
         // Provide from help/code in VariantAttrs
         if let Some(help) = &variant_attrs.help {
-            provide_stmts.push(gen_help_provide(help, crate_path));
+            provide_stmts.push(gen_help_provide(help, oopsie_path));
         }
         if let Some(code) = &variant_attrs.code {
             provide_stmts.push(quote! {
-                request.provide_value_with::<#crate_path::ErrorCode>(|| #crate_path::ErrorCode::from(#code));
+                request.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#code));
             });
         }
 
@@ -126,12 +126,12 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
         // Error code: check for user-specified code first, then auto-generated from provide attrs
         if let Some(code) = &variant_attrs.code {
             code_arms.push(quote! {
-                Self::#variant_ident { .. } => ::core::option::Option::Some(#crate_path::ErrorCode::from(#code)),
+                Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#code)),
             });
         } else {
             // Check for auto-generated code from #[traced] provide attrs
             for provide_attr in &variant_provides {
-                if is_error_code_provide(provide_attr, crate_path) {
+                if is_error_code_provide(provide_attr, oopsie_path) {
                     let expr = &provide_attr.expr;
                     code_arms.push(quote! {
                         Self::#variant_ident { .. } => ::core::option::Option::Some(#expr),
@@ -144,18 +144,18 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
         // Help text: dynamic field takes precedence over static attribute
         if let Some(help_field) = &categorized.help_field {
             help_arms.push(quote! {
-                Self::#variant_ident { #help_field, .. } => ::core::option::Option::Some(#crate_path::HelpText::from(#help_field.to_string())),
+                Self::#variant_ident { #help_field, .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(#help_field.to_string())),
             });
         } else if let Some(help) = &variant_attrs.help {
             let fmt = &help.format_str;
             let args = &help.args;
             if args.is_empty() {
                 help_arms.push(quote! {
-                    Self::#variant_ident { .. } => ::core::option::Option::Some(#crate_path::HelpText(::std::borrow::Cow::Borrowed(#fmt))),
+                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText(::std::borrow::Cow::Borrowed(#fmt))),
                 });
             } else {
                 help_arms.push(quote! {
-                    Self::#variant_ident { .. } => ::core::option::Option::Some(#crate_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*)))),
+                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*)))),
                 });
             }
         }
@@ -179,7 +179,7 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
         quote! {}
     } else {
         quote! {
-            fn oopsie_backtrace(&self) -> ::core::option::Option<&#crate_path::BackTrace> {
+            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::BackTrace> {
                 match self {
                     #(#bt_arms)*
                     _ => ::core::option::Option::None,
@@ -192,7 +192,7 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
         quote! {}
     } else {
         quote! {
-            fn oopsie_spantrace(&self) -> ::core::option::Option<&#crate_path::SpanTrace> {
+            fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
                 match self {
                     #(#st_arms)*
                     _ => ::core::option::Option::None,
@@ -205,7 +205,7 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
         quote! {}
     } else {
         quote! {
-            fn oopsie_error_code(&self) -> ::core::option::Option<#crate_path::ErrorCode> {
+            fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
                 match self {
                     #(#code_arms)*
                     _ => ::core::option::Option::None,
@@ -218,7 +218,7 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
         quote! {}
     } else {
         quote! {
-            fn oopsie_help_text(&self) -> ::core::option::Option<#crate_path::HelpText> {
+            fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
                 match self {
                     #(#help_arms)*
                     _ => ::core::option::Option::None,
@@ -238,7 +238,7 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
             #provide_method
         }
 
-        impl #impl_generics #crate_path::ErrorExt for #enum_ident #ty_generics #where_clause {
+        impl #impl_generics #oopsie_path::ErrorExt for #enum_ident #ty_generics #where_clause {
             #bt_method
             #st_method
             #code_method
@@ -248,7 +248,7 @@ pub fn gen_enum_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Resul
 }
 
 /// Generate `std::error::Error` impl for a struct.
-pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Result<TokenStream2> {
+pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Result<TokenStream2> {
     let struct_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -284,12 +284,12 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
     // Provide backtrace/spantrace refs from detected fields
     if let Some(bt_field) = &categorized.backtrace_field {
         provide_stmts.push(quote! {
-            request.provide_ref::<#crate_path::BackTrace>(#bt_field.as_ref());
+            request.provide_ref::<#oopsie_path::BackTrace>(#bt_field.as_ref());
         });
     }
     if let Some(st_field) = &categorized.spantrace_field {
         provide_stmts.push(quote! {
-            request.provide_ref::<#crate_path::SpanTrace>(#st_field.as_ref());
+            request.provide_ref::<#oopsie_path::SpanTrace>(#st_field.as_ref());
         });
     }
 
@@ -301,11 +301,11 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
 
     // Help/code from VariantAttrs (user-specified via #[oopsie(help = "...", code = "...")])
     if let Some(help) = &variant_attrs.help {
-        provide_stmts.push(gen_help_provide(help, crate_path));
+        provide_stmts.push(gen_help_provide(help, oopsie_path));
     }
     if let Some(code) = &variant_attrs.code {
         provide_stmts.push(quote! {
-            request.provide_value_with::<#crate_path::ErrorCode>(|| #crate_path::ErrorCode::from(#code));
+            request.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#code));
         });
     }
 
@@ -333,7 +333,7 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
 
     let bt_method = if let Some(bt_field) = &categorized.backtrace_field {
         quote! {
-            fn oopsie_backtrace(&self) -> ::core::option::Option<&#crate_path::BackTrace> {
+            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::BackTrace> {
                 ::core::option::Option::Some(self.#bt_field.as_ref())
             }
         }
@@ -343,7 +343,7 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
 
     let st_method = if let Some(st_field) = &categorized.spantrace_field {
         quote! {
-            fn oopsie_spantrace(&self) -> ::core::option::Option<&#crate_path::SpanTrace> {
+            fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
                 ::core::option::Option::Some(self.#st_field.as_ref())
             }
         }
@@ -353,22 +353,22 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
 
     let code_method = if let Some(code) = &variant_attrs.code {
         quote! {
-            fn oopsie_error_code(&self) -> ::core::option::Option<#crate_path::ErrorCode> {
-                ::core::option::Option::Some(#crate_path::ErrorCode::from(#code))
+            fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
+                ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#code))
             }
         }
     } else {
         // Check for auto-generated code from #[traced] provide attrs
         let mut code_expr = None;
         for provide_attr in &struct_provides {
-            if is_error_code_provide(provide_attr, crate_path) {
+            if is_error_code_provide(provide_attr, oopsie_path) {
                 code_expr = Some(&provide_attr.expr);
                 break;
             }
         }
         if let Some(expr) = code_expr {
             quote! {
-                fn oopsie_error_code(&self) -> ::core::option::Option<#crate_path::ErrorCode> {
+                fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
                     ::core::option::Option::Some(#expr)
                 }
             }
@@ -380,8 +380,8 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
     // Dynamic help field takes precedence over static attribute
     let help_method = if let Some(help_field) = &categorized.help_field {
         quote! {
-            fn oopsie_help_text(&self) -> ::core::option::Option<#crate_path::HelpText> {
-                ::core::option::Option::Some(#crate_path::HelpText::from(self.#help_field.to_string()))
+            fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
+                ::core::option::Option::Some(#oopsie_path::HelpText::from(self.#help_field.to_string()))
             }
         }
     } else if let Some(help) = &variant_attrs.help {
@@ -389,14 +389,14 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
         let args = &help.args;
         if args.is_empty() {
             quote! {
-                fn oopsie_help_text(&self) -> ::core::option::Option<#crate_path::HelpText> {
-                    ::core::option::Option::Some(#crate_path::HelpText(::std::borrow::Cow::Borrowed(#fmt)))
+                fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
+                    ::core::option::Option::Some(#oopsie_path::HelpText(::std::borrow::Cow::Borrowed(#fmt)))
                 }
             }
         } else {
             quote! {
-                fn oopsie_help_text(&self) -> ::core::option::Option<#crate_path::HelpText> {
-                    ::core::option::Option::Some(#crate_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*))))
+                fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
+                    ::core::option::Option::Some(#oopsie_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*))))
                 }
             }
         }
@@ -413,7 +413,7 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
             #provide_method
         }
 
-        impl #impl_generics #crate_path::ErrorExt for #struct_ident #ty_generics #where_clause {
+        impl #impl_generics #oopsie_path::ErrorExt for #struct_ident #ty_generics #where_clause {
             #bt_method
             #st_method
             #code_method
@@ -422,16 +422,16 @@ pub fn gen_struct_error(input: &DeriveInput, crate_path: &syn::Path) -> syn::Res
     })
 }
 
-fn gen_help_provide(help: &DisplayAttr, crate_path: &syn::Path) -> TokenStream2 {
+fn gen_help_provide(help: &DisplayAttr, oopsie_path: &syn::Path) -> TokenStream2 {
     let fmt = &help.format_str;
     let args = &help.args;
     if args.is_empty() {
         quote! {
-            request.provide_value_with::<#crate_path::HelpText>(|| #crate_path::HelpText(::std::borrow::Cow::Borrowed(#fmt)));
+            request.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText(::std::borrow::Cow::Borrowed(#fmt)));
         }
     } else {
         quote! {
-            request.provide_value_with::<#crate_path::HelpText>(|| #crate_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*))));
+            request.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*))));
         }
     }
 }
@@ -447,7 +447,7 @@ fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
 }
 
 /// Check if a provide attr is for ErrorCode (used to detect auto-generated code from #[traced]).
-fn is_error_code_provide(attr: &ProvideAttr, _crate_path: &syn::Path) -> bool {
+fn is_error_code_provide(attr: &ProvideAttr, _oopsie_path: &syn::Path) -> bool {
     // Check if the provided type ends with "ErrorCode"
     if let Type::Path(type_path) = &attr.provided_type
         && let Some(last_seg) = type_path.path.segments.last()
