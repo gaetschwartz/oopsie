@@ -6,12 +6,10 @@
 )]
 
 mod backtrace;
-mod color;
 mod error_ext;
 #[cfg(feature = "unstable")]
 mod result;
 pub mod spantrace;
-mod tracing_level;
 mod traits;
 
 use std::borrow::Cow;
@@ -19,7 +17,6 @@ use std::io;
 use std::ops::Deref;
 
 pub use backtrace::BackTrace;
-pub use color::{ColorConfig, get_color_mode, set_color_mode};
 use color_backtrace::termcolor;
 pub use error_ext::ErrorExt;
 
@@ -61,9 +58,8 @@ pub mod __private {
     }
 }
 
-pub use spantrace::{ErasedMetadata, OptionalSpanTrace, SpanTrace};
+pub use spantrace::{OptionalSpanTrace, SpanTrace};
 pub use tracing_error::ErrorLayer;
-pub use tracing_level::TracingLevel;
 use tracing_subscriber::fmt::format::JsonFields;
 use tracing_subscriber::registry::LookupSpan;
 pub use traits::*;

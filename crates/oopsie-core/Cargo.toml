@@ -16,21 +16,15 @@ color-backtrace = { version = "0.7.2", features = [
 ] }
 color-eyre = "0.6.5"
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
 smallbox = { version = "0.8.8", features = [
     "nightly",
     "coerce",
 ], optional = true }
-strum = { version = "0.28", features = ["derive"] }
 tracing = "0.1"
 tracing-error = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 [dev-dependencies]
-insta = { version = "1", features = ["filters", "json", "redactions"] }
-serde_json = { version = "1" }
-tracing-error = "0.2"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [lints]
 workspace = true

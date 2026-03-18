@@ -12,6 +12,8 @@ unstable = ["oopsie-core/unstable"]
 oopsie-core = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+strum = { version = "0.28", features = ["derive"] }
+tracing = "0.1"
 
 [dev-dependencies]
 insta = { version = "1.46.3", features = ["filters", "json", "redactions"] }

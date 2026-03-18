@@ -11,6 +11,11 @@ pub use oopsie_macros::traced;
 pub use oopsie_core::*;
 
 #[cfg(feature = "fancy")]
+mod color;
+#[cfg(feature = "fancy")]
+pub use color::{ColorConfig, get_color_mode, set_color_mode};
+
+#[cfg(feature = "fancy")]
 mod report;
 #[cfg(feature = "fancy")]
 pub use report::Report;

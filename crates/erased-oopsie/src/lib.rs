@@ -4,13 +4,16 @@
 //! format, preserving the full error context including message, source chain,
 //! spantrace, and backtrace.
 
+mod spantrace;
+
+pub use spantrace::{ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel};
+
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use oopsie_core::SpanTrace;
 use oopsie_core::{ErrorCode, HelpText};
 
 /// A serializable, cloneable error representation that preserves the full
@@ -31,7 +34,7 @@ pub struct ErasedError {
     pub diagnostics: Diagnostics,
 
     /// Serialized span trace.
-    pub spantrace: Option<SpanTrace>,
+    pub spantrace: Option<ErasedSpanTrace>,
 
     /// Serialized backtrace.
     pub backtrace: Option<oopsie_core::BackTrace>,
@@ -92,7 +95,7 @@ impl ErasedError {
             code: err.oopsie_error_code(),
             help: err.oopsie_help_text(),
         };
-        let spantrace = err.oopsie_spantrace().cloned();
+        let spantrace = err.oopsie_spantrace().map(ErasedSpanTrace::from);
         let backtrace = err.oopsie_backtrace().cloned();
 
         Self {
@@ -123,7 +126,7 @@ impl ErasedError {
             message: &'a str,
             source_chain: &'a [Box<str>],
             diagnostics: &'a Diagnostics,
-            spantrace: &'a Option<SpanTrace>,
+            spantrace: &'a Option<ErasedSpanTrace>,
             backtrace: PrettyBacktrace,
         }
 
