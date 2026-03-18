@@ -5,7 +5,7 @@ members = [
     "crates/oopsie",
     "crates/oopsie-core",
     "crates/oopsie-macros",
-    "crates/oopsie-daisy",
+    "crates/erased-oopsie",
 ]
 
 [workspace.package]
@@ -15,7 +15,8 @@ authors = ["Gaëtan Schwartz"]
 [workspace.dependencies]
 oopsie-core = { path = "crates/oopsie-core", default-features = false }
 oopsie-macros = { path = "crates/oopsie-macros" }
-oopsie-daisy = { path = "crates/oopsie-daisy", default-features = false }
+oopsie = { path = "crates/oopsie" }
+erased-oopsie = { path = "crates/erased-oopsie" }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

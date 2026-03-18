@@ -3,7 +3,8 @@
 
 mod common;
 
-use oopsie::{ErasedError, Oopsie, traced};
+use erased_oopsie::ErasedError;
+use oopsie::{Oopsie, traced};
 
 #[traced]
 #[derive(Debug, Oopsie)]

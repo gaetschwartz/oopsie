@@ -49,7 +49,7 @@ pub trait SpanTraceProvider {
 // Implementations for core types
 // ─────────────────────────────────────────────────────────────────────────────
 
-impl BacktraceProvider for oopsie_core::BackTrace {
+impl BacktraceProvider for crate::BackTrace {
     fn frames(&self) -> Vec<BacktraceFrame> {
         self.inner()
             .frames()
@@ -68,9 +68,9 @@ impl BacktraceProvider for oopsie_core::BackTrace {
     }
 }
 
-impl SpanTraceProvider for oopsie_core::SpanTrace {
+impl SpanTraceProvider for crate::SpanTrace {
     fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata, &str) -> bool) {
-        oopsie_core::SpanTrace::with_spans(self, |md, fields| {
+        crate::SpanTrace::with_spans(self, |md, fields| {
             let meta = SpanMetadata {
                 name: md.name().to_owned(),
                 target: md.target().to_owned(),

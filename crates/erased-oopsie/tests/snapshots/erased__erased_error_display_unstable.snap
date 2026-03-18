@@ -1,5 +1,5 @@
 ---
-source: crates/oopsie/tests/daisy_erased.rs
+source: crates/erased-oopsie/tests/erased.rs
 expression: error
 ---
 Error: 
@@ -10,10 +10,10 @@ Error:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    0: sys::inner_function
            with {"foo":true,"id":42,"name":"Alice"}
-             at crates/oopsie/tests/common/mod.rs:[LOC]
+             at crates/erased-oopsie/tests/common/mod.rs:[LOC]
    1: controller::outer_function
            with {"foo":true,"name":"Alice"}
-             at crates/oopsie/tests/common/mod.rs:[LOC]
+             at crates/erased-oopsie/tests/common/mod.rs:[LOC]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    0: backtrace::backtrace::libunwind::trace
              at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
@@ -26,24 +26,24 @@ Error:
    3: <backtrace::capture::Backtrace>::new
              at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
    4: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
-             at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
+             at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/backtrace.rs:[LOC]
    5: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture
-             at [CRATE_DIR]-core/src/traits.rs:[LOC]
-   6: <daisy_erased::common::MyErrorInnerOopsie<alloc::string::String>>::build
+             at /Users/gaetan/dev/oopsie/crates/oopsie-core/src/traits.rs:[LOC]
+   6: <erased::common::MyErrorInnerOopsie<alloc::string::String>>::build
              at tests/common/mod.rs:[LOC]
-   7: <daisy_erased::common::MyErrorInnerOopsie<alloc::string::String>>::fail::<()>
+   7: <erased::common::MyErrorInnerOopsie<alloc::string::String>>::fail::<()>
              at tests/common/mod.rs:[LOC]
-   8: daisy_erased::common::make_error::inner_function
+   8: erased::common::make_error::inner_function
              at tests/common/mod.rs:[LOC]
-   9: daisy_erased::common::make_error::outer_function
+   9: erased::common::make_error::outer_function
              at tests/common/mod.rs:[LOC]
-  10: daisy_erased::common::make_error
+  10: erased::common::make_error
              at tests/common/mod.rs:[LOC]
-  11: daisy_erased::test_erased_error_display
-             at tests/daisy_erased.rs:[LOC]
-  12: daisy_erased::test_erased_error_display::{closure#0}
-             at tests/daisy_erased.rs:[LOC]
-  13: <daisy_erased::test_erased_error_display::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+  11: erased::test_erased_error_display
+             at tests/erased.rs:[LOC]
+  12: erased::test_erased_error_display::{closure#0}
+             at tests/erased.rs:[LOC]
+  13: <erased::test_erased_error_display::{closure#0} as core::ops::function::FnOnce<()>>::call_once
              at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
   14: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
              at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]

@@ -1,8 +1,8 @@
 ---
-source: crates/oopsie/tests/daisy_fancy_report.rs
+source: crates/oopsie/tests/report.rs
 expression: report.to_string()
 ---
-Error[daisy_fancy_report::ErrorWithHelp]: Something went wrong: connection refused
+Error[report::ErrorWithHelp]: Something went wrong: connection refused
 
   help: Try restarting the service
 
@@ -23,13 +23,13 @@ Error[daisy_fancy_report::ErrorWithHelp]: Something went wrong: connection refus
              at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
    5: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/traits.rs:[LOC]
-   6: <daisy_fancy_report::ErrorWithHelpOopsie<&str>>::build
-             at tests/daisy_fancy_report.rs:[LOC]
-   7: daisy_fancy_report::test_fancy_report_with_help
-             at tests/daisy_fancy_report.rs:[LOC]
-   8: daisy_fancy_report::test_fancy_report_with_help::{closure#0}
-             at tests/daisy_fancy_report.rs:[LOC]
-   9: <daisy_fancy_report::test_fancy_report_with_help::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+   6: <report::ErrorWithHelpOopsie<&str>>::build
+             at tests/report.rs:[LOC]
+   7: report::test_report_with_help
+             at tests/report.rs:[LOC]
+   8: report::test_report_with_help::{closure#0}
+             at tests/report.rs:[LOC]
+   9: <report::test_report_with_help::{closure#0} as core::ops::function::FnOnce<()>>::call_once
              at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
   10: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
              at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]

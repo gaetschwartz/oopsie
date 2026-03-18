@@ -1,6 +1,6 @@
-//! FancyReport for rich, colorized error output.
+//! Report for rich, colorized error output.
 //!
-//! This module provides [`FancyReport`], a wrapper that formats errors with
+//! This module provides [`Report`], a wrapper that formats errors with
 //! colorized output including the error chain, span traces, and backtraces.
 
 use std::fmt;
@@ -8,23 +8,23 @@ use std::process::{ExitCode, Termination};
 
 use owo_colors::OwoColorize as _;
 
-use oopsie_core::ColorConfig;
+use crate::ColorConfig;
 
-use oopsie_core::ErrorExt;
+use crate::ErrorExt;
 
 use crate::trace_printer::TracePrinter;
 
 /// A wrapper around an error that provides rich, colorized output.
 ///
-/// `FancyReport` extracts backtraces and span traces from the error chain
+/// `Report` extracts backtraces and span traces from the error chain
 /// (when available via the Provider API) and formats them with colors.
-pub struct FancyReport<E> {
+pub struct Report<E> {
     res: Result<(), E>,
     color_config: ColorConfig,
 }
 
-impl<E: ErrorExt> FancyReport<E> {
-    /// Create a new `FancyReport` wrapping the given error.
+impl<E: ErrorExt> Report<E> {
+    /// Create a new `Report` wrapping the given error.
     ///
     /// Uses automatic color detection based on environment variables and
     /// terminal detection.
@@ -36,7 +36,7 @@ impl<E: ErrorExt> FancyReport<E> {
         }
     }
 
-    /// Create a new `FancyReport` with a successful result.
+    /// Create a new `Report` with a successful result.
     #[must_use]
     pub const fn ok() -> Self {
         Self {
@@ -45,7 +45,7 @@ impl<E: ErrorExt> FancyReport<E> {
         }
     }
 
-    /// Runs the given function and returns a `FancyReport` with the result.
+    /// Runs the given function and returns a `Report` with the result.
     #[must_use]
     pub fn run<F>(func: F) -> Self
     where
@@ -194,7 +194,7 @@ impl<E: ErrorExt> FancyReport<E> {
     }
 }
 
-impl<E> Termination for FancyReport<E>
+impl<E> Termination for Report<E>
 where
     E: ErrorExt,
 {
@@ -221,7 +221,7 @@ where
 }
 
 #[cfg(feature = "unstable")]
-impl<T, E> core::ops::FromResidual<Result<T, E>> for FancyReport<E> {
+impl<T, E> core::ops::FromResidual<Result<T, E>> for Report<E> {
     fn from_residual(residual: Result<T, E>) -> Self {
         Self {
             res: residual.map(drop),
@@ -230,7 +230,7 @@ impl<T, E> core::ops::FromResidual<Result<T, E>> for FancyReport<E> {
     }
 }
 
-impl<E: ErrorExt> fmt::Display for FancyReport<E> {
+impl<E: ErrorExt> fmt::Display for Report<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_error_chain(f)?;
         self.write_span_trace(f)?;
@@ -239,13 +239,13 @@ impl<E: ErrorExt> fmt::Display for FancyReport<E> {
     }
 }
 
-impl<E: ErrorExt> fmt::Debug for FancyReport<E> {
+impl<E: ErrorExt> fmt::Debug for Report<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
 }
 
-impl<E: ErrorExt> From<E> for FancyReport<E> {
+impl<E: ErrorExt> From<E> for Report<E> {
     fn from(error: E) -> Self {
         Self::from_std(error)
     }

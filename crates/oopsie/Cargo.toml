@@ -5,14 +5,16 @@ edition.workspace = true
 authors.workspace = true
 
 [features]
-default = ["daisy"]
-unstable = ["oopsie-core/unstable", "oopsie-macros/unstable", "oopsie-daisy?/unstable"]
-daisy = ["dep:oopsie-daisy", "oopsie-macros/daisy"]
+default = ["fancy"]
+unstable = ["oopsie-core/unstable", "oopsie-macros/unstable"]
+fancy = ["dep:owo-colors", "dep:serde", "dep:serde_json"]
 
 [dependencies]
 oopsie-core = { workspace = true }
 oopsie-macros = { workspace = true }
-oopsie-daisy = { workspace = true, optional = true }
+owo-colors = { version = "4", optional = true }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
 
 [lints]
 workspace = true

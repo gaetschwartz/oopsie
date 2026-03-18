@@ -72,10 +72,10 @@ impl ColorConfig {
     }
 }
 
-/// Set the global color mode for all `FancyReport` instances using `Auto`.
+/// Set the global color mode for all `Report` instances using `Auto`.
 ///
 /// This affects the default behavior when no explicit color configuration is
-/// provided to `FancyReport`.
+/// provided to `Report`.
 pub fn set_color_mode(mode: ColorConfig) {
     COLOR_MODE.store(mode as u8, Ordering::SeqCst);
 }

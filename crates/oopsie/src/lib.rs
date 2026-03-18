@@ -1,3 +1,8 @@
+#![cfg_attr(
+    feature = "unstable",
+    feature(error_generic_member_access, try_trait_v2)
+)]
+
 // Re-export the #[traced] proc-macro attribute and #[derive(Oopsie)].
 pub use oopsie_macros::Oopsie;
 pub use oopsie_macros::traced;
@@ -5,6 +10,10 @@ pub use oopsie_macros::traced;
 // Re-export all core types.
 pub use oopsie_core::*;
 
-// Re-export oopsie-daisy when the "daisy" feature is enabled.
-#[cfg(feature = "daisy")]
-pub use oopsie_daisy::*;
+#[cfg(feature = "fancy")]
+mod report;
+#[cfg(feature = "fancy")]
+pub use report::Report;
+
+#[cfg(feature = "fancy")]
+pub mod trace_printer;

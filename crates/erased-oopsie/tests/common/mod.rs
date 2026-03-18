@@ -1,4 +1,4 @@
-//! Shared helpers for oopsie integration tests.
+//! Shared helpers for erased-oopsie integration tests.
 
 use oopsie::{NewJsonErrorLayer as _, Oopsie, ResultExt as _, traced};
 use tracing::instrument;

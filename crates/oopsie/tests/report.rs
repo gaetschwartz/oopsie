@@ -5,7 +5,7 @@ mod common;
 
 use std::process::Termination as _;
 
-use oopsie::{Contextual as _, FancyReport, Oopsie, traced};
+use oopsie::{Contextual as _, Oopsie, Report, traced};
 
 #[traced]
 #[derive(Debug, Oopsie)]
@@ -27,53 +27,53 @@ fn strip_ansi(s: &str) -> String {
 }
 
 #[test]
-fn test_fancy_report_basic() {
+fn test_report_basic() {
     let error = TestOopsie {
         message: "something failed",
     }
     .build();
-    let report = FancyReport::from_std(error).no_colors();
+    let report = Report::from_std(error).no_colors();
 
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("fancy_report_basic"), report.to_string());
+        insta::assert_snapshot!(snap_name!("report_basic"), report.to_string());
     });
 }
 
 #[test]
-fn test_fancy_report_chain() {
+fn test_report_chain() {
     let inner = TestOopsie {
         message: "root cause",
     }
     .build();
     let outer: OuterError = OuterOopsie.build_error(inner);
-    let report = FancyReport::from_std(outer).no_colors();
+    let report = Report::from_std(outer).no_colors();
 
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("fancy_report_chain"), report.to_string());
+        insta::assert_snapshot!(snap_name!("report_chain"), report.to_string());
     });
 }
 
 #[test]
-fn test_fancy_report_colored() {
+fn test_report_colored() {
     let error = TestOopsie {
         message: "colored test",
     }
     .build();
-    let report = FancyReport::from_std(error).force_colors();
+    let report = Report::from_std(error).force_colors();
 
     let output = strip_ansi(&report.to_string());
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("fancy_report_colored_stripped"), output);
+        insta::assert_snapshot!(snap_name!("report_colored_stripped"), output);
     });
 }
 
 #[test]
-fn test_fancy_report_from() {
+fn test_report_from() {
     let error = TestOopsie {
         message: "from test",
     }
     .build();
-    let report: FancyReport<_> = error.into();
+    let report: Report<_> = error.into();
     assert!(report.to_string().contains("from test"));
 }
 
@@ -86,35 +86,35 @@ pub struct ErrorWithHelp {
 }
 
 #[test]
-fn test_fancy_report_with_help() {
+fn test_report_with_help() {
     let error = ErrorWithHelpOopsie {
         message: "connection refused",
     }
     .build();
-    let report = FancyReport::from_std(error).no_colors();
+    let report = Report::from_std(error).no_colors();
 
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("fancy_report_with_help"), report.to_string());
+        insta::assert_snapshot!(snap_name!("report_with_help"), report.to_string());
     });
 }
 
 #[test]
-fn test_fancy_report_with_spantrace() {
+fn test_report_with_spantrace() {
     let error = common::make_error();
-    let report = FancyReport::from_std(error).no_colors();
+    let report = Report::from_std(error).no_colors();
 
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("fancy_report_with_spantrace"), report);
+        insta::assert_snapshot!(snap_name!("report_with_spantrace"), report);
     });
 }
 
 #[test]
-fn test_fancy_report_with_spantrace_debug() {
+fn test_report_with_spantrace_debug() {
     let error = common::make_error();
 
     redact!(backtrace, {
         insta::assert_snapshot!(
-            snap_name!("fancy_report_with_spantrace_debug"),
+            snap_name!("report_with_spantrace_debug"),
             format!("{error:#}")
         );
     });
@@ -128,13 +128,13 @@ fn test_error_returns_some_when_err() {
         message: "accessor test",
     }
     .build();
-    let report = FancyReport::from_std(error);
+    let report = Report::from_std(error);
     assert!(report.error().is_some());
 }
 
 #[test]
 fn test_error_returns_none_when_ok() {
-    let report = FancyReport::<TestError>::ok();
+    let report = Report::<TestError>::ok();
     assert!(report.error().is_none());
 }
 
@@ -144,7 +144,7 @@ fn test_into_error_returns_some_when_err() {
         message: "into_error test",
     }
     .build();
-    let report = FancyReport::from_std(error);
+    let report = Report::from_std(error);
     let err = report.into_error();
     assert!(err.is_some());
     assert!(err.unwrap().to_string().contains("into_error test"));
@@ -152,7 +152,7 @@ fn test_into_error_returns_some_when_err() {
 
 #[test]
 fn test_into_error_returns_none_when_ok() {
-    let report = FancyReport::<TestError>::ok();
+    let report = Report::<TestError>::ok();
     assert!(report.into_error().is_none());
 }
 
@@ -164,7 +164,7 @@ fn test_debug_fmt_non_empty() {
         message: "debug test",
     }
     .build();
-    let report = FancyReport::from_std(error).no_colors();
+    let report = Report::from_std(error).no_colors();
     let debug_output = format!("{report:?}");
     assert!(!debug_output.is_empty());
     assert!(debug_output.contains("debug test"));
@@ -172,7 +172,7 @@ fn test_debug_fmt_non_empty() {
 
 #[test]
 fn test_display_ok_is_empty() {
-    let report = FancyReport::<TestError>::ok();
+    let report = Report::<TestError>::ok();
     let output = report.to_string();
     assert!(output.is_empty());
 }
@@ -181,7 +181,7 @@ fn test_display_ok_is_empty() {
 
 #[test]
 fn test_termination_report_ok() {
-    let _code = FancyReport::<TestError>::ok().report();
+    let _code = Report::<TestError>::ok().report();
 }
 
 #[test]
@@ -190,5 +190,5 @@ fn test_termination_report_error() {
         message: "termination test",
     }
     .build();
-    let _code = FancyReport::from_std(error).no_colors().report();
+    let _code = Report::from_std(error).no_colors().report();
 }

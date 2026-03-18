@@ -1,6 +1,6 @@
 //! Erased error types for serializable error reporting.
 //!
-//! This module provides types that capture error information in a serializable
+//! This crate provides types that capture error information in a serializable
 //! format, preserving the full error context including message, source chain,
 //! spantrace, and backtrace.
 
@@ -156,7 +156,7 @@ impl ErasedError {
         Ok(())
     }
 
-    /// Write the error in a text format similar to `FancyReport`.
+    /// Write the error in a text format similar to `Report`.
     pub fn write_text<W: io::Write>(&self, f: &mut W) -> io::Result<()> {
         // Write main error header
         write!(f, "Error: ")?;

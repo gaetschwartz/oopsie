@@ -1,8 +1,8 @@
 ---
-source: crates/oopsie/tests/daisy_fancy_report.rs
+source: crates/oopsie/tests/report.rs
 expression: output
 ---
-Error[daisy_fancy_report::TestError]: Test error: colored test
+Error[report::TestError]: Test error: colored test
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -22,13 +22,13 @@ Error[daisy_fancy_report::TestError]: Test error: colored test
            at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
   6: <alloc[[PTR]]::boxed::Box<oopsie_core[[PTR]]::backtrace::BackTrace> as oopsie_core[[PTR]]::traits::Capturable>::capture
            at [CRATE_DIR]-core/src/traits.rs:[LOC]
-  7: <daisy_fancy_report[[PTR]]::TestOopsie<&str>>::build
-           at [CRATE_DIR]/tests/daisy_fancy_report.rs:[LOC]
-  8: daisy_fancy_report[[PTR]]::test_fancy_report_colored
-           at [CRATE_DIR]/tests/daisy_fancy_report.rs:[LOC]
-  9: daisy_fancy_report[[PTR]]::test_fancy_report_colored::{closure#0}
-           at [CRATE_DIR]/tests/daisy_fancy_report.rs:[LOC]
- 10: <daisy_fancy_report[[PTR]]::test_fancy_report_colored::{closure#0} as core[[PTR]]::ops::function::FnOnce<()>>::call_once
+  7: <report[[PTR]]::TestOopsie<&str>>::build
+           at [CRATE_DIR]/tests/report.rs:[LOC]
+  8: report[[PTR]]::test_report_colored
+           at [CRATE_DIR]/tests/report.rs:[LOC]
+  9: report[[PTR]]::test_report_colored::{closure#0}
+           at [CRATE_DIR]/tests/report.rs:[LOC]
+ 10: <report[[PTR]]::test_report_colored::{closure#0} as core[[PTR]]::ops::function::FnOnce<()>>::call_once
            at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
  11: <fn() -> core[[PTR]]::result::Result<(), alloc[[PTR]]::string::String> as core[[PTR]]::ops::function::FnOnce<()>>::call_once
            at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
