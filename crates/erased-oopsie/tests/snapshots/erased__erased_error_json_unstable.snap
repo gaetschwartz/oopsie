@@ -37,6 +37,223 @@ expression: error
     ]
   },
   "backtrace": {
-    "frames": "[..]"
+    "frames": [
+      {
+        "name": "backtrace[HASH]::backtrace::libunwind::trace",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/libunwind.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "backtrace[HASH]::backtrace::trace_unsynchronized::<<backtrace[HASH]::capture::Backtrace>::create::{closure#0}>",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/mod.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "backtrace[HASH]::backtrace::trace::<<backtrace[HASH]::capture::Backtrace>::create::{closure#0}>",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/mod.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<backtrace[HASH]::capture::Backtrace>::create",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/capture.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<backtrace[HASH]::capture::Backtrace>::new",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/capture.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<oopsie_core[HASH]::backtrace::BackTrace as oopsie_core[HASH]::traits::Capturable>::capture",
+        "filename": "[PATH]/crates/oopsie-core/src/backtrace.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<alloc[HASH]::boxed::Box<oopsie_core[HASH]::backtrace::BackTrace> as oopsie_core[HASH]::traits::Capturable>::capture",
+        "filename": "[PATH]/crates/oopsie-core/src/traits.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<erased[HASH]::common::MyErrorInnerOopsie<alloc[HASH]::string::String>>::build",
+        "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<erased[HASH]::common::MyErrorInnerOopsie<alloc[HASH]::string::String>>::fail::<()>",
+        "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "erased[HASH]::common::make_error::inner_function",
+        "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "erased[HASH]::common::make_error::outer_function",
+        "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "erased[HASH]::common::make_error",
+        "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "erased[HASH]::test_erased_error_json",
+        "filename": "[PATH]/crates/erased-oopsie/tests/erased.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "erased[HASH]::test_erased_error_json::{closure#0}",
+        "filename": "[PATH]/crates/erased-oopsie/tests/erased.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<erased[HASH]::test_erased_error_json::{closure#0} as core[HASH]::ops::function::FnOnce<()>>::call_once",
+        "filename": "[PATH]/lib/rustlib/src/rust/library/core/src/ops/function.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<fn() -> core[HASH]::result::Result<(), alloc[HASH]::string::String> as core[HASH]::ops::function::FnOnce<()>>::call_once",
+        "filename": "[PATH]/library/core/src/ops/function.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "test[HASH]::__rust_begin_short_backtrace::<core[HASH]::result::Result<(), alloc[HASH]::string::String>, fn() -> core[HASH]::result::Result<(), alloc[HASH]::string::String>>",
+        "filename": "[PATH]/library/test/src/lib.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "test[HASH]::run_test_in_process::{closure#0}",
+        "filename": "[PATH]/library/test/src/lib.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<core[HASH]::panic::unwind_safe::AssertUnwindSafe<test[HASH]::run_test_in_process::{closure#0}> as core[HASH]::ops::function::FnOnce<()>>::call_once",
+        "filename": "[PATH]/library/core/src/panic/unwind_safe.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "std[HASH]::panicking::catch_unwind::do_call::<core[HASH]::panic::unwind_safe::AssertUnwindSafe<test[HASH]::run_test_in_process::{closure#0}>, core[HASH]::result::Result<(), alloc[HASH]::string::String>>",
+        "filename": "[PATH]/library/std/src/panicking.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "std[HASH]::panicking::catch_unwind::<core[HASH]::result::Result<(), alloc[HASH]::string::String>, core[HASH]::panic::unwind_safe::AssertUnwindSafe<test[HASH]::run_test_in_process::{closure#0}>>",
+        "filename": "[PATH]/library/std/src/panicking.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "std[HASH]::panic::catch_unwind::<core[HASH]::panic::unwind_safe::AssertUnwindSafe<test[HASH]::run_test_in_process::{closure#0}>, core[HASH]::result::Result<(), alloc[HASH]::string::String>>",
+        "filename": "[PATH]/library/std/src/panic.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "test[HASH]::run_test_in_process",
+        "filename": "[PATH]/library/test/src/lib.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "test[HASH]::run_test::{closure#0}",
+        "filename": "[PATH]/library/test/src/lib.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "test[HASH]::run_test::{closure#1}",
+        "filename": "[PATH]/library/test/src/lib.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "std[HASH]::sys::backtrace::__rust_begin_short_backtrace::<test[HASH]::run_test::{closure#1}, ()>",
+        "filename": "[PATH]/library/std/src/sys/backtrace.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "std[HASH]::thread::lifecycle::spawn_unchecked::<test[HASH]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}",
+        "filename": "[PATH]/library/std/src/thread/lifecycle.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<core[HASH]::panic::unwind_safe::AssertUnwindSafe<std[HASH]::thread::lifecycle::spawn_unchecked<test[HASH]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}> as core[HASH]::ops::function::FnOnce<()>>::call_once",
+        "filename": "[PATH]/library/core/src/panic/unwind_safe.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "std[HASH]::panicking::catch_unwind::do_call::<core[HASH]::panic::unwind_safe::AssertUnwindSafe<std[HASH]::thread::lifecycle::spawn_unchecked<test[HASH]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>",
+        "filename": "[PATH]/library/std/src/panicking.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "std[HASH]::panicking::catch_unwind::<(), core[HASH]::panic::unwind_safe::AssertUnwindSafe<std[HASH]::thread::lifecycle::spawn_unchecked<test[HASH]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>>",
+        "filename": "[PATH]/library/std/src/panicking.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "std[HASH]::panic::catch_unwind::<core[HASH]::panic::unwind_safe::AssertUnwindSafe<std[HASH]::thread::lifecycle::spawn_unchecked<test[HASH]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>",
+        "filename": "[PATH]/library/std/src/panic.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "std[HASH]::thread::lifecycle::spawn_unchecked::<test[HASH]::run_test::{closure#1}, ()>::{closure#1}",
+        "filename": "[PATH]/library/std/src/thread/lifecycle.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<std[HASH]::thread::lifecycle::spawn_unchecked<test[HASH]::run_test::{closure#1}, ()>::{closure#1} as core[HASH]::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}",
+        "filename": "[PATH]/library/core/src/ops/function.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<alloc[HASH]::boxed::Box<dyn core[HASH]::ops::function::FnOnce<(), Output = ()> + core[HASH]::marker::Send> as core[HASH]::ops::function::FnOnce<()>>::call_once",
+        "filename": "[PATH]/library/alloc/src/boxed.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "<std[HASH]::sys::thread::unix::Thread>::new::thread_start",
+        "filename": "[PATH]/library/std/src/sys/thread/unix.rs",
+        "line": "[line]",
+        "column": "[column]"
+      },
+      {
+        "name": "__pthread_cond_wait",
+        "filename": null,
+        "line": "[line]",
+        "column": "[column]"
+      }
+    ]
   }
 }

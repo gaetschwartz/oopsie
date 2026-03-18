@@ -9,7 +9,7 @@ default = []
 unstable = ["dep:smallbox"]
 
 [dependencies]
-backtrace = { version = "0.3.76", features = ["serialize-serde"] }
+backtrace = "0.3.76"
 color-backtrace = { version = "0.7.2", features = [
     "use-backtrace-crate",
     "use-btparse-crate",

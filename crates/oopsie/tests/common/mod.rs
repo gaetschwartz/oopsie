@@ -48,14 +48,6 @@ pub fn make_error() -> MyError {
 
 #[macro_export]
 macro_rules! redact {
-    (backtrace_json, $bl:block) => {
-        insta::with_settings! {
-          { filters => [
-            (r#""line": \d+"#, r#""line": [LINE]"#),
-            (r#""filename": "[^"]+""#, r#""filename": "[FILE]""#),
-            (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
-        ] }, $bl }
-    };
     (backtrace, $bl:block) => {
         insta::with_settings! {
           { filters => [

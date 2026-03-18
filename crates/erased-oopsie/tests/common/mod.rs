@@ -48,14 +48,6 @@ pub fn make_error() -> MyError {
 
 #[macro_export]
 macro_rules! redact {
-    (backtrace_json, $bl:block) => {
-        insta::with_settings! {
-          { filters => [
-            (r#""line": \d+"#, r#""line": [LINE]"#),
-            (r#""filename": "[^"]+""#, r#""filename": "[FILE]""#),
-            (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
-        ] }, $bl }
-    };
     (backtrace, $bl:block) => {
         insta::with_settings! {
           { filters => [
@@ -74,6 +66,63 @@ macro_rules! redact {
             (&format!("{}/.cargo/registry/src/", env!("HOME")), "[CARGO_REGISTRY]/"),
         ] }, $bl }
     };
+    (json, $bl:block) => {{
+        let mut settings = insta::Settings::clone_current();
+
+        // Redact crate hashes [hex7-16] in frame names
+        settings.add_redaction(
+            ".backtrace.frames[].name",
+            insta::dynamic_redaction(|value, _path| {
+                let s = value.as_str().unwrap_or_default();
+                regex::Regex::new(r"\[[0-9a-f]{7,16}\]")
+                    .unwrap()
+                    .replace_all(s, "[HASH]")
+                    .into_owned()
+            }),
+        );
+
+        // Redact absolute paths in filenames
+        let workspace_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .and_then(|p| p.parent())
+            .unwrap()
+            .to_str()
+            .unwrap();
+        let rustc_sysroot = String::from_utf8(
+            std::process::Command::new("rustc")
+                .arg("--print")
+                .arg("sysroot")
+                .output()
+                .expect("failed to run rustc")
+                .stdout,
+        )
+        .expect("invalid UTF-8");
+        let path_re = regex::Regex::new(&format!(
+            r"(?:{}|{}|/rustc/[0-9a-f]+)/",
+            regex::escape(workspace_root),
+            regex::escape(rustc_sysroot.trim()),
+        ))
+        .unwrap();
+        let registry_re =
+            regex::Regex::new(r".*/index\.crates\.io-[a-f0-9]+/(\w+)-[^/]+/").unwrap();
+        settings.add_redaction(
+            ".backtrace.frames[].filename",
+            insta::dynamic_redaction(move |value, _path| {
+                let Some(s) = value.as_str() else {
+                    return insta::internals::Content::from(());
+                };
+                let s = registry_re.replace(s, "[REGISTRY]/$1-[VERSION]/");
+                let s = path_re.replace(&s, "[PATH]/");
+                insta::internals::Content::from(s.into_owned())
+            }),
+        );
+
+        // Redact volatile line/column numbers
+        settings.add_redaction(".backtrace.frames[].line", "[line]");
+        settings.add_redaction(".backtrace.frames[].column", "[column]");
+
+        settings.bind(|| $bl);
+    }};
 }
 
 #[cfg(feature = "unstable")]

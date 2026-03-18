@@ -32,10 +32,8 @@ fn test_erased_error_display() {
 #[test]
 fn test_erased_error_json() {
     let error = ErasedError::from_error(common::make_error());
-    insta::assert_json_snapshot!(
-        snap_name!("erased_error_json"),
-        error, {
-        ".backtrace.frames" => "[..]"
+    redact!(json, {
+        insta::assert_json_snapshot!(snap_name!("erased_error_json"), error);
     });
 }
 

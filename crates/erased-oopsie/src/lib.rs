@@ -4,13 +4,14 @@
 //! format, preserving the full error context including message, source chain,
 //! spantrace, and backtrace.
 
+mod backtrace;
 mod spantrace;
 
+pub use backtrace::{ErasedBackTrace, ErasedFrame};
 pub use spantrace::{ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel};
 
 use std::fmt;
 use std::io;
-use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
@@ -37,7 +38,7 @@ pub struct ErasedError {
     pub spantrace: Option<ErasedSpanTrace>,
 
     /// Serialized backtrace.
-    pub backtrace: Option<oopsie_core::BackTrace>,
+    pub backtrace: Option<ErasedBackTrace>,
 }
 
 impl std::error::Error for ErasedError {}
@@ -96,7 +97,7 @@ impl ErasedError {
             help: err.oopsie_help_text(),
         };
         let spantrace = err.oopsie_spantrace().map(ErasedSpanTrace::from);
-        let backtrace = err.oopsie_backtrace().cloned();
+        let backtrace = err.oopsie_backtrace().map(ErasedBackTrace::from);
 
         Self {
             message,
@@ -108,54 +109,7 @@ impl ErasedError {
     }
 
     pub fn write_json<W: io::Write>(&self, f: &mut W) -> Result<(), serde_json::Error> {
-        #[derive(serde::Serialize)]
-        struct PrettyFrame {
-            name: Option<String>,
-            filename: Option<PathBuf>,
-            line: Option<u32>,
-            column: Option<u32>,
-        }
-
-        #[derive(serde::Serialize)]
-        struct PrettyBacktrace {
-            frames: Vec<PrettyFrame>,
-        }
-
-        #[derive(serde::Serialize)]
-        struct PrettyError<'a> {
-            message: &'a str,
-            source_chain: &'a [Box<str>],
-            diagnostics: &'a Diagnostics,
-            spantrace: &'a Option<ErasedSpanTrace>,
-            backtrace: PrettyBacktrace,
-        }
-
-        serde_json::to_writer_pretty(
-            io::BufWriter::new(f),
-            &PrettyError {
-                message: &self.message,
-                source_chain: &self.source_chain,
-                diagnostics: &self.diagnostics,
-                spantrace: &self.spantrace,
-                backtrace: PrettyBacktrace {
-                    frames: self.backtrace.as_ref().map_or(vec![], |bt| {
-                        bt.inner()
-                            .frames()
-                            .iter()
-                            .flat_map(|frame| {
-                                frame.symbols().iter().map(|sym| PrettyFrame {
-                                    name: sym.name().map(|n| n.to_string()),
-                                    filename: sym.filename().map(std::borrow::ToOwned::to_owned),
-                                    line: sym.lineno(),
-                                    column: sym.colno(),
-                                })
-                            })
-                            .collect()
-                    }),
-                },
-            },
-        )?;
-
+        serde_json::to_writer_pretty(io::BufWriter::new(f), self)?;
         Ok(())
     }
 
@@ -195,7 +149,7 @@ impl ErasedError {
         // Write backtrace if present
         if let Some(backtrace) = &self.backtrace {
             writeln!(f, "{:━^80}", " BACKTRACE ")?;
-            write!(f, "{backtrace:?}")?;
+            write!(f, "{backtrace}")?;
         }
 
         Ok(())

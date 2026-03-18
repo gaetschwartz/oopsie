@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::Capturable as _;
 
-#[derive(Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Clone)]
 pub struct BackTrace(backtrace::Backtrace);
 
 impl crate::Capturable for BackTrace {
