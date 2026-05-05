@@ -1,11 +1,11 @@
 //! The `#[traced]` macro implementation.
 
-mod args;
-mod config;
-mod expand_enum;
-mod expand_struct;
+pub(crate) mod args;
+pub(crate) mod config;
+pub(crate) mod expand_enum;
+pub(crate) mod expand_struct;
 pub mod field_detect;
-mod inject;
+pub(crate) mod inject;
 
 use args::TracedArgs;
 use darling::FromMeta as _;

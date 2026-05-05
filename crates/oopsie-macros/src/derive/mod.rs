@@ -10,11 +10,11 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{DeriveInput, parse_quote};
 
-use self::gen_display::{gen_enum_display, gen_struct_display};
-use self::gen_error::{gen_enum_error, gen_struct_error};
-use self::gen_module::wrap_in_module;
-use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
-use self::parse::{ContainerAttrs, SizeConstraint};
+pub(crate) use self::gen_display::{gen_enum_display, gen_struct_display};
+pub(crate) use self::gen_error::{gen_enum_error, gen_struct_error};
+pub(crate) use self::gen_module::wrap_in_module;
+pub(crate) use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
+pub(crate) use self::parse::{ContainerAttrs, SizeConstraint};
 
 pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     let input: DeriveInput = syn::parse2(input)?;
@@ -30,7 +30,7 @@ pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     }
 }
 
-fn oopsie_path(container: &ContainerAttrs) -> syn::Path {
+pub(crate) fn oopsie_path(container: &ContainerAttrs) -> syn::Path {
     container
         .path
         .clone()
@@ -91,7 +91,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
     }
 }
 
-fn expand_enum(input: &DeriveInput, container_attrs: &ContainerAttrs) -> syn::Result<TokenStream2> {
+pub(crate) fn expand_enum(input: &DeriveInput, container_attrs: &ContainerAttrs) -> syn::Result<TokenStream2> {
     let path = oopsie_path(container_attrs);
     let selectors = gen_enum_selectors(input, container_attrs, &path)?;
     let display = gen_enum_display(input)?;
@@ -114,7 +114,7 @@ fn expand_enum(input: &DeriveInput, container_attrs: &ContainerAttrs) -> syn::Re
     })
 }
 
-fn expand_struct(
+pub(crate) fn expand_struct(
     input: &DeriveInput,
     container_attrs: &ContainerAttrs,
 ) -> syn::Result<TokenStream2> {

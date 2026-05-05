@@ -1,12 +1,14 @@
-mod derive;
-mod traced;
+pub(crate) mod derive;
+pub(crate) mod traced;
 pub(crate) mod utils;
+mod oopsie_attr;
 
 /// Derive macro that generates context selectors, `Display`, and `Error` impls
 /// for a struct or enum.
 ///
-/// This is the low-level building block. Use [`#[traced]`](macro@traced) on top of it
-/// for the batteries-included experience (automatic backtrace/spantrace injection).
+/// This is the low-level building block. For the batteries-included experience
+/// (automatic `Debug` generation, optional tracing/diagnostics), prefer
+/// [`#[oopsie]`](macro@oopsie_attr) instead.
 ///
 /// # What gets generated
 ///
@@ -49,18 +51,17 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     }
 }
 
-/// Attribute macro that injects diagnostic fields (backtrace, spantrace) into
-/// every variant/struct and then delegates to `#[derive(Oopsie)]`.
+/// Attribute macro — the primary way to define an `oopsie` error type.
 ///
-/// **Must be placed above `#[derive(Debug, Oopsie)]`.**
+/// Generates context selectors, `Display`, `Error`, and `Debug` impls in one
+/// attribute. No need for `#[derive(Debug, Oopsie)]`.
 ///
 /// # Usage
 ///
 /// ```
 /// use oopsie::ResultExt as _;
 ///
-/// #[oopsie::traced]
-/// #[derive(Debug, oopsie::Oopsie)]
+/// #[oopsie::oopsie]
 /// pub enum MyError {
 ///     #[oopsie("Connection to {host} failed")]
 ///     Connect { host: String, source: std::io::Error },
@@ -73,6 +74,66 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// # }
 /// ```
 ///
+/// ## Diagnostics
+///
+/// Pass `traced` to automatically inject backtrace and spantrace fields:
+///
+/// ```
+/// #[oopsie::oopsie(traced)]
+/// pub enum MyError {
+///     #[oopsie("Connection failed")]
+///     Connect,
+/// }
+/// # fn main() {}
+/// ```
+///
+/// ## Parameters
+///
+/// | Parameter | Effect |
+/// |-----------|--------|
+/// | *(bare)* | No diagnostics; equivalent to `#[derive(Debug, Oopsie)]` |
+/// | `traced` | Inject backtrace + spantrace |
+/// | `backtrace` | Inject backtrace only |
+/// | `spantrace` | Inject spantrace only |
+/// | `timestamp` | Inject timestamp |
+/// | `code = false` | Disable error-code injection |
+/// | `path = "my_crate::oopsie"` | Custom path to the `oopsie` crate |
+///
+/// Container-level `#[oopsie(...)]` attributes (`module`, `vis`, `size`, etc.)
+/// are placed on the type itself, not in the attribute macro's argument list.
+#[proc_macro_attribute]
+pub fn oopsie(
+    attrs: proc_macro::TokenStream,
+    element: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    match oopsie_attr::expand(attrs.into(), element.into()) {
+        Ok(tokens) => tokens.into(),
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+/// Injects diagnostic fields (backtrace, spantrace) into every variant/struct
+/// and delegates to `#[derive(Oopsie)]`.
+///
+/// **Deprecated** — use [`#[oopsie(traced)]`](macro@oopsie_attr) instead:
+///
+/// ```
+/// // Before:
+/// // #[oopsie::traced]
+/// // #[derive(Debug, oopsie::Oopsie)]
+/// // pub enum MyError { ... }
+///
+/// // After:
+/// #[oopsie::oopsie(traced)]
+/// pub enum MyError {
+///     #[oopsie("Connection failed")]
+///     Connect,
+/// }
+/// # fn main() {}
+/// ```
+///
+/// **Must be placed above `#[derive(Debug, Oopsie)]`** when used directly.
+///
 /// ## Parameters
 ///
 /// | Parameter | Effect |
@@ -83,12 +144,6 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | `timestamp` | Inject timestamp |
 /// | `code = false` | Disable error-code injection |
 /// | `path = "my_crate::oopsie"` | Custom path to the `oopsie` crate |
-///
-/// ## Module naming
-///
-/// For enums, selectors are wrapped in a module named
-/// `{snake_case(strip_suffix("Error", TypeName))}_oopsies`.
-/// For example, `AppError` → `app_oopsies`, `ConnError` → `conn_oopsies`.
 #[proc_macro_attribute]
 pub fn traced(
     attrs: proc_macro::TokenStream,

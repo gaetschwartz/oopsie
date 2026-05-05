@@ -4,7 +4,7 @@ use crate::utils::{BetterFlag, FieldSetting};
 
 /// Raw parsed arguments — trace args are `Option` so we can detect explicit specification.
 #[derive(Debug, darling::FromMeta)]
-pub(super) struct TracedArgs {
+pub(crate) struct TracedArgs {
     #[darling(default)]
     pub backtrace: Option<FieldSetting<true, TraceSettings>>,
     #[darling(default)]
@@ -57,7 +57,7 @@ impl TracedArgs {
 }
 
 /// Resolved trace settings after applying the explicit override model.
-pub(super) struct ResolvedTraceArgs<'a> {
+pub(crate) struct ResolvedTraceArgs<'a> {
     pub backtrace: bool,
     pub backtrace_settings: Option<&'a FieldSetting<true, TraceSettings>>,
     pub spantrace: bool,
@@ -91,18 +91,18 @@ impl ResolvedTraceArgs<'_> {
 }
 
 #[derive(Debug, darling::FromMeta)]
-pub(super) struct TraceSettings {
+pub(crate) struct TraceSettings {
     pub r#type: Option<syn::Path>,
 }
 
 #[derive(Debug, darling::FromMeta)]
-pub(super) struct TimestampSettings {
+pub(crate) struct TimestampSettings {
     pub chrono: BetterFlag<true>,
     pub provide: BetterFlag<true>,
 }
 
 #[derive(Debug, darling::FromMeta)]
-pub(super) struct CodeSettings {
+pub(crate) struct CodeSettings {
     pub r#type: Option<syn::Path>,
 }
 

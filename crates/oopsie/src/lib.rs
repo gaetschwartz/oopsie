@@ -6,19 +6,17 @@
 
 //! Ergonomic, structured error handling for Rust.
 //!
-//! `oopsie` is built around two macros:
+//! `oopsie` centers on a single attribute macro:
 //!
-//! - **[`#[derive(Oopsie)]`](Oopsie)** — generates context selectors, `Display`, `Error`, and
-//!   optional `Provider` implementations for your error type.
-//! - **[`#[traced]`](traced)** — batteries-included layer: injects backtrace and span-trace
-//!   fields automatically, then delegates to `#[derive(Oopsie)]`.
+//! **[`#[oopsie]`](oopsie)** — generates context selectors, `Display`, `Debug`, and `Error`
+//! impls for your error type. Pass `traced` to also capture backtrace and span-trace.
 //!
 //! # Quick start
 //!
 //! **Define your error type:**
 //!
 //! ```
-//! #[derive(Debug, oopsie::Oopsie)]
+//! #[oopsie::oopsie]
 //! pub enum AppError {
 //!     #[oopsie("Connection to {host} failed")]
 //!     Connect { host: String, source: std::io::Error },
@@ -32,7 +30,7 @@
 //! **Use it** — bring the extension traits into scope with the prelude:
 //!
 //! ```
-//! # #[derive(Debug, oopsie::Oopsie)]
+//! # #[oopsie::oopsie]
 //! # pub enum AppError {
 //! #     #[oopsie("Connection to {host} failed")]
 //! #     Connect { host: String, source: std::io::Error },
@@ -49,12 +47,10 @@
 //!
 //! # Diagnostics
 //!
-//! For production error types, add [`#[traced]`](traced) as the **outermost** attribute
-//! (above `#[derive]`) to automatically capture backtrace and span-trace fields:
+//! Pass `traced` to automatically capture backtrace and span-trace fields:
 //!
 //! ```
-//! #[oopsie::traced]              // ← must be above #[derive]
-//! #[derive(Debug, oopsie::Oopsie)]
+//! #[oopsie::oopsie(traced)]
 //! pub enum AppError {
 //!     #[oopsie("Connection to {host} failed")]
 //!     Connect { host: String, source: std::io::Error },
@@ -62,11 +58,11 @@
 //! # fn main() {}
 //! ```
 //!
-//! See the [`#[traced]` documentation](traced) for the full parameter reference.
+//! See the [`#[oopsie]` documentation](oopsie) for the full parameter reference.
 //!
-//! # What the derive generates
+//! # What gets generated
 //!
-//! For each variant or struct, `#[derive(Oopsie)]` generates a **context selector** — a struct
+//! For each variant or struct, `#[oopsie]` generates a **context selector** — a struct
 //! containing all the fields *except* the source error and any `#[oopsie(capture)]` fields.
 //! Every selector exposes three methods:
 //!
@@ -145,7 +141,8 @@
 //! | `#[oopsie(from(Type, transform))]` | Source with type transformation |
 //! | `#[oopsie(capture)]` | Auto-filled via [`Capturable`]; excluded from selector |
 
-// Re-export the #[traced] proc-macro attribute and #[derive(Oopsie)].
+// Re-export the proc-macro attribute, derive, and legacy traced macro.
+pub use oopsie_macros::oopsie;
 pub use oopsie_macros::Oopsie;
 pub use oopsie_macros::traced;
 
@@ -156,13 +153,13 @@ pub use oopsie_core::*;
 ///
 /// Import this at the top of any file that calls `.context(...)` or
 /// `.with_context(...)` on `Result` / `Option` values, or inspects oopsie errors.
-/// You do **not** need this to *define* error types — `#[oopsie::traced]` and
-/// `#[derive(oopsie::Oopsie)]` work as fully-qualified attributes with no `use`.
+/// You do **not** need this to *define* error types — `#[oopsie::oopsie]` works
+/// as a fully-qualified attribute with no `use`.
 ///
 /// ```
 /// use oopsie::prelude::*;
 ///
-/// #[derive(Debug, oopsie::Oopsie)]
+/// #[oopsie::oopsie]
 /// enum MyError {
 ///     #[oopsie("Not found")]
 ///     NotFound,
