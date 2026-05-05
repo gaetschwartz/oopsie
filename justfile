@@ -4,6 +4,6 @@ check:
     cargo check --features unstable
 
 # Run tests for both stable and nightly toolchains
-test:
-    cargo nextest run
-    cargo nextest run --features unstable
+test *ARGS:
+    cargo nextest run {{ ARGS }}
+    cargo nextest run --features unstable {{ ARGS }}
