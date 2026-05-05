@@ -43,36 +43,30 @@ oopsie (facade)
 
 ### New traits (replacing snafu)
 
-#### `IntoError<E>`
+#### `Contextual<E>`
 
 Converts a context selector + source into an error. Used by `ResultExt::context()`.
+Implemented automatically by `#[derive(Oopsie)]`; you rarely implement this manually.
 
 ```rust
-pub trait IntoError<E: std::error::Error> {
+pub trait Contextual<E: std::error::Error> {
     type Source;
 
     #[track_caller]
-    fn into_error(self, source: Self::Source) -> E;
+    fn build_error(self, source: Self::Source) -> E;
 }
 ```
 
-#### `GenerateImplicitData`
+#### `Capturable`
 
-Auto-fills fields marked with `#[oopsie(auto)]` (e.g., backtrace, spantrace). Already exists in oopsie-core against snafu's trait — we define our own identical version.
+Auto-fills fields marked with `#[oopsie(capture)]` (e.g., backtrace, spantrace).
+A `#[oopsie(capture)]` field is excluded from the context selector and populated
+automatically via this trait when the error is constructed.
 
 ```rust
-pub trait GenerateImplicitData {
+pub trait Capturable {
     #[track_caller]
-    fn generate() -> Self;
-
-    #[track_caller]
-    fn generate_with_source(source: &dyn std::error::Error) -> Self
-    where
-        Self: Sized,
-    {
-        let _ = source;
-        Self::generate()
-    }
+    fn capture() -> Self;
 }
 ```
 
@@ -84,13 +78,13 @@ Extension trait on `Result` for ergonomic error context.
 pub trait ResultExt<T, E> {
     fn context<C, E2>(self, context: C) -> Result<T, E2>
     where
-        C: IntoError<E2, Source = E>,
+        C: Contextual<E2, Source = E>,
         E2: std::error::Error;
 
     fn with_context<F, C, E2>(self, context: F) -> Result<T, E2>
     where
-        F: FnOnce(&mut E) -> C,
-        C: IntoError<E2, Source = E>,
+        F: FnOnce(&E) -> C,
+        C: Contextual<E2, Source = E>,
         E2: std::error::Error;
 }
 ```
@@ -103,34 +97,33 @@ Extension trait on `Option` for converting `None` to errors.
 pub trait OptionExt<T> {
     fn context<C, E>(self, context: C) -> Result<T, E>
     where
-        C: IntoError<E, Source = NoneError>,
+        C: Contextual<E, Source = NoSource>,
         E: std::error::Error;
 
     fn with_context<F, C, E>(self, context: F) -> Result<T, E>
     where
         F: FnOnce() -> C,
-        C: IntoError<E, Source = NoneError>,
+        C: Contextual<E, Source = NoSource>,
         E: std::error::Error;
 }
 ```
 
-#### `NoneError`
+#### `NoSource`
 
-Unit type used as `IntoError::Source` for option context selectors.
+Unit type used as `Contextual::Source` for leaf errors (no chained source).
 
 ```rust
 #[derive(Debug, Copy, Clone)]
-pub struct NoneError;
+pub struct NoSource;
 ```
 
 ### Existing types (unchanged)
 
-- `Backtrace` — backtrace wrapper with `GenerateImplicitData` impl (updated to use our trait)
-- `Spantrace` — span trace wrapper with `GenerateImplicitData` impl (updated)
+- `BackTrace` — backtrace wrapper with `Capturable` impl
+- `SpanTrace` — span trace wrapper with `Capturable` impl
 - `ErrorCode` — error code newtype
 - `HelpText` — help text newtype
 - `ColorConfig` — color output configuration
-- `TracingLevel` — tracing level enum
 - `MayBoxResult` — behind `unstable` feature
 
 ### Removed re-exports
@@ -140,24 +133,45 @@ pub struct NoneError;
 
 ## Attribute Syntax
 
-### `#[oopsie]` on the type (attribute macro)
+### `#[traced]` on the type (attribute macro)
 
-When used as an attribute macro on a type, `#[oopsie]` does:
-1. Implicitly adds `#[derive(Oopsie)]`
-2. Injects backtrace and spantrace fields (as today)
-3. Adds `#[oopsie(auto)]` to injected fields
-4. Adds `#[oopsie(provide(...))]` for backtrace, spantrace, error code, help text
+`#[traced]` is the batteries-included entry point. It must be placed **above**
+`#[derive(Debug, Oopsie)]`. It:
 
-This is the "batteries-included" entry point.
+1. **Injects fields** into each variant/struct:
+   - `__oopsie_backtrace: Box<BackTrace>` with `#[oopsie(backtrace)]`
+   - `__oopsie_spantrace: Box<SpanTrace>` with `#[oopsie(spantrace)]`
+2. **Adds provide attributes** for injected fields:
+   - `#[oopsie(provide(ref, BackTrace => __oopsie_backtrace.as_ref()))]`
+   - `#[oopsie(provide(ref, SpanTrace => __oopsie_spantrace.as_ref()))]`
+3. **Sets enum defaults**: module on, suffix off, vis = pub(crate)
+
+Example:
+```rust
+#[traced]
+#[derive(Debug, Oopsie)]
+pub enum AppError { ... }
+```
+
+### `#[traced]` parameters
+
+```rust
+#[traced]                              // inject backtrace + spantrace (default)
+#[traced(backtrace)]                   // inject backtrace only
+#[traced(spantrace)]                   // inject spantrace only
+#[traced(timestamp)]                   // inject timestamp
+#[traced(code = false)]                // disable error-code injection
+#[traced(path = "my_crate::oopsie")]   // custom path to the oopsie crate
+```
 
 ### `#[derive(Oopsie)]` standalone
 
-Can be used without `#[oopsie]` for cases where you want context selectors and Error/Display generation without automatic field injection. Everything below applies to both `#[oopsie]` and `#[derive(Oopsie)]`.
+Can be used without `#[traced]` for full manual control over field injection.
+Everything below applies to both `#[traced] #[derive(Oopsie)]` and `#[derive(Oopsie)]` alone.
 
 ### Enum-level attributes
 
 ```rust
-#[oopsie]                              // default: module on, no suffix, vis = pub(crate)
 #[oopsie(module)]                      // explicit module (default name: snake_case of enum)
 #[oopsie(module(custom_name))]         // custom module name
 #[oopsie(module(false))]               // disable module wrapping
@@ -166,9 +180,9 @@ Can be used without `#[oopsie]` for cases where you want context selectors and E
 #[oopsie(suffix = "Error")]            // custom suffix
 ```
 
-Defaults when using `#[oopsie]`:
-- `module`: **on** (module name = snake_case of enum name)
-- `suffix`: **off** (selector name = variant name, with trailing "Error" stripped)
+Defaults when using `#[traced]`:
+- `module`: **on** (module name = `{snake_case(strip_suffix("Error", TypeName))}_oopsies`)
+- `suffix`: **off** (selector name = variant name)
 - `vis`: `pub(crate)`
 
 ### Variant-level attributes
@@ -205,8 +219,8 @@ source: io::Error,                           // auto-detected by name "source"
 cause: io::Error,                            // explicit source marker (non-"source" name)
 #[oopsie(from(std::io::Error, Box::new))]
 inner: Box<std::io::Error>,                  // source with type transformation
-#[oopsie(auto)]
-backtrace: Box<Backtrace>,                   // auto-fill via GenerateImplicitData
+#[oopsie(capture)]
+backtrace: Box<BackTrace>,                   // auto-fill via Capturable
 #[oopsie(provide(ref, Type => expr))]
 field: T,                                    // Provider API (behind unstable feature)
 ```
@@ -216,7 +230,7 @@ Rules:
 - `#[oopsie(from)]` is only needed for non-`source`-named fields
 - `#[oopsie(from(Type, transform))]` enables source transformation (on any field name)
 - At most one source field per variant/struct
-- `#[oopsie(auto)]` fields are excluded from context selectors
+- `#[oopsie(capture)]` fields (and `#[oopsie(backtrace)]` / `#[oopsie(spantrace)]`) are excluded from context selectors
 
 ## Code Generation: `#[derive(Oopsie)]`
 
@@ -230,8 +244,8 @@ For each non-transparent variant, generate a context selector struct:
 Connection {
     host: String,
     source: io::Error,
-    #[oopsie(auto)]
-    backtrace: Box<Backtrace>,
+    #[oopsie(capture)]
+    backtrace: Box<BackTrace>,
 }
 
 // Generated (inside module if module is enabled):
@@ -247,15 +261,15 @@ pub(crate) struct Connection<__T0> {
 - Leaf variants (no source) get `build()` and `fail()` methods
 - Source variants get `IntoError` impl
 
-### `IntoError` implementation
+### `Contextual` implementation
 
 ```rust
-impl<__T0: Into<String>> IntoError<AppError> for Connection<__T0> {
+impl<__T0: Into<String>> Contextual<AppError> for Connection<__T0> {
     type Source = io::Error;
 
     #[track_caller]
-    fn into_error(self, source: Self::Source) -> AppError {
-        let backtrace = GenerateImplicitData::generate_with_source(&source);
+    fn build_error(self, source: Self::Source) -> AppError {
+        let backtrace = BackTrace::capture();
         AppError::Connection {
             host: self.host.into(),
             source,
@@ -269,7 +283,7 @@ For source transformation (`#[oopsie(from(Type, transform))]`):
 ```rust
 type Source = Type;
 
-fn into_error(self, source: Self::Source) -> AppError {
+fn build_error(self, source: Self::Source) -> AppError {
     let source = (transform)(source);  // apply transformation
     // ... rest same
 }
@@ -284,7 +298,7 @@ impl<__T0: Into<String>> NotFound<__T0> {
     #[must_use]
     #[track_caller]
     pub fn build(self) -> AppError {
-        let backtrace = GenerateImplicitData::generate();
+        let backtrace = BackTrace::capture();
         AppError::NotFound {
             path: self.path.into(),
             backtrace,
@@ -360,46 +374,35 @@ Provider API behavior:
 - Explicit `#[oopsie(provide(...))]` attributes generate additional provide calls
 - All behind `#[cfg(feature = "unstable")]`
 
-## `#[oopsie]` attribute macro behavior
+## `#[traced]` attribute macro behaviour
 
-When `#[oopsie]` is used as an attribute macro (not just derive), it additionally:
+When `#[traced]` is used (see [Attribute Syntax](#attribute-syntax)), it additionally:
 
-1. **Adds `#[derive(Oopsie)]`** to the type if not present
+1. **Adds `#[derive(Oopsie)]`** — you still write `#[derive(Debug, Oopsie)]` yourself, but
+   `#[traced]` is designed to sit above it
 2. **Injects fields** into each variant/struct:
-   - `__oopsie_backtrace: Box<Backtrace>` with `#[oopsie(auto)]`
-   - `__oopsie_spantrace: Box<Spantrace>` with `#[oopsie(auto)]`
+   - `__oopsie_backtrace: Box<BackTrace>` with `#[oopsie(backtrace)]`
+   - `__oopsie_spantrace: Box<SpanTrace>` with `#[oopsie(spantrace)]`
 3. **Adds provide attributes** for injected fields:
-   - `#[oopsie(provide(ref, Backtrace => __oopsie_backtrace.as_ref()))]`
-   - `#[oopsie(provide(ref, Spantrace => __oopsie_spantrace.as_ref()))]`
+   - `#[oopsie(provide(ref, BackTrace => __oopsie_backtrace.as_ref()))]`
+   - `#[oopsie(provide(ref, SpanTrace => __oopsie_spantrace.as_ref()))]`
 4. **Adds provide for code/help** when `code = "..."` or `help = "..."` is present:
    - `#[oopsie(provide(ErrorCode => ErrorCode::from(...)))]`
    - `#[oopsie(provide(HelpText => HelpText("...")))]`
 5. **Sets enum defaults**: module on, suffix off, vis = pub(crate)
 
-### Attribute macro parameters
+## `LowerExp` implementation (fancy feature)
 
-Same as today:
-```rust
-#[oopsie]                                      // all defaults
-#[oopsie(path = "my_crate::oopsie")]           // custom path to oopsie crate
-#[oopsie(backtrace(enabled = false))]          // disable backtrace injection
-#[oopsie(spantrace(type = "MySpantrace"))]     // custom spantrace type
-```
-
-## `LowerExp` implementation (daisy feature)
-
-When the `daisy` feature is enabled, `#[oopsie]` generates a `LowerExp` impl that formats the error using `FancyReport`:
+When the `fancy` feature is enabled, `#[derive(Oopsie)]` generates a `LowerExp` impl that formats the error using `Report`:
 
 ```rust
-#[cfg(feature = "daisy")]
+#[cfg(feature = "fancy")]
 impl fmt::LowerExp for AppError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        FancyReport::from(self).fmt(f)
+        Report::from(self).fmt(f)
     }
 }
 ```
-
-This is unchanged from today.
 
 ## Feature gates
 
@@ -408,15 +411,14 @@ This is unchanged from today.
 Controls:
 - `#![feature(error_generic_member_access)]` in oopsie-core
 - `provide()` method generation in `#[derive(Oopsie)]`
-- `Spantrace::extract()` using Provider API
-- `GenerateImplicitData::generate_with_source()` using Provider API to check existing data
+- `SpanTrace::extract()` using Provider API
 - `MayBoxResult` / try trait support
 
-### `daisy` feature
+### `fancy` feature
 
 Controls:
-- `LowerExp` impl generation in `#[oopsie]`
-- oopsie-daisy dependency in facade
+- `Report` type and colorized output
+- `LowerExp` impl generation in `#[derive(Oopsie)]`
 
 ## Migration from snafu
 
@@ -424,11 +426,11 @@ Controls:
 
 | snafu | oopsie |
 |-------|--------|
-| `#[derive(Snafu)]` | `#[derive(Oopsie)]` or `#[oopsie]` |
+| `#[derive(Snafu)]` | `#[traced] #[derive(Debug, Oopsie)]` or `#[derive(Debug, Oopsie)]` |
 | `#[snafu(display("..."))]` | `#[oopsie("...")]` or `#[oopsie(display("..."))]` |
 | `#[snafu(source)]` | auto-detected for `source` field, or `#[oopsie(from)]` |
 | `#[snafu(source(from(T, f)))]` | `#[oopsie(from(T, f))]` |
-| `#[snafu(implicit)]` | `#[oopsie(auto)]` |
+| `#[snafu(implicit)]` | `#[oopsie(capture)]` |
 | `#[snafu(context(false))]` | `#[oopsie(transparent)]` |
 | `#[snafu(visibility(pub))]` | `#[oopsie(vis = pub)]` |
 | `#[snafu(module(name))]` | `#[oopsie(module(name))]` |
@@ -436,8 +438,8 @@ Controls:
 | `#[snafu(provide(...))]` | `#[oopsie(provide(...))]` |
 | `snafu::ResultExt` | `oopsie::ResultExt` |
 | `snafu::OptionExt` | `oopsie::OptionExt` |
-| `snafu::IntoError` | `oopsie::IntoError` |
-| `snafu::GenerateImplicitData` | `oopsie::GenerateImplicitData` |
+| `snafu::IntoError` | `oopsie::Contextual` |
+| `snafu::GenerateImplicitData` | `oopsie::Capturable` |
 | `XxxSnafu` | `Xxx` (no suffix by default) |
 
 ### Dependency changes
