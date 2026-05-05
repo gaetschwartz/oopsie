@@ -2,7 +2,7 @@
 
 #![cfg_attr(
     feature = "unstable",
-    feature(error_generic_member_access, try_trait_v2)
+    feature(error_generic_member_access, try_trait_v2, try_trait_v2_residual)
 )]
 
 mod backtrace;

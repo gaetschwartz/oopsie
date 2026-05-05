@@ -1,6 +1,6 @@
 #![allow(unused)]
 use std::convert::Infallible;
-use std::ops::{ControlFlow, FromResidual, Try};
+use std::ops::{ControlFlow, FromResidual, Residual, Try};
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 #[repr(transparent)]
@@ -95,6 +95,10 @@ impl<T, E> FromResidual<MayBoxResult<Infallible, E>> for MayBoxResult<T, E> {
             Err(e) => Self(Err(e)),
         }
     }
+}
+
+impl<T, E> Residual<T> for MayBoxResult<Infallible, E> {
+    type TryType = MayBoxResult<T, E>;
 }
 
 #[cfg(test)]
