@@ -3,6 +3,13 @@
     feature(error_generic_member_access)
 )]
 #![cfg_attr(feature = "unstable-try-trait-v2", feature(try_trait_v2))]
+// Doctests that use `#[oopsie::oopsie]` may generate `fn provide(...)` when the
+// `unstable-error-generic-member-access` feature is active; inject the corresponding
+// language feature flag so they compile under `--features unstable`.
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    doc(test(attr(feature(error_generic_member_access))))
+)]
 
 //! Ergonomic, structured error handling for Rust.
 //!
@@ -142,8 +149,8 @@
 //! | `#[oopsie(capture)]` | Auto-filled via [`Capturable`]; excluded from selector |
 
 // Re-export the proc-macro attribute, derive, and legacy traced macro.
-pub use oopsie_macros::oopsie;
 pub use oopsie_macros::Oopsie;
+pub use oopsie_macros::oopsie;
 pub use oopsie_macros::traced;
 
 // Re-export all core types.

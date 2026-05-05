@@ -1,7 +1,12 @@
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    doc(test(attr(feature(error_generic_member_access))))
+)]
+
 pub(crate) mod derive;
+mod oopsie_attr;
 pub(crate) mod traced;
 pub(crate) mod utils;
-mod oopsie_attr;
 
 /// Derive macro that generates context selectors, `Display`, and `Error` impls
 /// for a struct or enum.
