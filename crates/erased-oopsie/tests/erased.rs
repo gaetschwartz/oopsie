@@ -97,3 +97,64 @@ fn test_extract_error_code_returns_some_for_oopsie_errors() {
         "oopsie errors with help should have an error code"
     );
 }
+
+// --- Diagnostics::is_none() ---
+
+#[test]
+fn test_diagnostics_is_none_for_default() {
+    let diag = erased_oopsie::Diagnostics::default();
+    assert!(diag.is_none(), "default Diagnostics should have no code or help");
+}
+
+#[test]
+fn test_diagnostics_is_not_none_when_code_present() {
+    let error = ErrorWithCodeOnlyOopsie { message: "has code" }.build();
+    let erased = ErasedError::from_error(error);
+    assert!(
+        !erased.diagnostics.is_none(),
+        "Diagnostics with a code should not be is_none()"
+    );
+}
+
+// --- write_text ---
+
+#[test]
+fn test_write_text_contains_message_and_help() {
+    let error = ErrorWithHelpOopsie {
+        message: "text output test",
+    }
+    .build();
+    let erased = ErasedError::from_error(error);
+    let mut buf = Vec::new();
+    erased.write_text(&mut buf).unwrap();
+    let text = String::from_utf8(buf).unwrap();
+    assert!(text.contains("text output test"), "write_text should include the error message");
+    assert!(text.contains("Try restarting the service"), "write_text should include help text");
+}
+
+// --- write_json ---
+
+#[test]
+fn test_write_json_output_is_valid_json_with_expected_fields() {
+    let error = ErrorWithHelpOopsie {
+        message: "json output test",
+    }
+    .build();
+    let erased = ErasedError::from_error(error);
+    let mut buf = Vec::new();
+    erased.write_json(&mut buf).unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&buf)
+        .expect("write_json should produce valid JSON");
+    assert_eq!(
+        json["message"],
+        "Something went wrong: json output test",
+        "JSON message field should match Display"
+    );
+    assert_eq!(
+        json["diagnostics"]["help"],
+        "Try restarting the service",
+        "JSON diagnostics.help should match oopsie help attribute"
+    );
+}
+
+

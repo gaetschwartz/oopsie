@@ -195,3 +195,39 @@ fn test_termination_report_error() {
     .build();
     let _code = Report::from_std(error).no_colors().report();
 }
+
+// --- Report::run() tests ---
+
+#[test]
+fn test_report_run_ok() {
+    let report = Report::<TestError>::run(|| Ok(()));
+    assert!(report.error().is_none());
+    assert!(report.to_string().is_empty());
+}
+
+#[test]
+fn test_report_run_err() {
+    let report = Report::run(|| {
+        Err(TestOopsie {
+            message: "run failed",
+        }
+        .build())
+    });
+    assert!(report.error().is_some());
+    assert!(report.to_string().contains("run failed"));
+}
+
+// --- Report::with_colors() test ---
+
+#[test]
+fn test_with_colors_never_no_ansi() {
+    let error = TestOopsie {
+        message: "with_colors test",
+    }
+    .build();
+    let report = Report::with_colors(error, oopsie::ColorConfig::Never);
+    let output = report.to_string();
+    assert!(output.contains("with_colors test"));
+    // No ANSI escape codes when color is disabled
+    assert!(!output.contains("\x1b["));
+}
