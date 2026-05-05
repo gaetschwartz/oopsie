@@ -8,6 +8,19 @@ pub(crate) mod utils;
 /// This is the low-level building block. Use [`#[traced]`](macro@traced) on top of it
 /// for the batteries-included experience (automatic backtrace/spantrace injection).
 ///
+/// # What gets generated
+///
+/// For each variant or struct, the derive produces a **context selector** — a struct
+/// holding all fields except the source error and `#[oopsie(capture)]` fields. Each
+/// selector has three methods:
+///
+/// - **`.build()`** — constructs the error directly; only available for leaf errors
+///   (no source field).
+/// - **`.build_error(source)`** — constructs the error with a chained source.
+/// - **`.fail()`** — shorthand for `Err(self.build())`.
+///
+/// All fields accept `Into<T>`, so `"str"` is accepted for `String` fields.
+///
 /// # Usage
 ///
 /// ```

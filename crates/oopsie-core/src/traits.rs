@@ -5,6 +5,13 @@
 ///
 /// Used by [`ResultExt::context`] and [`OptionExt::context`] to wrap errors in a
 /// typed context layer.
+///
+/// # Advanced: manual use
+///
+/// Most code never touches `Contextual` directly — `.context(selector)` handles it.
+/// You only need this trait when constructing errors without a `Result` or `Option`,
+/// e.g. `selector.build_error(source)` (which calls `Contextual::build_error` under
+/// the hood).
 pub trait Contextual<E: std::error::Error> {
     /// The source error type, or [`NoSource`] for leaf errors (no source).
     type Source;
@@ -53,11 +60,11 @@ impl<T: CaptureExt> CaptureExt for Box<T> {
     }
 }
 
-/// Unit source type used by [`OptionExt`] context selectors.
+/// Unit source type used by [`OptionExt`] context selectors and leaf errors.
 ///
 /// Leaf errors (those with no chained source) use this as their
-/// `Contextual::Source` type. You will encounter it when implementing
-/// `Contextual` manually for an error that doesn't wrap another error.
+/// `Contextual::Source` type. You will see it in type signatures when working
+/// with [`OptionExt::context`] or when implementing [`Contextual`] manually.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NoSource;
 
