@@ -68,7 +68,7 @@ macro_rules! redact {
     };
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[macro_export]
 macro_rules! snap_name {
     ($name:literal) => {
@@ -76,7 +76,7 @@ macro_rules! snap_name {
     };
 }
 
-#[cfg(not(feature = "unstable"))]
+#[cfg(not(feature = "unstable-error-generic-member-access"))]
 #[macro_export]
 macro_rules! snap_name {
     ($name:literal) => {

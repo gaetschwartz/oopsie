@@ -1,4 +1,7 @@
-#![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 #![allow(unused, clippy::all)]
 
 use oopsie::{Oopsie, traced};
@@ -69,7 +72,7 @@ fn traced_with_help_and_code() {
     let err = help_code_oopsies::Refused { target: "db" }.build();
     assert!(matches!(err, HelpCodeError::Refused { ref target, .. } if target == "db"));
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "unstable-error-generic-member-access")]
     {
         let help = core::error::request_value::<oopsie::HelpText>(&err);
         assert!(help.is_some());
@@ -203,7 +206,7 @@ fn traced_code_disabled() {
     let err = no_code_oopsies::NoCode { msg: "test" }.build();
     assert_eq!(err.to_string(), "no code");
 
-    #[cfg(feature = "unstable")]
+    #[cfg(feature = "unstable-error-generic-member-access")]
     {
         let code = core::error::request_value::<oopsie::ErrorCode>(&err);
         assert!(

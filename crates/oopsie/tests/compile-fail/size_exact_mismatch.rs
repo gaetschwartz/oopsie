@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
+#![cfg_attr(feature = "unstable-error-generic-member-access", feature(error_generic_member_access))]
 
 use oopsie::Oopsie;
 

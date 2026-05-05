@@ -165,7 +165,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         quote! {}
     } else {
         quote! {
-            #[cfg(feature = "unstable")]
+            #[cfg(feature = "unstable-error-generic-member-access")]
             fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
                 match self {
                     #(#provide_arms)*
@@ -321,7 +321,7 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
         quote! {}
     } else {
         quote! {
-            #[cfg(feature = "unstable")]
+            #[cfg(feature = "unstable-error-generic-member-access")]
             fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
                 #destructure
                 #(#provide_stmts)*

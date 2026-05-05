@@ -6,7 +6,9 @@ authors.workspace = true
 
 [features]
 default = ["fancy"]
-unstable = ["oopsie-core/unstable", "oopsie-macros/unstable"]
+unstable-error-generic-member-access = ["oopsie-macros/unstable-error-generic-member-access"]
+unstable-try-trait-v2 = ["oopsie-core/unstable-try-trait-v2"]
+unstable = ["unstable-error-generic-member-access", "unstable-try-trait-v2"]
 fancy = ["dep:owo-colors", "dep:serde", "dep:serde_json"]
 
 [dependencies]

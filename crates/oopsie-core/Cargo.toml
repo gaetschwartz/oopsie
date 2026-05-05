@@ -6,7 +6,8 @@ authors.workspace = true
 
 [features]
 default = []
-unstable = ["dep:smallbox"]
+unstable-try-trait-v2 = ["dep:smallbox"]
+unstable = ["unstable-try-trait-v2"]
 
 [dependencies]
 backtrace = "0.3.76"

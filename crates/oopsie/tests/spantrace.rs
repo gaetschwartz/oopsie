@@ -1,4 +1,7 @@
-#![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 #![allow(clippy::all)]
 
 use oopsie::{Oopsie, SpanTrace};
@@ -19,7 +22,7 @@ fn test_extract_boxed_spantrace_via_provide_ref() {
     assert!(extracted.is_some());
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 mod provide_test {
     use super::*;
 

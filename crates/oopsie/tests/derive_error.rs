@@ -1,4 +1,7 @@
-#![cfg_attr(feature = "unstable", feature(error_generic_member_access))]
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 #![allow(unused, clippy::all)]
 
 use oopsie::{Contextual as _, Oopsie, ResultExt as _};
@@ -95,7 +98,7 @@ enum ProvideError {
     WithCode { msg: String },
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn provide_backtrace_ref() {
     let err = WithBacktrace { msg: "boom" }.build();
@@ -103,7 +106,7 @@ fn provide_backtrace_ref() {
     assert!(bt.is_some(), "should provide a Backtrace ref");
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn provide_help_text() {
     let err = WithHelp { msg: "broken" }.build();
@@ -112,7 +115,7 @@ fn provide_help_text() {
     assert_eq!(&*help.unwrap(), "try rebooting");
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn provide_error_code() {
     let err = WithCode { msg: "bad input" }.build();
@@ -199,7 +202,7 @@ fn nested_source_chain_via_context() {
     assert_eq!(inn.to_string(), "inner: timeout");
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn nested_backtrace_propagated_through_source_chain() {
     // Inner error has a backtrace. Wrap it two levels deep.
@@ -227,7 +230,7 @@ fn nested_backtrace_propagated_through_source_chain() {
     );
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn nested_help_text_propagated_through_source_chain() {
     let inner = Root { detail: "issue" }.build();
@@ -246,7 +249,7 @@ fn nested_help_text_propagated_through_source_chain() {
     assert_eq!(&*help.unwrap(), "fix the inner thing");
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn nested_error_code_propagated_through_source_chain() {
     let inner = Root {
@@ -297,7 +300,7 @@ fn nested_attr_macro_source_chain() {
     assert_eq!(src.to_string(), "attr inner: exploded");
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn nested_attr_macro_backtrace_propagated() {
     use attr_inner_oopsies::Boom;
@@ -325,7 +328,7 @@ enum BareHelpError {
     NeedHelp { detail: String },
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn provide_help_text_bare_derive() {
     let err = NeedHelp { detail: "stuck" }.build();
@@ -341,7 +344,7 @@ enum BareCodeError {
     Coded { msg: String },
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn provide_error_code_bare_derive() {
     let err = Coded { msg: "fail" }.build();
@@ -357,7 +360,7 @@ enum BareHelpCodeError {
     Both { info: String },
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn provide_help_and_code_combined() {
     let err = Both { info: "combo" }.build();
@@ -377,7 +380,7 @@ pub struct AttrStructWithBt {
     msg: String,
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn struct_provide_backtrace() {
     let err = AttrStructWithBtOopsie { msg: "test" }.build();

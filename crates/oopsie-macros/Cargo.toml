@@ -9,7 +9,8 @@ proc-macro = true
 
 [features]
 default = []
-unstable = []
+unstable-error-generic-member-access = []
+unstable = ["unstable-error-generic-member-access"]
 
 [dependencies]
 convert_case = "0.11"

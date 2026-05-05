@@ -1,13 +1,13 @@
 //! Core error types and utilities.
 
 #![cfg_attr(
-    feature = "unstable",
-    feature(error_generic_member_access, try_trait_v2, try_trait_v2_residual)
+    feature = "unstable-try-trait-v2",
+    feature(try_trait_v2, try_trait_v2_residual)
 )]
 
 mod backtrace;
 mod error_ext;
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-try-trait-v2")]
 mod result;
 pub mod spantrace;
 mod traits;

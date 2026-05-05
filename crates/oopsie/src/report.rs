@@ -204,13 +204,13 @@ where
             Err(ref e) => {
                 eprintln!("{self}");
 
-                #[cfg(feature = "unstable")]
+                #[cfg(feature = "unstable-error-generic-member-access")]
                 {
                     core::error::request_ref::<ExitCode>(e)
                         .copied()
                         .unwrap_or(ExitCode::FAILURE)
                 }
-                #[cfg(not(feature = "unstable"))]
+                #[cfg(not(feature = "unstable-error-generic-member-access"))]
                 {
                     let _ = e;
                     ExitCode::FAILURE
@@ -220,7 +220,7 @@ where
     }
 }
 
-#[cfg(feature = "unstable")]
+#[cfg(feature = "unstable-try-trait-v2")]
 impl<T, E> core::ops::FromResidual<Result<T, E>> for Report<E> {
     fn from_residual(residual: Result<T, E>) -> Self {
         Self {
