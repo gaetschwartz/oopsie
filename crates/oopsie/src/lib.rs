@@ -17,8 +17,7 @@
 //!
 //! **Define your error type** — no `use` needed, macros work fully qualified:
 //!
-//! ```rust,ignore
-//! // error.rs
+//! ```
 //! #[oopsie::traced]
 //! #[derive(Debug, oopsie::Oopsie)]
 //! pub enum AppError {
@@ -28,12 +27,18 @@
 //!     #[oopsie("Key not found: {key}")]
 //!     MissingKey { key: String },
 //! }
+//! # fn main() {}
 //! ```
 //!
 //! **Use it** — bring the extension traits into scope with the prelude:
 //!
-//! ```rust,ignore
-//! // any other file
+//! ```
+//! # #[oopsie::traced]
+//! # #[derive(Debug, oopsie::Oopsie)]
+//! # pub enum AppError {
+//! #     #[oopsie("Connection to {host} failed")]
+//! #     Connect { host: String, source: std::io::Error },
+//! # }
 //! use oopsie::prelude::*;
 //!
 //! fn connect(host: &str) -> Result<(), AppError> {
@@ -41,6 +46,7 @@
 //!         .context(app_oopsies::Connect { host })?;
 //!     Ok(())
 //! }
+//! # fn main() {}
 //! ```
 //!
 //! ## Attribute summary
@@ -94,13 +100,21 @@ pub use oopsie_core::*;
 /// You do **not** need this to *define* error types — `#[oopsie::traced]` and
 /// `#[derive(oopsie::Oopsie)]` work as fully-qualified attributes with no `use`.
 ///
-/// ```rust,ignore
+/// ```
 /// use oopsie::prelude::*;
 ///
-/// fn foo() -> Result<(), MyError> {
-///     some_result.context(my_oopsies::Variant { field })?;
-///     Ok(())
+/// #[oopsie::traced]
+/// #[derive(Debug, oopsie::Oopsie)]
+/// enum MyError {
+///     #[oopsie("Not found")]
+///     NotFound,
 /// }
+///
+/// # fn main() {
+/// let opt: Option<i32> = None;
+/// let err = opt.context(my_oopsies::NotFound).unwrap_err();
+/// assert_eq!(err.to_string(), "Not found");
+/// # }
 /// ```
 pub mod prelude {
     pub use crate::{ErrorExt, OptionExt, ResultExt};

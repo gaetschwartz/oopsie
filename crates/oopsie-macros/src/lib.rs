@@ -10,15 +10,21 @@ pub(crate) mod utils;
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// #[derive(Debug, Oopsie)]
+/// ```
+/// use oopsie::ResultExt as _;
+///
+/// #[derive(Debug, oopsie::Oopsie)]
+/// #[oopsie(module(false))]
 /// pub enum MyError {
 ///     #[oopsie("Connection to {host} failed")]
 ///     Connect { host: String, source: std::io::Error },
-///
-///     #[oopsie("Not found")]
-///     NotFound,
 /// }
+///
+/// # fn main() {
+/// let result: Result<(), std::io::Error> = Err(std::io::Error::other("refused"));
+/// let err = result.context(Connect { host: "db.example.com" }).unwrap_err();
+/// assert_eq!(err.to_string(), "Connection to db.example.com failed");
+/// # }
 /// ```
 ///
 /// See the [`oopsie`](https://docs.rs/oopsie) crate docs for the full attribute reference.
@@ -37,13 +43,21 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 ///
 /// # Usage
 ///
-/// ```rust,ignore
-/// #[traced]                  // inject backtrace + spantrace (default)
-/// #[derive(Debug, Oopsie)]
+/// ```
+/// use oopsie::ResultExt as _;
+///
+/// #[oopsie::traced]
+/// #[derive(Debug, oopsie::Oopsie)]
 /// pub enum MyError {
 ///     #[oopsie("Connection to {host} failed")]
 ///     Connect { host: String, source: std::io::Error },
 /// }
+///
+/// # fn main() {
+/// let result: Result<(), std::io::Error> = Err(std::io::Error::other("refused"));
+/// let err = result.context(my_oopsies::Connect { host: "db.example.com" }).unwrap_err();
+/// assert_eq!(err.to_string(), "Connection to db.example.com failed");
+/// # }
 /// ```
 ///
 /// ## Parameters

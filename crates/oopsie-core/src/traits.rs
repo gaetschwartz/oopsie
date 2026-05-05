@@ -67,21 +67,21 @@ pub struct NoSource;
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```
 /// use oopsie::{Oopsie, ResultExt as _};
 ///
 /// #[derive(Debug, Oopsie)]
 /// #[oopsie(module(false))]
-/// enum AppError {
-///     #[oopsie("Failed to read {path}")]
-///     ReadFile { path: String, source: std::io::Error },
+/// enum IoError {
+///     #[oopsie("IO failed: {source}")]
+///     Failed { source: std::io::Error },
 /// }
 ///
-/// fn read_config(path: &str) -> Result<String, AppError> {
-///     std::fs::read_to_string(path)
-///         .context(ReadFile { path })?;
-///     // ...
-/// }
+/// # fn main() {
+/// let result: Result<(), std::io::Error> = Err(std::io::Error::other("disk full"));
+/// let err = result.context(Failed).unwrap_err();
+/// assert_eq!(err.to_string(), "IO failed: disk full");
+/// # }
 /// ```
 pub trait ResultExt<T, E> {
     /// Wrap the error with an eagerly-evaluated context selector.
@@ -130,21 +130,21 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
 ///
 /// # Example
 ///
-/// ```rust,ignore
+/// ```
 /// use oopsie::{Oopsie, OptionExt as _};
 ///
 /// #[derive(Debug, Oopsie)]
 /// #[oopsie(module(false))]
-/// enum AppError {
+/// enum LookupError {
 ///     #[oopsie("Key not found: {key}")]
-///     MissingKey { key: String },
+///     Missing { key: String },
 /// }
 ///
-/// fn lookup(key: &str) -> Result<String, AppError> {
-///     map.get(key)
-///         .cloned()
-///         .context(MissingKey { key })
-/// }
+/// # fn main() {
+/// let opt: Option<i32> = None;
+/// let err = opt.context(Missing { key: "host" }).unwrap_err();
+/// assert_eq!(err.to_string(), "Key not found: host");
+/// # }
 /// ```
 pub trait OptionExt<T> {
     /// Convert `None` into an error with an eagerly-evaluated context selector.
