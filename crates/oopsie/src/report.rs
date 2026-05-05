@@ -29,6 +29,7 @@ impl<E: ErrorExt> Report<E> {
     /// Uses automatic color detection based on environment variables and
     /// terminal detection.
     #[must_use]
+    #[inline]
     pub const fn from_std(error: E) -> Self {
         Self {
             res: Err(error),
@@ -38,6 +39,7 @@ impl<E: ErrorExt> Report<E> {
 
     /// Create a new `Report` with a successful result.
     #[must_use]
+    #[inline]
     pub const fn ok() -> Self {
         Self {
             res: Ok(()),
@@ -63,6 +65,7 @@ impl<E: ErrorExt> Report<E> {
 
     /// Create with explicit color configuration.
     #[must_use]
+    #[inline]
     pub const fn with_colors(error: E, color_config: ColorConfig) -> Self {
         Self {
             res: Err(error),
@@ -72,6 +75,7 @@ impl<E: ErrorExt> Report<E> {
 
     /// Disable colors in output.
     #[must_use]
+    #[inline]
     pub const fn no_colors(mut self) -> Self {
         self.color_config = ColorConfig::Never;
         self
@@ -79,6 +83,7 @@ impl<E: ErrorExt> Report<E> {
 
     /// Force colors in output.
     #[must_use]
+    #[inline]
     pub const fn force_colors(mut self) -> Self {
         self.color_config = ColorConfig::Always;
         self
@@ -86,6 +91,7 @@ impl<E: ErrorExt> Report<E> {
 
     /// Get a reference to the wrapped error.
     #[must_use]
+    #[inline]
     pub const fn error(&self) -> Option<&E> {
         match &self.res {
             Err(err) => Some(err),
@@ -95,6 +101,7 @@ impl<E: ErrorExt> Report<E> {
 
     /// Consume self and return the wrapped error.
     #[must_use]
+    #[inline]
     pub fn into_error(self) -> Option<E> {
         self.res.err()
     }
@@ -246,6 +253,7 @@ impl<E: ErrorExt> fmt::Debug for Report<E> {
 }
 
 impl<E: ErrorExt> From<E> for Report<E> {
+    #[inline]
     fn from(error: E) -> Self {
         Self::from_std(error)
     }

@@ -6,12 +6,14 @@ use crate::Capturable as _;
 pub struct BackTrace(backtrace::Backtrace);
 
 impl crate::Capturable for BackTrace {
+    #[inline]
     fn capture() -> Self {
         BackTrace(backtrace::Backtrace::new())
     }
 }
 
 impl crate::CaptureExt for BackTrace {
+    #[inline]
     fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self {
         source
             .oopsie_backtrace()
@@ -21,12 +23,14 @@ impl crate::CaptureExt for BackTrace {
 }
 
 impl color_backtrace::Backtrace for BackTrace {
+    #[inline]
     fn frames(&self) -> Vec<color_backtrace::Frame> {
         color_backtrace::Backtrace::frames(&self.0)
     }
 }
 
 impl fmt::Debug for BackTrace {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.0, f)
     }
@@ -39,6 +43,8 @@ impl BackTrace {
         &self.0
     }
 
+    #[must_use]
+    #[inline]
     pub fn extract_from_error(err: &(impl crate::ErrorExt + ?Sized)) -> Option<&Self> {
         err.oopsie_backtrace()
     }

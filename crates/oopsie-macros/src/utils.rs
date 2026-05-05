@@ -20,6 +20,7 @@ impl<const DEFAULT: bool, T: FromMeta> FieldSetting<DEFAULT, T> {
         }
     }
 
+    #[inline]
     pub fn is_enabled(&self) -> bool {
         match self {
             Self::Settings(settings) => settings.enabled.unwrap_or(true),
@@ -28,6 +29,7 @@ impl<const DEFAULT: bool, T: FromMeta> FieldSetting<DEFAULT, T> {
     }
 }
 impl<const DEFAULT: bool, T: FromMeta + Default + Clone> FieldSetting<DEFAULT, T> {
+    #[inline]
     pub fn settings(&self) -> std::borrow::Cow<'_, T> {
         match self {
             Self::Settings(settings) => std::borrow::Cow::Borrowed(&settings.settings),
@@ -140,6 +142,7 @@ pub struct OopsieValue<T> {
 }
 
 impl<T> OopsieValue<T> {
+    #[inline]
     pub fn new_some(value: T) -> Self {
         Self {
             value: Some(value),
@@ -156,6 +159,7 @@ impl<T> OopsieValue<T> {
 impl<T> Deref for OopsieValue<T> {
     type Target = Option<T>;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.value
     }
@@ -219,6 +223,7 @@ macro_rules! oopsie_syn_value {
 pub(crate) use oopsie_syn_value;
 
 impl<T> OopsieSynValue<T> {
+    #[inline]
     pub fn new_some(value: T) -> Self {
         Self {
             value: Some(value),
@@ -235,6 +240,7 @@ impl<T> OopsieSynValue<T> {
 impl<T> Deref for OopsieSynValue<T> {
     type Target = Option<T>;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.value
     }

@@ -88,24 +88,28 @@ pub struct ErrorCode(pub Cow<'static, str>);
 impl Deref for ErrorCode {
     type Target = str;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl From<&'static str> for ErrorCode {
+    #[inline]
     fn from(s: &'static str) -> Self {
         Self(Cow::Borrowed(s))
     }
 }
 
 impl From<String> for ErrorCode {
+    #[inline]
     fn from(s: String) -> Self {
         Self(Cow::Owned(s))
     }
 }
 
 impl std::fmt::Display for ErrorCode {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
@@ -122,24 +126,28 @@ pub struct HelpText(pub Cow<'static, str>);
 impl Deref for HelpText {
     type Target = str;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
 impl From<&'static str> for HelpText {
+    #[inline]
     fn from(s: &'static str) -> Self {
         Self(Cow::Borrowed(s))
     }
 }
 
 impl From<String> for HelpText {
+    #[inline]
     fn from(s: String) -> Self {
         Self(Cow::Owned(s))
     }
 }
 
 impl std::fmt::Display for HelpText {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         self.0.fmt(f)
     }
@@ -153,6 +161,7 @@ impl<S> NewJsonErrorLayer<S> for ErrorLayer<S, JsonFields>
 where
     S: tracing::Subscriber + for<'span> LookupSpan<'span>,
 {
+    #[inline]
     fn json() -> Self {
         ErrorLayer::new(JsonFields::default())
     }
@@ -177,58 +186,72 @@ pub(crate) trait WriteColorExt {
 }
 
 impl<W: termcolor::WriteColor> WriteColorExt for W {
+    #[inline]
     fn black(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Black)))?;
         Ok(self)
     }
+    #[inline]
     fn blue(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Blue)))?;
         Ok(self)
     }
+    #[inline]
     fn green(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Green)))?;
         Ok(self)
     }
+    #[inline]
     fn red(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Red)))?;
         Ok(self)
     }
+    #[inline]
     fn cyan(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Cyan)))?;
         Ok(self)
     }
+    #[inline]
     fn magenta(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Magenta)))?;
         Ok(self)
     }
+    #[inline]
     fn yellow(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Yellow)))?;
         Ok(self)
     }
+    #[inline]
     fn white(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::White)))?;
         Ok(self)
     }
+    #[inline]
     fn rgb(&mut self, r: u8, g: u8, b: u8) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Rgb(r, g, b))))?;
         Ok(self)
     }
+    #[inline]
     fn ansi256(&mut self, code: u8) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Ansi256(code))))?;
         Ok(self)
     }
+    #[inline]
     fn bold(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_bold(true))?;
         Ok(self)
     }
+    #[inline]
     fn italic(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_italic(true))?;
         Ok(self)
     }
+    #[inline]
     fn underline(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_underline(true))?;
         Ok(self)
     }
+    #[inline]
     fn strike(&mut self) -> io::Result<&mut Self> {
         self.set_color(termcolor::ColorSpec::new().set_strikethrough(true))?;
         Ok(self)

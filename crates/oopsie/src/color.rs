@@ -45,24 +45,28 @@ pub enum ColorConfig {
 impl ColorConfig {
     /// Create a `ColorConfig` that auto-detects based on environment.
     #[must_use]
+    #[inline]
     pub const fn auto() -> Self {
         Self::Auto
     }
 
     /// Create a `ColorConfig` that always uses colors.
     #[must_use]
+    #[inline]
     pub const fn always() -> Self {
         Self::Always
     }
 
     /// Create a `ColorConfig` that never uses colors.
     #[must_use]
+    #[inline]
     pub const fn never() -> Self {
         Self::Never
     }
 
     /// Determine if colors should be used based on this configuration.
     #[must_use]
+    #[inline]
     pub fn should_colorize(self) -> bool {
         match self {
             Self::Auto => *ENV_SUPPORTS_COLOR.get_or_init(detect_env_color_support),

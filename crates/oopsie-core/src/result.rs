@@ -7,10 +7,12 @@ use std::ops::{ControlFlow, FromResidual, Residual, Try};
 pub struct MayBoxResult<T, E>(Result<T, smallbox::SmallBox<E, smallbox::space::S1>>);
 
 impl<T, E> MayBoxResult<T, E> {
+    #[inline]
     pub fn new(err: E) -> Self {
         Self(Err(smallbox::SmallBox::new(err)))
     }
 
+    #[inline]
     pub fn map<F, U>(self, f: F) -> MayBoxResult<U, E>
     where
         F: FnOnce(T) -> U,
@@ -18,6 +20,7 @@ impl<T, E> MayBoxResult<T, E> {
         MayBoxResult(self.0.map(f))
     }
 
+    #[inline]
     pub fn map_err<F, U>(self, f: F) -> MayBoxResult<T, U>
     where
         F: FnOnce(E) -> U,
@@ -28,6 +31,7 @@ impl<T, E> MayBoxResult<T, E> {
         }
     }
 
+    #[inline]
     pub fn and_then<F, U>(self, f: F) -> MayBoxResult<U, E>
     where
         F: FnOnce(T) -> MayBoxResult<U, E>,
@@ -35,6 +39,7 @@ impl<T, E> MayBoxResult<T, E> {
         MayBoxResult(self.0.and_then(|t| f(t).0))
     }
 
+    #[inline]
     pub fn or_else<F, U>(self, f: F) -> MayBoxResult<T, U>
     where
         F: FnOnce(E) -> MayBoxResult<T, U>,
@@ -60,6 +65,7 @@ impl<T, E: std::fmt::Debug> MayBoxResult<T, E> {
 }
 
 impl<T, E> From<Result<T, E>> for MayBoxResult<T, E> {
+    #[inline]
     fn from(result: Result<T, E>) -> Self {
         Self(result.map_err(smallbox::SmallBox::new))
     }
@@ -69,10 +75,12 @@ impl<T, E> Try for MayBoxResult<T, E> {
     type Output = T;
     type Residual = MayBoxResult<Infallible, E>;
 
+    #[inline]
     fn from_output(output: T) -> Self {
         Self(Ok(output))
     }
 
+    #[inline]
     fn branch(self) -> ControlFlow<Self::Residual, T> {
         match self.0 {
             Ok(v) => ControlFlow::Continue(v),
@@ -82,6 +90,7 @@ impl<T, E> Try for MayBoxResult<T, E> {
 }
 
 impl<T, E> FromResidual<Result<Infallible, E>> for MayBoxResult<T, E> {
+    #[inline]
     fn from_residual(residual: Result<Infallible, E>) -> Self {
         match residual {
             Err(e) => Self(Err(smallbox::SmallBox::new(e))),
@@ -90,6 +99,7 @@ impl<T, E> FromResidual<Result<Infallible, E>> for MayBoxResult<T, E> {
 }
 
 impl<T, E> FromResidual<MayBoxResult<Infallible, E>> for MayBoxResult<T, E> {
+    #[inline]
     fn from_residual(residual: MayBoxResult<Infallible, E>) -> Self {
         match residual.0 {
             Err(e) => Self(Err(e)),

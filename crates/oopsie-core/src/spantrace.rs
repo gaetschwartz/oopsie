@@ -11,6 +11,7 @@ pub struct SpanTrace {
 impl SpanTrace {
     #[must_use]
     #[track_caller]
+    #[inline]
     pub fn capture() -> Self {
         Self {
             inner: tracing_error::SpanTrace::capture(),
@@ -18,16 +19,19 @@ impl SpanTrace {
     }
 
     #[must_use]
+    #[inline]
     pub const fn new(inner: tracing_error::SpanTrace) -> Self {
         Self { inner }
     }
 
     #[must_use]
+    #[inline]
     pub fn status(&self) -> tracing_error::SpanTraceStatus {
         self.inner.status()
     }
 
     #[must_use]
+    #[inline]
     pub fn into_span_trace(self) -> tracing_error::SpanTrace {
         self.inner
     }
@@ -38,6 +42,7 @@ impl SpanTrace {
         err.oopsie_spantrace()
     }
 
+    #[inline]
     pub fn with_spans(&self, f: impl FnMut(&'static tracing::Metadata<'static>, &str) -> bool) {
         self.inner.with_spans(f);
     }
@@ -60,6 +65,7 @@ impl PartialEq for SpanTrace {
 }
 
 impl fmt::Display for SpanTrace {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.inner, f)
     }
@@ -67,12 +73,14 @@ impl fmt::Display for SpanTrace {
 
 impl crate::Capturable for SpanTrace {
     #[track_caller]
+    #[inline]
     fn capture() -> Self {
         Self::capture()
     }
 }
 
 impl crate::CaptureExt for SpanTrace {
+    #[inline]
     fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self {
         source
             .oopsie_spantrace()
@@ -92,42 +100,49 @@ pub struct OptionalSpanTrace(Option<SpanTrace>);
 impl OptionalSpanTrace {
     /// Create an empty `OptionalSpanTrace`.
     #[must_use]
+    #[inline]
     pub const fn none() -> Self {
         Self(None)
     }
 
     /// Create an `OptionalSpanTrace` from an existing `SpanTrace`.
     #[must_use]
+    #[inline]
     pub const fn some(trace: SpanTrace) -> Self {
         Self(Some(trace))
     }
 
     /// Returns the inner `Option<SpanTrace>`.
     #[must_use]
+    #[inline]
     pub fn into_inner(self) -> Option<SpanTrace> {
         self.0
     }
 
     /// Returns a reference to the inner `SpanTrace` if present.
     #[must_use]
+    #[inline]
     pub const fn as_ref(&self) -> Option<&SpanTrace> {
         self.0.as_ref()
     }
 
     /// Returns true if this contains a span trace.
     #[must_use]
+    #[inline]
     pub const fn is_some(&self) -> bool {
         self.0.is_some()
     }
 
     /// Returns true if this does not contain a span trace.
     #[must_use]
+    #[inline]
     pub const fn is_none(&self) -> bool {
         self.0.is_none()
     }
 }
 
 impl fmt::Display for OptionalSpanTrace {
+    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.0 {
             Some(trace) => fmt::Display::fmt(trace, f),
@@ -138,6 +153,7 @@ impl fmt::Display for OptionalSpanTrace {
 
 impl crate::Capturable for OptionalSpanTrace {
     #[track_caller]
+    #[inline]
     fn capture() -> Self {
         let trace = SpanTrace::capture();
         match trace.status() {
@@ -148,12 +164,14 @@ impl crate::Capturable for OptionalSpanTrace {
 }
 
 impl From<SpanTrace> for OptionalSpanTrace {
+    #[inline]
     fn from(trace: SpanTrace) -> Self {
         Self(Some(trace))
     }
 }
 
 impl From<Option<SpanTrace>> for OptionalSpanTrace {
+    #[inline]
     fn from(opt: Option<SpanTrace>) -> Self {
         Self(opt)
     }

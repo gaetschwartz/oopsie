@@ -67,22 +67,26 @@ pub(crate) struct ResolvedTraceArgs<'a> {
 }
 
 impl ResolvedTraceArgs<'_> {
+    #[inline]
     pub fn backtrace_type(&self) -> Option<&syn::Path> {
         let s = self.backtrace_settings?;
         s.r#type()
     }
 
+    #[inline]
     pub fn spantrace_type(&self) -> Option<&syn::Path> {
         let s = self.spantrace_settings?;
         s.r#type()
     }
 
+    #[inline]
     pub fn timestamp_chrono(&self) -> bool {
         self.timestamp_settings
             .and_then(|s| s.opt_settings())
             .is_some_and(|s| s.chrono.is_enabled())
     }
 
+    #[inline]
     pub fn timestamp_provide(&self) -> bool {
         self.timestamp_settings
             .and_then(|s| s.opt_settings())
@@ -107,6 +111,7 @@ pub(crate) struct CodeSettings {
 }
 
 impl<const DEFAULT: bool> FieldSetting<DEFAULT, TraceSettings> {
+    #[inline]
     pub fn r#type(&self) -> Option<&syn::Path> {
         let s = self.opt_settings()?;
         s.r#type.as_ref()
