@@ -122,3 +122,167 @@ impl<T> OptionExt<T> for Option<T> {
         self.ok_or_else(|| context().build_error(NoSource))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error as StdError;
+    use std::fmt;
+
+    // Test error types for trait implementations
+    #[derive(Debug)]
+    struct SimpleError {
+        message: String,
+    }
+
+    impl fmt::Display for SimpleError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.message)
+        }
+    }
+
+    impl std::error::Error for SimpleError {}
+
+    #[derive(Debug)]
+    struct SourceError {
+        message: String,
+    }
+
+    impl fmt::Display for SourceError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.message)
+        }
+    }
+
+    impl std::error::Error for SourceError {}
+
+    #[derive(Debug)]
+    struct ChainError {
+        message: String,
+        source: Box<SourceError>,
+    }
+
+    impl fmt::Display for ChainError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.message)
+        }
+    }
+
+    impl std::error::Error for ChainError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            Some(&*self.source)
+        }
+    }
+
+    // Test Contextual selector implementations
+    struct SimpleSelector;
+
+    impl Contextual<SimpleError> for SimpleSelector {
+        type Source = NoSource;
+
+        fn build_error(self, _source: Self::Source) -> SimpleError {
+            SimpleError {
+                message: "simple error".to_string(),
+            }
+        }
+    }
+
+    struct ChainSelector;
+
+    impl Contextual<ChainError> for ChainSelector {
+        type Source = SourceError;
+
+        fn build_error(self, source: Self::Source) -> ChainError {
+            ChainError {
+                message: "chain error".to_string(),
+                source: Box::new(source),
+            }
+        }
+    }
+
+    #[test]
+    fn test_result_ext_context_ok() {
+        let result: Result<i32, SourceError> = Ok(42);
+        let chained: Result<i32, ChainError> = result.context(ChainSelector);
+        assert!(chained.is_ok());
+        assert_eq!(chained.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_result_ext_context_err() {
+        let result: Result<i32, SourceError> = Err(SourceError {
+            message: "source failed".to_string(),
+        });
+        let chained: Result<i32, ChainError> = result.context(ChainSelector);
+        assert!(chained.is_err());
+        let err = chained.unwrap_err();
+        assert_eq!(err.message, "chain error");
+        assert_eq!(StdError::source(&err).unwrap().to_string(), "source failed");
+    }
+
+    #[test]
+    fn test_result_ext_with_context_ok() {
+        let result: Result<i32, SourceError> = Ok(42);
+        let chained: Result<i32, ChainError> = result.with_context(|_| ChainSelector);
+        assert!(chained.is_ok());
+        assert_eq!(chained.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_result_ext_with_context_err_closure_called() {
+        let mut closure_called = false;
+        let result: Result<i32, SourceError> = Err(SourceError {
+            message: "source failed".to_string(),
+        });
+        let chained: Result<i32, ChainError> = result.with_context(|source| {
+            closure_called = true;
+            // Verify we can access the source in the closure
+            assert_eq!(source.message, "source failed");
+            ChainSelector
+        });
+        assert!(closure_called);
+        assert!(chained.is_err());
+    }
+
+    #[test]
+    fn test_option_ext_context_some() {
+        let option: Option<i32> = Some(42);
+        let result: Result<i32, SimpleError> = option.context(SimpleSelector);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_option_ext_context_none() {
+        let option: Option<i32> = None;
+        let result: Result<i32, SimpleError> = option.context(SimpleSelector);
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().message, "simple error");
+    }
+
+    #[test]
+    fn test_option_ext_with_context_some() {
+        let option: Option<i32> = Some(42);
+        let result: Result<i32, SimpleError> = option.with_context(|| SimpleSelector);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 42);
+    }
+
+    #[test]
+    fn test_option_ext_with_context_none_closure_called() {
+        let mut closure_called = false;
+        let option: Option<i32> = None;
+        let result: Result<i32, SimpleError> = option.with_context(|| {
+            closure_called = true;
+            SimpleSelector
+        });
+        assert!(closure_called);
+        assert!(result.is_err());
+    }
+
+    const _: () = {
+        // Verify that Box<T> implements Capturable when T: Capturable
+        const fn is_capturable<T: Capturable>() {}
+        is_capturable::<Box<crate::BackTrace>>();
+    };
+}
