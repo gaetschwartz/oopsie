@@ -11,6 +11,7 @@ members = [
 [workspace.package]
 edition = "2024"
 authors = ["Gaëtan Schwartz"]
+rust-version = "1.89"
 
 [workspace.dependencies]
 oopsie-core = { path = "crates/oopsie-core", default-features = false }

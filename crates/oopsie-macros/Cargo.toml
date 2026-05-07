@@ -3,6 +3,7 @@ name = "oopsie-macros"
 version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
+rust-version.workspace = true
 
 [lib]
 proc-macro = true
