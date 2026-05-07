@@ -11,6 +11,7 @@ mod error_ext;
 mod result;
 pub mod spantrace;
 mod traits;
+mod welp;
 
 use std::borrow::Cow;
 use std::io;
@@ -63,6 +64,7 @@ pub use tracing_error::ErrorLayer;
 use tracing_subscriber::fmt::format::JsonFields;
 use tracing_subscriber::registry::LookupSpan;
 pub use traits::*;
+pub use welp::{Welp, WelpOptionExt, WelpResultExt};
 
 /// Install the color backtrace printer.
 pub fn install() {
