@@ -279,6 +279,6 @@ mod tests {
                 pub union Foo { x: i32, y: f32 }
             },
         );
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 }

@@ -22,6 +22,7 @@ pub struct ErasedFrame {
 
 impl ErasedBackTrace {
     /// Create an `ErasedBackTrace` from a live `BackTrace`.
+    #[must_use]
     pub fn from_backtrace(bt: &oopsie_core::BackTrace) -> Self {
         let frames = bt
             .inner()

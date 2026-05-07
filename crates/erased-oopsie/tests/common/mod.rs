@@ -59,7 +59,7 @@ pub static SYS_ROOT: LazyLock<String> = LazyLock::new(|| {
     )
     .expect("invalid UTF-8 in rustc sysroot")
     .trim()
-    .to_string()
+    .to_owned()
 });
 pub const CARGO_WORKSPACE_ROOT: &str = konst::string::rsplit_once(
     konst::string::rsplit_once(env!("CARGO_MANIFEST_DIR"), "/")
@@ -107,9 +107,8 @@ macro_rules! redact {
                 let Some(s) = value.as_str() else {
                     if value.is_nil() {
                         return ().into();
-                    } else {
-                        panic!("Expected a string value for name redaction but got: {value:?}");
                     }
+                    panic!("Expected a string value for name redaction but got: {value:?}");
                 };
                 $crate::common::CRATE_HASH_REGEX
                     .replace_all(s, "[HASH]")
@@ -123,9 +122,8 @@ macro_rules! redact {
                 let Some(s) = value.as_str() else {
                     if value.is_nil() {
                         return ().into();
-                    } else {
-                        panic!("Expected a string value for filename redaction but got: {value:?}");
                     }
+                    panic!("Expected a string value for filename redaction but got: {value:?}");
                 };
                 let s = $crate::common::REGISTRY_REGEX.replace(s, "[REGISTRY]/$1-[VERSION]/");
                 let s = $crate::common::PATH_REGEX.replace(&s, "[PATH]/");

@@ -123,6 +123,7 @@ impl<'a> From<&'a tracing::Metadata<'_>> for ErasedMetadata {
 
 impl ErasedSpanTrace {
     /// Create an `ErasedSpanTrace` from a live `SpanTrace`.
+    #[must_use]
     pub fn from_spantrace(st: &oopsie_core::SpanTrace) -> Self {
         let mut spans = Vec::new();
         st.with_spans(|metadata, fields| {
@@ -185,10 +186,7 @@ impl fmt::Display for ErasedSpanTrace {
                 try_bool!(write!(f, "\n           with {}", fields), err);
             }
 
-            if let Some((file, line)) = metadata
-                .file()
-                .and_then(|file| metadata.line().map(|line| (file, line)))
-            {
+            if let Some((file, line)) = metadata.file().zip(metadata.line()) {
                 try_bool!(write!(f, "\n             at {}:{}", file, line), err);
             }
 

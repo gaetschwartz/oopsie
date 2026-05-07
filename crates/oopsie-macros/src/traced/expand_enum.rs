@@ -10,7 +10,7 @@ use super::inject::{
     add_provide_attrs, check_existing_fields, has_oopsie_name_value, inject_fields,
 };
 
-pub(crate) fn expand_enum(
+pub fn expand_enum(
     args: &TracedArgs,
     _args_span: Span,
     mut input: syn::ItemEnum,

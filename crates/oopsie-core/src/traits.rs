@@ -248,7 +248,7 @@ mod tests {
 
         fn build_error(self, _source: Self::Source) -> SimpleError {
             SimpleError {
-                message: "simple error".to_string(),
+                message: "simple error".to_owned(),
             }
         }
     }
@@ -260,7 +260,7 @@ mod tests {
 
         fn build_error(self, source: Self::Source) -> ChainError {
             ChainError {
-                message: "chain error".to_string(),
+                message: "chain error".to_owned(),
                 source: Box::new(source),
             }
         }
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn test_result_ext_context_err() {
         let result: Result<i32, SourceError> = Err(SourceError {
-            message: "source failed".to_string(),
+            message: "source failed".to_owned(),
         });
         let chained: Result<i32, ChainError> = result.context(ChainSelector);
         assert!(chained.is_err());
@@ -298,7 +298,7 @@ mod tests {
     fn test_result_ext_with_context_err_closure_called() {
         let mut closure_called = false;
         let result: Result<i32, SourceError> = Err(SourceError {
-            message: "source failed".to_string(),
+            message: "source failed".to_owned(),
         });
         let chained: Result<i32, ChainError> = result.with_context(|source| {
             closure_called = true;
@@ -307,7 +307,7 @@ mod tests {
             ChainSelector
         });
         assert!(closure_called);
-        assert!(chained.is_err());
+        chained.unwrap_err();
     }
 
     #[test]
@@ -343,7 +343,7 @@ mod tests {
             SimpleSelector
         });
         assert!(closure_called);
-        assert!(result.is_err());
+        result.unwrap_err();
     }
 
     const _: () = {
