@@ -99,6 +99,23 @@ pub static MONOMORPHIZED_WRAP_REGEX: LazyLock<regex::Regex> =
 pub static EMPTY_TURBOFISH_REGEX: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"::<\(\)>").unwrap());
 
+/// Closure naming: `{{closure}}` (stable) and `{closure#N}` (nightly) both
+/// → `{closure}`.
+pub static CLOSURE_HASHED_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\{closure#\d+\}").unwrap());
+pub static CLOSURE_DOUBLED_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\{\{closure\}\}").unwrap());
+
+/// Strip generic args from traits in trait-impl wraps:
+/// `as core::ops::function::FnOnce<()>` → `as core::ops::function::FnOnce`.
+pub static TRAIT_GENERIC_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r" as (\w+(?:::\w+)*)<[^<>]+>").unwrap());
+
+/// Trait-impl wrap entirely (after generics are stripped):
+/// `<X::{closure} as FnOnce>::call_once` → `FnOnce::call_once`.
+pub static TRAIT_IMPL_WRAP_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"<[^<>]+ as (\w+(?:::\w+)*)>::").unwrap());
+
 pub static PATH_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(&format!(
         r"(?:{}|{}|/rustc/[0-9a-f]+)/",
@@ -139,6 +156,16 @@ macro_rules! redact {
             (r"<(\w+(?:::\w+)*)<[^<>]+>>::", "$1<T>::"),
             // Empty-return-type turbofish on nightly (`fail::<()>` vs `fail`).
             (r"::<\(\)>", ""),
+            // Closure naming: `{{closure}}` (stable) vs `{closure#N}` (nightly).
+            (r"\{closure#\d+\}", "{closure}"),
+            (r"\{\{closure\}\}", "{closure}"),
+            // Strip generic args from traits in trait-impl wraps:
+            // `as core::ops::function::FnOnce<()>` → `as core::ops::function::FnOnce`.
+            (r" as (\w+(?:::\w+)*)<[^<>]+>", " as $1"),
+            // Remove trait-impl wrap entirely once trait generics are stripped:
+            // `<X::{closure} as core::ops::function::FnOnce>::call_once`
+            // → `core::ops::function::FnOnce::call_once`.
+            (r"<[^<>]+ as (\w+(?:::\w+)*)>::", "$1::"),
             (r"rs:\d+(:\d+)?", "rs:[LOC]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),
             ($crate::common::CARGO_WORKSPACE_ROOT, "[WORKSPACE_ROOT]"),
@@ -173,6 +200,10 @@ macro_rules! redact {
                 let s = $crate::common::MONOMORPHIZED_WRAP_REGEX.replace_all(&s, "$1<T>::");
                 let s = $crate::common::SYNTHETIC_PARAM_REGEX.replace_all(&s, "<T>");
                 let s = $crate::common::EMPTY_TURBOFISH_REGEX.replace_all(&s, "");
+                let s = $crate::common::CLOSURE_HASHED_REGEX.replace_all(&s, "{closure}");
+                let s = $crate::common::CLOSURE_DOUBLED_REGEX.replace_all(&s, "{closure}");
+                let s = $crate::common::TRAIT_GENERIC_REGEX.replace_all(&s, " as $1");
+                let s = $crate::common::TRAIT_IMPL_WRAP_REGEX.replace_all(&s, "$1::");
                 s.into_owned().into()
             }),
         );

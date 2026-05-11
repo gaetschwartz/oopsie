@@ -39,7 +39,7 @@ expression: error
   "backtrace": {
     "frames": [
       {
-        "name": "<oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture",
+        "name": "oopsie_core::traits::Capturable::capture",
         "filename": "[PATH]/crates/oopsie-core/src/backtrace.rs",
         "line": -1,
         "column": 0
@@ -87,7 +87,7 @@ expression: error
         "column": 0
       },
       {
-        "name": "erased::test_erased_error_json::{{closure}}",
+        "name": "erased::test_erased_error_json::{closure}",
         "filename": "[PATH]/crates/erased-oopsie/tests/erased.rs",
         "line": -1,
         "column": 0
@@ -99,7 +99,7 @@ expression: error
         "column": 0
       },
       {
-        "name": "<fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once",
+        "name": "<fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce>::call_once",
         "filename": "[STDLIB]/library/core/src/ops/function.rs",
         "line": -1,
         "column": 0
@@ -111,31 +111,31 @@ expression: error
         "column": 0
       },
       {
-        "name": "test::run_test_in_process::{closure#0}",
+        "name": "test::run_test_in_process::{closure}",
         "filename": "[STDLIB]/library/test/src/lib.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}> as core::ops::function::FnOnce<()>>::call_once",
+        "name": "<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure}> as core::ops::function::FnOnce>::call_once",
         "filename": "[STDLIB]/library/core/src/panic/unwind_safe.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>, core::result::Result<(), alloc::string::String>>",
+        "name": "std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure}>, core::result::Result<(), alloc::string::String>>",
         "filename": "[STDLIB]/library/std/src/panicking.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "std::panicking::catch_unwind::<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>>",
+        "name": "std::panicking::catch_unwind::<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure}>>",
         "filename": "[STDLIB]/library/std/src/panicking.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>, core::result::Result<(), alloc::string::String>>",
+        "name": "std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure}>, core::result::Result<(), alloc::string::String>>",
         "filename": "[STDLIB]/library/std/src/panic.rs",
         "line": -1,
         "column": 0
@@ -147,67 +147,67 @@ expression: error
         "column": 0
       },
       {
-        "name": "test::run_test::{closure#0}",
+        "name": "test::run_test::{closure}",
         "filename": "[STDLIB]/library/test/src/lib.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "test::run_test::{closure#1}",
+        "name": "test::run_test::{closure}",
         "filename": "[STDLIB]/library/test/src/lib.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "std::sys::backtrace::__rust_begin_short_backtrace::<test::run_test::{closure#1}, ()>",
+        "name": "std::sys::backtrace::__rust_begin_short_backtrace::<test::run_test::{closure}, ()>",
         "filename": "[STDLIB]/library/std/src/sys/backtrace.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}",
+        "name": "std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure}, ()>::{closure}::{closure}",
         "filename": "[STDLIB]/library/std/src/thread/lifecycle.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}> as core::ops::function::FnOnce<()>>::call_once",
+        "name": "<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure}::{closure}> as core::ops::function::FnOnce>::call_once",
         "filename": "[STDLIB]/library/core/src/panic/unwind_safe.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>",
+        "name": "std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure}::{closure}>, ()>",
         "filename": "[STDLIB]/library/std/src/panicking.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "std::panicking::catch_unwind::<(), core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>>",
+        "name": "std::panicking::catch_unwind::<(), core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure}::{closure}>>",
         "filename": "[STDLIB]/library/std/src/panicking.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>",
+        "name": "std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure}::{closure}>, ()>",
         "filename": "[STDLIB]/library/std/src/panic.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}",
+        "name": "std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure}, ()>::{closure}",
         "filename": "[STDLIB]/library/std/src/thread/lifecycle.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}",
+        "name": "<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure} as core::ops::function::FnOnce>::call_once::{shim:vtable#0}",
         "filename": "[STDLIB]/library/core/src/ops/function.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "<alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce<()>>::call_once",
+        "name": "<alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce>::call_once",
         "filename": "[STDLIB]/library/alloc/src/boxed.rs",
         "line": -1,
         "column": 0

@@ -8,7 +8,7 @@ Error[report::OuterError]: Outer error
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   0: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
+   0: oopsie_core::traits::Capturable::capture
              at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
    1: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/traits.rs:[LOC]
@@ -16,47 +16,47 @@ Error[report::OuterError]: Outer error
              at tests/report.rs:[LOC]
    3: report::test_report_chain
              at tests/report.rs:[LOC]
-   4: report::test_report_chain::{{closure}}
+   4: report::test_report_chain::{closure}
              at tests/report.rs:[LOC]
    5: core::ops::function::FnOnce::call_once
              at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-   6: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
+   6: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce>::call_once
              at [STDLIB]/library/core/src/ops/function.rs:[LOC]
       test::__rust_begin_short_backtrace::<core::result::Result<(), alloc::string::String>, fn() -> core::result::Result<(), alloc::string::String>>
              at [STDLIB]/library/test/src/lib.rs:[LOC]
-   7: test::run_test_in_process::{closure#0}
+   7: test::run_test_in_process::{closure}
              at [STDLIB]/library/test/src/lib.rs:[LOC]
-      <core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}> as core::ops::function::FnOnce<()>>::call_once
+      <core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure}> as core::ops::function::FnOnce>::call_once
              at [STDLIB]/library/core/src/panic/unwind_safe.rs:[LOC]
-      std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>, core::result::Result<(), alloc::string::String>>
+      std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure}>, core::result::Result<(), alloc::string::String>>
              at [STDLIB]/library/std/src/panicking.rs:[LOC]
-      std::panicking::catch_unwind::<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>>
+      std::panicking::catch_unwind::<core::result::Result<(), alloc::string::String>, core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure}>>
              at [STDLIB]/library/std/src/panicking.rs:[LOC]
-      std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}>, core::result::Result<(), alloc::string::String>>
+      std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure}>, core::result::Result<(), alloc::string::String>>
              at [STDLIB]/library/std/src/panic.rs:[LOC]
       test::run_test_in_process
              at [STDLIB]/library/test/src/lib.rs:[LOC]
-      test::run_test::{closure#0}
+      test::run_test::{closure}
              at [STDLIB]/library/test/src/lib.rs:[LOC]
-   8: test::run_test::{closure#1}
+   8: test::run_test::{closure}
              at [STDLIB]/library/test/src/lib.rs:[LOC]
-      std::sys::backtrace::__rust_begin_short_backtrace::<test::run_test::{closure#1}, ()>
+      std::sys::backtrace::__rust_begin_short_backtrace::<test::run_test::{closure}, ()>
              at [STDLIB]/library/std/src/sys/backtrace.rs:[LOC]
-   9: std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}
+   9: std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure}, ()>::{closure}::{closure}
              at [STDLIB]/library/std/src/thread/lifecycle.rs:[LOC]
-      <core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}> as core::ops::function::FnOnce<()>>::call_once
+      <core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure}::{closure}> as core::ops::function::FnOnce>::call_once
              at [STDLIB]/library/core/src/panic/unwind_safe.rs:[LOC]
-      std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
+      std::panicking::catch_unwind::do_call::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure}::{closure}>, ()>
              at [STDLIB]/library/std/src/panicking.rs:[LOC]
-      std::panicking::catch_unwind::<(), core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>>
+      std::panicking::catch_unwind::<(), core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure}::{closure}>>
              at [STDLIB]/library/std/src/panicking.rs:[LOC]
-      std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
+      std::panic::catch_unwind::<core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure}::{closure}>, ()>
              at [STDLIB]/library/std/src/panic.rs:[LOC]
-      std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}
+      std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure}, ()>::{closure}
              at [STDLIB]/library/std/src/thread/lifecycle.rs:[LOC]
-      <std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
+      <std::thread::lifecycle::spawn_unchecked<test::run_test::{closure}, ()>::{closure} as core::ops::function::FnOnce>::call_once::{shim:vtable#0}
              at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-  10: <alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce<()>>::call_once
+  10: <alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce>::call_once
              at [STDLIB]/library/alloc/src/boxed.rs:[LOC]
       <std::sys::thread::unix::Thread>::new::thread_start
              at [STDLIB]/library/std/src/sys/thread/unix.rs:[LOC]
