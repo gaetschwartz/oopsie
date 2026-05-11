@@ -77,6 +77,12 @@ pub static CRATE_HASH_REGEX: LazyLock<regex::Regex> =
 pub static FN_HASH_SUFFIX_REGEX: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"::h[0-9a-f]{16}\b").unwrap());
 
+/// Normalizes `Box<concrete::Type>` (nightly demangling, with the
+/// monomorphized concrete type) back to `Box<T>` (stable's form using the
+/// type-param name) so the same snapshot matches both channels.
+pub static BOX_GENERIC_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"Box<[^,>]+>").unwrap());
+
 pub static PATH_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(&format!(
         r"(?:{}|{}|/rustc/[0-9a-f]+)/",
@@ -107,6 +113,11 @@ macro_rules! redact {
             // demangled names align across toolchains.
             (r"\[[0-9a-f]{7,16}\]", ""),
             (r"::h[0-9a-f]{16}\b", ""),
+            // Stable demangles `Box<T>` (preserving the type-param name);
+            // nightly resolves to the concrete monomorphized type
+            // (`Box<oopsie_core::backtrace::BackTrace>`). Collapse to
+            // `Box<T>` so both toolchains match the same snapshot.
+            (r"Box<[^,>]+>", "Box<T>"),
             (r"rs:\d+(:\d+)?", "rs:[LOC]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),
             ($crate::common::CARGO_WORKSPACE_ROOT, "[WORKSPACE_ROOT]"),
@@ -136,6 +147,7 @@ macro_rules! redact {
                 // Strip both crate-hash forms to empty (see backtrace arm).
                 let s = $crate::common::CRATE_HASH_REGEX.replace_all(s, "");
                 let s = $crate::common::FN_HASH_SUFFIX_REGEX.replace_all(&s, "");
+                let s = $crate::common::BOX_GENERIC_REGEX.replace_all(&s, "Box<T>");
                 s.into_owned().into()
             }),
         );

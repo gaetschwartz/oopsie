@@ -1,5 +1,6 @@
 ---
 source: crates/erased-oopsie/tests/erased.rs
+assertion_line: 39
 expression: error
 ---
 {

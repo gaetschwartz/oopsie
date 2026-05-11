@@ -11,7 +11,7 @@ Error[report::ErrorWithHelp]: Something went wrong: connection refused
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    0: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
-   1: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture
+   1: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/traits.rs:[LOC]
    2: <report::ErrorWithHelpOopsie<&str>>::build
              at tests/report.rs:[LOC]

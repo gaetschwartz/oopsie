@@ -56,6 +56,9 @@ macro_rules! redact {
             // only way to make a single snapshot match both.
             (r"\[[0-9a-f]{7,16}\]", ""),
             (r"::h[0-9a-f]{16}\b", ""),
+            // Normalize `Box<concrete::Type>` (nightly) and `Box<T>`
+            // (stable) demangling differences.
+            (r"Box<[^,>]+>", "Box<T>"),
             (r"rs:\d+(:\d+)?", "rs:[LOC]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),
             (&env!("CARGO_MANIFEST_DIR"), "[CRATE_DIR]"),
