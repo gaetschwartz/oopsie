@@ -13,7 +13,7 @@ Error[report::ErrorWithHelp]: Something went wrong: connection refused
              at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
    1: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/traits.rs:[LOC]
-   2: <report::ErrorWithHelpOopsie<&str>>::build
+   2: report::ErrorWithHelpOopsie<T>::build
              at tests/report.rs:[LOC]
    3: report::test_report_with_help
              at tests/report.rs:[LOC]

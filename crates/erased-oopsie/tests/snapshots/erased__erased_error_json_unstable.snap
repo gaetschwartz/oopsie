@@ -51,13 +51,13 @@ expression: error
         "column": 0
       },
       {
-        "name": "<erased::common::MyErrorInnerOopsie<alloc::string::String>>::build",
+        "name": "erased::common::MyErrorInnerOopsie<T>::build",
         "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "<erased::common::MyErrorInnerOopsie<alloc::string::String>>::fail::<()>",
+        "name": "erased::common::MyErrorInnerOopsie<T>::fail",
         "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
         "line": -1,
         "column": 0

@@ -83,6 +83,22 @@ pub static FN_HASH_SUFFIX_REGEX: LazyLock<regex::Regex> =
 pub static BOX_GENERIC_REGEX: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"Box<[^,>]+>").unwrap());
 
+/// Synthetic type-parameter names emitted by stable demangling
+/// (`<__T0>`, `<__T1>`, ...) — normalize to `<T>`.
+pub static SYNTHETIC_PARAM_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"<__T\d+>").unwrap());
+
+/// Outer self-type wrap for monomorphized methods (nightly form:
+/// `<MyType<X>>::method`). Strip the wrap and normalize generics to
+/// `MyType<T>::method`, matching stable's preferred form.
+pub static MONOMORPHIZED_WRAP_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"<(\w+(?:::\w+)*)<[^<>]+>>::").unwrap());
+
+/// Empty-return turbofish (`::<()>`) appears on nightly demangling but not
+/// stable. Strip entirely.
+pub static EMPTY_TURBOFISH_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"::<\(\)>").unwrap());
+
 pub static PATH_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(&format!(
         r"(?:{}|{}|/rustc/[0-9a-f]+)/",
@@ -113,11 +129,16 @@ macro_rules! redact {
             // demangled names align across toolchains.
             (r"\[[0-9a-f]{7,16}\]", ""),
             (r"::h[0-9a-f]{16}\b", ""),
-            // Stable demangles `Box<T>` (preserving the type-param name);
-            // nightly resolves to the concrete monomorphized type
-            // (`Box<oopsie_core::backtrace::BackTrace>`). Collapse to
-            // `Box<T>` so both toolchains match the same snapshot.
+            // Demangling differences for monomorphized generic methods.
+            // Stable shows `MyType<__T0>::method` (synthetic param name);
+            // nightly shows `<MyType<alloc::string::String>>::method` (concrete
+            // type plus an outer self-type wrap). Normalize both to
+            // `MyType<T>::method`.
             (r"Box<[^,>]+>", "Box<T>"),
+            (r"<__T\d+>", "<T>"),
+            (r"<(\w+(?:::\w+)*)<[^<>]+>>::", "$1<T>::"),
+            // Empty-return-type turbofish on nightly (`fail::<()>` vs `fail`).
+            (r"::<\(\)>", ""),
             (r"rs:\d+(:\d+)?", "rs:[LOC]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),
             ($crate::common::CARGO_WORKSPACE_ROOT, "[WORKSPACE_ROOT]"),
@@ -144,10 +165,14 @@ macro_rules! redact {
                     }
                     panic!("Expected a string value for name redaction but got: {value:?}");
                 };
-                // Strip both crate-hash forms to empty (see backtrace arm).
+                // Strip / normalize toolchain-specific demangling forms
+                // (see backtrace arm for the same chain).
                 let s = $crate::common::CRATE_HASH_REGEX.replace_all(s, "");
                 let s = $crate::common::FN_HASH_SUFFIX_REGEX.replace_all(&s, "");
                 let s = $crate::common::BOX_GENERIC_REGEX.replace_all(&s, "Box<T>");
+                let s = $crate::common::MONOMORPHIZED_WRAP_REGEX.replace_all(&s, "$1<T>::");
+                let s = $crate::common::SYNTHETIC_PARAM_REGEX.replace_all(&s, "<T>");
+                let s = $crate::common::EMPTY_TURBOFISH_REGEX.replace_all(&s, "");
                 s.into_owned().into()
             }),
         );

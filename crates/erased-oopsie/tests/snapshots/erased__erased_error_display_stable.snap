@@ -19,9 +19,9 @@ Error:
            at [WORKSPACE_ROOT]/crates/oopsie-core/src/backtrace.rs:[LOC]
    1: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture
            at [WORKSPACE_ROOT]/crates/oopsie-core/src/traits.rs:[LOC]
-   2: erased::common::MyErrorInnerOopsie<__T0>::build
+   2: erased::common::MyErrorInnerOopsie<T>::build
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-   3: erased::common::MyErrorInnerOopsie<__T0>::fail
+   3: erased::common::MyErrorInnerOopsie<T>::fail
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
    4: erased::common::make_error::inner_function
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]

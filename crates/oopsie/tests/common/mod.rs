@@ -56,9 +56,16 @@ macro_rules! redact {
             // only way to make a single snapshot match both.
             (r"\[[0-9a-f]{7,16}\]", ""),
             (r"::h[0-9a-f]{16}\b", ""),
-            // Normalize `Box<concrete::Type>` (nightly) and `Box<T>`
-            // (stable) demangling differences.
+            // Normalize demangling differences between toolchains:
+            // - `Box<concrete>` (nightly) / `Box<T>` (stable)
+            // - `<__Tn>` synthetic param names (stable)
+            // - `<MyType<X>>::method` outer-wrap (nightly) vs
+            //   `MyType<__T0>::method` (stable)
+            // - `::<()>` empty-return turbofish (nightly)
             (r"Box<[^,>]+>", "Box<T>"),
+            (r"<__T\d+>", "<T>"),
+            (r"<(\w+(?:::\w+)*)<[^<>]+>>::", "$1<T>::"),
+            (r"::<\(\)>", ""),
             (r"rs:\d+(:\d+)?", "rs:[LOC]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),
             (&env!("CARGO_MANIFEST_DIR"), "[CRATE_DIR]"),
