@@ -46,6 +46,13 @@ impl color_backtrace::Backtrace for BackTrace {
 /// consumer all see a stable backtrace shape across macOS and Linux.
 #[must_use]
 pub fn is_internal_frame(name: Option<&str>, filename: Option<&std::path::Path>) -> bool {
+    // Unresolvable frame (no symbol name, no filename). On Linux these
+    // typically sit at the bottom of stack where the dynamic linker can't
+    // resolve into a Rust/libc function — they're never user-actionable and
+    // their presence varies by platform/build. Drop them.
+    if name.is_none() && filename.is_none() {
+        return true;
+    }
     if let Some(n) = name {
         // Top-of-stack: `backtrace` crate capture machinery.
         if n.starts_with("backtrace::") || n.starts_with("<backtrace::") {
