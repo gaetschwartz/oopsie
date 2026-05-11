@@ -120,7 +120,7 @@ mod tests {
     }
 
     fn err(s: &str) -> MayBoxResult<i32, String> {
-        MayBoxResult::new(s.to_string())
+        MayBoxResult::new(s.to_owned())
     }
 
     // --- map ---
@@ -134,7 +134,7 @@ mod tests {
     #[test]
     fn map_err() {
         let r = err("bad").map(|v: i32| v * 3);
-        assert_eq!(r, MayBoxResult::new("bad".to_string()));
+        assert_eq!(r, MayBoxResult::new("bad".to_owned()));
     }
 
     // --- map_err ---
@@ -162,7 +162,7 @@ mod tests {
     #[test]
     fn and_then_err() {
         let r = err("fail").and_then(|v| MayBoxResult::from(Ok(v + 10)));
-        assert_eq!(r, MayBoxResult::new("fail".to_string()));
+        assert_eq!(r, MayBoxResult::new("fail".to_owned()));
     }
 
     // --- or_else ---
@@ -175,7 +175,7 @@ mod tests {
 
     #[test]
     fn or_else_err() {
-        let r = err("oops").or_else(|e| MayBoxResult::new(e.len() as i32));
+        let r = err("oops").or_else(|e| MayBoxResult::new(i32::try_from(e.len()).unwrap()));
         assert_eq!(r, MayBoxResult::new(4i32));
     }
 
@@ -202,8 +202,8 @@ mod tests {
 
     #[test]
     fn from_result_err() {
-        let r: MayBoxResult<i32, String> = MayBoxResult::from(Err("e".to_string()));
-        assert_eq!(r, MayBoxResult::new("e".to_string()));
+        let r: MayBoxResult<i32, String> = MayBoxResult::from(Err("e".to_owned()));
+        assert_eq!(r, MayBoxResult::new("e".to_owned()));
     }
 
     // --- Try::from_output ---
@@ -227,7 +227,7 @@ mod tests {
         let cf = err("x").branch();
         match cf {
             ControlFlow::Break(residual) => {
-                assert_eq!(residual, MayBoxResult::new("x".to_string()));
+                assert_eq!(residual, MayBoxResult::new("x".to_owned()));
             }
             ControlFlow::Continue(_) => panic!("expected Break"),
         }
@@ -238,10 +238,10 @@ mod tests {
     #[test]
     fn from_residual_result() {
         fn inner() -> MayBoxResult<i32, String> {
-            let _: i32 = Err::<i32, String>("err".to_string())?;
+            let _: i32 = Err::<i32, String>("err".to_owned())?;
             MayBoxResult::from_output(0)
         }
-        assert_eq!(inner(), MayBoxResult::new("err".to_string()));
+        assert_eq!(inner(), MayBoxResult::new("err".to_owned()));
     }
 
     // --- FromResidual<MayBoxResult<Infallible, E>> ---
@@ -249,10 +249,10 @@ mod tests {
     #[test]
     fn from_residual_mayboxresult() {
         fn inner() -> MayBoxResult<i32, String> {
-            let _: i32 = MayBoxResult::new("nested".to_string())?;
+            let _: i32 = MayBoxResult::new("nested".to_owned())?;
             MayBoxResult::from_output(0)
         }
-        assert_eq!(inner(), MayBoxResult::new("nested".to_string()));
+        assert_eq!(inner(), MayBoxResult::new("nested".to_owned()));
     }
 
     // Also test the happy path for ? operator to ensure from_output works in context

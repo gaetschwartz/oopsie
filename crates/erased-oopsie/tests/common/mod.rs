@@ -88,7 +88,11 @@ macro_rules! redact {
     (backtrace, $bl:block) => {
         insta::with_settings! {
           { filters => [
+            // Crate hash in bracket form (nightly debug-info): `crate[abc123]`.
             (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
+            // Mangled hash suffix (stable Rust): `::h<16 hex>` at end of symbol.
+            // Drop entirely so stable and nightly demangled names align.
+            (r"::h[0-9a-f]{16}\b", ""),
             (r"rs:\d+(:\d+)?", "rs:[LOC]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),
             ($crate::common::CARGO_WORKSPACE_ROOT, "[WORKSPACE_ROOT]"),
