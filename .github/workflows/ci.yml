@@ -40,18 +40,8 @@ jobs:
       - name: cargo check (default features)
         run: cargo check --workspace --all-targets
 
-      # `compile_fail_tests` is the trybuild snapshot suite — its expected
-      # `.stderr` files match stable rustc's diagnostic span shape. Nightly
-      # rustc draws wider underlines on the same diagnostics, so we exclude
-      # the test from the nightly job. The macro behavior under test isn't
-      # toolchain-specific; only the rendered span is.
       - name: cargo nextest (default features)
-        run: |
-          if [ "${{ matrix.toolchain }}" = "nightly" ]; then
-            cargo nextest run --workspace -E 'not test(compile_fail_tests)'
-          else
-            cargo nextest run --workspace
-          fi
+        run: cargo nextest run --workspace
 
       - name: cargo doctest (default features)
         run: cargo test --doc --workspace
