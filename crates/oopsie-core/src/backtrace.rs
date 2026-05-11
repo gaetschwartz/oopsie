@@ -42,12 +42,6 @@ impl BackTrace {
     pub const fn inner(&self) -> &backtrace::Backtrace {
         &self.0
     }
-
-    #[must_use]
-    #[inline]
-    pub fn extract_from_error(err: &(impl crate::ErrorExt + ?Sized)) -> Option<&Self> {
-        err.oopsie_backtrace()
-    }
 }
 
 #[cfg(test)]
@@ -118,28 +112,6 @@ mod tests {
         let captured = BackTrace::capture_or_extract(&error);
         // Should produce a valid backtrace (frames list is valid, may be empty)
         let _ = captured.inner().frames();
-    }
-
-    #[test]
-    fn test_backtrace_extract_from_error_with_backtrace() {
-        let bt = BackTrace::capture();
-        let error = ErrorWithBacktrace {
-            backtrace: bt.clone(),
-        };
-
-        let extracted = BackTrace::extract_from_error(&error);
-        assert!(extracted.is_some());
-        assert_eq!(
-            extracted.unwrap().inner().frames().len(),
-            bt.inner().frames().len()
-        );
-    }
-
-    #[test]
-    fn test_backtrace_extract_from_error_without_backtrace() {
-        let error = ErrorWithoutBacktrace;
-        let extracted = BackTrace::extract_from_error(&error);
-        assert!(extracted.is_none());
     }
 
     #[test]

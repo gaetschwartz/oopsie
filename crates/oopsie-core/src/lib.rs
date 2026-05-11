@@ -4,6 +4,13 @@
     feature = "unstable-try-trait-v2",
     feature(try_trait_v2, try_trait_v2_residual)
 )]
+// Doctests that use `#[derive(Oopsie)]` will see the macro emit a `provide`
+// impl when the unstable feature is active; inject the corresponding language
+// feature flag so those doctests compile under `--features unstable`.
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    doc(test(attr(feature(error_generic_member_access))))
+)]
 
 mod backtrace;
 mod error_ext;
@@ -85,7 +92,29 @@ pub fn install_panic_hook() -> color_eyre::Result<()> {
 )]
 #[serde(transparent)]
 #[repr(transparent)]
-pub struct ErrorCode(pub Cow<'static, str>);
+pub struct ErrorCode(Cow<'static, str>);
+
+impl ErrorCode {
+    /// Build an `ErrorCode` from a `&'static str` in `const` context.
+    #[must_use]
+    pub const fn from_static(s: &'static str) -> Self {
+        Self(Cow::Borrowed(s))
+    }
+
+    /// Borrow the underlying string.
+    #[must_use]
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consume the `ErrorCode`, returning the underlying `Cow`.
+    #[must_use]
+    #[inline]
+    pub fn into_inner(self) -> Cow<'static, str> {
+        self.0
+    }
+}
 
 impl Deref for ErrorCode {
     type Target = str;
@@ -123,7 +152,29 @@ impl std::fmt::Display for ErrorCode {
 )]
 #[serde(transparent)]
 #[repr(transparent)]
-pub struct HelpText(pub Cow<'static, str>);
+pub struct HelpText(Cow<'static, str>);
+
+impl HelpText {
+    /// Build a `HelpText` from a `&'static str` in `const` context.
+    #[must_use]
+    pub const fn from_static(s: &'static str) -> Self {
+        Self(Cow::Borrowed(s))
+    }
+
+    /// Borrow the underlying string.
+    #[must_use]
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Consume the `HelpText`, returning the underlying `Cow`.
+    #[must_use]
+    #[inline]
+    pub fn into_inner(self) -> Cow<'static, str> {
+        self.0
+    }
+}
 
 impl Deref for HelpText {
     type Target = str;

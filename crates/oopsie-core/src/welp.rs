@@ -169,6 +169,14 @@ impl ErrorExt for Welp {
 /// ```
 pub trait WelpResultExt<T, E>: Sized {
     /// Wrap the error in a [`Welp`] with the given message.
+    ///
+    /// Note: the `message` argument is evaluated at the call site per Rust's
+    /// eager-argument rules — `welp_context(format!(...))` allocates the
+    /// formatted `String` even on the `Ok` branch. Use [`with_welp_context`]
+    /// when the message is built from a non-trivial expression that should
+    /// only run on `Err`.
+    ///
+    /// [`with_welp_context`]: Self::with_welp_context
     fn welp_context(self, message: impl Into<String>) -> Result<T, Welp>;
 
     /// Wrap the error in a [`Welp`] with a lazily-built message. The closure
@@ -218,6 +226,14 @@ where
 /// ```
 pub trait WelpOptionExt<T>: Sized {
     /// Convert `None` into a [`Welp`] with the given message.
+    ///
+    /// Note: the `message` argument is evaluated at the call site per Rust's
+    /// eager-argument rules — `welp_context(format!(...))` allocates the
+    /// formatted `String` even on the `Some` branch. Use [`with_welp_context`]
+    /// when the message is built from a non-trivial expression that should
+    /// only run on `None`.
+    ///
+    /// [`with_welp_context`]: Self::with_welp_context
     fn welp_context(self, message: impl Into<String>) -> Result<T, Welp>;
 
     /// Convert `None` into a [`Welp`] with a lazily-built message. The

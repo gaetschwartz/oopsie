@@ -90,7 +90,7 @@ enum ProvideError {
     },
 
     #[oopsie("help error")]
-    #[oopsie(provide(::oopsie::HelpText => ::oopsie::HelpText(::std::borrow::Cow::Borrowed("try rebooting"))))]
+    #[oopsie(provide(::oopsie::HelpText => ::oopsie::HelpText::from_static("try rebooting")))]
     WithHelp { msg: String },
 
     #[oopsie("coded error")]
@@ -135,7 +135,7 @@ fn provide_error_code() {
 enum InnerError {
     #[oopsie("inner: {detail}")]
     #[oopsie(provide(ref, oopsie::BackTrace => bt.as_ref()))]
-    #[oopsie(provide(::oopsie::HelpText => ::oopsie::HelpText(::std::borrow::Cow::Borrowed("fix the inner thing"))))]
+    #[oopsie(provide(::oopsie::HelpText => ::oopsie::HelpText::from_static("fix the inner thing")))]
     #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from("inner::code")))]
     Root {
         detail: String,

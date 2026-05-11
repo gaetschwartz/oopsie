@@ -111,6 +111,7 @@ pub trait ResultExt<T, E> {
 }
 
 impl<T, E> ResultExt<T, E> for Result<T, E> {
+    #[inline]
     #[track_caller]
     fn context<C, E2>(self, context: C) -> Result<T, E2>
     where
@@ -120,6 +121,7 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
         self.map_err(|error| context.build_error(error))
     }
 
+    #[inline]
     #[track_caller]
     fn with_context<F, C, E2>(self, context: F) -> Result<T, E2>
     where
@@ -169,6 +171,7 @@ pub trait OptionExt<T> {
 }
 
 impl<T> OptionExt<T> for Option<T> {
+    #[inline]
     #[track_caller]
     fn context<C, E>(self, context: C) -> Result<T, E>
     where
@@ -178,6 +181,7 @@ impl<T> OptionExt<T> for Option<T> {
         self.ok_or_else(|| context.build_error(NoSource))
     }
 
+    #[inline]
     #[track_caller]
     fn with_context<F, C, E>(self, context: F) -> Result<T, E>
     where

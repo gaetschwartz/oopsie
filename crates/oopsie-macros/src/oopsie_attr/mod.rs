@@ -171,6 +171,9 @@ mod tests {
     use super::*;
     use quote::quote;
 
+    // Output includes the `provide` impl when the unstable feature is on,
+    // so the snapshot only matches in the default-features build.
+    #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn bare_enum_no_tracing() {
         let result = expand(
@@ -200,6 +203,7 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
+    #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn traced_enum() {
         let result = expand(
@@ -215,6 +219,7 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
+    #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn backtrace_only_struct() {
         let result = expand(

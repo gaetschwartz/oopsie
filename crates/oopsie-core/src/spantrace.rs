@@ -36,12 +36,6 @@ impl SpanTrace {
         self.inner
     }
 
-    #[must_use]
-    #[inline]
-    pub fn extract_from_error(err: &(impl crate::ErrorExt + ?Sized)) -> Option<&Self> {
-        err.oopsie_spantrace()
-    }
-
     #[inline]
     pub fn with_spans(&self, f: impl FnMut(&'static tracing::Metadata<'static>, &str) -> bool) {
         self.inner.with_spans(f);

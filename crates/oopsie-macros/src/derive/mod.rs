@@ -183,6 +183,9 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
+    // Output includes the `provide` impl when the unstable feature is on,
+    // so the snapshot only matches in the default-features build.
+    #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn test_derive_struct_with_provide() {
         let input = quote! {
@@ -201,6 +204,7 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
+    #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn test_derive_enum_with_transparent() {
         let input = quote! {

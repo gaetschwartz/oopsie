@@ -81,7 +81,7 @@ fn test_format_short_includes_help() {
 #[test]
 fn test_extract_backtrace_returns_some_when_provided() {
     let error = common::make_error();
-    let bt = oopsie::BackTrace::extract_from_error(&error);
+    let bt = oopsie::ErrorExt::oopsie_backtrace(&error);
     assert!(
         bt.is_some(),
         "extract_backtrace should return Some for oopsie errors"

@@ -7,8 +7,9 @@ rust-version.workspace = true
 
 [features]
 default = []
+unstable-error-generic-member-access = []
 unstable-try-trait-v2 = ["dep:smallbox"]
-unstable = ["unstable-try-trait-v2"]
+unstable = ["unstable-try-trait-v2", "unstable-error-generic-member-access"]
 
 [dependencies]
 backtrace = "0.3.76"

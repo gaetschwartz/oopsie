@@ -549,7 +549,7 @@ mod tests {
             msg: "plain error",
             source: None,
         };
-        let bt = oopsie_core::BackTrace::extract_from_error(&error);
+        let bt = oopsie_core::ErrorExt::oopsie_backtrace(&error);
         assert!(
             bt.is_none(),
             "extract_backtrace should return None for plain errors"
