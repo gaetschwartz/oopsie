@@ -217,12 +217,6 @@ expression: error
         "filename": "[STDLIB]/library/std/src/sys/thread/unix.rs",
         "line": -1,
         "column": 0
-      },
-      {
-        "name": "__pthread_cond_wait",
-        "filename": null,
-        "line": -1,
-        "column": 0
       }
     ]
   }

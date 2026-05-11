@@ -60,4 +60,3 @@ Error[report::OuterError]: Outer error
              at [STDLIB]/library/alloc/src/boxed.rs:[LOC]
       <std::sys::thread::unix::Thread>::new::thread_start
              at [STDLIB]/library/std/src/sys/thread/unix.rs:[LOC]
-  11: __pthread_cond_wait

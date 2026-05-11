@@ -60,4 +60,3 @@ Error[report::TestError]: Test error: colored test
            at [STDLIB]/library/alloc/src/boxed.rs:[LOC]
  25: <std[[PTR]]::sys::thread::unix::Thread>::new::thread_start
            at [STDLIB]/library/std/src/sys/thread/unix.rs:[LOC]
- 26: __pthread_cond_wait

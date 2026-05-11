@@ -26,25 +26,40 @@ impl color_backtrace::Backtrace for BackTrace {
     #[inline]
     fn frames(&self) -> Vec<color_backtrace::Frame> {
         let mut frames = color_backtrace::Backtrace::frames(&self.0);
-        frames.retain(|f| !is_internal_capture_frame(f.name.as_deref(), f.filename.as_deref()));
+        frames.retain(|f| !is_internal_frame(f.name.as_deref(), f.filename.as_deref()));
         frames
     }
 }
 
-/// Returns `true` for frames belonging to the `backtrace` crate's own
-/// capture machinery (`backtrace::backtrace::*`, `<backtrace::capture::*>::*`).
+/// Returns `true` for frames that are implementation/platform detail and
+/// should not appear in user-facing renderings.
 ///
-/// These frames are platform/toolchain dependent: macOS captures them,
-/// Linux inlines them away. They're never user-relevant — the user wants
-/// the stack from *their* code, not the implementation of the capture
-/// mechanism. Filtering them at the source means `Report`, `ErasedError`,
-/// and any future consumer all see a stable backtrace shape.
+/// Covers two classes of noise:
+/// - **Top of stack**: the `backtrace` crate's own capture machinery
+///   (`backtrace::backtrace::*`, `<backtrace::capture::*>::*`). macOS
+///   captures them; Linux inlines them away.
+/// - **Bottom of stack**: OS-level thread / libc / pthread entry points
+///   (`__pthread_*`, `__libc_start*`, etc.). These appear on some
+///   platforms (macOS pthread) and not others (Linux's libc start).
+///
+/// Filtering at the source means `Report`, `ErasedError`, and any future
+/// consumer all see a stable backtrace shape across macOS and Linux.
 #[must_use]
-pub fn is_internal_capture_frame(name: Option<&str>, filename: Option<&std::path::Path>) -> bool {
-    if let Some(n) = name
-        && (n.starts_with("backtrace::") || n.starts_with("<backtrace::"))
-    {
-        return true;
+pub fn is_internal_frame(name: Option<&str>, filename: Option<&std::path::Path>) -> bool {
+    if let Some(n) = name {
+        // Top-of-stack: `backtrace` crate capture machinery.
+        if n.starts_with("backtrace::") || n.starts_with("<backtrace::") {
+            return true;
+        }
+        // Bottom-of-stack: OS thread / libc / pthread internals.
+        if n.starts_with("__pthread_")
+            || n.starts_with("_pthread_")
+            || n.starts_with("__libc_start")
+            || n.starts_with("__GI___")
+            || n.starts_with("__rust_try")
+        {
+            return true;
+        }
     }
     if let Some(p) = filename {
         // Path components are the cleanest match: avoids false positives on
@@ -88,7 +103,7 @@ impl fmt::Debug for BackTrace {
             .filter(|frame| {
                 let name = primary_name(frame);
                 let filename = primary_filename(frame);
-                !is_internal_capture_frame(name.as_deref(), filename.as_deref())
+                !is_internal_frame(name.as_deref(), filename.as_deref())
             })
             .cloned()
             .collect();

@@ -69,9 +69,7 @@ impl BacktraceProvider for crate::BackTrace {
                     colno: sym.colno(),
                 })
             })
-            .filter(|f| {
-                !oopsie_core::is_internal_capture_frame(f.name.as_deref(), f.filename.as_deref())
-            })
+            .filter(|f| !oopsie_core::is_internal_frame(f.name.as_deref(), f.filename.as_deref()))
             .collect()
     }
 }

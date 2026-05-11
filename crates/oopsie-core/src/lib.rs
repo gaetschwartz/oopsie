@@ -24,7 +24,7 @@ use std::borrow::Cow;
 use std::io;
 use std::ops::Deref;
 
-pub use backtrace::{BackTrace, is_internal_capture_frame};
+pub use backtrace::{BackTrace, is_internal_frame};
 use color_backtrace::termcolor;
 pub use diagnostic::Diagnostic;
 

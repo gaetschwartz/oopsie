@@ -73,4 +73,3 @@ Error[report::common::MyError::Inner]: Inner error happened
              at [STDLIB]/library/alloc/src/boxed.rs:[LOC]
       <std::sys::thread::unix::Thread>::new::thread_start
              at [STDLIB]/library/std/src/sys/thread/unix.rs:[LOC]
-  15: __pthread_cond_wait

@@ -75,4 +75,3 @@ Error:
            at [STDLIB]/library/alloc/src/boxed.rs:[LOC]
   29: <std[PTR]::sys::thread::unix::Thread>::new::thread_start
            at [STDLIB]/library/std/src/sys/thread/unix.rs:[LOC]
-  30: __pthread_cond_wait
