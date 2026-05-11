@@ -98,6 +98,30 @@ impl Welp {
         })
     }
 
+    /// Wrap an already-boxed trait-object error with a string message.
+    ///
+    /// Use this when the source comes from an API returning
+    /// `Box<dyn Error + Send + Sync + 'static>` — that type is `?Sized` and
+    /// can't satisfy [`wrap`](Self::wrap)'s `Sized` bound, but it's exactly
+    /// the shape `Welp` stores internally, so no rewrapping is needed.
+    ///
+    /// ```
+    /// use oopsie_core::Welp;
+    ///
+    /// let boxed: Box<dyn std::error::Error + Send + Sync + 'static> =
+    ///     Box::new(std::io::Error::other("disk full"));
+    /// let err = Welp::wrap_boxed(boxed, "could not write");
+    /// assert_eq!(err.to_string(), "could not write");
+    /// assert!(std::error::Error::source(&err).is_some());
+    /// ```
+    #[track_caller]
+    pub fn wrap_boxed(source: BoxError, message: impl Into<String>) -> Self {
+        Self(WelpRepr::Sourced {
+            message: message.into().into_boxed_str(),
+            source,
+        })
+    }
+
     /// The message attached to this error.
     #[must_use]
     #[inline]
@@ -307,6 +331,17 @@ mod tests {
         let err = Welp::wrap(std::io::Error::other("x"), "msg");
         assert!(err.oopsie_backtrace().is_none());
         assert!(err.oopsie_spantrace().is_none());
+    }
+
+    #[test]
+    fn wrap_boxed_carries_source() {
+        let boxed: BoxError = Box::new(std::io::Error::other("disk full"));
+        let err = Welp::wrap_boxed(boxed, "could not write");
+        assert_eq!(err.to_string(), "could not write");
+        assert_eq!(
+            StdError::source(&err).expect("source missing").to_string(),
+            "disk full"
+        );
     }
 
     #[test]
