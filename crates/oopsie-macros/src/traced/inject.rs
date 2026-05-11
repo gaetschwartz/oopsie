@@ -127,7 +127,7 @@ pub(super) fn has_oopsie_name_value(attrs: &[syn::Attribute], key: &str) -> bool
 
 /// Add Oopsie provide attributes for auto-generated error code.
 ///
-/// Backtrace and spantrace are now handled by ErrorExt via field detection,
+/// Backtrace and spantrace are now handled by Diagnostic via field detection,
 /// so only ErrorCode needs a provide attr for nightly Error::provide support.
 pub(super) fn add_provide_attrs(
     attrs: &mut Vec<syn::Attribute>,

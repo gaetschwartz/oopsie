@@ -42,20 +42,20 @@ impl<T: Capturable> Capturable for Box<T> {
 
 /// Extension of [`Capturable`] that tries to reuse traces from a source error.
 ///
-/// When an error with a source implements [`ErrorExt`](crate::ErrorExt), this trait
+/// When an error with a source implements [`Diagnostic`](crate::Diagnostic), this trait
 /// extracts the existing backtrace/spantrace rather than capturing a new one, which
 /// preserves the original call site. Falls back to [`Capturable::capture`] otherwise.
 #[doc(hidden)]
 pub trait CaptureExt: Capturable {
     #[track_caller]
-    fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self
+    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self
     where
         Self: Sized;
 }
 
 impl<T: CaptureExt> CaptureExt for Box<T> {
     #[track_caller]
-    fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self {
+    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
         Box::new(T::capture_or_extract(source))
     }
 }

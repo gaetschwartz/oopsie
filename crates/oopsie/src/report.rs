@@ -10,7 +10,7 @@ use owo_colors::OwoColorize as _;
 
 use crate::ColorConfig;
 
-use crate::ErrorExt;
+use crate::Diagnostic;
 
 use crate::trace_printer::TracePrinter;
 
@@ -23,7 +23,7 @@ pub struct Report<E> {
     color_config: ColorConfig,
 }
 
-impl<E: ErrorExt> Report<E> {
+impl<E: Diagnostic> Report<E> {
     /// Create a new `Report` wrapping the given error.
     ///
     /// Uses automatic color detection based on environment variables and
@@ -203,7 +203,7 @@ impl<E: ErrorExt> Report<E> {
 
 impl<E> Termination for Report<E>
 where
-    E: ErrorExt,
+    E: Diagnostic,
 {
     fn report(self) -> ExitCode {
         match self.res {
@@ -237,7 +237,7 @@ impl<T, E> core::ops::FromResidual<Result<T, E>> for Report<E> {
     }
 }
 
-impl<E: ErrorExt> fmt::Display for Report<E> {
+impl<E: Diagnostic> fmt::Display for Report<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_error_chain(f)?;
         self.write_span_trace(f)?;
@@ -246,13 +246,13 @@ impl<E: ErrorExt> fmt::Display for Report<E> {
     }
 }
 
-impl<E: ErrorExt> fmt::Debug for Report<E> {
+impl<E: Diagnostic> fmt::Debug for Report<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(self, f)
     }
 }
 
-impl<E: ErrorExt> From<E> for Report<E> {
+impl<E: Diagnostic> From<E> for Report<E> {
     #[inline]
     fn from(error: E) -> Self {
         Self::from_std(error)

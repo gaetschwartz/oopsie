@@ -14,7 +14,7 @@ impl crate::Capturable for BackTrace {
 
 impl crate::CaptureExt for BackTrace {
     #[inline]
-    fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self {
+    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
         source
             .oopsie_backtrace()
             .cloned()
@@ -47,7 +47,7 @@ impl BackTrace {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CaptureExt, ErrorExt};
+    use crate::{CaptureExt, Diagnostic};
 
     #[derive(Debug)]
     struct ErrorWithBacktrace {
@@ -62,7 +62,7 @@ mod tests {
 
     impl std::error::Error for ErrorWithBacktrace {}
 
-    impl ErrorExt for ErrorWithBacktrace {
+    impl Diagnostic for ErrorWithBacktrace {
         fn oopsie_backtrace(&self) -> Option<&BackTrace> {
             Some(&self.backtrace)
         }
@@ -79,7 +79,7 @@ mod tests {
 
     impl std::error::Error for ErrorWithoutBacktrace {}
 
-    impl ErrorExt for ErrorWithoutBacktrace {}
+    impl Diagnostic for ErrorWithoutBacktrace {}
 
     #[test]
     fn test_backtrace_capture_produces_backtrace() {

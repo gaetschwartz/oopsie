@@ -20,7 +20,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
     let mut source_arms = Vec::new();
     let mut provide_arms = Vec::new();
 
-    // ErrorExt arms
+    // Diagnostic arms
     let mut bt_arms = Vec::new();
     let mut st_arms = Vec::new();
     let mut code_arms = Vec::new();
@@ -119,7 +119,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             });
         }
 
-        // ── ErrorExt arms ──
+        // ── Diagnostic arms ──
 
         // Backtrace
         if let Some(bt_field) = &categorized.backtrace_field {
@@ -194,7 +194,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             }
         };
 
-    // Generate ErrorExt methods
+    // Generate Diagnostic methods
     let bt_method = if bt_arms.is_empty() {
         quote! {}
     } else {
@@ -262,7 +262,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             #provide_method
         }
 
-        impl #impl_generics #oopsie_path::ErrorExt for #enum_ident #ty_generics #where_clause {
+        impl #impl_generics #oopsie_path::Diagnostic for #enum_ident #ty_generics #where_clause {
             #bt_method
             #st_method
             #code_method
@@ -360,7 +360,7 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
             }
         };
 
-    // ── ErrorExt impl for struct ──
+    // ── Diagnostic impl for struct ──
 
     let bt_method = if let Some(bt_field) = &categorized.backtrace_field {
         quote! {
@@ -444,7 +444,7 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
             #provide_method
         }
 
-        impl #impl_generics #oopsie_path::ErrorExt for #struct_ident #ty_generics #where_clause {
+        impl #impl_generics #oopsie_path::Diagnostic for #struct_ident #ty_generics #where_clause {
             #bt_method
             #st_method
             #code_method

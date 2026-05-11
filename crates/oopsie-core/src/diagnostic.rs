@@ -7,7 +7,7 @@ use crate::{BackTrace, ErrorCode, HelpText, SpanTrace};
 /// Always implemented by `#[derive(Oopsie)]`. Provides a stable mechanism
 /// for extracting backtraces, span traces, error codes, and help text
 /// without relying on the unstable `Provide`/`Request` API.
-pub trait ErrorExt: std::error::Error {
+pub trait Diagnostic: std::error::Error {
     /// Returns the backtrace captured when this error was created.
     #[inline]
     fn oopsie_backtrace(&self) -> Option<&BackTrace> {

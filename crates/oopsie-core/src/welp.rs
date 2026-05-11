@@ -35,7 +35,7 @@
 use std::error::Error as StdError;
 use std::fmt;
 
-use crate::{BackTrace, Capturable as _, ErrorExt, SpanTrace};
+use crate::{BackTrace, Capturable as _, Diagnostic, SpanTrace};
 
 /// A boxed `std::error::Error` that's `Send + Sync + 'static`.
 type BoxError = Box<dyn StdError + Send + Sync + 'static>;
@@ -138,7 +138,7 @@ impl StdError for Welp {
     }
 }
 
-impl ErrorExt for Welp {
+impl Diagnostic for Welp {
     fn oopsie_backtrace(&self) -> Option<&BackTrace> {
         match &self.0 {
             WelpRepr::Sourced { .. } => None,

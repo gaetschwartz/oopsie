@@ -158,7 +158,7 @@ pub use oopsie_macros::traced;
 // tracing-subscriber) don't accidentally become part of oopsie's SemVer
 // contract via incidental glob re-export.
 pub use oopsie_core::{
-    AsErrorSource, BackTrace, Capturable, CaptureExt, Contextual, ErrorCode, ErrorExt, HelpText,
+    AsErrorSource, BackTrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
     NoSource, OptionExt, OptionalSpanTrace, ResultExt, SpanTrace, Welp, WelpOptionExt,
     WelpResultExt, install, install_panic_hook,
 };
@@ -197,7 +197,7 @@ pub mod tracing {
 /// # }
 /// ```
 pub mod prelude {
-    pub use crate::{Contextual, ErrorExt, OptionExt, ResultExt, WelpOptionExt, WelpResultExt};
+    pub use crate::{Contextual, Diagnostic, OptionExt, ResultExt, WelpOptionExt, WelpResultExt};
 }
 
 #[cfg(feature = "fancy")]

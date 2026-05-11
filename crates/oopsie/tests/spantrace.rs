@@ -16,7 +16,7 @@ struct BoxedSpantraceError {
 
 #[test]
 fn test_extract_boxed_spantrace_via_provide_ref() {
-    use oopsie::ErrorExt as _;
+    use oopsie::Diagnostic as _;
     let err = BoxedSpantraceOopsie.build();
     let extracted = err.oopsie_spantrace();
     assert!(extracted.is_some());

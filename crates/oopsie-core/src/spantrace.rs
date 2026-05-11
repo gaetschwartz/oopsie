@@ -75,7 +75,7 @@ impl crate::Capturable for SpanTrace {
 
 impl crate::CaptureExt for SpanTrace {
     #[inline]
-    fn capture_or_extract(source: &dyn crate::ErrorExt) -> Self {
+    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
         source
             .oopsie_spantrace()
             .cloned()

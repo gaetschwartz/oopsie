@@ -71,20 +71,20 @@ impl Diagnostics {
 // ─────────────────────────────────────────────────────────────────────────────
 
 impl ErasedError {
-    /// Create an `ErasedError` from any error implementing `ErrorExt`.
+    /// Create an `ErasedError` from any error implementing `Diagnostic`.
     ///
     /// This extracts the message, source chain, backtrace, spantrace,
-    /// error code, and help text via the `ErrorExt` trait.
+    /// error code, and help text via the `Diagnostic` trait.
     #[expect(clippy::needless_pass_by_value)]
-    pub fn from_error<E: oopsie_core::ErrorExt>(err: E) -> Self {
+    pub fn from_error<E: oopsie_core::Diagnostic>(err: E) -> Self {
         Self::from_error_ref(&err)
     }
 
-    /// Create an `ErasedError` from a reference to any error implementing `ErrorExt`.
+    /// Create an `ErasedError` from a reference to any error implementing `Diagnostic`.
     ///
     /// Like `from_error` but takes a reference, useful when ownership cannot be transferred
     /// (e.g., in `Serialize` implementations).
-    pub fn from_error_ref<E: oopsie_core::ErrorExt>(err: &E) -> Self {
+    pub fn from_error_ref<E: oopsie_core::Diagnostic>(err: &E) -> Self {
         let message = err.to_string().into();
 
         let source_chain = std::iter::successors(err.source(), |e| e.source())
@@ -268,7 +268,7 @@ mod tests {
         }
     }
 
-    impl oopsie_core::ErrorExt for ChainedError {}
+    impl oopsie_core::Diagnostic for ChainedError {}
 
     #[test]
     fn test_from_error_preserves_message_and_chain() {
@@ -549,7 +549,7 @@ mod tests {
             msg: "plain error",
             source: None,
         };
-        let bt = oopsie_core::ErrorExt::oopsie_backtrace(&error);
+        let bt = oopsie_core::Diagnostic::oopsie_backtrace(&error);
         assert!(
             bt.is_none(),
             "extract_backtrace should return None for plain errors"

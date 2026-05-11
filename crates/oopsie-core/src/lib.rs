@@ -13,7 +13,7 @@
 )]
 
 mod backtrace;
-mod error_ext;
+mod diagnostic;
 #[cfg(feature = "unstable-try-trait-v2")]
 mod result;
 pub mod spantrace;
@@ -26,25 +26,25 @@ use std::ops::Deref;
 
 pub use backtrace::BackTrace;
 use color_backtrace::termcolor;
-pub use error_ext::ErrorExt;
+pub use diagnostic::Diagnostic;
 
 /// Private helpers used by macro-generated code. Not part of the public API.
 #[doc(hidden)]
 pub mod __private {
     /// Autoref probe for capture deduplication.
     ///
-    /// When the concrete source type implements `ErrorExt`, the high-priority
+    /// When the concrete source type implements `Diagnostic`, the high-priority
     /// `CaptureFromExt` impl is selected and tries to extract existing traces.
-    /// For non-`ErrorExt` sources (e.g., `io::Error`), the low-priority
+    /// For non-`Diagnostic` sources (e.g., `io::Error`), the low-priority
     /// `CaptureFromFallback` impl is selected via autoref and does fresh capture.
     pub struct CaptureProbe<'a, T: ?Sized>(pub &'a T);
 
-    /// High-priority: source implements `ErrorExt` → try extraction.
+    /// High-priority: source implements `Diagnostic` → try extraction.
     pub trait CaptureFromExt {
         fn resolve<C: crate::CaptureExt>(&self) -> C;
     }
 
-    impl<T: crate::ErrorExt> CaptureFromExt for CaptureProbe<'_, T> {
+    impl<T: crate::Diagnostic> CaptureFromExt for CaptureProbe<'_, T> {
         #[inline]
         #[track_caller]
         fn resolve<C: crate::CaptureExt>(&self) -> C {
@@ -52,7 +52,7 @@ pub mod __private {
         }
     }
 
-    /// Low-priority: source doesn't implement `ErrorExt` → fresh capture.
+    /// Low-priority: source doesn't implement `Diagnostic` → fresh capture.
     pub trait CaptureFromFallback {
         fn resolve<C: crate::Capturable>(&self) -> C;
     }
