@@ -125,7 +125,7 @@
 //! | `#[oopsie(module)]` | Wrap selectors in auto-named module |
 //! | `#[oopsie(module(name))]` | Wrap selectors in module named `name` |
 //! | `#[oopsie(module(false))]` | Disable module wrapping |
-//! | `#[oopsie(vis = pub)]` | Override default selector visibility |
+//! | `#[oopsie(vis(pub))]` | Override default selector visibility |
 //! | `#[oopsie(suffix)]` | Append `"Oopsie"` suffix to selector names |
 //! | `#[oopsie(suffix = "X")]` | Append custom suffix to selector names |
 //! | `#[oopsie(size(N))]` | Assert error type is exactly `N` bytes at compile time |

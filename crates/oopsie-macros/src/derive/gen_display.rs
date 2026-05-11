@@ -4,7 +4,7 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::DeriveInput;
 
-use super::parse::{DisplayAttr, VariantAttrs};
+use super::parse::{DisplayAttr, StructAttrs, VariantAttrs};
 
 /// Generate a `Display` impl for an enum.
 pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
@@ -66,10 +66,10 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
 }
 
 /// Generate a `Display` impl for a struct.
-pub fn gen_struct_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
+pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<TokenStream2> {
     let struct_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let variant_attrs = VariantAttrs::from_attrs(&input.attrs)?;
+    let variant_attrs = attrs;
 
     let syn::Data::Struct(data) = &input.data else {
         unreachable!()

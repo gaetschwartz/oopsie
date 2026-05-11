@@ -2,9 +2,7 @@
 use std::ops::Deref;
 
 use darling::FromMeta;
-use proc_macro2::Span;
-use syn::spanned::Spanned as _;
-use syn::{MetaList, MetaNameValue};
+use syn::MetaNameValue;
 
 #[derive(Debug)]
 pub enum FieldSetting<const DEFAULT: bool, T: FromMeta> {
@@ -135,157 +133,90 @@ impl<const DEFAULT: bool> FromMeta for BetterFlag<DEFAULT> {
     }
 }
 
-#[derive(Debug)]
-pub struct OopsieValue<T> {
-    pub value: Option<T>,
-    pub span: Span,
-}
+/// Bridge `syn::Parse → darling::FromMeta`.
+///
+/// Accepts `key(tokens)` (parses tokens via `syn::parse2::<T>`) and
+/// `key = "tokens"` (parses the string literal's contents as `T`). Bare-flag
+/// form (`key` alone) is an error; use a flag/tristate type when you need it.
+pub struct SynParse<T: syn::parse::Parse>(pub T);
 
-impl<T> OopsieValue<T> {
-    #[inline]
-    pub fn new_some(value: T) -> Self {
-        Self {
-            value: Some(value),
-            span: Span::call_site(),
-        }
-    }
-
-    pub const fn with_span(mut self, span: Span) -> Self {
-        self.span = span;
-        self
+impl<T: syn::parse::Parse + std::fmt::Debug> std::fmt::Debug for SynParse<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("SynParse").field(&self.0).finish()
     }
 }
 
-impl<T> Deref for OopsieValue<T> {
-    type Target = Option<T>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.value
+impl<T: syn::parse::Parse> Deref for SynParse<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
     }
 }
 
-impl<T: Default> Default for OopsieValue<T> {
-    fn default() -> Self {
-        Self {
-            value: None,
-            span: Span::call_site(),
-        }
-    }
-}
-
-impl<T: FromMeta> FromMeta for OopsieValue<T> {
+impl<T: syn::parse::Parse> FromMeta for SynParse<T> {
     fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
         match meta {
-            syn::Meta::NameValue(MetaNameValue { value, .. }) => {
-                let span = value.span();
-                let value = T::from_expr(value)?;
-                Ok(OopsieValue {
-                    value: Some(value),
-                    span,
-                })
-            }
-            syn::Meta::List(MetaList { tokens, .. }) => {
-                let span = tokens.span();
-                let meta_2 = syn::parse2::<syn::Meta>(tokens.clone())
-                    .map_err(|e| darling::Error::custom(e).with_span(tokens))?;
-                let value = T::from_meta(&meta_2)?;
-                Ok(OopsieValue {
-                    value: Some(value),
-                    span,
-                })
-            }
-            syn::Meta::Path(p) => Ok(OopsieValue {
-                value: None,
-                span: p.span(),
-            }),
+            syn::Meta::List(list) => syn::parse2(list.tokens.clone())
+                .map(Self)
+                .map_err(|e| darling::Error::custom(e).with_span(&list.tokens)),
+            syn::Meta::NameValue(nv) => match &nv.value {
+                syn::Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) => s
+                    .parse()
+                    .map(Self)
+                    .map_err(|e| darling::Error::custom(e).with_span(s)),
+                other => Err(
+                    darling::Error::custom("expected `key(...)` or `key = \"...\"`")
+                        .with_span(other),
+                ),
+            },
+            syn::Meta::Path(p) => Err(darling::Error::custom(
+                "expected a value, e.g. `key(...)` or `key = \"...\"`",
+            )
+            .with_span(p)),
         }
     }
 }
 
-#[derive(Debug)]
-pub struct OopsieSynValue<T> {
-    pub value: Option<T>,
-    pub span: Span,
+/// Tristate for keys that accept three syntactic shapes:
+/// `key` (alone), `key(true|false)` (bool toggle), or `key(value)` / `key = value`.
+///
+/// Parser stays dumb: `Bool(true)` and `Alone` are distinct variants — the
+/// resolver folds them (see `effective_module` / `effective_suffix`).
+/// Use `Option<MaybeAloneOopsieValue<T>>` in attribute structs to represent
+/// absence; this enum has no "Unset" variant.
+#[derive(Debug, Clone)]
+pub enum MaybeAloneOopsieValue<T> {
+    Alone,
+    Bool(bool),
+    Value(T),
 }
 
-#[expect(unused_macros)]
-macro_rules! oopsie_syn_value {
-    ($($tt:tt)*) => {
-        OopsieValue {
-            value: Some(syn::parse_quote! { $($tt)* }),
-            span: Span::call_site(),
-        }
-    };
-}
-
-#[expect(unused_imports)]
-pub(crate) use oopsie_syn_value;
-
-impl<T> OopsieSynValue<T> {
-    #[inline]
-    pub fn new_some(value: T) -> Self {
-        Self {
-            value: Some(value),
-            span: Span::call_site(),
-        }
-    }
-
-    pub const fn with_span(mut self, span: Span) -> Self {
-        self.span = span;
-        self
-    }
-}
-
-impl<T> Deref for OopsieSynValue<T> {
-    type Target = Option<T>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.value
-    }
-}
-
-impl<T: Default> Default for OopsieSynValue<T> {
-    fn default() -> Self {
-        Self {
-            value: None,
-            span: Span::call_site(),
-        }
-    }
-}
-
-impl<T: FromMeta + syn::parse::Parse> FromMeta for OopsieSynValue<T> {
+impl<T: FromMeta> FromMeta for MaybeAloneOopsieValue<T> {
     fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
         match meta {
-            syn::Meta::NameValue(MetaNameValue { value, .. }) => {
-                let span = value.span();
-                let value = T::from_expr(value)?;
-                Ok(OopsieSynValue {
-                    value: Some(value),
-                    span,
-                })
+            syn::Meta::Path(_) => Ok(Self::Alone),
+            syn::Meta::List(list) => {
+                if let Ok(b) = syn::parse2::<syn::LitBool>(list.tokens.clone()) {
+                    return Ok(Self::Bool(b.value));
+                }
+                // Re-route `key(value)` through `T::from_expr` — most `FromMeta`
+                // impls (e.g. `syn::Ident`, `String`) override `from_expr` but
+                // not `from_list`, so the default dispatch on `Meta::List`
+                // would otherwise hit `from_list` and fail.
+                let expr: syn::Expr = syn::parse2(list.tokens.clone())
+                    .map_err(|e| darling::Error::custom(e).with_span(&list.tokens))?;
+                T::from_expr(&expr).map(Self::Value)
             }
-            syn::Meta::List(MetaList { tokens, .. }) => {
-                let span = tokens.span();
-                let value = syn::parse2::<T>(tokens.clone())
-                    .map_err(|e| darling::Error::custom(e).with_span(tokens))?;
-                Ok(OopsieSynValue {
-                    value: Some(value),
-                    span,
-                })
-            }
-            syn::Meta::Path(p) => Ok(OopsieSynValue {
-                value: None,
-                span: p.span(),
-            }),
+            syn::Meta::NameValue(_) => T::from_meta(meta).map(Self::Value),
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use darling::FromAttributes as _;
     use syn::parse_quote;
 
     use super::*;
@@ -426,51 +357,102 @@ mod tests {
         assert!(!flag.is_enabled());
     }
 
-    // ── OopsieValue Deref test ───────────────────────────────────────
+    // ── SynParse tests ───────────────────────────────────────────────
 
     #[test]
-    fn oopsie_value_deref() {
-        let val = OopsieValue::new_some(42);
-        let inner: &Option<i32> = &val;
-        assert_eq!(*inner, Some(42));
-
-        let empty: OopsieValue<i32> = OopsieValue::default();
-        let inner: &Option<i32> = &empty;
-        assert_eq!(*inner, None);
+    fn syn_parse_list_form_parses_inner_tokens() {
+        let meta: syn::Meta = parse_quote!(key(..=128));
+        let parsed = SynParse::<syn::ExprRange>::from_meta(&meta).unwrap();
+        assert!(parsed.start.is_none());
+        assert!(parsed.end.is_some());
     }
 
-    // ── OopsieSynValue Deref test ────────────────────────────────────
-
     #[test]
-    fn oopsie_syn_value_deref() {
-        let val = OopsieSynValue::new_some(42i32);
-        let inner: &Option<i32> = &val;
-        assert_eq!(*inner, Some(42));
-
-        let empty: OopsieSynValue<i32> = OopsieSynValue::default();
-        let inner: &Option<i32> = &empty;
-        assert_eq!(*inner, None);
+    fn syn_parse_name_value_string_form_parses_string_contents() {
+        let meta: syn::Meta = parse_quote!(key = "..=128");
+        let parsed = SynParse::<syn::ExprRange>::from_meta(&meta).unwrap();
+        assert!(parsed.start.is_none());
+        assert!(parsed.end.is_some());
     }
 
-    // ── Existing tests ───────────────────────────────────────────────
+    #[test]
+    fn syn_parse_path_form_is_rejected() {
+        let meta: syn::Meta = parse_quote!(key);
+        SynParse::<syn::ExprRange>::from_meta(&meta).unwrap_err();
+    }
 
     #[test]
-    #[expect(clippy::items_after_statements, clippy::needless_continue)]
-    fn oopsie_value_from_meta_name_value() {
-        let meta: Vec<syn::Attribute> = parse_quote! {
-            #[oopsie(visibility(pub(crate)))]
-        };
+    fn syn_parse_name_value_non_string_is_rejected() {
+        let meta: syn::Meta = parse_quote!(key = 42);
+        SynParse::<syn::ExprRange>::from_meta(&meta).unwrap_err();
+    }
 
-        #[derive(Debug, darling::FromAttributes)]
-        #[darling(attributes(oopsie))]
-        struct OopsieValueTest {
-            visibility: OopsieSynValue<syn::Visibility>,
+    #[test]
+    fn syn_parse_with_syn_path() {
+        let meta: syn::Meta = parse_quote!(key(crate::a::b));
+        let parsed = SynParse::<syn::Path>::from_meta(&meta).unwrap();
+        assert_eq!(parsed.segments.len(), 3);
+
+        let meta: syn::Meta = parse_quote!(key = "crate::a::b");
+        let parsed = SynParse::<syn::Path>::from_meta(&meta).unwrap();
+        assert_eq!(parsed.segments.len(), 3);
+    }
+
+    // ── MaybeAloneOopsieValue tests ──────────────────────────────────
+
+    #[test]
+    fn maybe_alone_path_form_is_alone() {
+        let meta: syn::Meta = parse_quote!(key);
+        let parsed = MaybeAloneOopsieValue::<syn::Ident>::from_meta(&meta).unwrap();
+        assert!(matches!(parsed, MaybeAloneOopsieValue::Alone));
+    }
+
+    #[test]
+    fn maybe_alone_bool_forms() {
+        let meta: syn::Meta = parse_quote!(key(true));
+        let parsed = MaybeAloneOopsieValue::<syn::Ident>::from_meta(&meta).unwrap();
+        assert!(matches!(parsed, MaybeAloneOopsieValue::Bool(true)));
+
+        let meta: syn::Meta = parse_quote!(key(false));
+        let parsed = MaybeAloneOopsieValue::<syn::Ident>::from_meta(&meta).unwrap();
+        assert!(matches!(parsed, MaybeAloneOopsieValue::Bool(false)));
+    }
+
+    #[test]
+    fn maybe_alone_value_via_list_form() {
+        let meta: syn::Meta = parse_quote!(key(my_name));
+        let parsed = MaybeAloneOopsieValue::<syn::Ident>::from_meta(&meta).unwrap();
+        match parsed {
+            MaybeAloneOopsieValue::Value(ident) => assert_eq!(ident, "my_name"),
+            other => panic!("expected Value, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maybe_alone_value_via_name_value_form_widening() {
+        // Widened form: `key = name` was previously rejected; now accepted.
+        let meta: syn::Meta = parse_quote!(key = "my_name");
+        let parsed = MaybeAloneOopsieValue::<syn::Ident>::from_meta(&meta).unwrap();
+        match parsed {
+            MaybeAloneOopsieValue::Value(ident) => assert_eq!(ident, "my_name"),
+            other => panic!("expected Value, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maybe_alone_value_string_typed() {
+        let meta: syn::Meta = parse_quote!(key("CustomSuffix"));
+        let parsed = MaybeAloneOopsieValue::<String>::from_meta(&meta).unwrap();
+        match parsed {
+            MaybeAloneOopsieValue::Value(s) => assert_eq!(s, "CustomSuffix"),
+            other => panic!("expected Value, got {other:?}"),
         }
 
-        let oopsie_value = OopsieValueTest::from_attributes(&meta).unwrap();
-        assert_eq!(
-            oopsie_value.visibility.value,
-            Some(parse_quote! { pub(crate) })
-        );
+        let meta: syn::Meta = parse_quote!(key = "CustomSuffix");
+        let parsed = MaybeAloneOopsieValue::<String>::from_meta(&meta).unwrap();
+        match parsed {
+            MaybeAloneOopsieValue::Value(s) => assert_eq!(s, "CustomSuffix"),
+            other => panic!("expected Value, got {other:?}"),
+        }
     }
 }

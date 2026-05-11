@@ -63,7 +63,7 @@ fn expand_enum(
 
     // Step 2: generate Oopsie impls from the (possibly modified) item.
     let derive_input: syn::DeriveInput = syn::parse2(injected_ts.clone())?;
-    let container_attrs = derive::parse::ContainerAttrs::from_attrs(&derive_input.attrs)?;
+    let container_attrs = derive::parse::EnumContainerAttrs::from_attrs(&derive_input.attrs)?;
     let impls = derive::expand_enum(&derive_input, &container_attrs)?;
 
     // Step 3: emit the item with Debug added, Oopsie removed from derives,
@@ -100,7 +100,7 @@ fn expand_struct(
 
     // Step 2: generate Oopsie impls from the (possibly modified) item.
     let derive_input: syn::DeriveInput = syn::parse2(injected_ts.clone())?;
-    let container_attrs = derive::parse::ContainerAttrs::from_attrs(&derive_input.attrs)?;
+    let container_attrs = derive::parse::StructAttrs::from_attrs(&derive_input.attrs)?;
     let impls = derive::expand_struct(&derive_input, &container_attrs)?;
 
     // Step 3: emit the item with Debug added, Oopsie removed from derives,

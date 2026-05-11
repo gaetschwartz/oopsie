@@ -6,28 +6,9 @@
 //! - Field: from, capture, provide
 
 use syn::parse::{Parse, ParseStream};
-use syn::punctuated::Punctuated;
-use syn::{Expr, Ident, LitInt, LitStr, Path, Token, Type, Visibility};
+use syn::{Expr, Ident, LitStr, Path, Token, Type, Visibility};
 
 // ─── Container-level attributes ──────────────────────────────────
-
-/// Keys accepted inside `#[oopsie(...)]` at the *container* (enum/struct)
-/// position. The first five are genuinely container-only; the rest are
-/// variant/field-level keys that legitimately appear at struct-container
-/// scope (a struct definition serves as both container and variant) and
-/// are silently passed through to the variant/field passes.
-const KNOWN_CONTAINER_KEYS: &[&str] = &[
-    "module",
-    "suffix",
-    "size",
-    "vis",
-    "path",
-    "display",
-    "provide",
-    "help",
-    "code",
-    "transparent",
-];
 
 /// A compile-time size constraint for the error type.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,536 +23,376 @@ pub enum SizeConstraint {
     Range(usize, usize),
 }
 
-#[derive(Debug, Default)]
-pub struct ContainerAttrs {
-    pub module: ModuleSetting,
-    pub visibility: Option<Visibility>,
-    pub suffix: SuffixSetting,
-    pub path: Option<Path>,
-    pub size: Option<SizeConstraint>,
+impl Parse for SizeConstraint {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        // Three of four shapes (`..=N`, `N..`, `N..=M`) parse as `Expr::Range`;
+        // the bare integer `N` parses as `Expr::Lit`. Dispatch on whichever.
+        let expr: syn::Expr = input.parse()?;
+        match &expr {
+            syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Int(n),
+                ..
+            }) => Ok(Self::Exact(n.base10_parse()?)),
+            syn::Expr::Range(r) => {
+                let closed = matches!(r.limits, syn::RangeLimits::Closed(_));
+                let start = r.start.as_deref().map(expr_to_usize).transpose()?;
+                let end = r.end.as_deref().map(expr_to_usize).transpose()?;
+                match (start, end, closed) {
+                    (None, Some(e), true) => Ok(Self::AtMost(e)),
+                    (Some(s), None, false) => Ok(Self::AtLeast(s)),
+                    (Some(s), Some(e), true) => Ok(Self::Range(s, e)),
+                    _ => Err(syn::Error::new_spanned(
+                        &expr,
+                        "unsupported range shape (use `..=N`, `N..`, or `N..=M`)",
+                    )),
+                }
+            }
+            _ => Err(syn::Error::new_spanned(
+                &expr,
+                "expected integer or range (e.g. `64`, `..=128`, `32..`, `32..=64`)",
+            )),
+        }
+    }
 }
 
-#[derive(Debug, Default)]
+fn expr_to_usize(expr: &syn::Expr) -> syn::Result<usize> {
+    match expr {
+        syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(n),
+            ..
+        }) => n.base10_parse(),
+        _ => Err(syn::Error::new_spanned(expr, "expected integer literal")),
+    }
+}
+
+impl darling::FromMeta for SizeConstraint {
+    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
+        match meta {
+            syn::Meta::List(list) => syn::parse2(list.tokens.clone())
+                .map_err(|e| darling::Error::custom(e).with_span(&list.tokens)),
+            other => Err(darling::Error::custom(
+                "expected `size(N)`, `size(..=N)`, `size(N..)`, or `size(N..=M)`",
+            )
+            .with_span(other)),
+        }
+    }
+}
+
+/// Container-level keys without `vis` (which is extracted by a pre-pass
+/// because `pub(crate)` isn't a `syn::Expr`).
+///
+/// Used as a flattened component of `EnumContainerAttrs` and `StructAttrs`.
+/// Each strict-darling struct exposes only the keys it owns; cross-scope
+/// keys produce real darling errors.
+#[derive(Debug, Default, darling::FromMeta)]
+pub struct EnumContainerAttrsInner {
+    #[darling(default)]
+    pub module: Option<crate::utils::MaybeAloneOopsieValue<Ident>>,
+    #[darling(default)]
+    pub suffix: Option<crate::utils::MaybeAloneOopsieValue<String>>,
+    #[darling(default)]
+    pub size: Option<SizeConstraint>,
+    #[darling(default)]
+    pub path: Option<Path>,
+}
+
+#[derive(Debug, Clone)]
 pub enum ModuleSetting {
     /// Module enabled with optional custom name.
     On(Option<Ident>),
     /// Module disabled.
     Off,
-    /// Not specified — use default (on for enums, off for structs).
-    #[default]
-    Default,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone)]
 pub enum SuffixSetting {
     /// No suffix (selector name = variant name).
     Off,
-    /// Default suffix "Oopsie".
-    Default,
     /// Custom suffix.
     Custom(String),
-    /// Not specified — use default (off for enums, "Oopsie" for structs).
-    #[default]
-    Unset,
 }
 
-impl ContainerAttrs {
-    pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
-        let mut result = Self::default();
-        for attr in attrs {
-            if !attr.path().is_ident("oopsie") {
-                continue;
-            }
-            // Special-case `vis = <Visibility>` because `pub` / `pub(crate)`
-            // are keywords and cannot be parsed as `syn::Expr` (which the
-            // generic `Meta::NameValue` parser requires). When the attribute
-            // body looks like `vis = ...` we parse the tail as a `Visibility`
-            // directly and skip the generic Meta path.
-            if let Ok((eaten, rest)) = attr.parse_args_with(parse_vis_prefix)
-                && let Some(vis) = eaten
-            {
-                result.visibility = Some(vis);
-                if rest.is_empty() {
-                    continue;
-                }
-                // Fall through to parse the remaining comma-separated items.
-                let nested = syn::parse::Parser::parse2(
-                    Punctuated::<syn::Meta, Token![,]>::parse_terminated,
-                    rest,
-                )?;
-                for meta in &nested {
-                    result.parse_container_meta(meta)?;
-                }
-                continue;
-            }
-            // Try parsing as Meta items. If the attr starts with a string literal
-            // (short display form), skip it — it's a variant/struct-level attr.
-            let Ok(nested) =
-                attr.parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)
-            else {
-                continue;
-            };
-            for meta in &nested {
-                result.parse_container_meta(meta)?;
-            }
-        }
-        Ok(result)
-    }
-
-    fn parse_container_meta(&mut self, meta: &syn::Meta) -> syn::Result<()> {
-        // Reject typos early. The match below only handles container-only
-        // keys; legitimately variant/field-level keys on a struct container
-        // (where the same `#[oopsie(...)]` provides both container and
-        // variant data) are silently ignored here — `VariantAttrs` /
-        // `FieldAttrs` pick them up on a later pass.
-        let key = meta.path().get_ident().map(ToString::to_string);
-        if !key
-            .as_deref()
-            .is_some_and(|k| KNOWN_CONTAINER_KEYS.contains(&k))
-        {
-            return Err(syn::Error::new_spanned(
-                meta.path(),
-                match key {
-                    Some(name) => format!("unknown oopsie attribute: `{name}`"),
-                    None => "unknown oopsie attribute (non-identifier path)".to_owned(),
-                },
-            ));
-        }
-
-        match meta {
-            syn::Meta::Path(path) => {
-                if path.is_ident("module") {
-                    self.module = ModuleSetting::On(None);
-                } else if path.is_ident("suffix") {
-                    self.suffix = SuffixSetting::Default;
-                }
-                // Other known path-style keys (e.g. `transparent`) are
-                // variant-level and handled by `VariantAttrs`.
-            }
-            syn::Meta::List(list) => {
-                if list.path.is_ident("module") {
-                    // module(name) or module(false)
-                    let content: ModuleContent = syn::parse2(list.tokens.clone())?;
-                    self.module = content.0;
-                } else if list.path.is_ident("suffix") {
-                    let content: SuffixContent = syn::parse2(list.tokens.clone())?;
-                    self.suffix = content.0;
-                } else if list.path.is_ident("size") {
-                    let content: SizeContent = syn::parse2(list.tokens.clone())?;
-                    self.size = Some(content.0);
-                }
-                // Other known list keys (display, provide, help) are
-                // variant-level and handled by `VariantAttrs`.
-            }
-            syn::Meta::NameValue(nv) => {
-                if nv.path.is_ident("vis") {
-                    let vis: Visibility = syn::parse2(expr_to_tokens(&nv.value))?;
-                    self.visibility = Some(vis);
-                } else if nv.path.is_ident("suffix") {
-                    if let Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Str(s),
-                        ..
-                    }) = &nv.value
-                    {
-                        self.suffix = SuffixSetting::Custom(s.value());
-                    } else {
-                        return Err(syn::Error::new_spanned(
-                            &nv.value,
-                            "expected string literal",
-                        ));
-                    }
-                } else if nv.path.is_ident("path") {
-                    if let Expr::Lit(syn::ExprLit {
-                        lit: syn::Lit::Str(s),
-                        ..
-                    }) = &nv.value
-                    {
-                        self.path = Some(s.parse()?);
-                    } else {
-                        return Err(syn::Error::new_spanned(
-                            &nv.value,
-                            "expected string literal",
-                        ));
-                    }
-                }
-                // Other known name-value keys (help, code) are
-                // variant-level and handled by `VariantAttrs`.
-            }
-        }
-        Ok(())
-    }
-
+impl EnumContainerAttrsInner {
     /// Resolve the suffix setting with defaults for the given item kind.
-    /// - Enums: default → `Off` (no suffix, selector name = variant name)
-    /// - Structs: default → `Default` ("Oopsie" suffix, e.g. `ConnOopsie`)
-    pub const fn effective_suffix(&self, is_enum: bool) -> &SuffixSetting {
+    /// - Enums: default → `Off` (selector name = variant name)
+    /// - Structs: default → `Custom("Oopsie")` (e.g. `ConnOopsie`)
+    pub fn effective_suffix(&self, is_enum: bool) -> SuffixSetting {
+        use crate::utils::MaybeAloneOopsieValue as M;
         match &self.suffix {
-            SuffixSetting::Unset => {
+            None => {
                 if is_enum {
-                    &SuffixSetting::Off
+                    SuffixSetting::Off
                 } else {
-                    &SuffixSetting::Default
+                    SuffixSetting::Custom("Oopsie".into())
                 }
             }
-            other => other,
+            Some(M::Alone | M::Bool(true)) => SuffixSetting::Custom("Oopsie".into()),
+            Some(M::Bool(false)) => SuffixSetting::Off,
+            Some(M::Value(s)) => SuffixSetting::Custom(s.clone()),
         }
     }
 
     /// Resolve the module setting with defaults for the given item kind.
+    /// - Enums: default → `On(None)` (auto-named module)
+    /// - Structs: default → `Off`
     pub fn effective_module(&self, is_enum: bool) -> ModuleSetting {
+        use crate::utils::MaybeAloneOopsieValue as M;
         match &self.module {
-            ModuleSetting::Default => {
+            None => {
                 if is_enum {
                     ModuleSetting::On(None)
                 } else {
                     ModuleSetting::Off
                 }
             }
-            other => match other {
-                ModuleSetting::On(name) => ModuleSetting::On(name.clone()),
-                ModuleSetting::Off => ModuleSetting::Off,
-                ModuleSetting::Default => unreachable!(),
-            },
+            Some(M::Alone | M::Bool(true)) => ModuleSetting::On(None),
+            Some(M::Bool(false)) => ModuleSetting::Off,
+            Some(M::Value(name)) => ModuleSetting::On(Some(name.clone())),
         }
+    }
+
+    /// Path override for the `::oopsie` crate (used by `gen_*` to qualify
+    /// trait paths). Defaults to `::oopsie`.
+    pub fn oopsie_path(&self) -> Path {
+        self.path
+            .clone()
+            .unwrap_or_else(|| syn::parse_quote! { ::oopsie })
     }
 }
 
-struct ModuleContent(ModuleSetting);
+/// Outer attribute container for enum types. Flattens
+/// `EnumContainerAttrsInner` plus `vis`.
+///
+/// `vis` uses `SynParse<Visibility>` because `vis(pub(crate))` (the
+/// user-facing form) routes through `Meta::List`, whose raw tokens
+/// `SynParse` parses directly via `syn::Visibility::parse`. The legacy
+/// quoted form `vis = "pub(crate)"` is also accepted as a fallback. The
+/// bare `vis = pub(crate)` form is **not** accepted — `syn::Expr::parse`
+/// rejects `pub` upstream of darling, and there's no FromMeta-side hook
+/// to intercept it.
+#[derive(Debug, Default, darling::FromAttributes)]
+#[darling(attributes(oopsie))]
+#[allow(clippy::needless_continue, clippy::nonminimal_bool)] // darling-generated
+pub struct EnumContainerAttrs {
+    #[darling(flatten)]
+    pub inner: EnumContainerAttrsInner,
+    #[darling(default)]
+    pub vis: Option<crate::utils::SynParse<Visibility>>,
+}
 
-impl Parse for ModuleContent {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.peek(syn::LitBool) {
-            let lit: syn::LitBool = input.parse()?;
-            if lit.value {
-                Ok(Self(ModuleSetting::On(None)))
-            } else {
-                Ok(Self(ModuleSetting::Off))
-            }
-        } else {
-            let ident: Ident = input.parse()?;
-            Ok(Self(ModuleSetting::On(Some(ident))))
-        }
+impl std::ops::Deref for EnumContainerAttrs {
+    type Target = EnumContainerAttrsInner;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
 
-struct SuffixContent(SuffixSetting);
-
-impl Parse for SuffixContent {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        if input.peek(syn::LitBool) {
-            let lit: syn::LitBool = input.parse()?;
-            if lit.value {
-                Ok(Self(SuffixSetting::Default))
-            } else {
-                Ok(Self(SuffixSetting::Off))
-            }
-        } else if input.peek(LitStr) {
-            let s: LitStr = input.parse()?;
-            Ok(Self(SuffixSetting::Custom(s.value())))
-        } else {
-            Err(input.error("expected bool or string literal"))
-        }
+impl EnumContainerAttrs {
+    /// Parse `#[oopsie(...)]` on an enum definition. Strict: unknown keys
+    /// (including variant-only keys like `display`) error.
+    pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
+        use darling::FromAttributes as _;
+        Self::from_attributes(attrs).map_err(syn::Error::from)
     }
-}
 
-struct SizeContent(SizeConstraint);
-
-impl Parse for SizeContent {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        // Try `..=N` first (starts with `..=`)
-        if input.peek(Token![..=]) {
-            let _: Token![..=] = input.parse()?;
-            let lit: LitInt = input.parse()?;
-            let n: usize = lit.base10_parse()?;
-            return Ok(Self(SizeConstraint::AtMost(n)));
-        }
-
-        // Otherwise must start with an integer
-        let lit: LitInt = input.parse()?;
-        let n: usize = lit.base10_parse()?;
-
-        if input.peek(Token![..=]) {
-            // N..=M
-            let _: Token![..=] = input.parse()?;
-            let lit2: LitInt = input.parse()?;
-            let m: usize = lit2.base10_parse()?;
-            Ok(Self(SizeConstraint::Range(n, m)))
-        } else if input.peek(Token![..]) {
-            // N..
-            let _: Token![..] = input.parse()?;
-            Ok(Self(SizeConstraint::AtLeast(n)))
-        } else {
-            // Exact(N)
-            Ok(Self(SizeConstraint::Exact(n)))
-        }
+    /// Unwrap the `SynParse` wrapper to expose the inner `Visibility`.
+    #[inline]
+    pub fn visibility(&self) -> Option<&Visibility> {
+        self.vis.as_deref()
     }
 }
 
 // ─── Variant-level attributes ────────────────────────────────────
 
-#[derive(Debug, Default)]
-pub struct VariantAttrs {
+/// Variant-level keys without `vis` (which is extracted by a pre-pass).
+///
+/// `provide(...)` appears here even though it's logically field-level: the
+/// `#[traced]` macro auto-emits `#[oopsie(provide(...))]` at variant/struct
+/// scope to surface injected backtrace/spantrace fields. Collected as a Vec
+/// because multiple `provide` entries can appear per item.
+#[derive(Debug, Default, darling::FromMeta)]
+pub struct VariantAttrsInner {
+    #[darling(default)]
     pub display: Option<DisplayAttr>,
+    #[darling(default)]
     pub transparent: bool,
+    #[darling(default)]
     pub help: Option<DisplayAttr>,
+    #[darling(default)]
     pub code: Option<String>,
-    pub visibility: Option<Visibility>,
+    #[darling(default, multiple, rename = "provide")]
+    pub provides: Vec<ProvideAttr>,
 }
 
-#[derive(Debug, Clone)]
+/// `display("fmt {}", expr)` / `help("fmt {}", expr)` body: a format string
+/// followed by zero or more comma-separated expression arguments.
+#[derive(Debug, Clone, derive_syn_parse::Parse)]
 pub struct DisplayAttr {
     pub format_str: LitStr,
+    #[call(parse_trailing_exprs)]
     pub args: Vec<Expr>,
 }
 
+fn parse_trailing_exprs(input: ParseStream) -> syn::Result<Vec<Expr>> {
+    let mut out = Vec::new();
+    while input.peek(Token![,]) {
+        let _: Token![,] = input.parse()?;
+        if input.is_empty() {
+            break;
+        }
+        out.push(input.parse()?);
+    }
+    Ok(out)
+}
+
+impl darling::FromMeta for DisplayAttr {
+    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
+        match meta {
+            // `display("fmt", args)` / `help("fmt", args)`
+            syn::Meta::List(list) => syn::parse2(list.tokens.clone())
+                .map_err(|e| darling::Error::custom(e).with_span(&list.tokens)),
+            // `help = "plain"` — zero-arg display
+            syn::Meta::NameValue(nv) => match &nv.value {
+                Expr::Lit(syn::ExprLit {
+                    lit: syn::Lit::Str(s),
+                    ..
+                }) => Ok(Self {
+                    format_str: s.clone(),
+                    args: vec![],
+                }),
+                other => Err(darling::Error::custom("expected string literal").with_span(other)),
+            },
+            syn::Meta::Path(p) => Err(darling::Error::custom("expected value").with_span(p)),
+        }
+    }
+}
+
+/// Outer attribute container for enum variants. Flattens `VariantAttrsInner`
+/// plus `vis`.
+#[derive(Debug, Default, darling::FromAttributes)]
+#[darling(attributes(oopsie))]
+#[allow(clippy::needless_continue, clippy::nonminimal_bool)] // darling-generated
+pub struct VariantAttrs {
+    #[darling(flatten)]
+    pub inner: VariantAttrsInner,
+    #[darling(default)]
+    pub vis: Option<crate::utils::SynParse<Visibility>>,
+}
+
+impl std::ops::Deref for VariantAttrs {
+    type Target = VariantAttrsInner;
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
 impl VariantAttrs {
-    /// Parse variant-level `#[oopsie(...)]` attributes.
+    /// Unwrap the `SynParse` wrapper to expose the inner `Visibility`.
+    #[inline]
+    pub fn visibility(&self) -> Option<&Visibility> {
+        self.vis.as_deref()
+    }
+
+    /// Parse `#[oopsie(...)]` on an enum variant. Strict: unknown keys
+    /// (including container-only keys like `module`) error.
+    ///
+    /// The short-display form `#[oopsie("fmt", args)]` is extracted by
+    /// `extract_short_display` before darling runs (bare `LitStr` first item
+    /// isn't a valid `NestedMeta`). The result is merged into `display`;
+    /// duplicate display (short + long form) errors.
     pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
-        let mut result = Self::default();
-        for attr in attrs {
-            if !attr.path().is_ident("oopsie") {
-                continue;
-            }
-            let nested =
-                attr.parse_args_with(Punctuated::<OopsieVariantMeta, Token![,]>::parse_terminated)?;
-            for item in nested {
-                match item {
-                    OopsieVariantMeta::ShortDisplay(d) => {
-                        result.display = Some(d);
-                    }
-                    OopsieVariantMeta::Display(d) => {
-                        result.display = Some(d);
-                    }
-                    OopsieVariantMeta::Transparent => {
-                        result.transparent = true;
-                    }
-                    OopsieVariantMeta::Help(s) => {
-                        result.help = Some(s);
-                    }
-                    OopsieVariantMeta::Code(s) => {
-                        result.code = Some(s);
-                    }
-                    OopsieVariantMeta::Vis(v) => {
-                        result.visibility = Some(v);
-                    }
-                    OopsieVariantMeta::Module(())
-                    | OopsieVariantMeta::Suffix(())
-                    | OopsieVariantMeta::Path(())
-                    | OopsieVariantMeta::Size(())
-                    | OopsieVariantMeta::Capture
-                    | OopsieVariantMeta::From(())
-                    | OopsieVariantMeta::Provide(()) => {
-                        // Container or field-level attr; skip at variant level
-                    }
-                }
-            }
+        use darling::FromAttributes as _;
+        let (short_display, attrs) = extract_short_display(attrs)?;
+        let mut result = Self::from_attributes(&attrs).map_err(syn::Error::from)?;
+        if let Some(short) = short_display {
+            merge_short_display(&mut result.inner.display, short)?;
         }
         Ok(result)
     }
 }
 
-/// A single item inside `#[oopsie(...)]`.
-#[derive(Debug)]
-enum OopsieVariantMeta {
-    /// Short form: `"format string"` or `"format string", arg1, arg2`
-    ShortDisplay(DisplayAttr),
-    /// Long form: `display("format", args...)`
-    Display(DisplayAttr),
-    /// `transparent`
-    Transparent,
-    /// `help = "..."` or `help("format {}", args...)`
-    Help(DisplayAttr),
-    /// `code = "..."`
-    Code(String),
-    /// `vis = <visibility>`
-    Vis(Visibility),
-    /// `module` / `module(...)` — container level, skipped here
-    Module(()),
-    /// `suffix` / `suffix(...)` — container level, skipped here
-    Suffix(()),
-    /// `path = "..."` — container level, skipped here
-    Path(()),
-    /// `size(...)` — container level, skipped here
-    Size(()),
-    /// `capture` — field level, skipped here
-    Capture,
-    /// `from` / `from(...)` — field level, skipped here
-    From(()),
-    /// `provide(...)` — field level, skipped here
-    Provide(()),
+/// Outer attribute container for `#[derive(Oopsie)]` structs. Structs occupy
+/// both container and variant roles on the same `#[oopsie(...)]` list, so
+/// `container` flattens `EnumContainerAttrsInner` and variant-level fields
+/// are inlined alongside it. Strict: keys outside the union of container +
+/// variant keys produce darling errors.
+///
+/// Darling allows only one `#[darling(flatten)]` per struct (codegen
+/// constraint), so variant fields cannot also be flattened from
+/// `VariantAttrsInner` — they live inline here, duplicating those four
+/// declarations.
+#[derive(Debug, Default, darling::FromAttributes)]
+#[darling(attributes(oopsie))]
+#[allow(clippy::needless_continue, clippy::nonminimal_bool)] // darling-generated
+pub struct StructAttrs {
+    #[darling(flatten)]
+    pub container: EnumContainerAttrsInner,
+    #[darling(default)]
+    pub vis: Option<crate::utils::SynParse<Visibility>>,
+    #[darling(default)]
+    pub display: Option<DisplayAttr>,
+    #[darling(default)]
+    pub transparent: bool,
+    #[darling(default)]
+    pub help: Option<DisplayAttr>,
+    #[darling(default)]
+    pub code: Option<String>,
+    /// See `VariantAttrsInner::provides` for the rationale (struct-level
+    /// `#[oopsie(provide(...))]` from `#[traced]`).
+    #[darling(default, multiple, rename = "provide")]
+    pub provides: Vec<ProvideAttr>,
 }
 
-impl Parse for OopsieVariantMeta {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        // Short form: starts with a string literal, followed by optional format args.
-        // `#[oopsie("format {}", expr)]` is equivalent to `#[oopsie(display("format {}", expr))]`.
-        //
-        // The short form consumes ALL remaining tokens — no other meta items (help, code, etc.)
-        // are allowed alongside it. This prevents confusing ambiguities like:
-        //   `#[oopsie("i need {help}", help = "you")]`
-        // where `help` could be a format arg or a meta keyword.
-        // Use `display(...)` explicitly when combining with other attributes:
-        //   `#[oopsie(display("i need {help}"), help = "you")]`
-        if input.peek(LitStr) {
-            let format_str: LitStr = input.parse()?;
-            let mut args = Vec::new();
-            while input.peek(Token![,]) {
-                let _: Token![,] = input.parse()?;
-                if input.is_empty() {
-                    break;
-                }
-                // Check for meta keywords that indicate the user is mixing
-                // short-form display with other oopsie attributes.
-                if input.peek(Ident) {
-                    let ahead = input.fork();
-                    let ident = ahead.parse::<Ident>()?;
-                    let kw = ident.to_string();
-                    let is_keyword = match kw.as_str() {
-                        "transparent" | "capture" | "backtrace" | "spantrace" => true,
-                        "module" | "suffix" | "from" => true,
-                        "display" | "provide" | "size" => ahead.peek(syn::token::Paren),
-                        "help" | "code" | "vis" | "path" => {
-                            ahead.peek(Token![=]) && !ahead.peek(Token![==])
-                        }
-                        _ => false,
-                    };
-                    if is_keyword {
-                        return Err(syn::Error::new(
-                            ident.span(),
-                            format!(
-                                "`{kw}` cannot be combined with the short display form; \
-                                 use `#[oopsie(display(...), {kw}...)]` instead"
-                            ),
-                        ));
-                    }
-                }
-                let arg: Expr = input.parse()?;
-                args.push(arg);
-            }
-            return Ok(Self::ShortDisplay(DisplayAttr { format_str, args }));
-        }
-
-        // Keyword-based forms
-        let ident: Ident = input.parse()?;
-        let ident_str = ident.to_string();
-
-        match ident_str.as_str() {
-            "display" => {
-                let content;
-                syn::parenthesized!(content in input);
-                let format_str: LitStr = content.parse()?;
-                let mut args = Vec::new();
-                while content.peek(Token![,]) {
-                    let _: Token![,] = content.parse()?;
-                    if content.is_empty() {
-                        break;
-                    }
-                    let arg: Expr = content.parse()?;
-                    args.push(arg);
-                }
-                Ok(Self::Display(DisplayAttr { format_str, args }))
-            }
-            "transparent" => Ok(Self::Transparent),
-            "help" => {
-                if input.peek(syn::token::Paren) {
-                    // help("format {}", arg1, arg2)
-                    let content;
-                    syn::parenthesized!(content in input);
-                    let format_str: LitStr = content.parse()?;
-                    let mut args = Vec::new();
-                    while content.peek(Token![,]) {
-                        let _: Token![,] = content.parse()?;
-                        if content.is_empty() {
-                            break;
-                        }
-                        let arg: Expr = content.parse()?;
-                        args.push(arg);
-                    }
-                    Ok(Self::Help(DisplayAttr { format_str, args }))
-                } else {
-                    // help = "plain string"
-                    let _: Token![=] = input.parse()?;
-                    let lit: LitStr = input.parse()?;
-                    Ok(Self::Help(DisplayAttr {
-                        format_str: lit,
-                        args: vec![],
-                    }))
-                }
-            }
-            "code" => {
-                let _: Token![=] = input.parse()?;
-                let lit: LitStr = input.parse()?;
-                Ok(Self::Code(lit.value()))
-            }
-            "vis" => {
-                let _: Token![=] = input.parse()?;
-                let vis: Visibility = input.parse()?;
-                Ok(Self::Vis(vis))
-            }
-            "module" => {
-                // Skip content if present
-                if input.peek(syn::token::Paren) {
-                    let content;
-                    syn::parenthesized!(content in input);
-                    let _ = content.parse::<proc_macro2::TokenStream>()?;
-                }
-                Ok(Self::Module(()))
-            }
-            "suffix" => {
-                if input.peek(syn::token::Paren) {
-                    let content;
-                    syn::parenthesized!(content in input);
-                    let _ = content.parse::<proc_macro2::TokenStream>()?;
-                } else if input.peek(Token![=]) {
-                    let _: Token![=] = input.parse()?;
-                    let _: LitStr = input.parse()?;
-                }
-                Ok(Self::Suffix(()))
-            }
-            "path" => {
-                let _: Token![=] = input.parse()?;
-                let _: LitStr = input.parse()?;
-                Ok(Self::Path(()))
-            }
-            "size" => {
-                let content;
-                syn::parenthesized!(content in input);
-                let _ = content.parse::<proc_macro2::TokenStream>()?;
-                Ok(Self::Size(()))
-            }
-            "capture" => Ok(Self::Capture),
-            "from" => {
-                if input.peek(syn::token::Paren) {
-                    let content;
-                    syn::parenthesized!(content in input);
-                    let _ = content.parse::<proc_macro2::TokenStream>()?;
-                }
-                Ok(Self::From(()))
-            }
-            "provide" => {
-                let content;
-                syn::parenthesized!(content in input);
-                let _ = content.parse::<proc_macro2::TokenStream>()?;
-                Ok(Self::Provide(()))
-            }
-            _ => Err(syn::Error::new(
-                ident.span(),
-                format!("unknown oopsie attribute: {ident_str}"),
-            )),
-        }
+impl StructAttrs {
+    /// Unwrap the `SynParse` wrapper to expose the inner `Visibility`.
+    #[inline]
+    pub fn visibility(&self) -> Option<&Visibility> {
+        self.vis.as_deref()
     }
+
+    /// Parse `#[oopsie(...)]` on a struct definition. Strict on unknown keys.
+    pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
+        use darling::FromAttributes as _;
+        let (short_display, attrs) = extract_short_display(attrs)?;
+        let mut result = Self::from_attributes(&attrs).map_err(syn::Error::from)?;
+        if let Some(short) = short_display {
+            merge_short_display(&mut result.display, short)?;
+        }
+        Ok(result)
+    }
+}
+
+/// Merge a pre-pass-extracted short-display into the target slot. Errors if
+/// the slot is already populated (long-form `display(...)` from darling).
+fn merge_short_display(target: &mut Option<DisplayAttr>, short: DisplayAttr) -> syn::Result<()> {
+    if target.is_some() {
+        return Err(syn::Error::new_spanned(
+            &short.format_str,
+            "duplicate display: short form and `display(...)` cannot both be specified",
+        ));
+    }
+    *target = Some(short);
+    Ok(())
 }
 
 // ─── Field-level attributes ──────────────────────────────────────
 
 #[expect(clippy::struct_excessive_bools)]
-#[derive(Debug, Default)]
+#[derive(Debug, Default, darling::FromAttributes)]
+#[darling(attributes(oopsie))]
+#[allow(clippy::needless_continue, clippy::nonminimal_bool)] // darling-generated
 pub struct FieldAttrs {
+    #[darling(default)]
     pub from: SourceKind,
+    #[darling(default)]
     pub capture: bool,
+    #[darling(default, multiple)]
     pub provide: Vec<ProvideAttr>,
+    #[darling(default)]
     pub backtrace: bool,
+    #[darling(default)]
     pub spantrace: bool,
+    #[darling(default)]
     pub help: bool,
 }
 
@@ -589,25 +410,111 @@ pub enum SourceKind {
     },
 }
 
-#[derive(Debug, Clone)]
+/// Inner shape for `from(Type, transform)`. Used only as a parsing helper.
+/// The `comma` field is captured by `derive(Parse)` but never read.
+#[derive(derive_syn_parse::Parse)]
+struct SourceKindTransform {
+    ty: Type,
+    #[expect(dead_code)]
+    comma: Token![,],
+    transform: Expr,
+}
+
+impl darling::FromMeta for SourceKind {
+    fn from_word() -> darling::Result<Self> {
+        Ok(Self::Yes)
+    }
+
+    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
+        match meta {
+            syn::Meta::Path(_) => Ok(Self::Yes),
+            syn::Meta::List(list) => {
+                let parsed: SourceKindTransform = syn::parse2(list.tokens.clone())
+                    .map_err(|e| darling::Error::custom(e).with_span(&list.tokens))?;
+                Ok(Self::Transformed {
+                    source_type: Box::new(parsed.ty),
+                    transform: parsed.transform,
+                })
+            }
+            syn::Meta::NameValue(nv) => Err(darling::Error::custom(
+                "`from` does not accept a `= value` form; use `from(Type, transform)`",
+            )
+            .with_span(&nv.value)),
+        }
+    }
+
+    fn from_none() -> Option<Self> {
+        Some(Self::No)
+    }
+}
+
+/// `provide(ref, Type => expr)` or `provide(Type => expr)`.
+///
+/// `ref_kw` is `Some` when the optional `ref` prefix is present. Access via
+/// the `is_ref()` helper for clarity at call sites.
+#[derive(Debug, Clone, derive_syn_parse::Parse)]
 pub struct ProvideAttr {
-    pub is_ref: bool,
+    #[peek(Token![ref])]
+    pub ref_kw: Option<Token![ref]>,
+    /// Syntactic-only — captured by `derive(Parse)`, never read.
+    #[parse_if(ref_kw.is_some())]
+    #[expect(dead_code)]
+    pub ref_comma: Option<Token![,]>,
     pub provided_type: Type,
+    /// Syntactic-only — captured by `derive(Parse)`, never read.
+    #[expect(dead_code)]
+    pub arrow: Token![=>],
     pub expr: Expr,
 }
 
-impl FieldAttrs {
-    pub fn from_field(field: &syn::Field) -> syn::Result<Self> {
-        let mut result = Self::default();
+impl ProvideAttr {
+    #[inline]
+    pub const fn is_ref(&self) -> bool {
+        self.ref_kw.is_some()
+    }
+}
 
-        // Auto-detect source field by name
-        if let Some(ident) = &field.ident
+impl darling::FromMeta for ProvideAttr {
+    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
+        match meta {
+            syn::Meta::List(list) => syn::parse2(list.tokens.clone())
+                .map_err(|e| darling::Error::custom(e).with_span(&list.tokens)),
+            other => Err(darling::Error::custom(
+                "expected `provide(ref, Type => expr)` or `provide(Type => expr)`",
+            )
+            .with_span(other)),
+        }
+    }
+}
+
+impl FieldAttrs {
+    /// Parse `#[oopsie(...)]` on a field, then apply name/type-based
+    /// auto-detection on top:
+    /// - field named `source` → `from = Yes` (unless attrs already set `from`)
+    /// - field named `backtrace`/`back_trace`/`spantrace`/`span_trace`
+    ///   → `capture = true`
+    /// - `backtrace` / `spantrace` flags imply `capture = true`
+    /// - source field whose type is `Box<T>` (non-trait-object) auto-upgrades
+    ///   to `Transformed { source_type: T, transform: Box::new }`
+    pub fn from_field(field: &syn::Field) -> syn::Result<Self> {
+        use darling::FromAttributes as _;
+
+        let mut result = Self::from_attributes(&field.attrs).map_err(syn::Error::from)?;
+
+        // `backtrace` / `spantrace` flags imply `capture`.
+        if result.backtrace || result.spantrace {
+            result.capture = true;
+        }
+
+        // Auto-source by field name (only if no explicit `from`).
+        if matches!(result.from, SourceKind::No)
+            && let Some(ident) = &field.ident
             && ident == "source"
         {
             result.from = SourceKind::Yes;
         }
 
-        // Auto-detect backtrace/spantrace fields by name
+        // Auto-capture for trace fields by name.
         if let Some(ident) = &field.ident
             && (ident == "backtrace"
                 || ident == "back_trace"
@@ -617,45 +524,10 @@ impl FieldAttrs {
             result.capture = true;
         }
 
-        for attr in &field.attrs {
-            if !attr.path().is_ident("oopsie") {
-                continue;
-            }
-            let nested =
-                attr.parse_args_with(Punctuated::<FieldMeta, Token![,]>::parse_terminated)?;
-            for item in nested {
-                match item {
-                    FieldMeta::From(kind) => {
-                        result.from = kind;
-                    }
-                    FieldMeta::Capture => {
-                        result.capture = true;
-                    }
-                    FieldMeta::Provide(p) => {
-                        result.provide.push(*p);
-                    }
-                    FieldMeta::Backtrace => {
-                        result.backtrace = true;
-                        result.capture = true;
-                    }
-                    FieldMeta::Spantrace => {
-                        result.spantrace = true;
-                        result.capture = true;
-                    }
-                    FieldMeta::Help => {
-                        result.help = true;
-                    }
-                }
-            }
-        }
-
-        // Auto-boxing: if field type is Box<T> and source was auto-detected
-        // (SourceKind::Yes), upgrade to Transformed with Box::new — *unless*
-        // T is a trait object. `Box<dyn Trait>` is the user explicitly opting
-        // into trait-object storage; unwrapping it would force the selector's
-        // `Source` to be `?Sized`, which breaks at every use site.
-        // Explicit `from(T, transform)` already sets Transformed, so it takes
-        // precedence.
+        // Auto-boxing: source field with `Box<T>` type (and T is not a trait
+        // object — unwrapping `Box<dyn Trait>` would force `?Sized` on the
+        // selector's `Source` and break every use site). Explicit
+        // `from(T, transform)` already sets `Transformed` and takes precedence.
         if matches!(result.from, SourceKind::Yes)
             && let Some(inner) = crate::traced::field_detect::extract_boxed_inner(&field.ty)
             && !matches!(inner, syn::Type::TraitObject(_))
@@ -674,135 +546,319 @@ impl FieldAttrs {
     }
 }
 
-#[derive(Debug)]
-enum FieldMeta {
-    From(SourceKind),
-    Capture,
-    Provide(Box<ProvideAttr>),
-    Backtrace,
-    Spantrace,
-    Help,
-}
+// ─── Pre-pass helpers ────────────────────────────────────────────
 
-impl Parse for FieldMeta {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let ident: Ident = input.parse()?;
-        match ident.to_string().as_str() {
-            "from" => {
-                if input.peek(syn::token::Paren) {
-                    let content;
-                    syn::parenthesized!(content in input);
-                    let source_type: Type = content.parse()?;
-                    let _: Token![,] = content.parse()?;
-                    let transform: Expr = content.parse()?;
-                    Ok(Self::From(SourceKind::Transformed {
-                        source_type: Box::new(source_type),
-                        transform,
-                    }))
-                } else {
-                    Ok(Self::From(SourceKind::Yes))
-                }
-            }
-            "capture" => Ok(Self::Capture),
-            "backtrace" => Ok(Self::Backtrace),
-            "spantrace" => Ok(Self::Spantrace),
-            "help" => Ok(Self::Help),
-            "provide" => {
-                let content;
-                syn::parenthesized!(content in input);
-                let is_ref = if content.peek(Token![ref]) {
-                    let _: Token![ref] = content.parse()?;
-                    let _: Token![,] = content.parse()?;
-                    true
-                } else {
-                    false
-                };
-                let provided_type: Type = content.parse()?;
-                let _: Token![=>] = content.parse()?;
-                let expr: Expr = content.parse()?;
-                Ok(Self::Provide(Box::new(ProvideAttr {
-                    is_ref,
-                    provided_type,
-                    expr,
-                })))
-            }
-            other => Err(syn::Error::new(
-                ident.span(),
-                format!("unknown oopsie field attribute: {other}"),
-            )),
-        }
-    }
-}
-
-// ─── Helpers ─────────────────────────────────────────────────────
-
-fn expr_to_tokens(expr: &Expr) -> proc_macro2::TokenStream {
-    use quote::ToTokens as _;
-    expr.to_token_stream()
-}
-
-/// Special-case parser for `vis = <Visibility>` at the front of an attribute
-/// list (e.g. `#[oopsie(vis = pub, module(foo))]`).
+/// Extracts the short-display form (`#[oopsie("fmt {}", arg)]`) from a list
+/// of attributes. Returns the synthesized `DisplayAttr` (if any) along with
+/// the remaining attributes (with the short-display attrs removed) so the
+/// caller can hand those to darling.
 ///
-/// Returns `(Some(vis), rest)` if the input starts with `vis = ...`, where
-/// `rest` is the remaining tokens (everything after the visibility). Returns
-/// `(None, rest)` if the input does not begin with `vis =`.
-fn parse_vis_prefix(
-    input: ParseStream,
-) -> syn::Result<(Option<syn::Visibility>, proc_macro2::TokenStream)> {
-    let fork = input.fork();
-    if fork.peek(syn::Ident) {
-        let ident: syn::Ident = fork.parse()?;
-        if ident == "vis" && fork.peek(Token![=]) && !fork.peek(Token![==]) {
-            // Commit to the fork by re-parsing `vis = <Visibility>` on the
-            // real input.
-            let _: syn::Ident = input.parse()?;
-            let _: Token![=] = input.parse()?;
-            let vis: syn::Visibility = input.parse()?;
-            // Optional trailing comma
-            if input.peek(Token![,]) {
-                let _: Token![,] = input.parse()?;
+/// At most one short display per attribute list — a second one is an error.
+/// Short display cannot be combined with meta keywords in the same
+/// `#[oopsie(...)]` (preserves the existing diagnostic).
+pub fn extract_short_display(
+    attrs: &[syn::Attribute],
+) -> syn::Result<(Option<DisplayAttr>, Vec<syn::Attribute>)> {
+    let mut display: Option<DisplayAttr> = None;
+    let mut kept: Vec<syn::Attribute> = Vec::with_capacity(attrs.len());
+    for attr in attrs {
+        if !attr.path().is_ident("oopsie") {
+            kept.push(attr.clone());
+            continue;
+        }
+        // Parse the body: if it starts with a string literal, consume it as a
+        // short-display form; otherwise leave the attribute for darling.
+        let parsed: Option<DisplayAttr> =
+            attr.parse_args_with(|input: ParseStream| -> syn::Result<Option<DisplayAttr>> {
+                if input.peek(LitStr) {
+                    Ok(Some(parse_short_display_body(input)?))
+                } else {
+                    // Consume the rest so parse_args_with succeeds; the
+                    // attribute is preserved for darling to parse later.
+                    let _: proc_macro2::TokenStream = input.parse()?;
+                    Ok(None)
+                }
+            })?;
+        match parsed {
+            Some(d) => {
+                if display.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        attr,
+                        "at most one short-display form per item; use `display(...)` if combining",
+                    ));
+                }
+                display = Some(d);
             }
-            let rest = input.parse::<proc_macro2::TokenStream>()?;
-            return Ok((Some(vis), rest));
+            None => kept.push(attr.clone()),
         }
     }
-    let rest = input.parse::<proc_macro2::TokenStream>()?;
-    Ok((None, rest))
+    Ok((display, kept))
+}
+
+/// Body parser for the short-display form. Same shape as `DisplayAttr::parse`
+/// but rejects any trailing meta keywords with a precise diagnostic.
+fn parse_short_display_body(input: ParseStream) -> syn::Result<DisplayAttr> {
+    let format_str: LitStr = input.parse()?;
+    let mut args = Vec::new();
+    while input.peek(Token![,]) {
+        let _: Token![,] = input.parse()?;
+        if input.is_empty() {
+            break;
+        }
+        // Reject meta-keyword tails so the short form doesn't silently swallow
+        // a misplaced `help = ...` / `transparent` / etc.
+        if input.peek(Ident) {
+            let ahead = input.fork();
+            let ident = ahead.parse::<Ident>()?;
+            let kw = ident.to_string();
+            let is_keyword = match kw.as_str() {
+                "transparent" | "capture" | "backtrace" | "spantrace" => true,
+                "module" | "suffix" | "from" => true,
+                "display" | "provide" | "size" => ahead.peek(syn::token::Paren),
+                "help" | "code" | "vis" | "path" => {
+                    ahead.peek(Token![=]) && !ahead.peek(Token![==])
+                }
+                _ => false,
+            };
+            if is_keyword {
+                return Err(syn::Error::new(
+                    ident.span(),
+                    format!(
+                        "`{kw}` cannot be combined with the short display form; \
+                         use `#[oopsie(display(...), {kw}...)]` instead"
+                    ),
+                ));
+            }
+        }
+        args.push(input.parse()?);
+    }
+    Ok(DisplayAttr { format_str, args })
 }
 
 #[cfg(test)]
 mod tests {
+    use darling::FromMeta as _;
+    use syn::parse_quote;
+
     use super::*;
 
-    fn parse_size(tokens: proc_macro2::TokenStream) -> syn::Result<SizeConstraint> {
-        let content: SizeContent = syn::parse2(tokens)?;
-        Ok(content.0)
+    // ── SizeConstraint ──────────────────────────────────────────────
+
+    #[test]
+    fn size_constraint_exact() {
+        let meta: syn::Meta = parse_quote!(size(64));
+        assert_eq!(
+            SizeConstraint::from_meta(&meta).unwrap(),
+            SizeConstraint::Exact(64)
+        );
     }
 
     #[test]
-    fn test_size_exact() {
-        let result = parse_size(quote::quote! { 64 }).unwrap();
-        assert_eq!(result, SizeConstraint::Exact(64));
+    fn size_constraint_at_most() {
+        let meta: syn::Meta = parse_quote!(size(..=128));
+        assert_eq!(
+            SizeConstraint::from_meta(&meta).unwrap(),
+            SizeConstraint::AtMost(128)
+        );
     }
 
     #[test]
-    fn test_size_at_most() {
-        let result = parse_size(quote::quote! { ..=128 }).unwrap();
-        assert_eq!(result, SizeConstraint::AtMost(128));
+    fn size_constraint_at_least() {
+        let meta: syn::Meta = parse_quote!(size(32..));
+        assert_eq!(
+            SizeConstraint::from_meta(&meta).unwrap(),
+            SizeConstraint::AtLeast(32)
+        );
     }
 
     #[test]
-    fn test_size_at_least() {
-        let result = parse_size(quote::quote! { 32.. }).unwrap();
-        assert_eq!(result, SizeConstraint::AtLeast(32));
+    fn size_constraint_range() {
+        let meta: syn::Meta = parse_quote!(size(32..=64));
+        assert_eq!(
+            SizeConstraint::from_meta(&meta).unwrap(),
+            SizeConstraint::Range(32, 64)
+        );
     }
 
     #[test]
-    fn test_size_range() {
-        let result = parse_size(quote::quote! { 32..=64 }).unwrap();
-        assert_eq!(result, SizeConstraint::Range(32, 64));
+    fn size_constraint_name_value_rejected() {
+        let meta: syn::Meta = parse_quote!(size = 64);
+        SizeConstraint::from_meta(&meta).unwrap_err();
     }
+
+    // ── DisplayAttr ─────────────────────────────────────────────────
+
+    #[test]
+    fn display_attr_format_only() {
+        let meta: syn::Meta = parse_quote!(display("hello"));
+        let d = DisplayAttr::from_meta(&meta).unwrap();
+        assert_eq!(d.format_str.value(), "hello");
+        assert!(d.args.is_empty());
+    }
+
+    #[test]
+    fn display_attr_format_with_one_arg() {
+        let meta: syn::Meta = parse_quote!(display("hello {}", name));
+        let d = DisplayAttr::from_meta(&meta).unwrap();
+        assert_eq!(d.format_str.value(), "hello {}");
+        assert_eq!(d.args.len(), 1);
+    }
+
+    #[test]
+    fn display_attr_format_with_multiple_args() {
+        let meta: syn::Meta = parse_quote!(display("{} and {}", a, b));
+        let d = DisplayAttr::from_meta(&meta).unwrap();
+        assert_eq!(d.args.len(), 2);
+    }
+
+    #[test]
+    fn display_attr_with_non_trivial_expr_args() {
+        let meta: syn::Meta = parse_quote!(display("{} and {}", self.0, foo.bar()));
+        let d = DisplayAttr::from_meta(&meta).unwrap();
+        assert_eq!(d.args.len(), 2);
+    }
+
+    #[test]
+    fn display_attr_name_value_string_form() {
+        // `help = "plain"` builds a zero-arg DisplayAttr.
+        let meta: syn::Meta = parse_quote!(help = "plain");
+        let d = DisplayAttr::from_meta(&meta).unwrap();
+        assert_eq!(d.format_str.value(), "plain");
+        assert!(d.args.is_empty());
+    }
+
+    // ── SourceKind ──────────────────────────────────────────────────
+
+    #[test]
+    fn source_kind_word_is_yes() {
+        let meta: syn::Meta = parse_quote!(from);
+        assert!(matches!(
+            SourceKind::from_meta(&meta).unwrap(),
+            SourceKind::Yes
+        ));
+    }
+
+    #[test]
+    fn source_kind_with_transform() {
+        let meta: syn::Meta = parse_quote!(from(MyType, MyType::from));
+        match SourceKind::from_meta(&meta).unwrap() {
+            SourceKind::Transformed {
+                source_type,
+                transform: _,
+            } => {
+                let s = quote::quote! { #source_type }.to_string();
+                assert!(s.contains("MyType"));
+            }
+            other => panic!("expected Transformed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn source_kind_missing_transform_rejected() {
+        let meta: syn::Meta = parse_quote!(from(MyType));
+        SourceKind::from_meta(&meta).unwrap_err();
+    }
+
+    #[test]
+    fn source_kind_name_value_rejected() {
+        let meta: syn::Meta = parse_quote!(from = "X");
+        SourceKind::from_meta(&meta).unwrap_err();
+    }
+
+    #[test]
+    fn source_kind_from_none_is_no() {
+        assert!(matches!(SourceKind::from_none().unwrap(), SourceKind::No));
+    }
+
+    // ── ProvideAttr ─────────────────────────────────────────────────
+
+    #[test]
+    fn provide_attr_value_form() {
+        let meta: syn::Meta = parse_quote!(provide(MyType => self.value));
+        let p = ProvideAttr::from_meta(&meta).unwrap();
+        assert!(!p.is_ref());
+    }
+
+    #[test]
+    fn provide_attr_ref_form() {
+        let meta: syn::Meta = parse_quote!(provide(ref, MyType => self.value.as_ref()));
+        let p = ProvideAttr::from_meta(&meta).unwrap();
+        assert!(p.is_ref());
+    }
+
+    #[test]
+    fn provide_attr_missing_arrow_rejected() {
+        let meta: syn::Meta = parse_quote!(provide(MyType));
+        ProvideAttr::from_meta(&meta).unwrap_err();
+    }
+
+    // ── extract_short_display ───────────────────────────────────────
+
+    #[test]
+    fn short_display_extracts_simple_string() {
+        let attrs: Vec<syn::Attribute> = parse_quote! {
+            #[oopsie("simple message")]
+        };
+        let (display, kept) = extract_short_display(&attrs).unwrap();
+        let d = display.expect("expected a display attr");
+        assert_eq!(d.format_str.value(), "simple message");
+        assert!(d.args.is_empty());
+        assert!(kept.is_empty());
+    }
+
+    #[test]
+    fn short_display_extracts_with_args() {
+        let attrs: Vec<syn::Attribute> = parse_quote! {
+            #[oopsie("fmt {}", arg)]
+        };
+        let (display, _kept) = extract_short_display(&attrs).unwrap();
+        let d = display.expect("expected a display attr");
+        assert_eq!(d.format_str.value(), "fmt {}");
+        assert_eq!(d.args.len(), 1);
+    }
+
+    #[test]
+    fn short_display_rejects_keyword_tail() {
+        let attrs: Vec<syn::Attribute> = parse_quote! {
+            #[oopsie("fmt {}", help = "X")]
+        };
+        extract_short_display(&attrs).unwrap_err();
+    }
+
+    #[test]
+    fn short_display_keeps_long_form_attrs() {
+        let attrs: Vec<syn::Attribute> = parse_quote! {
+            #[oopsie(display("fmt"), help = "X")]
+        };
+        let (display, kept) = extract_short_display(&attrs).unwrap();
+        assert!(display.is_none());
+        assert_eq!(kept.len(), 1);
+    }
+
+    #[test]
+    fn short_display_rejects_two() {
+        let attrs: Vec<syn::Attribute> = parse_quote! {
+            #[oopsie("first")]
+            #[oopsie("second")]
+        };
+        extract_short_display(&attrs).unwrap_err();
+    }
+
+    #[test]
+    fn short_display_passes_through_non_oopsie_attrs() {
+        let attrs: Vec<syn::Attribute> = parse_quote! {
+            #[other(stuff)]
+            #[oopsie("display me")]
+            #[cfg(feature = "x")]
+        };
+        let (display, kept) = extract_short_display(&attrs).unwrap();
+        assert!(display.is_some());
+        assert_eq!(kept.len(), 2);
+    }
+
+    // Typo rejection is now done by darling itself (strict mode on
+    // `EnumContainerAttrs` / `VariantAttrs` / `StructAttrs`). Coverage moved
+    // to the per-scope `from_attrs` integration paths.
 }
 
 /// Categorized fields for a variant/struct.

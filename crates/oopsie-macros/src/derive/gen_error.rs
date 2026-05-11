@@ -2,11 +2,9 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::parse::{Parse, ParseStream};
-use syn::punctuated::Punctuated;
-use syn::{DeriveInput, Expr, Token, Type};
+use syn::{DeriveInput, Type};
 
-use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr, VariantAttrs};
+use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr, StructAttrs, VariantAttrs};
 
 /// Generate `std::error::Error` impl for an enum.
 pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Result<TokenStream2> {
@@ -82,8 +80,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         }
 
         // Provide from variant-level provide attrs (auto error code from #[traced])
-        let variant_provides = parse_item_level_provides(&variant.attrs)?;
-        for provide_attr in &variant_provides {
+        for provide_attr in &variant_attrs.provides {
             provide_stmts.push(gen_provide_call(provide_attr));
         }
 
@@ -145,7 +142,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             });
         } else {
             // Check for auto-generated code from #[traced] provide attrs
-            for provide_attr in &variant_provides {
+            for provide_attr in &variant_attrs.provides {
                 if is_error_code_provide(provide_attr) {
                     let expr = &provide_attr.expr;
                     code_arms.push(quote! {
@@ -272,7 +269,11 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
 }
 
 /// Generate `std::error::Error` impl for a struct.
-pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Result<TokenStream2> {
+pub fn gen_struct_error(
+    input: &DeriveInput,
+    attrs: &StructAttrs,
+    oopsie_path: &syn::Path,
+) -> syn::Result<TokenStream2> {
     let struct_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -281,7 +282,7 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
     };
 
     let categorized = CategorizedFields::from_fields(&data.fields)?;
-    let variant_attrs = VariantAttrs::from_attrs(&input.attrs)?;
+    let variant_attrs = attrs;
 
     let source_body = if let Some(source_field) = &categorized.source {
         let source_ident = &source_field.ident;
@@ -324,8 +325,7 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
     }
 
     // Struct-level provides (from #[oopsie(provide(...))] on the struct)
-    let struct_provides = parse_item_level_provides(&input.attrs)?;
-    for provide_attr in &struct_provides {
+    for provide_attr in &attrs.provides {
         provide_stmts.push(gen_provide_call(provide_attr));
     }
 
@@ -391,7 +391,7 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
     } else {
         // Check for auto-generated code from #[traced] provide attrs
         let mut code_expr = None;
-        for provide_attr in &struct_provides {
+        for provide_attr in &attrs.provides {
             if is_error_code_provide(provide_attr) {
                 code_expr = Some(&provide_attr.expr);
                 break;
@@ -470,7 +470,7 @@ fn gen_help_provide(help: &DisplayAttr, oopsie_path: &syn::Path) -> TokenStream2
 fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
     let ty = &attr.provided_type;
     let expr = &attr.expr;
-    if attr.is_ref {
+    if attr.is_ref() {
         quote! { request.provide_ref_with::<#ty>(|| #expr); }
     } else {
         quote! { request.provide_value_with::<#ty>(|| #expr); }
@@ -486,61 +486,6 @@ fn is_error_code_provide(attr: &ProvideAttr) -> bool {
         return last_seg.ident == "ErrorCode";
     }
     false
-}
-
-/// Parse `#[oopsie(provide(...))]` attributes from struct/variant-level attributes.
-///
-/// These are emitted by the `#[traced]` attribute macro for backtrace, spantrace,
-/// and auto-generated error codes. The format is:
-/// - `#[oopsie(provide(ref, Type => expr))]` for ref provides
-/// - `#[oopsie(provide(Type => expr))]` for value provides
-fn parse_item_level_provides(attrs: &[syn::Attribute]) -> syn::Result<Vec<ProvideAttr>> {
-    let mut provides = Vec::new();
-    for attr in attrs {
-        if !attr.path().is_ident("oopsie") {
-            continue;
-        }
-        // Try to parse the attr content. Skip if it doesn't parse as meta items
-        // (e.g., short display form like `#[oopsie("display string")]`).
-        let Ok(nested) = attr.parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)
-        else {
-            continue;
-        };
-        for meta in &nested {
-            if let syn::Meta::List(list) = meta
-                && list.path.is_ident("provide")
-            {
-                let provide: ProvideContent = syn::parse2(list.tokens.clone())?;
-                provides.push(provide.0);
-            }
-        }
-    }
-    Ok(provides)
-}
-
-/// Helper to parse the content of `provide(...)`.
-struct ProvideContent(ProvideAttr);
-
-impl Parse for ProvideContent {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        // Check for `ref` keyword. Note: `ref` is a Rust keyword, so we must
-        // peek for Token![ref] rather than Ident.
-        let is_ref = if input.peek(Token![ref]) {
-            let _: Token![ref] = input.parse()?;
-            let _: Token![,] = input.parse()?;
-            true
-        } else {
-            false
-        };
-        let provided_type: Type = input.parse()?;
-        let _: Token![=>] = input.parse()?;
-        let expr: Expr = input.parse()?;
-        Ok(Self(ProvideAttr {
-            is_ref,
-            provided_type,
-            expr,
-        }))
-    }
 }
 
 fn collect_provide_field_names(categorized: &CategorizedFields) -> Vec<&syn::Ident> {

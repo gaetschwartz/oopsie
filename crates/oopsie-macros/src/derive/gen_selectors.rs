@@ -4,19 +4,21 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{DeriveInput, Ident};
 
-use super::parse::{CategorizedFields, ContainerAttrs, SourceKind, SuffixSetting, VariantAttrs};
+use super::parse::{
+    CategorizedFields, EnumContainerAttrs, SourceKind, StructAttrs, SuffixSetting, VariantAttrs,
+};
 
 /// Generate context selectors for all variants of an enum.
 pub fn gen_enum_selectors(
     input: &DeriveInput,
-    container: &ContainerAttrs,
+    container: &EnumContainerAttrs,
     oopsie_path: &syn::Path,
 ) -> syn::Result<Vec<TokenStream2>> {
     let enum_ident = &input.ident;
     let (_, ty_generics, _) = input.generics.split_for_impl();
     let vis = container
-        .visibility
-        .clone()
+        .visibility()
+        .cloned()
         .unwrap_or_else(|| syn::parse_quote! { pub(crate) });
 
     let syn::Data::Enum(data) = &input.data else {
@@ -83,10 +85,10 @@ pub fn gen_enum_selectors(
             continue;
         }
 
-        let selector_ident = selector_name(variant_ident, container.effective_suffix(true));
+        let selector_ident = selector_name(variant_ident, &container.effective_suffix(true));
         let selector_vis = variant_attrs
-            .visibility
-            .clone()
+            .visibility()
+            .cloned()
             .unwrap_or_else(|| vis.clone());
 
         let has_source = categorized.source.is_some();
@@ -180,15 +182,18 @@ pub fn gen_enum_selectors(
 /// Generate context selector for a struct error.
 pub fn gen_struct_selector(
     input: &DeriveInput,
-    container: &ContainerAttrs,
+    attrs: &StructAttrs,
     oopsie_path: &syn::Path,
 ) -> syn::Result<TokenStream2> {
     let struct_ident = &input.ident;
-    let vis = container
-        .visibility
-        .clone()
+    let vis = attrs
+        .visibility()
+        .cloned()
         .unwrap_or_else(|| syn::parse_quote! { pub(crate) });
-    let variant_attrs = VariantAttrs::from_attrs(&input.attrs)?;
+    // Variant-level fields are inlined on `StructAttrs` (darling allows only
+    // one flatten per derive); aliasing makes downstream field access read
+    // naturally as `variant_attrs.transparent` etc.
+    let variant_attrs = attrs;
 
     let syn::Data::Struct(data) = &input.data else {
         unreachable!()
@@ -232,7 +237,7 @@ pub fn gen_struct_selector(
         return Ok(TokenStream2::new());
     }
 
-    let selector_ident = selector_name(struct_ident, container.effective_suffix(false));
+    let selector_ident = selector_name(struct_ident, &attrs.container.effective_suffix(false));
     let has_source = categorized.source.is_some();
     let user_fields = &categorized.user_fields;
 
@@ -305,8 +310,7 @@ fn selector_name(base: &Ident, suffix: &SuffixSetting) -> Ident {
         .filter(|s| !s.is_empty())
         .unwrap_or(&base_str);
     match suffix {
-        SuffixSetting::Off | SuffixSetting::Unset => Ident::new(stripped, base.span()),
-        SuffixSetting::Default => format_ident!("{}Oopsie", stripped),
+        SuffixSetting::Off => Ident::new(stripped, base.span()),
         SuffixSetting::Custom(s) => format_ident!("{}{}", stripped, s),
     }
 }

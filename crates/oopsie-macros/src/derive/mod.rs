@@ -14,15 +14,20 @@ pub use self::gen_display::{gen_enum_display, gen_struct_display};
 pub use self::gen_error::{gen_enum_error, gen_struct_error};
 pub use self::gen_module::wrap_in_module;
 pub use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
-pub use self::parse::{ContainerAttrs, SizeConstraint};
+pub use self::parse::{EnumContainerAttrs, SizeConstraint, StructAttrs};
 
 pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     let input: DeriveInput = syn::parse2(input)?;
-    let container_attrs = ContainerAttrs::from_attrs(&input.attrs)?;
 
     match &input.data {
-        syn::Data::Enum(_) => expand_enum(&input, &container_attrs),
-        syn::Data::Struct(_) => expand_struct(&input, &container_attrs),
+        syn::Data::Enum(_) => {
+            let attrs = EnumContainerAttrs::from_attrs(&input.attrs)?;
+            expand_enum(&input, &attrs)
+        }
+        syn::Data::Struct(_) => {
+            let attrs = StructAttrs::from_attrs(&input.attrs)?;
+            expand_struct(&input, &attrs)
+        }
         syn::Data::Union(_) => Err(syn::Error::new_spanned(
             input,
             "#[derive(Oopsie)] cannot be applied to unions",
@@ -45,11 +50,8 @@ fn check_no_generics(input: &DeriveInput) -> syn::Result<()> {
     ))
 }
 
-pub fn oopsie_path(container: &ContainerAttrs) -> syn::Path {
-    container
-        .path
-        .clone()
-        .unwrap_or_else(|| parse_quote! { ::oopsie })
+pub fn oopsie_path_from(path: Option<&syn::Path>) -> syn::Path {
+    path.cloned().unwrap_or_else(|| parse_quote! { ::oopsie })
 }
 
 fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenStream2 {
@@ -106,21 +108,18 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
     }
 }
 
-pub fn expand_enum(
-    input: &DeriveInput,
-    container_attrs: &ContainerAttrs,
-) -> syn::Result<TokenStream2> {
+pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Result<TokenStream2> {
     check_no_generics(input)?;
-    let path = oopsie_path(container_attrs);
-    let selectors = gen_enum_selectors(input, container_attrs, &path)?;
+    let path = oopsie_path_from(attrs.path.as_ref());
+    let selectors = gen_enum_selectors(input, attrs, &path)?;
     let display = gen_enum_display(input)?;
     let error = gen_enum_error(input, &path)?;
 
     // Wrap selectors in module if enabled
-    let effective_module = container_attrs.effective_module(true);
+    let effective_module = attrs.effective_module(true);
     let wrapped_selectors = wrap_in_module(&effective_module, &input.ident, &selectors);
 
-    let size_assert = container_attrs
+    let size_assert = attrs
         .size
         .as_ref()
         .map(|c| gen_size_assertion(&input.ident, c));
@@ -133,17 +132,15 @@ pub fn expand_enum(
     })
 }
 
-pub fn expand_struct(
-    input: &DeriveInput,
-    container_attrs: &ContainerAttrs,
-) -> syn::Result<TokenStream2> {
+pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<TokenStream2> {
     check_no_generics(input)?;
-    let path = oopsie_path(container_attrs);
-    let selector = gen_struct_selector(input, container_attrs, &path)?;
-    let display = gen_struct_display(input)?;
-    let error = gen_struct_error(input, &path)?;
+    let path = oopsie_path_from(attrs.container.path.as_ref());
+    let selector = gen_struct_selector(input, attrs, &path)?;
+    let display = gen_struct_display(input, attrs)?;
+    let error = gen_struct_error(input, attrs, &path)?;
 
-    let size_assert = container_attrs
+    let size_assert = attrs
+        .container
         .size
         .as_ref()
         .map(|c| gen_size_assertion(&input.ident, c));
@@ -188,7 +185,7 @@ mod tests {
     #[test]
     fn test_derive_struct_simple() {
         let input = quote! {
-            #[oopsie(vis = pub(crate))]
+            #[oopsie(vis(pub(crate)))]
             #[oopsie(suffix)]
             #[oopsie(path = "crate")]
             #[oopsie("Test error: {message}")]
@@ -206,7 +203,7 @@ mod tests {
     #[test]
     fn test_derive_struct_with_provide() {
         let input = quote! {
-            #[oopsie(vis = pub(crate))]
+            #[oopsie(vis(pub(crate)))]
             #[oopsie(suffix)]
             #[oopsie(path = "crate")]
             #[oopsie("Test error: {message}")]
@@ -226,7 +223,7 @@ mod tests {
     fn test_derive_enum_with_transparent() {
         let input = quote! {
             #[oopsie(module(error_with_span_trace_oopsies))]
-            #[oopsie(vis = pub(crate))]
+            #[oopsie(vis(pub(crate)))]
             #[oopsie(path = "crate")]
             pub enum ErrorWithSpanTrace {
                 #[oopsie(display("Inner error happened"), transparent)]

@@ -14,7 +14,7 @@ pub fn wrap_in_module(
     tokens: &[TokenStream2],
 ) -> TokenStream2 {
     match module_setting {
-        ModuleSetting::Off | ModuleSetting::Default => {
+        ModuleSetting::Off => {
             // No wrapping
             quote! { #(#tokens)* }
         }
