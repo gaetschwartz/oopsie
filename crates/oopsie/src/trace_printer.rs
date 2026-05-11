@@ -51,6 +51,11 @@ pub trait SpanTraceProvider {
 
 impl BacktraceProvider for crate::BackTrace {
     fn frames(&self) -> Vec<BacktraceFrame> {
+        // Filter `backtrace`-crate capture frames here too (same as in
+        // `oopsie_core::backtrace::BackTrace::Debug` and
+        // `erased_oopsie::ErasedBackTrace::from_backtrace`) so the colored
+        // and no-colors rendering paths produce the same shape across
+        // platforms.
         self.inner()
             .frames()
             .iter()
@@ -63,6 +68,9 @@ impl BacktraceProvider for crate::BackTrace {
                     lineno: sym.lineno(),
                     colno: sym.colno(),
                 })
+            })
+            .filter(|f| {
+                !oopsie_core::is_internal_capture_frame(f.name.as_deref(), f.filename.as_deref())
             })
             .collect()
     }

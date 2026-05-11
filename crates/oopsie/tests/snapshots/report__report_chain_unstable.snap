@@ -8,33 +8,23 @@ Error[report::OuterError]: Outer error
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   0: backtrace::backtrace::libunwind::trace
-             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
-      backtrace::backtrace::trace_unsynchronized::<<backtrace::capture::Backtrace>::create::{closure#0}>
-             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-   1: backtrace::backtrace::trace::<<backtrace::capture::Backtrace>::create::{closure#0}>
-             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-   2: <backtrace::capture::Backtrace>::create
-             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-   3: <backtrace::capture::Backtrace>::new
-             at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-   4: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
+   0: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
-   5: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture
+   1: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/traits.rs:[LOC]
-   6: <report::TestOopsie<&str>>::build
+   2: <report::TestOopsie<&str>>::build
              at tests/report.rs:[LOC]
-   7: report::test_report_chain
+   3: report::test_report_chain
              at tests/report.rs:[LOC]
-   8: report::test_report_chain::{closure#0}
+   4: report::test_report_chain::{closure#0}
              at tests/report.rs:[LOC]
-   9: <report::test_report_chain::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+   5: <report::test_report_chain::{closure#0} as core::ops::function::FnOnce<()>>::call_once
              at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
-  10: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
+   6: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
              at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
       test::__rust_begin_short_backtrace::<core::result::Result<(), alloc::string::String>, fn() -> core::result::Result<(), alloc::string::String>>
              at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
-  11: test::run_test_in_process::{closure#0}
+   7: test::run_test_in_process::{closure#0}
              at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
       <core::panic::unwind_safe::AssertUnwindSafe<test::run_test_in_process::{closure#0}> as core::ops::function::FnOnce<()>>::call_once
              at /rustc/[HASH]/library/core/src/panic/unwind_safe.rs:[LOC]
@@ -48,11 +38,11 @@ Error[report::OuterError]: Outer error
              at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
       test::run_test::{closure#0}
              at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
-  12: test::run_test::{closure#1}
+   8: test::run_test::{closure#1}
              at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
       std::sys::backtrace::__rust_begin_short_backtrace::<test::run_test::{closure#1}, ()>
              at /rustc/[HASH]/library/std/src/sys/backtrace.rs:[LOC]
-  13: std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}
+   9: std::thread::lifecycle::spawn_unchecked::<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}
              at /rustc/[HASH]/library/std/src/thread/lifecycle.rs:[LOC]
       <core::panic::unwind_safe::AssertUnwindSafe<std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1}::{closure#0}> as core::ops::function::FnOnce<()>>::call_once
              at /rustc/[HASH]/library/core/src/panic/unwind_safe.rs:[LOC]
@@ -66,8 +56,8 @@ Error[report::OuterError]: Outer error
              at /rustc/[HASH]/library/std/src/thread/lifecycle.rs:[LOC]
       <std::thread::lifecycle::spawn_unchecked<test::run_test::{closure#1}, ()>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
              at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
-  14: <alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce<()>>::call_once
+  10: <alloc::boxed::Box<dyn core::ops::function::FnOnce<(), Output = ()> + core::marker::Send> as core::ops::function::FnOnce<()>>::call_once
              at /rustc/[HASH]/library/alloc/src/boxed.rs:[LOC]
       <std::sys::thread::unix::Thread>::new::thread_start
              at /rustc/[HASH]/library/std/src/sys/thread/unix.rs:[LOC]
-  15: __pthread_cond_wait
+  11: __pthread_cond_wait

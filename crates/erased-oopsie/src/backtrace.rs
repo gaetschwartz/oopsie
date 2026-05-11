@@ -22,6 +22,11 @@ pub struct ErasedFrame {
 
 impl ErasedBackTrace {
     /// Create an `ErasedBackTrace` from a live `BackTrace`.
+    ///
+    /// Frames belonging to the `backtrace` crate's own capture machinery
+    /// (`backtrace::backtrace::*` and `<backtrace::capture::*>::*`) are
+    /// stripped — those are platform/toolchain-dependent implementation
+    /// detail, never user-relevant.
     #[must_use]
     pub fn from_backtrace(bt: &oopsie_core::BackTrace) -> Self {
         let frames = bt
@@ -35,6 +40,9 @@ impl ErasedBackTrace {
                     line: sym.lineno(),
                     column: sym.colno(),
                 })
+            })
+            .filter(|f| {
+                !oopsie_core::is_internal_capture_frame(f.name.as_deref(), f.filename.as_deref())
             })
             .collect();
         Self { frames }

@@ -25,14 +25,74 @@ impl crate::CaptureExt for BackTrace {
 impl color_backtrace::Backtrace for BackTrace {
     #[inline]
     fn frames(&self) -> Vec<color_backtrace::Frame> {
-        color_backtrace::Backtrace::frames(&self.0)
+        let mut frames = color_backtrace::Backtrace::frames(&self.0);
+        frames.retain(|f| !is_internal_capture_frame(f.name.as_deref(), f.filename.as_deref()));
+        frames
     }
 }
 
+/// Returns `true` for frames belonging to the `backtrace` crate's own
+/// capture machinery (`backtrace::backtrace::*`, `<backtrace::capture::*>::*`).
+///
+/// These frames are platform/toolchain dependent: macOS captures them,
+/// Linux inlines them away. They're never user-relevant — the user wants
+/// the stack from *their* code, not the implementation of the capture
+/// mechanism. Filtering them at the source means `Report`, `ErasedError`,
+/// and any future consumer all see a stable backtrace shape.
+pub fn is_internal_capture_frame(name: Option<&str>, filename: Option<&std::path::Path>) -> bool {
+    if let Some(n) = name
+        && (n.starts_with("backtrace::") || n.starts_with("<backtrace::"))
+    {
+        return true;
+    }
+    if let Some(p) = filename {
+        // Path components are the cleanest match: avoids false positives on
+        // e.g. `/home/.../my-backtrace-experiments/...`.
+        for component in p.components() {
+            if let std::path::Component::Normal(s) = component
+                && let Some(s) = s.to_str()
+                && s.starts_with("backtrace-")
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 impl fmt::Debug for BackTrace {
-    #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.0, f)
+        // Strip backtrace-crate capture frames so the rendered backtrace is
+        // identical across platforms (macOS captures them; Linux inlines
+        // them away). We rebuild a `backtrace::Backtrace` from the filtered
+        // frame vec to reuse the upstream Debug formatter verbatim.
+        let primary_name = |frame: &backtrace::BacktraceFrame| -> Option<String> {
+            frame
+                .symbols()
+                .iter()
+                .next()
+                .and_then(|s| s.name().map(|n| n.to_string()))
+        };
+        let primary_filename = |frame: &backtrace::BacktraceFrame| {
+            frame
+                .symbols()
+                .iter()
+                .next()
+                .and_then(|s| s.filename().map(std::borrow::ToOwned::to_owned))
+        };
+        let kept: Vec<backtrace::BacktraceFrame> = self
+            .0
+            .frames()
+            .iter()
+            .filter(|frame| {
+                let name = primary_name(frame);
+                let filename = primary_filename(frame);
+                !is_internal_capture_frame(name.as_deref(), filename.as_deref())
+            })
+            .cloned()
+            .collect();
+        let bt = backtrace::Backtrace::from(kept);
+        fmt::Debug::fmt(&bt, f)
     }
 }
 

@@ -39,36 +39,6 @@ expression: error
   "backtrace": {
     "frames": [
       {
-        "name": "backtrace[HASH]::backtrace::libunwind::trace",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/libunwind.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
-        "name": "backtrace[HASH]::backtrace::trace_unsynchronized::<<backtrace[HASH]::capture::Backtrace>::create::{closure#0}>",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/mod.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
-        "name": "backtrace[HASH]::backtrace::trace::<<backtrace[HASH]::capture::Backtrace>::create::{closure#0}>",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/mod.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
-        "name": "<backtrace[HASH]::capture::Backtrace>::create",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/capture.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
-        "name": "<backtrace[HASH]::capture::Backtrace>::new",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/capture.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
         "name": "<oopsie_core[HASH]::backtrace::BackTrace as oopsie_core[HASH]::traits::Capturable>::capture",
         "filename": "[PATH]/crates/oopsie-core/src/backtrace.rs",
         "line": -1,

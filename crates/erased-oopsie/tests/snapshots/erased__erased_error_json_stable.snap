@@ -39,36 +39,6 @@ expression: error
   "backtrace": {
     "frames": [
       {
-        "name": "backtrace::backtrace::libunwind::trace::he7de96703523050b",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/libunwind.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
-        "name": "backtrace::backtrace::trace_unsynchronized::h5b45c8a275237134",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/mod.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
-        "name": "backtrace::backtrace::trace::he2756034ac04a047",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/mod.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
-        "name": "backtrace::capture::Backtrace::create::h6209338d560f4303",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/capture.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
-        "name": "backtrace::capture::Backtrace::new::hfec0069f2bc5c35c",
-        "filename": "[REGISTRY]/backtrace-[VERSION]/src/capture.rs",
-        "line": -1,
-        "column": 0
-      },
-      {
         "name": "<oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture::hf1b510b5df9150fe",
         "filename": "[PATH]/crates/oopsie-core/src/backtrace.rs",
         "line": -1,
