@@ -68,6 +68,52 @@ impl<T: CaptureExt> CaptureExt for Box<T> {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NoSource;
 
+/// Normalize any source-error value to a `&(dyn Error + 'static)`.
+///
+/// `#[derive(Oopsie)]` calls `source.as_error_source()` when emitting
+/// `Error::source` for a variant with a `source` field. Method resolution
+/// plus autoderef pick the right impl regardless of whether the field is
+/// `MyError`, `Box<MyError>`, or `Box<dyn Error + Send + Sync + 'static>`.
+///
+/// The explicit `dyn Error + …` impls exist because the blanket
+/// `impl<T: Error + 'static> AsErrorSource for T` can't reach the autoderef
+/// target of `Box<dyn Error + Send + Sync>` — that target is `?Sized` and the
+/// blanket implicitly requires `Sized`. Without those impls the boxed-dyn
+/// case fails to typecheck because stdlib's `impl<E: Error> Error for Box<E>`
+/// also requires `E: Sized`.
+pub trait AsErrorSource {
+    /// Borrow this value as a `&(dyn Error + 'static)`.
+    fn as_error_source(&self) -> &(dyn std::error::Error + 'static);
+}
+
+impl<T: std::error::Error + 'static> AsErrorSource for T {
+    #[inline]
+    fn as_error_source(&self) -> &(dyn std::error::Error + 'static) {
+        self
+    }
+}
+
+impl AsErrorSource for dyn std::error::Error + 'static {
+    #[inline]
+    fn as_error_source(&self) -> &(dyn std::error::Error + 'static) {
+        self
+    }
+}
+
+impl AsErrorSource for dyn std::error::Error + Send + 'static {
+    #[inline]
+    fn as_error_source(&self) -> &(dyn std::error::Error + 'static) {
+        self
+    }
+}
+
+impl AsErrorSource for dyn std::error::Error + Send + Sync + 'static {
+    #[inline]
+    fn as_error_source(&self) -> &(dyn std::error::Error + 'static) {
+        self
+    }
+}
+
 /// Extension trait on [`Result`] for ergonomic error context wrapping.
 ///
 /// Import via `use oopsie::prelude::*` or `use oopsie::ResultExt`.

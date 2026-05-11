@@ -41,7 +41,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             let source_ident = &source_field.ident;
             source_arms.push(quote! {
                 #(#cfg_attrs)*
-                Self::#variant_ident { #source_ident, .. } => ::core::option::Option::Some(#source_ident),
+                Self::#variant_ident { #source_ident, .. } => ::core::option::Option::Some(#source_ident.as_error_source()),
             });
         } else {
             source_arms.push(quote! {
@@ -53,11 +53,14 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         // provide() arm (nightly only)
         let mut provide_stmts = Vec::new();
 
-        // Forward source's provide
+        // Forward source's provide. Use `as_error_source()` to obtain a
+        // `&dyn Error` so the call doesn't need `Box<dyn Error + …>: Error`
+        // (which fails for unsized-content boxes — same reason `source()`
+        // needs the same trick).
         if let Some(source_field) = &categorized.source {
             let source_ident = &source_field.ident;
             provide_stmts.push(quote! {
-                ::core::error::Error::provide(#source_ident, request);
+                ::core::error::Error::provide(#source_ident.as_error_source(), request);
             });
         }
 
@@ -183,6 +186,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         } else {
             quote! {
                 fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
+                    use #oopsie_path::AsErrorSource as _;
                     match self {
                         #(#provide_arms)*
                     }
@@ -246,6 +250,10 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
     Ok(quote! {
         impl #impl_generics ::core::error::Error for #enum_ident #ty_generics #where_clause {
             fn source(&self) -> ::core::option::Option<&(dyn ::core::error::Error + 'static)> {
+                // Bring `as_error_source` into scope so method-call autoderef
+                // can pick the `dyn Error + Send + Sync + 'static` impl for
+                // `Box<dyn Error + …>` fields.
+                use #oopsie_path::AsErrorSource as _;
                 match self {
                     #(#source_arms)*
                 }
@@ -277,18 +285,24 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
 
     let source_body = if let Some(source_field) = &categorized.source {
         let source_ident = &source_field.ident;
-        quote! { ::core::option::Option::Some(&self.#source_ident) }
+        quote! {
+            {
+                use #oopsie_path::AsErrorSource as _;
+                ::core::option::Option::Some(self.#source_ident.as_error_source())
+            }
+        }
     } else {
         quote! { ::core::option::Option::None }
     };
 
     let mut provide_stmts = Vec::new();
 
-    // Forward source's provide (uses destructured field name)
+    // Forward source's provide (uses destructured field name). Same
+    // `as_error_source()` trick as `source()` so boxed-dyn fields compile.
     if let Some(source_field) = &categorized.source {
         let source_ident = &source_field.ident;
         provide_stmts.push(quote! {
-            ::core::error::Error::provide(#source_ident, request);
+            ::core::error::Error::provide(#source_ident.as_error_source(), request);
         });
     }
 
@@ -339,6 +353,7 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
         } else {
             quote! {
                 fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
+                    use #oopsie_path::AsErrorSource as _;
                     #destructure
                     #(#provide_stmts)*
                 }

@@ -650,10 +650,15 @@ impl FieldAttrs {
         }
 
         // Auto-boxing: if field type is Box<T> and source was auto-detected
-        // (SourceKind::Yes), upgrade to Transformed with Box::new.
-        // Explicit `from(T, transform)` already sets Transformed, so it takes precedence.
+        // (SourceKind::Yes), upgrade to Transformed with Box::new — *unless*
+        // T is a trait object. `Box<dyn Trait>` is the user explicitly opting
+        // into trait-object storage; unwrapping it would force the selector's
+        // `Source` to be `?Sized`, which breaks at every use site.
+        // Explicit `from(T, transform)` already sets Transformed, so it takes
+        // precedence.
         if matches!(result.from, SourceKind::Yes)
             && let Some(inner) = crate::traced::field_detect::extract_boxed_inner(&field.ty)
+            && !matches!(inner, syn::Type::TraitObject(_))
         {
             result.from = SourceKind::Transformed {
                 source_type: Box::new(inner.clone()),

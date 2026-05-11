@@ -158,9 +158,9 @@ pub use oopsie_macros::traced;
 // tracing-subscriber) don't accidentally become part of oopsie's SemVer
 // contract via incidental glob re-export.
 pub use oopsie_core::{
-    BackTrace, Capturable, CaptureExt, Contextual, ErrorCode, ErrorExt, HelpText, NoSource,
-    OptionExt, OptionalSpanTrace, ResultExt, SpanTrace, Welp, WelpOptionExt, WelpResultExt,
-    install, install_panic_hook,
+    AsErrorSource, BackTrace, Capturable, CaptureExt, Contextual, ErrorCode, ErrorExt, HelpText,
+    NoSource, OptionExt, OptionalSpanTrace, ResultExt, SpanTrace, Welp, WelpOptionExt,
+    WelpResultExt, install, install_panic_hook,
 };
 
 // Hidden re-export so macro-generated code can reach the autoref-probe
