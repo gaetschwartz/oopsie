@@ -50,8 +50,11 @@ macro_rules! redact {
     (backtrace, $bl:block) => {
         insta::with_settings! {
           { filters => [
-            (r"\[[0-9a-f]{7,16}\]", "[[PTR]]"),
-            // Mangled hash suffix (stable Rust): `::h<16 hex>` at end of symbol.
+            // Strip nightly's `crate[hash]` bracket form AND stable's
+            // `::h<16hex>` suffix form to empty — they appear at different
+            // positions per toolchain, so collapsing both to nothing is the
+            // only way to make a single snapshot match both.
+            (r"\[[0-9a-f]{7,16}\]", ""),
             (r"::h[0-9a-f]{16}\b", ""),
             (r"rs:\d+(:\d+)?", "rs:[LOC]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),

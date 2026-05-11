@@ -102,10 +102,10 @@ macro_rules! redact {
     (backtrace, $bl:block) => {
         insta::with_settings! {
           { filters => [
-            // Crate hash in bracket form (nightly debug-info): `crate[abc123]`.
-            (r"\[[0-9a-f]{7,16}\]", "[PTR]"),
-            // Mangled hash suffix (stable Rust): `::h<16 hex>` at end of symbol.
-            // Drop entirely so stable and nightly demangled names align.
+            // Crate-hash markers — `[abc1234]` brackets (nightly) and
+            // `::h<16 hex>` suffixes (stable). Strip BOTH to empty so the
+            // demangled names align across toolchains.
+            (r"\[[0-9a-f]{7,16}\]", ""),
             (r"::h[0-9a-f]{16}\b", ""),
             (r"rs:\d+(:\d+)?", "rs:[LOC]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),
@@ -133,7 +133,8 @@ macro_rules! redact {
                     }
                     panic!("Expected a string value for name redaction but got: {value:?}");
                 };
-                let s = $crate::common::CRATE_HASH_REGEX.replace_all(s, "[HASH]");
+                // Strip both crate-hash forms to empty (see backtrace arm).
+                let s = $crate::common::CRATE_HASH_REGEX.replace_all(s, "");
                 let s = $crate::common::FN_HASH_SUFFIX_REGEX.replace_all(&s, "");
                 s.into_owned().into()
             }),

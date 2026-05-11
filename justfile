@@ -16,6 +16,9 @@ test *ARGS: doctest
     cargo +stable nextest run {{ ARGS }}
     cargo nextest run --features unstable {{ ARGS }}
 
-# Re-run the full test suite, overwriting trybuild stderr and insta snapshots
-test-bless *ARGS:
-    TRYBUILD=overwrite INSTA_UPDATE=always just test {{ ARGS }}
+# Re-run the full test suite, overwriting trybuild stderr (stable-only,
+# since nightly diagnostics use wider span underlines that don't match
+# stable's renderer) and insta snapshots.
+test-bless *ARGS: doctest
+    TRYBUILD=overwrite INSTA_UPDATE=always cargo +stable nextest run {{ ARGS }}
+    INSTA_UPDATE=always cargo nextest run --features unstable {{ ARGS }}
