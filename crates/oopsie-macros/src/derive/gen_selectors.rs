@@ -44,24 +44,23 @@ pub fn gen_enum_selectors(
                 // detected `Box<T>`), the generated `From` impl accepts the
                 // pre-transform type `T` and applies the transform internally,
                 // matching snafu's `#[snafu(context(false))]` semantics.
+                let source_ident = &source.ident;
                 let (param_ty, body_assign) = match &source.kind {
                     super::parse::SourceKind::Transformed {
                         source_type,
                         transform,
-                    } => {
-                        let source_ident = &source.ident;
-                        (
-                            quote! { #source_type },
-                            quote! { let #source_ident = (#transform)(source); },
-                        )
-                    }
-                    _ => {
+                    } => (
+                        quote! { #source_type },
+                        quote! { let #source_ident = (#transform)(source); },
+                    ),
+                    super::parse::SourceKind::Yes => {
                         let ty = &source.ty;
-                        let source_ident = &source.ident;
                         (quote! { #ty }, quote! { let #source_ident = source; })
                     }
+                    super::parse::SourceKind::No => {
+                        unreachable!("categorized.source set but kind is SourceKind::No")
+                    }
                 };
-                let source_ident = &source.ident;
                 let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
                 let auto_names = gen_auto_field_names(&categorized);
                 let user_inits = gen_user_default_inits(&categorized);
@@ -200,24 +199,23 @@ pub fn gen_struct_selector(
     if variant_attrs.transparent {
         // Generate From impl for transparent structs
         if let Some(source) = &categorized.source {
+            let source_ident = &source.ident;
             let (param_ty, body_assign) = match &source.kind {
                 super::parse::SourceKind::Transformed {
                     source_type,
                     transform,
-                } => {
-                    let source_ident = &source.ident;
-                    (
-                        quote! { #source_type },
-                        quote! { let #source_ident = (#transform)(source); },
-                    )
-                }
-                _ => {
+                } => (
+                    quote! { #source_type },
+                    quote! { let #source_ident = (#transform)(source); },
+                ),
+                super::parse::SourceKind::Yes => {
                     let ty = &source.ty;
-                    let source_ident = &source.ident;
                     (quote! { #ty }, quote! { let #source_ident = source; })
                 }
+                super::parse::SourceKind::No => {
+                    unreachable!("categorized.source set but kind is SourceKind::No")
+                }
             };
-            let source_ident = &source.ident;
             let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
             let auto_names = gen_auto_field_names(&categorized);
             return Ok(quote! {

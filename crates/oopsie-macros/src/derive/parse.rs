@@ -11,6 +11,24 @@ use syn::{Expr, Ident, LitInt, LitStr, Path, Token, Type, Visibility};
 
 // ─── Container-level attributes ──────────────────────────────────
 
+/// Keys accepted inside `#[oopsie(...)]` at the *container* (enum/struct)
+/// position. The first five are genuinely container-only; the rest are
+/// variant/field-level keys that legitimately appear at struct-container
+/// scope (a struct definition serves as both container and variant) and
+/// are silently passed through to the variant/field passes.
+const KNOWN_CONTAINER_KEYS: &[&str] = &[
+    "module",
+    "suffix",
+    "size",
+    "vis",
+    "path",
+    "display",
+    "provide",
+    "help",
+    "code",
+    "transparent",
+];
+
 /// A compile-time size constraint for the error type.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SizeConstraint {
@@ -101,15 +119,34 @@ impl ContainerAttrs {
     }
 
     fn parse_container_meta(&mut self, meta: &syn::Meta) -> syn::Result<()> {
+        // Reject typos early. The match below only handles container-only
+        // keys; legitimately variant/field-level keys on a struct container
+        // (where the same `#[oopsie(...)]` provides both container and
+        // variant data) are silently ignored here — `VariantAttrs` /
+        // `FieldAttrs` pick them up on a later pass.
+        let key = meta.path().get_ident().map(ToString::to_string);
+        if !key
+            .as_deref()
+            .is_some_and(|k| KNOWN_CONTAINER_KEYS.contains(&k))
+        {
+            return Err(syn::Error::new_spanned(
+                meta.path(),
+                match key {
+                    Some(name) => format!("unknown oopsie attribute: `{name}`"),
+                    None => "unknown oopsie attribute (non-identifier path)".to_owned(),
+                },
+            ));
+        }
+
         match meta {
             syn::Meta::Path(path) => {
                 if path.is_ident("module") {
                     self.module = ModuleSetting::On(None);
                 } else if path.is_ident("suffix") {
                     self.suffix = SuffixSetting::Default;
-                } else {
-                    return Err(syn::Error::new_spanned(path, "unknown oopsie attribute"));
                 }
+                // Other known path-style keys (e.g. `transparent`) are
+                // variant-level and handled by `VariantAttrs`.
             }
             syn::Meta::List(list) => {
                 if list.path.is_ident("module") {
@@ -122,10 +159,9 @@ impl ContainerAttrs {
                 } else if list.path.is_ident("size") {
                     let content: SizeContent = syn::parse2(list.tokens.clone())?;
                     self.size = Some(content.0);
-                } else {
-                    // Don't error on unknown list attrs at container level -
-                    // they might be variant-level attrs on a struct
                 }
+                // Other known list keys (display, provide, help) are
+                // variant-level and handled by `VariantAttrs`.
             }
             syn::Meta::NameValue(nv) => {
                 if nv.path.is_ident("vis") {
@@ -157,9 +193,9 @@ impl ContainerAttrs {
                             "expected string literal",
                         ));
                     }
-                } else {
-                    // Ignore unknown name-value attrs - they may be variant-level on structs
                 }
+                // Other known name-value keys (help, code) are
+                // variant-level and handled by `VariantAttrs`.
             }
         }
         Ok(())

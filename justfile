@@ -12,3 +12,8 @@ doctest:
 test *ARGS: doctest
     cargo nextest run {{ ARGS }}
     cargo nextest run --features unstable {{ ARGS }}
+
+# Re-run the full test suite, overwriting trybuild stderr and insta snapshots
+[env("TRYBUILD", "overwrite")]
+[env("INSTA_UPDATE", "always")]
+test-bless *ARGS: (test ARGS)

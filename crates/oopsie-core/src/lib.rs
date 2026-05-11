@@ -67,7 +67,7 @@ pub mod __private {
 }
 
 pub use spantrace::{OptionalSpanTrace, SpanTrace};
-pub use tracing_error::ErrorLayer;
+use tracing_error::ErrorLayer;
 use tracing_subscriber::fmt::format::JsonFields;
 use tracing_subscriber::registry::LookupSpan;
 pub use traits::*;
@@ -206,18 +206,18 @@ impl std::fmt::Display for HelpText {
     }
 }
 
-pub trait NewJsonErrorLayer<S> {
-    fn json() -> ErrorLayer<S, JsonFields>;
-}
-
-impl<S> NewJsonErrorLayer<S> for ErrorLayer<S, JsonFields>
+/// Construct a `tracing_error::ErrorLayer` configured to format span fields
+/// as JSON.
+///
+/// Equivalent to `ErrorLayer::new(JsonFields::default())` but doesn't require
+/// the caller to depend on `tracing-subscriber` directly.
+#[inline]
+#[must_use]
+pub fn json_error_layer<S>() -> ErrorLayer<S, JsonFields>
 where
     S: tracing::Subscriber + for<'span> LookupSpan<'span>,
 {
-    #[inline]
-    fn json() -> Self {
-        ErrorLayer::new(JsonFields::default())
-    }
+    ErrorLayer::new(JsonFields::default())
 }
 
 #[expect(dead_code)]

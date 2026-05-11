@@ -1,0 +1,5 @@
+error: #[derive(Oopsie)] does not support tuple variants/structs
+  --> tests/compile-fail/tuple_variant.rs:12:8
+   |
+12 |     Foo(String),
+   |        ^^^^^^^^

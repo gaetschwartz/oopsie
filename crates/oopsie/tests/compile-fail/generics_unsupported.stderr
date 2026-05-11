@@ -1,0 +1,5 @@
+error: oopsie does not yet support generic error types
+  --> tests/compile-fail/generics_unsupported.rs:10:7
+   |
+10 | enum E<T: std::fmt::Debug> {
+   |       ^^^^^^^^^^^^^^^^^^^^

@@ -153,8 +153,26 @@ pub use oopsie_macros::Oopsie;
 pub use oopsie_macros::oopsie;
 pub use oopsie_macros::traced;
 
-// Re-export all core types.
-pub use oopsie_core::*;
+// Explicit re-export of the public surface from `oopsie-core`. Avoid
+// `pub use oopsie_core::*` so transitive deps (tracing-error,
+// tracing-subscriber) don't accidentally become part of oopsie's SemVer
+// contract via incidental glob re-export.
+pub use oopsie_core::{
+    BackTrace, Capturable, CaptureExt, Contextual, ErrorCode, ErrorExt, HelpText, NoSource,
+    OptionExt, OptionalSpanTrace, ResultExt, SpanTrace, Welp, WelpOptionExt, WelpResultExt,
+    install, install_panic_hook,
+};
+
+// Hidden re-export so macro-generated code can reach the autoref-probe
+// machinery via `::oopsie::__private::CaptureProbe`. Not part of the public
+// API; do not depend on its contents.
+#[doc(hidden)]
+pub use oopsie_core::__private;
+
+/// `tracing-subscriber` integration helpers.
+pub mod tracing {
+    pub use oopsie_core::json_error_layer;
+}
 
 /// Extension traits for error handling at the call site.
 ///

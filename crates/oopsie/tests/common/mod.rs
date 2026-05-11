@@ -1,8 +1,7 @@
 //! Shared helpers for oopsie integration tests.
 
-use oopsie::{NewJsonErrorLayer as _, Oopsie, ResultExt as _, traced};
+use oopsie::{Oopsie, ResultExt as _, traced};
 use tracing::instrument;
-use tracing_error::ErrorLayer;
 use tracing_subscriber::prelude::*;
 
 #[traced]
@@ -21,7 +20,7 @@ pub struct MyErrorInner {
 
 /// Initialize a test subscriber with ErrorLayer for spantrace support.
 pub fn init_test_subscriber() -> tracing::subscriber::DefaultGuard {
-    let subscriber = tracing_subscriber::registry().with(ErrorLayer::json());
+    let subscriber = tracing_subscriber::registry().with(oopsie::tracing::json_error_layer());
     tracing::subscriber::set_default(subscriber)
 }
 

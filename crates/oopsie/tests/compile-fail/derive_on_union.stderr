@@ -1,0 +1,8 @@
+error: #[derive(Oopsie)] cannot be applied to unions
+  --> tests/compile-fail/derive_on_union.rs:9:1
+   |
+ 9 | / union U {
+10 | |     a: u32,
+11 | |     b: u32,
+12 | | }
+   | |_^

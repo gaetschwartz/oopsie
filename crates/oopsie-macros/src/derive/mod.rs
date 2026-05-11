@@ -30,6 +30,21 @@ pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     }
 }
 
+/// Reject generic types up-front so users get a clear error instead of an
+/// `E0107` originating inside macro-generated code. The selector struct,
+/// `Contextual` impl, and `transparent` `From` impl would all need to thread
+/// `impl_generics` / `ty_generics` / `where_clause` through every emit site
+/// to support this properly — left for a follow-up.
+fn check_no_generics(input: &DeriveInput) -> syn::Result<()> {
+    if input.generics.params.is_empty() {
+        return Ok(());
+    }
+    Err(syn::Error::new_spanned(
+        &input.generics,
+        "oopsie does not yet support generic error types",
+    ))
+}
+
 pub fn oopsie_path(container: &ContainerAttrs) -> syn::Path {
     container
         .path
@@ -95,6 +110,7 @@ pub fn expand_enum(
     input: &DeriveInput,
     container_attrs: &ContainerAttrs,
 ) -> syn::Result<TokenStream2> {
+    check_no_generics(input)?;
     let path = oopsie_path(container_attrs);
     let selectors = gen_enum_selectors(input, container_attrs, &path)?;
     let display = gen_enum_display(input)?;
@@ -121,6 +137,7 @@ pub fn expand_struct(
     input: &DeriveInput,
     container_attrs: &ContainerAttrs,
 ) -> syn::Result<TokenStream2> {
+    check_no_generics(input)?;
     let path = oopsie_path(container_attrs);
     let selector = gen_struct_selector(input, container_attrs, &path)?;
     let display = gen_struct_display(input)?;

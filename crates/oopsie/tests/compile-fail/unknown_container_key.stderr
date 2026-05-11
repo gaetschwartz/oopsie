@@ -1,0 +1,5 @@
+error: unknown oopsie attribute: `modul`
+ --> tests/compile-fail/unknown_container_key.rs:9:10
+  |
+9 | #[oopsie(modul(false))]
+  |          ^^^^^
