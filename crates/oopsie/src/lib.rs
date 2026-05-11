@@ -179,7 +179,7 @@ pub use oopsie_core::*;
 /// # }
 /// ```
 pub mod prelude {
-    pub use crate::{ErrorExt, OptionExt, ResultExt, WelpOptionExt, WelpResultExt};
+    pub use crate::{Contextual, ErrorExt, OptionExt, ResultExt, WelpOptionExt, WelpResultExt};
 }
 
 #[cfg(feature = "fancy")]
