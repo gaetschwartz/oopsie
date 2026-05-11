@@ -71,6 +71,12 @@ pub const CARGO_WORKSPACE_ROOT: &str = konst::string::rsplit_once(
 pub static CRATE_HASH_REGEX: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"\[[0-9a-f]{7,16}\]").unwrap());
 
+/// `::h<16 hex>` mangled symbol-hash suffix (stable rust default demangling).
+/// Stripped entirely so identical symbols match across stable / nightly /
+/// platform variants.
+pub static FN_HASH_SUFFIX_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"::h[0-9a-f]{16}\b").unwrap());
+
 pub static PATH_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(&format!(
         r"(?:{}|{}|/rustc/[0-9a-f]+)/",
@@ -79,6 +85,14 @@ pub static PATH_REGEX: LazyLock<regex::Regex> = LazyLock::new(|| {
     ))
     .unwrap()
 });
+
+/// Local toolchains store stdlib sources at `<sysroot>/lib/rustlib/src/rust/
+/// library/...`; CI distributes stdlib via `/rustc/<commit>/library/...`.
+/// After `PATH_REGEX` normalizes the prefix, the local form still carries
+/// the `lib/rustlib/src/rust/` middle segment. Strip it (or the bare empty
+/// equivalent on CI) so both produce `[STDLIB]/library/...`.
+pub static STDLIB_PATH_REGEX: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"\[PATH\]/(?:lib/rustlib/src/rust/)?library/").unwrap());
 
 pub static REGISTRY_REGEX: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r".*/index\.crates\.io-[a-f0-9]+/(\w+)-[^/]+/").unwrap());
@@ -98,6 +112,12 @@ macro_rules! redact {
             ($crate::common::CARGO_WORKSPACE_ROOT, "[WORKSPACE_ROOT]"),
             (&*$crate::common::SYS_ROOT, "[SYS_ROOT]"),
             (concat!(env!("HOME"), "/.cargo/registry/src/"), "[CARGO_REGISTRY]/"),
+            // Normalize stdlib paths after the above substitutions:
+            //   local: `[SYS_ROOT]/lib/rustlib/src/rust/library/...`
+            //   CI:    `/rustc/[HASH]/library/...`
+            // Both → `[STDLIB]/library/...`.
+            (r"\[SYS_ROOT\]/lib/rustlib/src/rust/library/", "[STDLIB]/library/"),
+            (r"/rustc/\[HASH\]/library/", "[STDLIB]/library/"),
         ] }, $bl }
     };
     (json, $bl:block) => {{
@@ -113,10 +133,9 @@ macro_rules! redact {
                     }
                     panic!("Expected a string value for name redaction but got: {value:?}");
                 };
-                $crate::common::CRATE_HASH_REGEX
-                    .replace_all(s, "[HASH]")
-                    .into_owned()
-                    .into()
+                let s = $crate::common::CRATE_HASH_REGEX.replace_all(s, "[HASH]");
+                let s = $crate::common::FN_HASH_SUFFIX_REGEX.replace_all(&s, "");
+                s.into_owned().into()
             }),
         );
         settings.add_redaction(
@@ -130,6 +149,7 @@ macro_rules! redact {
                 };
                 let s = $crate::common::REGISTRY_REGEX.replace(s, "[REGISTRY]/$1-[VERSION]/");
                 let s = $crate::common::PATH_REGEX.replace(&s, "[PATH]/");
+                let s = $crate::common::STDLIB_PATH_REGEX.replace(&s, "[STDLIB]/library/");
                 s.into_owned().into()
             }),
         );

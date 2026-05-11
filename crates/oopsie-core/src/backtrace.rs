@@ -39,6 +39,7 @@ impl color_backtrace::Backtrace for BackTrace {
 /// the stack from *their* code, not the implementation of the capture
 /// mechanism. Filtering them at the source means `Report`, `ErasedError`,
 /// and any future consumer all see a stable backtrace shape.
+#[must_use]
 pub fn is_internal_capture_frame(name: Option<&str>, filename: Option<&std::path::Path>) -> bool {
     if let Some(n) = name
         && (n.starts_with("backtrace::") || n.starts_with("<backtrace::"))

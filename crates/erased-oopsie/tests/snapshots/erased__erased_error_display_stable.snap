@@ -34,45 +34,45 @@ Error:
    8: erased::test_erased_error_display::{{closure}}
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/erased.rs:[LOC]
    9: core::ops::function::FnOnce::call_once
-           at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
+           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
   10: <fn() -> core[PTR]::result::Result<(), alloc[PTR]::string::String> as core[PTR]::ops::function::FnOnce<()>>::call_once
-           at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
+           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
   11: test[PTR]::__rust_begin_short_backtrace::<core[PTR]::result::Result<(), alloc[PTR]::string::String>, fn() -> core[PTR]::result::Result<(), alloc[PTR]::string::String>>
-           at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
   12: test[PTR]::run_test_in_process::{closure#0}
-           at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
   13: <core[PTR]::panic::unwind_safe::AssertUnwindSafe<test[PTR]::run_test_in_process::{closure#0}> as core[PTR]::ops::function::FnOnce<()>>::call_once
-           at /rustc/[HASH]/library/core/src/panic/unwind_safe.rs:[LOC]
+           at [STDLIB]/library/core/src/panic/unwind_safe.rs:[LOC]
   14: std[PTR]::panicking::catch_unwind::do_call::<core[PTR]::panic::unwind_safe::AssertUnwindSafe<test[PTR]::run_test_in_process::{closure#0}>, core[PTR]::result::Result<(), alloc[PTR]::string::String>>
-           at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
+           at [STDLIB]/library/std/src/panicking.rs:[LOC]
   15: std[PTR]::panicking::catch_unwind::<core[PTR]::result::Result<(), alloc[PTR]::string::String>, core[PTR]::panic::unwind_safe::AssertUnwindSafe<test[PTR]::run_test_in_process::{closure#0}>>
-           at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
+           at [STDLIB]/library/std/src/panicking.rs:[LOC]
   16: std[PTR]::panic::catch_unwind::<core[PTR]::panic::unwind_safe::AssertUnwindSafe<test[PTR]::run_test_in_process::{closure#0}>, core[PTR]::result::Result<(), alloc[PTR]::string::String>>
-           at /rustc/[HASH]/library/std/src/panic.rs:[LOC]
+           at [STDLIB]/library/std/src/panic.rs:[LOC]
   17: test[PTR]::run_test_in_process
-           at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
   18: test[PTR]::run_test::{closure#0}
-           at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
   19: test[PTR]::run_test::{closure#1}
-           at /rustc/[HASH]/library/test/src/lib.rs:[LOC]
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
   20: std[PTR]::sys::backtrace::__rust_begin_short_backtrace::<test[PTR]::run_test::{closure#1}, ()>
-           at /rustc/[HASH]/library/std/src/sys/backtrace.rs:[LOC]
+           at [STDLIB]/library/std/src/sys/backtrace.rs:[LOC]
   21: std[PTR]::thread::lifecycle::spawn_unchecked::<test[PTR]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}
-           at /rustc/[HASH]/library/std/src/thread/lifecycle.rs:[LOC]
+           at [STDLIB]/library/std/src/thread/lifecycle.rs:[LOC]
   22: <core[PTR]::panic::unwind_safe::AssertUnwindSafe<std[PTR]::thread::lifecycle::spawn_unchecked<test[PTR]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}> as core[PTR]::ops::function::FnOnce<()>>::call_once
-           at /rustc/[HASH]/library/core/src/panic/unwind_safe.rs:[LOC]
+           at [STDLIB]/library/core/src/panic/unwind_safe.rs:[LOC]
   23: std[PTR]::panicking::catch_unwind::do_call::<core[PTR]::panic::unwind_safe::AssertUnwindSafe<std[PTR]::thread::lifecycle::spawn_unchecked<test[PTR]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
-           at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
+           at [STDLIB]/library/std/src/panicking.rs:[LOC]
   24: std[PTR]::panicking::catch_unwind::<(), core[PTR]::panic::unwind_safe::AssertUnwindSafe<std[PTR]::thread::lifecycle::spawn_unchecked<test[PTR]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>>
-           at /rustc/[HASH]/library/std/src/panicking.rs:[LOC]
+           at [STDLIB]/library/std/src/panicking.rs:[LOC]
   25: std[PTR]::panic::catch_unwind::<core[PTR]::panic::unwind_safe::AssertUnwindSafe<std[PTR]::thread::lifecycle::spawn_unchecked<test[PTR]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
-           at /rustc/[HASH]/library/std/src/panic.rs:[LOC]
+           at [STDLIB]/library/std/src/panic.rs:[LOC]
   26: std[PTR]::thread::lifecycle::spawn_unchecked::<test[PTR]::run_test::{closure#1}, ()>::{closure#1}
-           at /rustc/[HASH]/library/std/src/thread/lifecycle.rs:[LOC]
+           at [STDLIB]/library/std/src/thread/lifecycle.rs:[LOC]
   27: <std[PTR]::thread::lifecycle::spawn_unchecked<test[PTR]::run_test::{closure#1}, ()>::{closure#1} as core[PTR]::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
-           at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
+           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
   28: <alloc[PTR]::boxed::Box<dyn core[PTR]::ops::function::FnOnce<(), Output = ()> + core[PTR]::marker::Send> as core[PTR]::ops::function::FnOnce<()>>::call_once
-           at /rustc/[HASH]/library/alloc/src/boxed.rs:[LOC]
+           at [STDLIB]/library/alloc/src/boxed.rs:[LOC]
   29: <std[PTR]::sys::thread::unix::Thread>::new::thread_start
-           at /rustc/[HASH]/library/std/src/sys/thread/unix.rs:[LOC]
+           at [STDLIB]/library/std/src/sys/thread/unix.rs:[LOC]
   30: __pthread_cond_wait

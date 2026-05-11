@@ -51,6 +51,8 @@ macro_rules! redact {
         insta::with_settings! {
           { filters => [
             (r"\[[0-9a-f]{7,16}\]", "[[PTR]]"),
+            // Mangled hash suffix (stable Rust): `::h<16 hex>` at end of symbol.
+            (r"::h[0-9a-f]{16}\b", ""),
             (r"rs:\d+(:\d+)?", "rs:[LOC]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),
             (&env!("CARGO_MANIFEST_DIR"), "[CRATE_DIR]"),
@@ -63,6 +65,10 @@ macro_rules! redact {
                 .stdout
             ).expect("invalid UTF-8 in rustc sysroot").trim(), "[SYS_ROOT]"),
             (&format!("{}/.cargo/registry/src/", env!("HOME")), "[CARGO_REGISTRY]/"),
+            // Stdlib path normalization: local `[SYS_ROOT]/lib/rustlib/src/rust/library/`
+            // and CI `/rustc/[HASH]/library/` both → `[STDLIB]/library/`.
+            (r"\[SYS_ROOT\]/lib/rustlib/src/rust/library/", "[STDLIB]/library/"),
+            (r"/rustc/\[HASH\]/library/", "[STDLIB]/library/"),
         ] }, $bl }
     };
 }
