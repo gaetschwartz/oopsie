@@ -2,4 +2,4 @@ error: Unknown field: `visibility`. Did you mean `vis`?
  --> tests/compile-fail/unknown_container_key_value.rs:9:10
   |
 9 | #[oopsie(visibility = "pub")]
-  |          ^^^^^^^^^^^^^^^^^^
+  |          ^^^^^^^^^^
