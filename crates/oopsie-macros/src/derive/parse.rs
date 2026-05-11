@@ -5,7 +5,6 @@
 //! - Variant/struct: display, transparent, help, code
 //! - Field: from, capture, provide
 
-use proc_macro2::Span;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{Expr, Ident, LitInt, LitStr, Path, Token, Type, Visibility};
@@ -63,6 +62,28 @@ impl ContainerAttrs {
         let mut result = Self::default();
         for attr in attrs {
             if !attr.path().is_ident("oopsie") {
+                continue;
+            }
+            // Special-case `vis = <Visibility>` because `pub` / `pub(crate)`
+            // are keywords and cannot be parsed as `syn::Expr` (which the
+            // generic `Meta::NameValue` parser requires). When the attribute
+            // body looks like `vis = ...` we parse the tail as a `Visibility`
+            // directly and skip the generic Meta path.
+            if let Ok((eaten, rest)) = attr.parse_args_with(parse_vis_prefix)
+                && let Some(vis) = eaten
+            {
+                result.visibility = Some(vis);
+                if rest.is_empty() {
+                    continue;
+                }
+                // Fall through to parse the remaining comma-separated items.
+                let nested = syn::parse::Parser::parse2(
+                    Punctuated::<syn::Meta, Token![,]>::parse_terminated,
+                    rest,
+                )?;
+                for meta in &nested {
+                    result.parse_container_meta(meta)?;
+                }
                 continue;
             }
             // Try parsing as Meta items. If the attr starts with a string literal
@@ -679,6 +700,36 @@ fn expr_to_tokens(expr: &Expr) -> proc_macro2::TokenStream {
     expr.to_token_stream()
 }
 
+/// Special-case parser for `vis = <Visibility>` at the front of an attribute
+/// list (e.g. `#[oopsie(vis = pub, module(foo))]`).
+///
+/// Returns `(Some(vis), rest)` if the input starts with `vis = ...`, where
+/// `rest` is the remaining tokens (everything after the visibility). Returns
+/// `(None, rest)` if the input does not begin with `vis =`.
+fn parse_vis_prefix(
+    input: ParseStream,
+) -> syn::Result<(Option<syn::Visibility>, proc_macro2::TokenStream)> {
+    let fork = input.fork();
+    if fork.peek(syn::Ident) {
+        let ident: syn::Ident = fork.parse()?;
+        if ident == "vis" && fork.peek(Token![=]) && !fork.peek(Token![==]) {
+            // Commit to the fork by re-parsing `vis = <Visibility>` on the
+            // real input.
+            let _: syn::Ident = input.parse()?;
+            let _: Token![=] = input.parse()?;
+            let vis: syn::Visibility = input.parse()?;
+            // Optional trailing comma
+            if input.peek(Token![,]) {
+                let _: Token![,] = input.parse()?;
+            }
+            let rest = input.parse::<proc_macro2::TokenStream>()?;
+            return Ok((Some(vis), rest));
+        }
+    }
+    let rest = input.parse::<proc_macro2::TokenStream>()?;
+    Ok((None, rest))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -775,16 +826,18 @@ impl CategorizedFields {
                     help_field,
                 });
             }
-            syn::Fields::Unnamed(_) => {
-                return Err(syn::Error::new(
-                    Span::call_site(),
+            syn::Fields::Unnamed(unnamed) => {
+                return Err(syn::Error::new_spanned(
+                    unnamed,
                     "#[derive(Oopsie)] does not support tuple variants/structs",
                 ));
             }
         };
 
         for field in named {
-            let ident = field.ident.clone().expect("named field has ident");
+            let Some(ident) = field.ident.clone() else {
+                continue;
+            };
             let attrs = FieldAttrs::from_field(field)?;
 
             // Collect provides

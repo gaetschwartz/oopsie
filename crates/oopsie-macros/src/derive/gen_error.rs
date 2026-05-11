@@ -30,15 +30,22 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         let variant_ident = &variant.ident;
         let categorized = CategorizedFields::from_fields(&variant.fields)?;
         let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
+        let cfg_attrs: Vec<&syn::Attribute> = variant
+            .attrs
+            .iter()
+            .filter(|a| a.path().is_ident("cfg"))
+            .collect();
 
         // source() arm
         if let Some(source_field) = &categorized.source {
             let source_ident = &source_field.ident;
             source_arms.push(quote! {
+                #(#cfg_attrs)*
                 Self::#variant_ident { #source_ident, .. } => ::core::option::Option::Some(#source_ident),
             });
         } else {
             source_arms.push(quote! {
+                #(#cfg_attrs)*
                 Self::#variant_ident { .. } => ::core::option::Option::None,
             });
         }
@@ -97,10 +104,12 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
 
         if provide_stmts.is_empty() {
             provide_arms.push(quote! {
+                #(#cfg_attrs)*
                 #pattern => {}
             });
         } else {
             provide_arms.push(quote! {
+                #(#cfg_attrs)*
                 #pattern => {
                     #(#provide_stmts)*
                 }
@@ -112,6 +121,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         // Backtrace
         if let Some(bt_field) = &categorized.backtrace_field {
             bt_arms.push(quote! {
+                #(#cfg_attrs)*
                 Self::#variant_ident { #bt_field, .. } => ::core::option::Option::Some(#bt_field.as_ref()),
             });
         }
@@ -119,6 +129,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         // Spantrace
         if let Some(st_field) = &categorized.spantrace_field {
             st_arms.push(quote! {
+                #(#cfg_attrs)*
                 Self::#variant_ident { #st_field, .. } => ::core::option::Option::Some(#st_field.as_ref()),
             });
         }
@@ -126,6 +137,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         // Error code: check for user-specified code first, then auto-generated from provide attrs
         if let Some(code) = &variant_attrs.code {
             code_arms.push(quote! {
+                #(#cfg_attrs)*
                 Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#code)),
             });
         } else {
@@ -134,6 +146,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                 if is_error_code_provide(provide_attr) {
                     let expr = &provide_attr.expr;
                     code_arms.push(quote! {
+                        #(#cfg_attrs)*
                         Self::#variant_ident { .. } => ::core::option::Option::Some(#expr),
                     });
                     break;
@@ -144,6 +157,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         // Help text: dynamic field takes precedence over static attribute
         if let Some(help_field) = &categorized.help_field {
             help_arms.push(quote! {
+                #(#cfg_attrs)*
                 Self::#variant_ident { #help_field, .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(#help_field.to_string())),
             });
         } else if let Some(help) = &variant_attrs.help {
@@ -151,28 +165,30 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             let args = &help.args;
             if args.is_empty() {
                 help_arms.push(quote! {
-                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText(::std::borrow::Cow::Borrowed(#fmt))),
+                    #(#cfg_attrs)*
+                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from_static(#fmt)),
                 });
             } else {
                 help_arms.push(quote! {
-                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*)))),
+                    #(#cfg_attrs)*
+                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*))),
                 });
             }
         }
     }
 
-    let provide_method = if provide_arms.is_empty() {
-        quote! {}
-    } else {
-        quote! {
-            #[cfg(feature = "unstable-error-generic-member-access")]
-            fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
-                match self {
-                    #(#provide_arms)*
+    let provide_method =
+        if provide_arms.is_empty() || !cfg!(feature = "unstable-error-generic-member-access") {
+            quote! {}
+        } else {
+            quote! {
+                fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
+                    match self {
+                        #(#provide_arms)*
+                    }
                 }
             }
-        }
-    };
+        };
 
     // Generate ErrorExt methods
     let bt_method = if bt_arms.is_empty() {
@@ -317,17 +333,17 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
         quote! { let Self { #(#provide_field_names),*, .. } = self; }
     };
 
-    let provide_method = if provide_stmts.is_empty() {
-        quote! {}
-    } else {
-        quote! {
-            #[cfg(feature = "unstable-error-generic-member-access")]
-            fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
-                #destructure
-                #(#provide_stmts)*
+    let provide_method =
+        if provide_stmts.is_empty() || !cfg!(feature = "unstable-error-generic-member-access") {
+            quote! {}
+        } else {
+            quote! {
+                fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
+                    #destructure
+                    #(#provide_stmts)*
+                }
             }
-        }
-    };
+        };
 
     // ── ErrorExt impl for struct ──
 
@@ -390,13 +406,13 @@ pub fn gen_struct_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Re
         if args.is_empty() {
             quote! {
                 fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
-                    ::core::option::Option::Some(#oopsie_path::HelpText(::std::borrow::Cow::Borrowed(#fmt)))
+                    ::core::option::Option::Some(#oopsie_path::HelpText::from_static(#fmt))
                 }
             }
         } else {
             quote! {
                 fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
-                    ::core::option::Option::Some(#oopsie_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*))))
+                    ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*)))
                 }
             }
         }
@@ -427,11 +443,11 @@ fn gen_help_provide(help: &DisplayAttr, oopsie_path: &syn::Path) -> TokenStream2
     let args = &help.args;
     if args.is_empty() {
         quote! {
-            request.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText(::std::borrow::Cow::Borrowed(#fmt)));
+            request.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from_static(#fmt));
         }
     } else {
         quote! {
-            request.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText(::std::borrow::Cow::Owned(::std::format!(#fmt, #(#args),*))));
+            request.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*)));
         }
     }
 }

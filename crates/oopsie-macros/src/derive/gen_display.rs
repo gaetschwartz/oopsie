@@ -19,6 +19,11 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
     for variant in &data.variants {
         let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
         let variant_ident = &variant.ident;
+        let cfg_attrs: Vec<&syn::Attribute> = variant
+            .attrs
+            .iter()
+            .filter(|a| a.path().is_ident("cfg"))
+            .collect();
 
         // Collect all field names for destructuring
         let field_names: Vec<_> = match &variant.fields {
@@ -44,6 +49,7 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
         };
 
         arms.push(quote! {
+            #(#cfg_attrs)*
             #pattern => #write_call,
         });
     }

@@ -28,19 +28,49 @@ pub fn gen_enum_selectors(
         let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
         let categorized = CategorizedFields::from_fields(&variant.fields)?;
         let variant_ident = &variant.ident;
+        // Extract `#[cfg(...)]` attrs so the generated selector + impl carry
+        // the same gating as the variant. Without this, callers behind a
+        // disabled feature still see references to types that don't exist.
+        let cfg_attrs: Vec<&syn::Attribute> = variant
+            .attrs
+            .iter()
+            .filter(|a| a.path().is_ident("cfg"))
+            .collect();
 
         if variant_attrs.transparent {
             // Generate From impl instead of selector
             if let Some(source) = &categorized.source {
-                let source_ty = &source.ty;
+                // When the source field uses `from(T, transform)` (or auto-box
+                // detected `Box<T>`), the generated `From` impl accepts the
+                // pre-transform type `T` and applies the transform internally,
+                // matching snafu's `#[snafu(context(false))]` semantics.
+                let (param_ty, body_assign) = match &source.kind {
+                    super::parse::SourceKind::Transformed {
+                        source_type,
+                        transform,
+                    } => {
+                        let source_ident = &source.ident;
+                        (
+                            quote! { #source_type },
+                            quote! { let #source_ident = (#transform)(source); },
+                        )
+                    }
+                    _ => {
+                        let ty = &source.ty;
+                        let source_ident = &source.ident;
+                        (quote! { #ty }, quote! { let #source_ident = source; })
+                    }
+                };
                 let source_ident = &source.ident;
                 let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
                 let auto_names = gen_auto_field_names(&categorized);
                 let user_inits = gen_user_default_inits(&categorized);
                 selectors.push(quote! {
-                    impl #ty_generics ::core::convert::From<#source_ty> for #enum_ident #ty_generics {
+                    #(#cfg_attrs)*
+                    impl #ty_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics {
                         #[track_caller]
-                        fn from(#source_ident: #source_ty) -> Self {
+                        fn from(source: #param_ty) -> Self {
+                            #body_assign
                             #(#auto_inits)*
                             #enum_ident::#variant_ident {
                                 #source_ident,
@@ -92,18 +122,20 @@ pub fn gen_enum_selectors(
 
         let selector_struct = if user_fields.is_empty() {
             quote! {
+                #(#cfg_attrs)*
                 #[derive(Debug, Copy, Clone)]
                 #selector_vis struct #selector_ident;
             }
         } else {
             quote! {
+                #(#cfg_attrs)*
                 #[derive(Debug, Copy, Clone)]
                 #selector_vis struct #selector_ident #generic_params #struct_fields
             }
         };
 
         // Generate Contextual or build/fail depending on whether there's a source
-        let methods = if has_source {
+        let methods_inner = if has_source {
             gen_build_error(
                 &selector_ident,
                 enum_ident,
@@ -123,6 +155,18 @@ pub fn gen_enum_selectors(
                 &where_clauses,
                 oopsie_path,
             )
+        };
+        // Wrap methods in `const _: () = { ... };` so cfg-attrs apply to all
+        // impl blocks emitted by gen_build_error / gen_build_fail.
+        let methods = if cfg_attrs.is_empty() {
+            methods_inner
+        } else {
+            quote! {
+                #(#cfg_attrs)*
+                const _: () = {
+                    #methods_inner
+                };
+            }
         };
 
         selectors.push(quote! {
@@ -156,14 +200,31 @@ pub fn gen_struct_selector(
     if variant_attrs.transparent {
         // Generate From impl for transparent structs
         if let Some(source) = &categorized.source {
-            let source_ty = &source.ty;
+            let (param_ty, body_assign) = match &source.kind {
+                super::parse::SourceKind::Transformed {
+                    source_type,
+                    transform,
+                } => {
+                    let source_ident = &source.ident;
+                    (
+                        quote! { #source_type },
+                        quote! { let #source_ident = (#transform)(source); },
+                    )
+                }
+                _ => {
+                    let ty = &source.ty;
+                    let source_ident = &source.ident;
+                    (quote! { #ty }, quote! { let #source_ident = source; })
+                }
+            };
             let source_ident = &source.ident;
             let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
             let auto_names = gen_auto_field_names(&categorized);
             return Ok(quote! {
-                impl ::core::convert::From<#source_ty> for #struct_ident {
+                impl ::core::convert::From<#param_ty> for #struct_ident {
                     #[track_caller]
-                    fn from(#source_ident: #source_ty) -> Self {
+                    fn from(source: #param_ty) -> Self {
+                        #body_assign
                         #(#auto_inits)*
                         Self { #source_ident, #(#auto_names,)* }
                     }
@@ -241,7 +302,10 @@ pub fn gen_struct_selector(
 
 fn selector_name(base: &Ident, suffix: &SuffixSetting) -> Ident {
     let base_str = base.to_string();
-    let stripped = base_str.strip_suffix("Error").unwrap_or(&base_str);
+    let stripped = base_str
+        .strip_suffix("Error")
+        .filter(|s| !s.is_empty())
+        .unwrap_or(&base_str);
     match suffix {
         SuffixSetting::Off | SuffixSetting::Unset => Ident::new(stripped, base.span()),
         SuffixSetting::Default => format_ident!("{}Oopsie", stripped),
