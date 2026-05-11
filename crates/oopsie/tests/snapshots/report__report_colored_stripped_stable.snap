@@ -8,27 +8,27 @@ Error[report::TestError]: Test error: colored test
 
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  0: backtrace[[PTR]]::backtrace::libunwind::trace
+  0: backtrace::backtrace::libunwind::trace::he7de96703523050b
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
-  1: backtrace[[PTR]]::backtrace::trace_unsynchronized::<<backtrace[[PTR]]::capture::Backtrace>::create::{closure#0}>
+  1: backtrace::backtrace::trace_unsynchronized::h5b45c8a275237134
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-  2: backtrace[[PTR]]::backtrace::trace::<<backtrace[[PTR]]::capture::Backtrace>::create::{closure#0}>
+  2: backtrace::backtrace::trace::he2756034ac04a047
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-  3: <backtrace[[PTR]]::capture::Backtrace>::create
+  3: backtrace::capture::Backtrace::create::h6209338d560f4303
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-  4: <backtrace[[PTR]]::capture::Backtrace>::new
+  4: backtrace::capture::Backtrace::new::hfec0069f2bc5c35c
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-  5: <oopsie_core[[PTR]]::backtrace::BackTrace as oopsie_core[[PTR]]::traits::Capturable>::capture
+  5: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture::h6a3f5f45ea26ec77
            at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
-  6: <alloc[[PTR]]::boxed::Box<oopsie_core[[PTR]]::backtrace::BackTrace> as oopsie_core[[PTR]]::traits::Capturable>::capture
+  6: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture::hf6f0021ed1909218
            at [CRATE_DIR]-core/src/traits.rs:[LOC]
-  7: <report[[PTR]]::TestOopsie<&str>>::build
+  7: report::TestOopsie<__T0>::build::ha7d75cd1cfc6ff82
            at [CRATE_DIR]/tests/report.rs:[LOC]
-  8: report[[PTR]]::test_report_colored
+  8: report::test_report_colored::h07fda9f565c67441
            at [CRATE_DIR]/tests/report.rs:[LOC]
-  9: report[[PTR]]::test_report_colored::{closure#0}
+  9: report::test_report_colored::{{closure}}::hf0ff843bc0594310
            at [CRATE_DIR]/tests/report.rs:[LOC]
- 10: <report[[PTR]]::test_report_colored::{closure#0} as core[[PTR]]::ops::function::FnOnce<()>>::call_once
+ 10: core::ops::function::FnOnce::call_once::hee305a41f16a09a0
            at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
  11: <fn() -> core[[PTR]]::result::Result<(), alloc[[PTR]]::string::String> as core[[PTR]]::ops::function::FnOnce<()>>::call_once
            at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]

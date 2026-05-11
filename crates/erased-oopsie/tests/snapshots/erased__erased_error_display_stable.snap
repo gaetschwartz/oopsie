@@ -15,35 +15,35 @@ Error:
            with {"foo":true,"name":"Alice"}
              at crates/erased-oopsie/tests/common/mod.rs:[LOC]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   0: backtrace[PTR]::backtrace::libunwind::trace
+   0: backtrace::backtrace::libunwind::trace
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
-   1: backtrace[PTR]::backtrace::trace_unsynchronized::<<backtrace[PTR]::capture::Backtrace>::create::{closure#0}>
+   1: backtrace::backtrace::trace_unsynchronized
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-   2: backtrace[PTR]::backtrace::trace::<<backtrace[PTR]::capture::Backtrace>::create::{closure#0}>
+   2: backtrace::backtrace::trace
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-   3: <backtrace[PTR]::capture::Backtrace>::create
+   3: backtrace::capture::Backtrace::create
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-   4: <backtrace[PTR]::capture::Backtrace>::new
+   4: backtrace::capture::Backtrace::new
            at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-   5: <oopsie_core[PTR]::backtrace::BackTrace as oopsie_core[PTR]::traits::Capturable>::capture
+   5: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
            at [WORKSPACE_ROOT]/crates/oopsie-core/src/backtrace.rs:[LOC]
-   6: <alloc[PTR]::boxed::Box<oopsie_core[PTR]::backtrace::BackTrace> as oopsie_core[PTR]::traits::Capturable>::capture
+   6: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture
            at [WORKSPACE_ROOT]/crates/oopsie-core/src/traits.rs:[LOC]
-   7: <erased[PTR]::common::MyErrorInnerOopsie<alloc[PTR]::string::String>>::build
+   7: erased::common::MyErrorInnerOopsie<__T0>::build
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-   8: <erased[PTR]::common::MyErrorInnerOopsie<alloc[PTR]::string::String>>::fail::<()>
+   8: erased::common::MyErrorInnerOopsie<__T0>::fail
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-   9: erased[PTR]::common::make_error::inner_function
+   9: erased::common::make_error::inner_function
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-  10: erased[PTR]::common::make_error::outer_function
+  10: erased::common::make_error::outer_function
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-  11: erased[PTR]::common::make_error
+  11: erased::common::make_error
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-  12: erased[PTR]::test_erased_error_display
+  12: erased::test_erased_error_display
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/erased.rs:[LOC]
-  13: erased[PTR]::test_erased_error_display::{closure#0}
+  13: erased::test_erased_error_display::{{closure}}
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/erased.rs:[LOC]
-  14: <erased[PTR]::test_erased_error_display::{closure#0} as core[PTR]::ops::function::FnOnce<()>>::call_once
+  14: core::ops::function::FnOnce::call_once
            at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
   15: <fn() -> core[PTR]::result::Result<(), alloc[PTR]::string::String> as core[PTR]::ops::function::FnOnce<()>>::call_once
            at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]

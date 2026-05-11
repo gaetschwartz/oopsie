@@ -10,25 +10,25 @@ Error[report::OuterError]: Outer error
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    0: backtrace::backtrace::libunwind::trace
              at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
-      backtrace::backtrace::trace_unsynchronized::<<backtrace::capture::Backtrace>::create::{closure#0}>
+      backtrace::backtrace::trace_unsynchronized
              at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-   1: backtrace::backtrace::trace::<<backtrace::capture::Backtrace>::create::{closure#0}>
+   1: backtrace::backtrace::trace
              at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-   2: <backtrace::capture::Backtrace>::create
+   2: backtrace::capture::Backtrace::create
              at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-   3: <backtrace::capture::Backtrace>::new
+   3: backtrace::capture::Backtrace::new
              at [CARGO_REGISTRY]/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
    4: <oopsie_core::backtrace::BackTrace as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
-   5: <alloc::boxed::Box<oopsie_core::backtrace::BackTrace> as oopsie_core::traits::Capturable>::capture
+   5: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture
              at [CRATE_DIR]-core/src/traits.rs:[LOC]
-   6: <report::TestOopsie<&str>>::build
+   6: report::TestOopsie<__T0>::build
              at tests/report.rs:[LOC]
    7: report::test_report_chain
              at tests/report.rs:[LOC]
-   8: report::test_report_chain::{closure#0}
+   8: report::test_report_chain::{{closure}}
              at tests/report.rs:[LOC]
-   9: <report::test_report_chain::{closure#0} as core::ops::function::FnOnce<()>>::call_once
+   9: core::ops::function::FnOnce::call_once
              at [SYS_ROOT]/lib/rustlib/src/rust/library/core/src/ops/function.rs:[LOC]
   10: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce<()>>::call_once
              at /rustc/[HASH]/library/core/src/ops/function.rs:[LOC]
