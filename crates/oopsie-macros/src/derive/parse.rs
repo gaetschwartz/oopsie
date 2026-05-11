@@ -5,6 +5,16 @@
 //! - Variant/struct: display, transparent, help, code
 //! - Field: from, capture, provide
 
+// `darling::FromAttributes` derive emits code that trips these pedantic
+// lints inside its generated impl body, which our struct-level attributes
+// can't reach.
+#![allow(
+    clippy::needless_continue,
+    clippy::nonminimal_bool,
+    clippy::if_not_else,
+    clippy::allow_attributes
+)]
+
 use syn::parse::{Parse, ParseStream};
 use syn::{Expr, Ident, LitStr, Path, Token, Type, Visibility};
 
@@ -172,7 +182,6 @@ impl EnumContainerAttrsInner {
 /// to intercept it.
 #[derive(Debug, Default, darling::FromAttributes)]
 #[darling(attributes(oopsie))]
-#[allow(clippy::needless_continue, clippy::nonminimal_bool)] // darling-generated
 pub struct EnumContainerAttrs {
     #[darling(flatten)]
     pub inner: EnumContainerAttrsInner,
@@ -271,7 +280,6 @@ impl darling::FromMeta for DisplayAttr {
 /// plus `vis`.
 #[derive(Debug, Default, darling::FromAttributes)]
 #[darling(attributes(oopsie))]
-#[allow(clippy::needless_continue, clippy::nonminimal_bool)] // darling-generated
 pub struct VariantAttrs {
     #[darling(flatten)]
     pub inner: VariantAttrsInner,
@@ -323,7 +331,6 @@ impl VariantAttrs {
 /// declarations.
 #[derive(Debug, Default, darling::FromAttributes)]
 #[darling(attributes(oopsie))]
-#[allow(clippy::needless_continue, clippy::nonminimal_bool)] // darling-generated
 pub struct StructAttrs {
     #[darling(flatten)]
     pub container: EnumContainerAttrsInner,
@@ -380,7 +387,6 @@ fn merge_short_display(target: &mut Option<DisplayAttr>, short: DisplayAttr) -> 
 #[expect(clippy::struct_excessive_bools)]
 #[derive(Debug, Default, darling::FromAttributes)]
 #[darling(attributes(oopsie))]
-#[allow(clippy::needless_continue, clippy::nonminimal_bool)] // darling-generated
 pub struct FieldAttrs {
     #[darling(default)]
     pub from: SourceKind,

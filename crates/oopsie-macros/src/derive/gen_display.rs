@@ -66,7 +66,7 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
 }
 
 /// Generate a `Display` impl for a struct.
-pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<TokenStream2> {
+pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> TokenStream2 {
     let struct_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let variant_attrs = attrs;
@@ -97,14 +97,14 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
         quote! { ::core::write!(f, #name) }
     };
 
-    Ok(quote! {
+    quote! {
         impl #impl_generics ::core::fmt::Display for #struct_ident #ty_generics #where_clause {
             fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 #destructure
                 #write_call
             }
         }
-    })
+    }
 }
 
 fn gen_write_call(display: &DisplayAttr) -> TokenStream2 {
