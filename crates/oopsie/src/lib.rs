@@ -148,10 +148,9 @@
 //! | `#[oopsie(from(Type, transform))]` | Source with type transformation |
 //! | `#[oopsie(capture)]` | Auto-filled via [`Capturable`]; excluded from selector |
 
-// Re-export the proc-macro attribute, derive, and legacy traced macro.
+// Re-export the proc-macro attribute and derive.
 pub use oopsie_macros::Oopsie;
 pub use oopsie_macros::oopsie;
-pub use oopsie_macros::traced;
 
 // Explicit re-export of the public surface from `oopsie-core`. Avoid
 // `pub use oopsie_core::*` so transitive deps (tracing-error,

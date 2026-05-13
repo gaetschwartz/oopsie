@@ -1,4 +1,4 @@
-//! Struct expansion for `#[traced]`.
+//! Struct trace-field injection for `#[oopsie(traced)]`.
 
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;

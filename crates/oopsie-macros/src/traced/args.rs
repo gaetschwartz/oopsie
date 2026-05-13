@@ -1,4 +1,4 @@
-//! Argument types for the `#[traced]` macro.
+//! Argument types for trace injection options.
 
 use crate::utils::{BetterFlag, FieldSetting};
 
@@ -17,7 +17,8 @@ pub struct TracedArgs {
 
 impl TracedArgs {
     /// Resolve the explicit override model:
-    /// - Bare `#[traced]` (no trace args specified) → backtrace + spantrace enabled, timestamp disabled
+    /// - Bare `#[oopsie(traced)]` or no explicit trace args specified
+    ///   → backtrace + spantrace enabled, timestamp disabled
     /// - Any trace arg specified → you get exactly what's listed
     pub fn resolve(&self) -> ResolvedTraceArgs<'_> {
         let any_trace_specified =

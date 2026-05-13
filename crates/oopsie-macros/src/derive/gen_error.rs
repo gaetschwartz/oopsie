@@ -79,7 +79,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             });
         }
 
-        // Provide from variant-level provide attrs (auto error code from #[traced])
+        // Provide from variant-level provide attrs (including auto error code from trace injection)
         for provide_attr in &variant_attrs.provides {
             provide_stmts.push(gen_provide_call(provide_attr));
         }
@@ -141,7 +141,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                 Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#code)),
             });
         } else {
-            // Check for auto-generated code from #[traced] provide attrs
+            // Check for auto-generated code from trace-injection provide attrs
             for provide_attr in &variant_attrs.provides {
                 if is_error_code_provide(provide_attr) {
                     let expr = &provide_attr.expr;
@@ -389,7 +389,7 @@ pub fn gen_struct_error(
             }
         }
     } else {
-        // Check for auto-generated code from #[traced] provide attrs
+        // Check for auto-generated code from trace-injection provide attrs
         let mut code_expr = None;
         for provide_attr in &attrs.provides {
             if is_error_code_provide(provide_attr) {
@@ -477,7 +477,7 @@ fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
     }
 }
 
-/// Check if a provide attr is for ErrorCode (used to detect auto-generated code from #[traced]).
+/// Check if a provide attr is for ErrorCode (used to detect auto-generated code from trace injection).
 fn is_error_code_provide(attr: &ProvideAttr) -> bool {
     // Check if the provided type ends with "ErrorCode"
     if let Type::Path(type_path) = &attr.provided_type

@@ -1,5 +1,0 @@
----
-source: crates/oopsie-macros/src/traced/mod.rs
-expression: output
----
-# [derive (Debug , Oopsie)] # [oopsie (provide (:: oopsie :: ErrorCode => :: oopsie :: ErrorCode :: from (concat ! (module_path ! () , "::" , "SomethingFailed"))))] pub struct SomethingFailed { # [oopsie (backtrace)] __oopsie_backtrace : :: std :: boxed :: Box < :: oopsie :: BackTrace > , # [oopsie (spantrace)] __oopsie_spantrace : :: std :: boxed :: Box < :: oopsie :: SpanTrace > }

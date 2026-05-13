@@ -216,7 +216,7 @@ impl EnumContainerAttrs {
 /// Variant-level keys without `vis` (which is extracted by a pre-pass).
 ///
 /// `provide(...)` appears here even though it's logically field-level: the
-/// `#[traced]` macro auto-emits `#[oopsie(provide(...))]` at variant/struct
+/// trace-injection path auto-emits `#[oopsie(provide(...))]` at variant/struct
 /// scope to surface injected backtrace/spantrace fields. Collected as a Vec
 /// because multiple `provide` entries can appear per item.
 #[derive(Debug, Default, darling::FromMeta)]
@@ -345,7 +345,7 @@ pub struct StructAttrs {
     #[darling(default)]
     pub code: Option<String>,
     /// See `VariantAttrsInner::provides` for the rationale (struct-level
-    /// `#[oopsie(provide(...))]` from `#[traced]`).
+    /// `#[oopsie(provide(...))]` emitted by trace injection).
     #[darling(default, multiple, rename = "provide")]
     pub provides: Vec<ProvideAttr>,
 }

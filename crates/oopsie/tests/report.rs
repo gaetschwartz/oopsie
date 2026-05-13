@@ -8,17 +8,15 @@ mod common;
 
 use std::process::Termination as _;
 
-use oopsie::{Contextual as _, Oopsie, Report, traced};
+use oopsie::{Contextual as _, Report, oopsie};
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 #[oopsie("Test error: {message}")]
 pub struct TestError {
     message: String,
 }
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 #[oopsie("Outer error")]
 pub struct OuterError {
     source: TestError,
@@ -80,8 +78,7 @@ fn test_report_from() {
     assert!(report.to_string().contains("from test"));
 }
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 #[oopsie("Something went wrong: {message}")]
 #[oopsie(help = "Try restarting the service")]
 pub struct ErrorWithHelp {

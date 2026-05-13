@@ -7,18 +7,16 @@
 mod common;
 
 use erased_oopsie::ErasedError;
-use oopsie::{Oopsie, traced};
+use oopsie::oopsie;
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 #[oopsie("Something went wrong: {message}")]
 #[oopsie(help = "Try restarting the service")]
 pub struct ErrorWithHelp {
     message: String,
 }
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 #[oopsie("Code-only error: {message}")]
 pub struct ErrorWithCodeOnly {
     message: String,

@@ -1,5 +1,0 @@
----
-source: crates/oopsie-macros/src/traced/mod.rs
-expression: err
----
-`#[traced]` does not support tuple variants/structs; use named fields instead

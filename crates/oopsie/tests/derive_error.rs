@@ -271,17 +271,15 @@ fn nested_error_code_propagated_through_source_chain() {
     assert_eq!(&*code.unwrap(), "inner::code");
 }
 
-/// Test that `#[traced]` + `#[derive(Oopsie)]` properly propagates
+/// Test that `#[oopsie(traced)]` properly propagates
 /// backtrace through nested errors.
-#[oopsie::traced]
-#[derive(Debug, oopsie::Oopsie)]
+#[oopsie::oopsie(traced)]
 pub enum AttrInnerError {
     #[oopsie("attr inner: {msg}")]
     Boom { msg: String },
 }
 
-#[oopsie::traced]
-#[derive(Debug, oopsie::Oopsie)]
+#[oopsie::oopsie(traced)]
 pub enum AttrOuterError {
     #[oopsie("attr outer: {ctx}")]
     Wrapper { source: AttrInnerError, ctx: String },
@@ -309,13 +307,13 @@ fn nested_attr_macro_backtrace_propagated() {
     let inner = Boom { msg: "kaboom" }.build();
     let outer: AttrOuterError = Wrapper { ctx: "handling" }.build_error(inner);
 
-    // #[traced] injects backtrace with provide(ref, Backtrace => ...)
+    // #[oopsie(traced)] injects backtrace with provide(ref, Backtrace => ...)
     // on each variant. The outer error's provide() forwards to source.provide(),
     // so the inner's backtrace should be reachable from the outer.
     let bt = core::error::request_ref::<oopsie::BackTrace>(&outer);
     assert!(
         bt.is_some(),
-        "backtrace from #[traced] inner should propagate to outer"
+        "backtrace from #[oopsie(traced)] inner should propagate to outer"
     );
 }
 
@@ -374,8 +372,7 @@ fn provide_help_and_code_combined() {
 
 // ---- Bug fix: struct provide() works correctly ----
 
-#[oopsie::traced]
-#[derive(Debug, oopsie::Oopsie)]
+#[oopsie::oopsie(traced)]
 pub struct AttrStructWithBt {
     msg: String,
 }

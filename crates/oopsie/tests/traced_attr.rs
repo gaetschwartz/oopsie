@@ -4,12 +4,11 @@
 )]
 #![allow(unused, clippy::all)]
 
-use oopsie::{Oopsie, traced};
+use oopsie::oopsie;
 
-// ---- Test 1: traced macro on enum — basic usage ----
+// ---- Test 1: #[oopsie(traced)] on enum — basic usage ----
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub enum AppError {
     #[oopsie("conn failed: {addr}")]
     ConnFailed { addr: String },
@@ -23,10 +22,9 @@ fn traced_enum_basic() {
     assert_eq!(err.to_string(), "conn failed: 127.0.0.1");
 }
 
-// ---- Test 2: traced macro on struct — basic usage ----
+// ---- Test 2: #[oopsie(traced)] on struct — basic usage ----
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub struct ConnError {
     reason: String,
 }
@@ -38,10 +36,9 @@ fn traced_struct_basic() {
     assert_eq!(err.reason, "refused");
 }
 
-// ---- Test 3: traced macro injects backtrace (no panic) ----
+// ---- Test 3: #[oopsie(traced)] injects backtrace (no panic) ----
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub enum InjectError {
     #[oopsie("injected")]
     Injected { info: String },
@@ -49,15 +46,14 @@ pub enum InjectError {
 
 #[test]
 fn traced_injects_backtrace() {
-    // Should not panic — backtrace and spantrace are auto-injected by #[traced].
+    // Should not panic — backtrace and spantrace are auto-injected by #[oopsie(traced)].
     let err = inject_oopsies::Injected { info: "test" }.build();
     assert!(matches!(err, InjectError::Injected { ref info, .. } if info == "test"));
 }
 
 // ---- Test 4: #[help] and #[code] on variant ----
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub enum HelpCodeError {
     #[oopsie(
         display("connection refused"),
@@ -83,15 +79,13 @@ fn traced_with_help_and_code() {
 
 // ---- Test 5: enum module naming convention ----
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub enum FooBarError {
     #[oopsie("foo")]
     Foo,
 }
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub enum MyError {
     #[oopsie("my")]
     My,
@@ -107,8 +101,7 @@ fn traced_enum_module_naming() {
 
 // ---- Test 6: does not duplicate pre-existing backtrace field ----
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub enum PreExistingBtError {
     #[oopsie("has backtrace")]
     #[oopsie(provide(ref, oopsie::BackTrace => bt.as_ref()))]
@@ -127,8 +120,7 @@ fn traced_does_not_duplicate_backtrace() {
 
 // ---- Test 7: does not duplicate pre-existing spantrace field ----
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub enum PreExistingStError {
     #[oopsie("has spantrace")]
     #[oopsie(provide(ref, oopsie::SpanTrace => st.as_ref()))]
@@ -147,8 +139,7 @@ fn traced_does_not_duplicate_spantrace() {
 
 // ---- Test 8: struct does not duplicate pre-existing backtrace ----
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub struct PreExistingBtStructError {
     msg: String,
     #[oopsie(capture)]
@@ -163,8 +154,7 @@ fn traced_struct_does_not_duplicate_backtrace() {
 
 // ---- Test 9: explicit override — backtrace only ----
 
-#[traced(backtrace)]
-#[derive(Debug, Oopsie)]
+#[oopsie(backtrace)]
 pub enum BacktraceOnlyError {
     #[oopsie("bt only")]
     BtOnly { msg: String },
@@ -179,8 +169,7 @@ fn traced_explicit_backtrace_only() {
 
 // ---- Test 10: explicit override — spantrace only ----
 
-#[traced(spantrace)]
-#[derive(Debug, Oopsie)]
+#[oopsie(spantrace)]
 pub enum SpantraceOnlyError {
     #[oopsie("st only")]
     StOnly { msg: String },
@@ -194,8 +183,7 @@ fn traced_explicit_spantrace_only() {
 
 // ---- Test 11: code = false disables auto error code ----
 
-#[traced(code = false)]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced, code = false)]
 pub enum NoCodeError {
     #[oopsie("no code")]
     NoCode { msg: String },

@@ -2,19 +2,17 @@
 
 use std::sync::LazyLock;
 
-use oopsie::{Oopsie, ResultExt as _, traced};
+use oopsie::{ResultExt as _, oopsie};
 use tracing::instrument;
 use tracing_subscriber::prelude::*;
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 pub enum MyError {
     #[oopsie(display("Inner error happened"))]
     Inner { source: MyErrorInner },
 }
 
-#[traced]
-#[derive(Debug, Oopsie)]
+#[oopsie(traced)]
 #[oopsie("Error: {message}")]
 pub struct MyErrorInner {
     message: String,

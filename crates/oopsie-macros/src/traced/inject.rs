@@ -61,7 +61,7 @@ pub(super) fn inject_fields(
         }
         Fields::Unnamed(unnamed) => Err(syn::Error::new_spanned(
             unnamed,
-            "`#[traced]` does not support tuple variants/structs; use named fields instead",
+            "trace injection does not support tuple variants/structs; use named fields instead",
         )),
     }
 }
