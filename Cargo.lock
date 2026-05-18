@@ -241,7 +241,6 @@ dependencies = [
  "serde_json",
  "strum",
  "tracing",
- "tracing-error",
  "tracing-subscriber",
 ]
 
@@ -493,7 +492,6 @@ dependencies = [
  "serde_json",
  "strip-ansi-escapes",
  "tracing",
- "tracing-error",
  "tracing-subscriber",
  "trybuild",
 ]

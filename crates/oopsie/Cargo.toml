@@ -30,6 +30,5 @@ insta = { version = "1.46.3", features = ["filters", "json", "redactions"] }
 rustversion = "1.0.22"
 strip-ansi-escapes = "0.2.1"
 tracing = "0.1.44"
-tracing-error = "0.2.1"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 trybuild = "1.0.116"

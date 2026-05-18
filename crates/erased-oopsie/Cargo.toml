@@ -24,7 +24,6 @@ konst = { version = "0.4.3", features = ["alloc"] }
 oopsie = { workspace = true }
 regex = "1.12.3"
 tracing = "0.1.44"
-tracing-error = "0.2.1"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 
 [lints]
