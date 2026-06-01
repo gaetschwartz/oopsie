@@ -19,7 +19,6 @@ use crate::Backtrace;
 
 /// A single frame from a backtrace.
 pub struct BacktraceFrame {
-    pub n: usize,
     pub name: Option<Box<str>>,
     pub filename: Option<Box<path::Path>>,
     pub lineno: Option<u32>,
@@ -54,17 +53,17 @@ pub trait SpanTraceProvider {
 
 impl BacktraceProvider for Backtrace {
     fn frames(&self) -> Vec<BacktraceFrame> {
-        // Filter `backtrace`-crate capture frames here too (same as in
-        // `oopsie_core::backtrace::Backtrace::Debug` and
-        // `erased_oopsie::ErasedBacktrace::from_backtrace`) so the colored
-        // and no-colors rendering paths produce the same shape across
-        // platforms.
+        // Apply the same internal-frame filter as the `Debug` impl
+        // (`oopsie_core::backtrace::Backtrace`) and
+        // `erased_oopsie::ErasedBacktrace::from_backtrace` so each rendering
+        // path is stable across platforms (macOS captures `backtrace`-crate
+        // frames that Linux inlines away). This does not make the colored and
+        // Debug outputs identical in shape — the Debug path groups inlined
+        // symbols under one frame number, this path numbers each symbol.
         Backtrace::frames(self)
             .iter()
-            .zip(1..)
-            .flat_map(|(frame, n)| {
-                frame.symbols().iter().map(move |sym| BacktraceFrame {
-                    n,
+            .flat_map(|frame| {
+                frame.symbols().iter().map(|sym| BacktraceFrame {
                     name: sym.name().map(|s| s.to_string().into_boxed_str()),
                     filename: sym.filename().map(Box::from),
                     lineno: sym.lineno(),
@@ -108,7 +107,7 @@ pub struct TraceTheme {
 }
 
 impl TraceTheme {
-    /// Create a new `TraceTheme` with the specified styles.
+    /// The default color theme used for trace rendering.
     pub const DEFAULT: Self = Self {
         frame_number: Style::new().dimmed(),
         function_name: Style::new().bright_red(),
@@ -207,15 +206,20 @@ pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
 /// Split a function name into (base, hash_suffix).
 /// The hash suffix is `::h` followed by exactly 16 hex characters at the end.
 fn split_function_hash(name: &str) -> (&str, Option<&str>) {
-    // Look for ::h followed by exactly 16 hex chars at end
+    // Look for ::h followed by exactly 16 hex chars at end.
     if name.len() >= 20 {
         let suffix_start = name.len() - 19; // "::h" (3) + 16 hex chars
-        let candidate = &name[suffix_start..];
-        if candidate.starts_with("::h")
-            && candidate[3..].len() == 16
-            && candidate[3..].chars().all(|c| c.is_ascii_hexdigit())
-        {
-            return (&name[..suffix_start], Some(candidate));
+        // A valid hash suffix is all ASCII, so a `suffix_start` that lands mid
+        // UTF-8 char (demangled symbols can be non-ASCII) can never match —
+        // bail out rather than panic on the slice.
+        if name.is_char_boundary(suffix_start) {
+            let candidate = &name[suffix_start..];
+            if candidate.starts_with("::h")
+                && candidate[3..].len() == 16
+                && candidate[3..].chars().all(|c| c.is_ascii_hexdigit())
+            {
+                return (&name[..suffix_start], Some(candidate));
+            }
         }
     }
     (name, None)
@@ -319,9 +323,9 @@ impl TracePrinter {
             )?;
         }
 
-        // Render each frame
+        // Render each frame, numbered 1-based.
         for (i, frame) in filtered.iter().enumerate() {
-            self.write_backtrace_frame(f, i, frame)?;
+            self.write_backtrace_frame(f, i + 1, frame)?;
         }
 
         Ok(())
@@ -331,14 +335,14 @@ impl TracePrinter {
     fn write_backtrace_frame(
         &self,
         f: &mut fmt::Formatter<'_>,
-        index: usize,
+        number: usize,
         frame: &BacktraceFrame,
     ) -> fmt::Result {
         // Frame number: right-aligned in 3 chars
         write!(
             f,
             "{}",
-            format_args!("{index:>3}").style(self.theme.frame_number)
+            format_args!("{number:>3}").style(self.theme.frame_number)
         )?;
         write!(f, "{}", ": ".style(self.theme.separator))?;
 
@@ -392,7 +396,7 @@ impl TracePrinter {
             format_args!("{:━^80}", " SPANTRACE ").style(self.theme.header)
         )?;
 
-        let mut index = 0usize;
+        let mut index = 1usize;
         let mut err = Ok(());
 
         st.with_spans(&mut |meta, fields| {
@@ -470,7 +474,7 @@ enum BoxOrBorrow<'a, T: ?Sized> {
 }
 impl<T: ?Sized> BoxOrBorrow<'_, T> {
     #[inline]
-    pub fn as_ref(&self) -> &T {
+    fn as_ref(&self) -> &T {
         match self {
             BoxOrBorrow::Borrow(b) => b,
             BoxOrBorrow::Box(b) => b,
@@ -504,13 +508,8 @@ fn overlay_frame_filters(under: FrameFilterBox, above: FrameFilterBox) -> FrameF
 mod tests {
     use super::*;
 
-    fn make_frame(
-        n: usize,
-        name: Option<impl Into<String>>,
-        lineno: Option<u32>,
-    ) -> BacktraceFrame {
+    fn make_frame(name: Option<impl Into<String>>, lineno: Option<u32>) -> BacktraceFrame {
         BacktraceFrame {
-            n,
             name: name.map(|s| s.into().into_boxed_str()),
             filename: None,
             lineno,
@@ -536,55 +535,43 @@ mod tests {
 
     #[test]
     fn test_error_backtrace_frame_filter() {
-        let capture = make_frame(
-            0,
-            Some("std::backtrace_rs::backtrace::libunwind::trace"),
-            None,
-        );
-        let app1 = make_frame(1, Some("my_crate::function_a"), None);
-        let app2 = make_frame(2, Some("my_crate::function_b"), None);
-        let runtime = make_frame(3, Some("std::rt::lang_start_internal::invoke"), None);
+        let capture = make_frame(Some("std::backtrace_rs::backtrace::libunwind::trace"), None);
+        let app1 = make_frame(Some("my_crate::function_a"), None);
+        let app2 = make_frame(Some("my_crate::function_b"), None);
+        let runtime = make_frame(Some("std::rt::lang_start_internal::invoke"), None);
 
         let mut frames: Vec<&BacktraceFrame> = vec![&capture, &app1, &app2, &runtime];
         error_backtrace_frame_filter(&mut frames);
 
         assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].n, 1);
-        assert_eq!(frames[1].n, 2);
+        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
+        assert_eq!(frames[1].name.as_deref(), Some("my_crate::function_b"));
     }
 
     #[test]
     fn test_error_backtrace_frame_filter_no_capture_no_runtime() {
-        let app1 = make_frame(0, Some("my_crate::function_a"), None);
-        let app2 = make_frame(1, Some("my_crate::function_b"), None);
+        let app1 = make_frame(Some("my_crate::function_a"), None);
+        let app2 = make_frame(Some("my_crate::function_b"), None);
 
         let mut frames: Vec<&BacktraceFrame> = vec![&app1, &app2];
         error_backtrace_frame_filter(&mut frames);
 
         assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].n, 0);
-        assert_eq!(frames[1].n, 1);
+        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
+        assert_eq!(frames[1].name.as_deref(), Some("my_crate::function_b"));
     }
 
     #[test]
     fn test_error_backtrace_frame_filter_multiple_capture_frames() {
-        let capture1 = make_frame(
-            0,
-            Some("<std::backtrace::Backtrace>::create::something"),
-            None,
-        );
-        let capture2 = make_frame(
-            1,
-            Some("std::backtrace_rs::backtrace::libunwind::trace"),
-            None,
-        );
-        let app = make_frame(2, Some("my_crate::function_a"), None);
+        let capture1 = make_frame(Some("<std::backtrace::Backtrace>::create::something"), None);
+        let capture2 = make_frame(Some("std::backtrace_rs::backtrace::libunwind::trace"), None);
+        let app = make_frame(Some("my_crate::function_a"), None);
 
         let mut frames: Vec<&BacktraceFrame> = vec![&capture1, &capture2, &app];
         error_backtrace_frame_filter(&mut frames);
 
         assert_eq!(frames.len(), 1);
-        assert_eq!(frames[0].n, 2);
+        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
     }
 
     #[test]
@@ -600,6 +587,18 @@ mod tests {
         // Not exactly 16 hex chars
         let (base, hash) = split_function_hash("my_crate::foo::habcd");
         assert_eq!(base, "my_crate::foo::habcd");
+        assert_eq!(hash, None);
+    }
+
+    #[test]
+    fn split_function_hash_non_ascii_does_not_panic() {
+        // 2-byte `é` at bytes 0..2 then 18 ASCII bytes: len is 20 and the
+        // `len - 19 == 1` slice offset lands mid-char. Must not panic.
+        let name = format!("é{}", "a".repeat(18));
+        assert_eq!(name.len(), 20);
+        assert!(!name.is_char_boundary(1));
+        let (base, hash) = split_function_hash(&name);
+        assert_eq!(base, name);
         assert_eq!(hash, None);
     }
 }
