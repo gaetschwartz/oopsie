@@ -1,6 +1,93 @@
-use std::fmt;
+use std::cell::Cell;
+use std::sync::LazyLock;
+use std::{fmt, path};
 
 use crate::Capturable as _;
+
+/// Whether backtrace capture is enabled, and how verbosely it should render.
+///
+/// Resolved once from the environment (see [`rust_backtrace`]) following the
+/// same convention as `std`: `RUST_LIB_BACKTRACE` is consulted first and, if
+/// unset, `RUST_BACKTRACE`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RustBacktrace {
+    /// Capture disabled — no frames are recorded.
+    Disabled,
+    /// Capture enabled, rendered as the trimmed "short" view.
+    Enabled,
+    /// Capture enabled, rendered untrimmed — every frame is shown.
+    Full,
+}
+
+impl RustBacktrace {
+    fn detect() -> Self {
+        // `RUST_LIB_BACKTRACE` wins when set; otherwise fall back to
+        // `RUST_BACKTRACE`. `or_else` only fires on `Err` (var unset or
+        // non-unicode), so an explicit `RUST_LIB_BACKTRACE=0` disables even
+        // when `RUST_BACKTRACE=1`.
+        let raw = std::env::var("RUST_LIB_BACKTRACE").or_else(|_| std::env::var("RUST_BACKTRACE"));
+        match raw.as_deref() {
+            Ok("0") | Err(_) => RustBacktrace::Disabled,
+            Ok("full") => RustBacktrace::Full,
+            Ok(_) => RustBacktrace::Enabled,
+        }
+    }
+
+    /// Whether frames should be captured at all.
+    #[inline]
+    #[must_use]
+    pub const fn is_enabled(self) -> bool {
+        matches!(self, RustBacktrace::Full | RustBacktrace::Enabled)
+    }
+
+    /// Whether rendering should show every frame, skipping the trimming that
+    /// hides capture machinery and runtime setup/teardown frames.
+    #[inline]
+    #[must_use]
+    pub const fn is_full(self) -> bool {
+        matches!(self, RustBacktrace::Full)
+    }
+}
+
+thread_local! {
+    /// Per-thread override of the backtrace setting. `None` falls back to the
+    /// environment.
+    static OVERRIDE: Cell<Option<RustBacktrace>> = const { Cell::new(None) };
+}
+
+/// Force [`rust_backtrace`] to return `value` **on the current thread**, taking
+/// precedence over the environment until [`clear_rust_backtrace_override`].
+///
+/// This is the precise, scoped lever — it affects only backtraces captured on
+/// this thread, not threads spawned afterwards. For process-wide control use
+/// the `RUST_LIB_BACKTRACE` / `RUST_BACKTRACE` environment variables instead.
+#[inline]
+pub fn set_rust_backtrace_override(value: RustBacktrace) {
+    OVERRIDE.with(|o| o.set(Some(value)));
+}
+
+/// Remove any override set by [`set_rust_backtrace_override`] on the current
+/// thread, reverting [`rust_backtrace`] to the environment-derived value.
+#[inline]
+pub fn clear_rust_backtrace_override() {
+    OVERRIDE.with(|o| o.set(None));
+}
+
+/// The effective backtrace setting for the current thread.
+///
+/// Returns the thread-local override set via [`set_rust_backtrace_override`] if
+/// present; otherwise the value derived from `RUST_LIB_BACKTRACE` then
+/// `RUST_BACKTRACE`. Like `std`, the environment is read once and cached — only
+/// an override can change the result afterwards.
+#[must_use]
+#[inline]
+pub fn rust_backtrace() -> RustBacktrace {
+    static CACHED: LazyLock<RustBacktrace> = LazyLock::new(RustBacktrace::detect);
+    if let Some(over) = OVERRIDE.with(Cell::get) {
+        return over;
+    }
+    *CACHED
+}
 
 #[derive(Clone)]
 pub struct BackTrace(backtrace::Backtrace);
@@ -8,7 +95,11 @@ pub struct BackTrace(backtrace::Backtrace);
 impl crate::Capturable for BackTrace {
     #[inline]
     fn capture() -> Self {
-        BackTrace(backtrace::Backtrace::new())
+        if rust_backtrace().is_enabled() {
+            BackTrace(backtrace::Backtrace::new_unresolved())
+        } else {
+            BackTrace(backtrace::Backtrace::from(vec![]))
+        }
     }
 }
 
@@ -26,7 +117,9 @@ impl color_backtrace::Backtrace for BackTrace {
     #[inline]
     fn frames(&self) -> Vec<color_backtrace::Frame> {
         let mut frames = color_backtrace::Backtrace::frames(&self.0);
-        frames.retain(|f| !is_internal_frame(f.name.as_deref(), f.filename.as_deref()));
+        if !rust_backtrace().is_full() {
+            frames.retain(|f| !is_internal_frame(f.name.as_deref(), f.filename.as_deref()));
+        }
         frames
     }
 }
@@ -45,7 +138,7 @@ impl color_backtrace::Backtrace for BackTrace {
 /// Filtering at the source means `Report`, `ErasedError`, and any future
 /// consumer all see a stable backtrace shape across macOS and Linux.
 #[must_use]
-pub fn is_internal_frame(name: Option<&str>, filename: Option<&std::path::Path>) -> bool {
+pub fn is_internal_frame(name: Option<&str>, filename: Option<&path::Path>) -> bool {
     // Unresolvable frame (no symbol name, no filename). On Linux these
     // typically sit at the bottom of stack where the dynamic linker can't
     // resolve into a Rust/libc function — they're never user-actionable and
@@ -72,7 +165,7 @@ pub fn is_internal_frame(name: Option<&str>, filename: Option<&std::path::Path>)
         // Path components are the cleanest match: avoids false positives on
         // e.g. `/home/.../my-backtrace-experiments/...`.
         for component in p.components() {
-            if let std::path::Component::Normal(s) = component
+            if let path::Component::Normal(s) = component
                 && let Some(s) = s.to_str()
                 && s.starts_with("backtrace-")
             {
@@ -89,28 +182,32 @@ impl fmt::Debug for BackTrace {
         // identical across platforms (macOS captures them; Linux inlines
         // them away). We rebuild a `backtrace::Backtrace` from the filtered
         // frame vec to reuse the upstream Debug formatter verbatim.
-        let primary_name = |frame: &backtrace::BacktraceFrame| -> Option<String> {
+        fn primary_name(frame: &backtrace::BacktraceFrame) -> Option<String> {
             frame
                 .symbols()
                 .iter()
                 .next()
                 .and_then(|s| s.name().map(|n| n.to_string()))
-        };
-        let primary_filename = |frame: &backtrace::BacktraceFrame| {
+        }
+        fn primary_filename(frame: &backtrace::BacktraceFrame) -> Option<&path::Path> {
             frame
                 .symbols()
                 .iter()
                 .next()
-                .and_then(|s| s.filename().map(std::borrow::ToOwned::to_owned))
-        };
+                .and_then(|s| s.filename().map(AsRef::as_ref))
+        }
+        // `full` means "show everything captured" — defer to the upstream
+        // formatter without any trimming.
+        if rust_backtrace().is_full() {
+            return fmt::Debug::fmt(&self.0, f);
+        }
         let kept: Vec<backtrace::BacktraceFrame> = self
-            .0
             .frames()
             .iter()
             .filter(|frame| {
                 let name = primary_name(frame);
                 let filename = primary_filename(frame);
-                !is_internal_frame(name.as_deref(), filename.as_deref())
+                !is_internal_frame(name.as_deref(), filename)
             })
             .cloned()
             .collect();
@@ -122,8 +219,29 @@ impl fmt::Debug for BackTrace {
 impl BackTrace {
     /// Returns a reference to the inner [`backtrace::Backtrace`].
     #[must_use]
+    #[inline]
     pub const fn inner(&self) -> &backtrace::Backtrace {
         &self.0
+    }
+
+    /// Returns a mutable reference to the inner [`backtrace::Backtrace`].
+    #[must_use]
+    #[inline]
+    pub const fn inner_mut(&mut self) -> &mut backtrace::Backtrace {
+        &mut self.0
+    }
+
+    /// Returns the frames of the backtrace.
+    #[must_use]
+    #[inline]
+    pub fn frames(&self) -> &[backtrace::BacktraceFrame] {
+        self.inner().frames()
+    }
+
+    /// Resolves the backtrace's symbols.
+    #[inline]
+    pub fn resolve(&mut self) {
+        self.0.resolve();
     }
 }
 

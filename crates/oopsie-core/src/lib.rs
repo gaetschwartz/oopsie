@@ -24,7 +24,10 @@ use std::borrow::Cow;
 use std::io;
 use std::ops::Deref;
 
-pub use backtrace::{BackTrace, is_internal_frame};
+pub use backtrace::{
+    BackTrace, RustBacktrace, clear_rust_backtrace_override, is_internal_frame, rust_backtrace,
+    set_rust_backtrace_override,
+};
 use color_backtrace::termcolor;
 pub use diagnostic::Diagnostic;
 
