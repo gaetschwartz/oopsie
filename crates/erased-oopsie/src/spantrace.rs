@@ -179,7 +179,13 @@ impl fmt::Display for ErasedSpanTrace {
             }
 
             try_bool!(
-                write!(f, "{:>4}: {}::{}", span, metadata.target(), metadata.name()),
+                write!(
+                    f,
+                    "{:>3}: {}::{}",
+                    span + 1,
+                    metadata.target(),
+                    metadata.name()
+                ),
                 err
             );
 
@@ -287,10 +293,10 @@ mod tests {
         let spantrace: ErasedSpanTrace = serde_json::from_value(json).unwrap();
         let display = spantrace.to_string();
 
-        insta::assert_snapshot!(display, @r"
-           0: my_module::inner_function
-                     at src/lib.rs:42
-           1: my_crate::outer_function
+        insta::assert_snapshot!(display, @"
+        1: my_module::inner_function
+                   at src/lib.rs:42
+        2: my_crate::outer_function
         ");
     }
 
@@ -315,9 +321,9 @@ mod tests {
         let display = spantrace.to_string();
 
         insta::assert_snapshot!(display, @"
-        0: server::process_request
-                with user_id=42, method=GET
-                  at src/server.rs:100
+        1: server::process_request
+                 with user_id=42, method=GET
+                   at src/server.rs:100
         ");
     }
 
@@ -431,8 +437,8 @@ mod tests {
         });
         let spantrace: ErasedSpanTrace = serde_json::from_value(json).unwrap();
         let display = spantrace.to_string();
-        // Span 0 must NOT start with a newline
+        // The first span must NOT start with a newline
         assert!(!display.starts_with('\n'));
-        assert!(display.starts_with("   0:"));
+        assert!(display.starts_with("  1:"));
     }
 }

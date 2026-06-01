@@ -116,8 +116,7 @@ impl ErasedError {
     /// Write the error in a text format similar to `Report`.
     pub fn write_text<W: io::Write>(&self, f: &mut W) -> io::Result<()> {
         // Write main error header
-        write!(f, "Error: ")?;
-        writeln!(f)?;
+        writeln!(f, "Error:")?;
 
         writeln!(f, "\n  \u{2715} {}", self.message)?;
 

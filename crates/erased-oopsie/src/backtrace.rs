@@ -21,12 +21,8 @@ pub struct ErasedFrame {
 }
 
 impl ErasedBacktrace {
-    /// Create an `ErasedBacktrace` from a live `Backtrace`.
-    ///
-    /// Frames belonging to the `backtrace` crate's own capture machinery
-    /// (`backtrace::backtrace::*` and `<backtrace::capture::*>::*`) are
-    /// stripped — those are platform/toolchain-dependent implementation
-    /// detail, never user-relevant.
+    /// Create an `ErasedBacktrace` from a live `Backtrace`. See
+    /// [`from_backtrace`](Self::from_backtrace).
     #[must_use]
     #[inline]
     pub fn from_backtrace_ref(bt: &oopsie_core::Backtrace) -> Self {
@@ -34,16 +30,29 @@ impl ErasedBacktrace {
     }
     /// Create an `ErasedBacktrace` from a live `Backtrace`.
     ///
-    /// Frames belonging to the `backtrace` crate's own capture machinery
-    /// (`backtrace::backtrace::*` and `<backtrace::capture::*>::*`) are
-    /// stripped — those are platform/toolchain-dependent implementation
-    /// detail, never user-relevant.
+    /// Frames that [`oopsie_core::is_internal_frame`] considers
+    /// implementation/platform detail (capture machinery, OS/libc entry
+    /// points, unresolvable frames) are stripped, unless `RUST_BACKTRACE=full`
+    /// is set. The keep/drop decision is made per frame on its primary symbol,
+    /// matching the non-erased `Backtrace` `Debug` rendering.
     #[must_use]
     pub fn from_backtrace(mut bt: oopsie_core::Backtrace) -> Self {
         bt.resolve();
+        let full = oopsie_core::rust_backtrace().is_full();
         let frames = bt
             .frames()
             .iter()
+            .filter(|frame| {
+                if full {
+                    return true;
+                }
+                let primary = frame.symbols().first();
+                let name = primary
+                    .and_then(backtrace::BacktraceSymbol::name)
+                    .and_then(|n| n.as_str());
+                let filename = primary.and_then(|s| s.filename());
+                !oopsie_core::is_internal_frame(name, filename)
+            })
             .flat_map(|frame| {
                 frame.symbols().iter().map(|sym| ErasedFrame {
                     name: sym.name().map(|n| n.to_string().into_boxed_str()),
@@ -52,7 +61,6 @@ impl ErasedBacktrace {
                     column: sym.colno(),
                 })
             })
-            .filter(|f| !oopsie_core::is_internal_frame(f.name.as_deref(), f.filename.as_deref()))
             .collect();
         Self { frames }
     }
@@ -81,7 +89,7 @@ impl From<oopsie_core::Backtrace> for ErasedBacktrace {
 impl fmt::Display for ErasedBacktrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, frame) in self.frames.iter().enumerate() {
-            write!(f, "{i:>4}: ")?;
+            write!(f, "{:>3}: ", i + 1)?;
             if let Some(name) = &frame.name {
                 writeln!(f, "{name}")?;
             } else {
