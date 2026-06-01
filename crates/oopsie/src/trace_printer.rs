@@ -240,17 +240,9 @@ pub struct TracePrinter {
 }
 
 impl TracePrinter {
-    const FILTER: FrameFilterBox = BoxOrBorrow::Borrow(&error_backtrace_frame_filter);
-    const NOOP_FILTER: FrameFilterBox = BoxOrBorrow::Borrow(&noop_frame_filter);
-
-    /// Create a new `TracePrinter` with the default theme and default frame filter.
-    #[must_use]
-    #[inline]
+    /// Default `TracePrinter` with the default theme and frame filter.
     pub const fn new() -> Self {
-        Self {
-            theme: TraceTheme::DEFAULT,
-            frame_filter: Self::FILTER,
-        }
+        Self::with_filter_and_theme_const(&error_backtrace_frame_filter, TraceTheme::DEFAULT)
     }
 
     /// Create a new `TracePrinter` with the default theme and no frame filtering.
@@ -259,19 +251,32 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn unfiltered() -> Self {
+        Self::with_filter_and_theme_const(&noop_frame_filter, TraceTheme::DEFAULT)
+    }
+
+    /// Create a new `TracePrinter` with a custom frame filter and theme.
+    #[must_use]
+    #[inline]
+    pub fn with_filter_and_theme(
+        filter: impl Fn(&mut Vec<&BacktraceFrame>) + 'static,
+        theme: TraceTheme,
+    ) -> Self {
         Self {
-            theme: TraceTheme::DEFAULT,
-            frame_filter: Self::NOOP_FILTER,
+            frame_filter: BoxOrBorrow::Box(Box::new(filter)),
+            theme,
         }
     }
 
-    /// Create a new `TracePrinter` with a custom theme and default frame filter.
+    /// `const` version of `[with_filter_and_theme]`.
     #[must_use]
     #[inline]
-    pub const fn with_theme(theme: TraceTheme) -> Self {
+    pub const fn with_filter_and_theme_const(
+        filter: &'static (dyn Fn(&mut Vec<&BacktraceFrame>) + 'static),
+        theme: TraceTheme,
+    ) -> Self {
         Self {
+            frame_filter: BoxOrBorrow::Borrow(filter),
             theme,
-            frame_filter: Self::FILTER,
         }
     }
 
