@@ -7,7 +7,7 @@ use std::hint::black_box;
 use std::io;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use oopsie::{RustBacktrace, oopsie, set_rust_backtrace_override};
+use oopsie::{Report, RustBacktrace, oopsie, set_rust_backtrace_override};
 
 #[oopsie]
 #[oopsie("wrap failed: {ctx}")]
@@ -20,6 +20,14 @@ struct OopsieErr {
 #[snafu(display("wrap failed: {}", ctx))]
 struct SnafuErr {
     ctx: &'static str,
+    source: io::Error,
+}
+
+#[derive(Debug, thiserror::Error, miette::Diagnostic)]
+#[error("wrap failed: {ctx}")]
+struct MietteErr {
+    ctx: &'static str,
+    #[source]
     source: io::Error,
 }
 
@@ -58,8 +66,108 @@ fn bench_wrap(c: &mut Criterion) {
         b.iter(|| black_box(eyre::WrapErr::wrap_err(io_err(), "op")));
     });
 
+    group.bench_function("miette", |b| {
+        b.iter(|| {
+            let r: miette::Result<()> =
+                miette::WrapErr::wrap_err(miette::IntoDiagnostic::into_diagnostic(io_err()), "op");
+            black_box(r)
+        });
+    });
+
     group.finish();
 }
 
-criterion_group!(benches, bench_wrap);
+/// Renders a pre-built error (with one source) to a string, so the benchmark
+/// measures only formatting — not construction. Each library uses its own
+/// idiomatic full-chain renderer: `Report` for oopsie, `snafu::Report` for
+/// snafu, alternate `Debug` for anyhow and eyre.
+fn bench_render(c: &mut Criterion) {
+    set_rust_backtrace_override(RustBacktrace::Disabled);
+    let mut group = c.benchmark_group("render_error");
+
+    let oopsie_report = Report::from_std(
+        oopsie::ResultExt::context(io_err(), OopsieErrOopsie { ctx: "render" }).unwrap_err(),
+    )
+    .no_colors();
+    group.bench_function("oopsie", |b| {
+        b.iter(|| black_box(format!("{oopsie_report}")));
+    });
+
+    let snafu_report = snafu::Report::from_error(
+        snafu::ResultExt::context(io_err(), SnafuErrSnafu { ctx: "render" }).unwrap_err(),
+    );
+    group.bench_function("snafu", |b| {
+        b.iter(|| black_box(format!("{snafu_report}")));
+    });
+
+    let anyhow_err = anyhow::Context::context(io_err(), "render").unwrap_err();
+    group.bench_function("anyhow", |b| {
+        b.iter(|| black_box(format!("{anyhow_err:?}")));
+    });
+
+    let eyre_report = eyre::WrapErr::wrap_err(io_err(), "render").unwrap_err();
+    group.bench_function("eyre", |b| {
+        b.iter(|| black_box(format!("{eyre_report:?}")));
+    });
+
+    let miette_handler =
+        miette::GraphicalReportHandler::new_themed(miette::GraphicalTheme::unicode_nocolor());
+    let miette_err = MietteErr {
+        ctx: "render",
+        source: io_err().unwrap_err(),
+    };
+    group.bench_function("miette", |b| {
+        b.iter(|| {
+            let mut out = String::new();
+            miette_handler.render_report(&mut out, &miette_err).unwrap();
+            black_box(out)
+        });
+    });
+
+    group.finish();
+}
+
+/// Renders a pre-built error with colors forced on, comparing oopsie's printer
+/// against the two ecosystem renderers that specialize in colored diagnostics.
+fn bench_colored(c: &mut Criterion) {
+    set_rust_backtrace_override(RustBacktrace::Disabled);
+    // `color_eyre::install` sets a process-global eyre hook, so this group must
+    // run last — otherwise the plain `eyre` benches above would pick up the
+    // colored handler. eyre attaches the handler at report-creation time, so
+    // the report below (built after install) is the only colored one.
+    let _ = color_eyre::install();
+
+    let mut group = c.benchmark_group("render_colored");
+
+    let oopsie_report = Report::from_std(
+        oopsie::ResultExt::context(io_err(), OopsieErrOopsie { ctx: "render" }).unwrap_err(),
+    )
+    .force_colors();
+    group.bench_function("oopsie", |b| {
+        b.iter(|| black_box(format!("{oopsie_report}")));
+    });
+
+    let color_eyre_report = eyre::WrapErr::wrap_err(io_err(), "render").unwrap_err();
+    group.bench_function("color_eyre", |b| {
+        b.iter(|| black_box(format!("{color_eyre_report:?}")));
+    });
+
+    let miette_handler =
+        miette::GraphicalReportHandler::new_themed(miette::GraphicalTheme::unicode());
+    let miette_err = MietteErr {
+        ctx: "render",
+        source: io_err().unwrap_err(),
+    };
+    group.bench_function("miette", |b| {
+        b.iter(|| {
+            let mut out = String::new();
+            miette_handler.render_report(&mut out, &miette_err).unwrap();
+            black_box(out)
+        });
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_wrap, bench_render, bench_colored);
 criterion_main!(benches);

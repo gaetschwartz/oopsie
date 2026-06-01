@@ -28,9 +28,11 @@ workspace = true
 
 [dev-dependencies]
 anyhow = "1.0.102"
+color-eyre = "0.6.5"
 criterion = "0.8.2"
 eyre = "0.6.12"
 insta = { version = "1.46.3", features = ["filters", "json", "redactions"] }
+miette = { version = "7.6.0", features = ["fancy"] }
 rustversion = "1.0.22"
 snafu = { version = "0.9.1", features = ["backtrace"] }
 strip-ansi-escapes = "0.2.1"
