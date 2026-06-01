@@ -42,9 +42,11 @@ impl FieldInjectorConfig {
             |p| quote! { #p },
         );
         let timestamp_type: syn::Type = if resolved.timestamp_chrono() {
-            parse_quote! { chrono::DateTime<chrono::Local> }
+            // Leading `::` so the injected field does not depend on `chrono`
+            // being nameable (unshadowed, unrenamed) in the caller's scope.
+            parse_quote! { ::chrono::DateTime<::chrono::Local> }
         } else {
-            parse_quote! { std::time::SystemTime }
+            parse_quote! { ::std::time::SystemTime }
         };
         let timestamp_provide_attr = resolved
             .timestamp_provide()

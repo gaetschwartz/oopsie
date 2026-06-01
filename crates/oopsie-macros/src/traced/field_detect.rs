@@ -18,6 +18,11 @@ pub fn extract_boxed_inner(ty: &syn::Type) -> Option<&syn::Type> {
     })
 }
 
+// These match on the type's last path segment only, so an unrelated user type
+// whose final segment is `Backtrace`/`SpanTrace` (e.g. `foo::Backtrace`) is
+// treated as an existing trace field and suppresses injection. Field-name
+// detection (in `check_existing_fields`) is the primary signal; this type-name
+// match is a best-effort supplement that cannot resolve paths.
 pub(super) fn is_backtrace_type(ty: &syn::Type) -> bool {
     is_ident_type(ty, "Backtrace") || is_boxed_ident_type(ty, "Backtrace")
 }

@@ -56,7 +56,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
             let msg = format!("{ident} size must be exactly {n} bytes");
             quote! {
                 const _: () = {
-                    assert!(
+                    ::core::assert!(
                         ::core::mem::size_of::<#ident>() == #n,
                         #msg
                     );
@@ -67,7 +67,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
             let msg = format!("{ident} exceeds size limit of {n} bytes");
             quote! {
                 const _: () = {
-                    assert!(
+                    ::core::assert!(
                         ::core::mem::size_of::<#ident>() <= #n,
                         #msg
                     );
@@ -78,7 +78,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
             let msg = format!("{ident} must be at least {n} bytes");
             quote! {
                 const _: () = {
-                    assert!(
+                    ::core::assert!(
                         ::core::mem::size_of::<#ident>() >= #n,
                         #msg
                     );
@@ -90,11 +90,11 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
             let msg_hi = format!("{ident} exceeds size limit of {hi} bytes");
             quote! {
                 const _: () = {
-                    assert!(
+                    ::core::assert!(
                         ::core::mem::size_of::<#ident>() >= #lo,
                         #msg_lo
                     );
-                    assert!(
+                    ::core::assert!(
                         ::core::mem::size_of::<#ident>() <= #hi,
                         #msg_hi
                     );

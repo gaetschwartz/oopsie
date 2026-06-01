@@ -182,6 +182,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             quote! {}
         } else {
             quote! {
+                #[allow(unused_variables)]
                 fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
                     use #oopsie_path::AsErrorSource as _;
                     match self {
@@ -352,6 +353,7 @@ pub fn gen_struct_error(
             quote! {}
         } else {
             quote! {
+                #[allow(unused_variables)]
                 fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
                     use #oopsie_path::AsErrorSource as _;
                     #destructure
@@ -477,15 +479,31 @@ fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
     }
 }
 
-/// Check if a provide attr is for ErrorCode (used to detect auto-generated code from trace injection).
+/// Check if a provide attr is for oopsie's `ErrorCode` (used to surface the
+/// auto-generated code from trace injection, and a user's own ErrorCode
+/// provide, through `oopsie_error_code()`).
+///
+/// Matches a bare `ErrorCode` (the form trace injection emits) or one
+/// qualified by `oopsie`/`oopsie_core`. A foreign `my_crate::ErrorCode` is
+/// deliberately not matched, so it is not hijacked into `oopsie_error_code()`.
 fn is_error_code_provide(attr: &ProvideAttr) -> bool {
-    // Check if the provided type ends with "ErrorCode"
-    if let Type::Path(type_path) = &attr.provided_type
-        && let Some(last_seg) = type_path.path.segments.last()
-    {
-        return last_seg.ident == "ErrorCode";
+    let Type::Path(type_path) = &attr.provided_type else {
+        return false;
+    };
+    let segments = &type_path.path.segments;
+    let Some(last) = segments.last() else {
+        return false;
+    };
+    if last.ident != "ErrorCode" {
+        return false;
     }
-    false
+    match segments.len() {
+        1 => true,
+        n => {
+            let qualifier = &segments[n - 2].ident;
+            qualifier == "oopsie" || qualifier == "oopsie_core"
+        }
+    }
 }
 
 fn collect_provide_field_names(categorized: &CategorizedFields) -> Vec<&syn::Ident> {
@@ -502,6 +520,14 @@ fn collect_provide_field_names(categorized: &CategorizedFields) -> Vec<&syn::Ide
     for af in &categorized.auto_fields {
         if !names.contains(&&af.ident) {
             names.push(&af.ident);
+        }
+    }
+    // User fields may be referenced by a variant/struct-level `provide(...)`
+    // expr; bind them so those exprs resolve. The generated `provide` method
+    // carries `#[allow(unused_variables)]` for fields no expr references.
+    for uf in &categorized.user_fields {
+        if !names.contains(&&uf.ident) {
+            names.push(&uf.ident);
         }
     }
     names

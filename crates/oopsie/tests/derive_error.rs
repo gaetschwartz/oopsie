@@ -96,6 +96,12 @@ enum ProvideError {
     #[oopsie("coded error")]
     #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from("app::parse")))]
     WithCode { msg: String },
+
+    // Regression: a variant-level `provide` expr that references a bare user
+    // field must bind that field in the generated `provide()` match arm.
+    #[oopsie("field help error")]
+    #[oopsie(provide(::oopsie::HelpText => ::oopsie::HelpText::from(msg.clone())))]
+    WithFieldHelp { msg: String },
 }
 
 #[cfg(feature = "unstable-error-generic-member-access")]
@@ -122,6 +128,21 @@ fn provide_error_code() {
     let code = core::error::request_value::<oopsie::ErrorCode>(&err);
     assert!(code.is_some(), "should provide ErrorCode");
     assert_eq!(&*code.unwrap(), "app::parse");
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn provide_help_text_from_user_field() {
+    let err = WithFieldHelp {
+        msg: "needs attention",
+    }
+    .build();
+    let help = core::error::request_value::<oopsie::HelpText>(&err);
+    assert!(
+        help.is_some(),
+        "should provide HelpText built from a user field"
+    );
+    assert_eq!(&*help.unwrap(), "needs attention");
 }
 
 // ---- Nested error propagation tests ----

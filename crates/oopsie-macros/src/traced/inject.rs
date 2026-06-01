@@ -26,13 +26,21 @@ pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type)
             .as_ref()
             .is_some_and(|id| id == "spantrace" || id == "span_trace");
 
+        let is_timestamp_name = field
+            .ident
+            .as_ref()
+            .is_some_and(|id| id == "timestamp" || id == "__oopsie_timestamp");
+
         if is_backtrace_name || is_backtrace_type(&field.ty) {
             existence.has_backtrace = true;
         }
         if is_spantrace_name || is_spantrace_type(&field.ty) {
             existence.has_spantrace = true;
         }
-        if field.ty == *timestamp_type {
+        // Match by name as well as exact type: a user-written `SystemTime`
+        // (unqualified) is not token-equal to the configured fully-qualified
+        // type, so the type check alone misses the common case.
+        if is_timestamp_name || field.ty == *timestamp_type {
             existence.has_timestamp = true;
         }
     }
