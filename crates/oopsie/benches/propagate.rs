@@ -1,3 +1,7 @@
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 //! Cost of `?` + `.context(..)` on the hot path versus a bare `Result`.
 
 use std::hint::black_box;

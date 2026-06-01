@@ -1,3 +1,7 @@
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 //! Wrapping an `io::Error` with a context message across error libraries.
 //!
 //! Backtraces are off for oopsie (override); anyhow and eyre follow

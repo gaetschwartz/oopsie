@@ -1,3 +1,7 @@
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 //! Cost of rendering a `Report` — the path that pays symbol resolution.
 
 use std::hint::black_box;

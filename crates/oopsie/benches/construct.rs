@@ -1,3 +1,7 @@
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 //! Error construction cost: plain vs `traced`, and how env-gated capture changes it.
 
 use std::hint::black_box;

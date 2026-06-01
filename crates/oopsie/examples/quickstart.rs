@@ -1,3 +1,7 @@
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 //! Define a structured error enum and attach context as errors propagate.
 //!
 //! Run with: `cargo run --example quickstart`

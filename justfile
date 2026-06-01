@@ -5,6 +5,8 @@
 check:
     cargo +stable check
     cargo check --features unstable
+    cargo +stable check -p oopsie --no-default-features --lib
+    cargo +stable check -p oopsie-core --no-default-features --lib
 
 # Run doctests for all workspace crates.
 doctest:

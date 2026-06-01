@@ -1,3 +1,7 @@
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 //! Capture a `tracing` span trace alongside a `traced` error.
 //!
 //! Run with: `cargo run --example spantrace`

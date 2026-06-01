@@ -1,3 +1,7 @@
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 //! Return `Report` from `main` for colored, top-level error output.
 //!
 //! Run with: `cargo run --example report_main` (exits non-zero on error).

@@ -5,6 +5,9 @@ edition.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
+[package.metadata.docs.rs]
+all-features = true
+
 [features]
 default = []
 unstable-error-generic-member-access = []

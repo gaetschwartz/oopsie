@@ -40,6 +40,14 @@ jobs:
       - name: cargo check (default features)
         run: cargo check --workspace --all-targets
 
+      # `fancy` (default) gates the entire reporting surface; check the lib
+      # builds without it so a leaked dependency on owo-colors/serde/Report
+      # from non-gated code is caught.
+      - name: cargo check (no default features)
+        run: |
+          cargo check -p oopsie --no-default-features --lib
+          cargo check -p oopsie-core --no-default-features --lib
+
       - name: cargo nextest (default features)
         run: cargo nextest run --workspace
 
