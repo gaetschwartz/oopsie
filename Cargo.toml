@@ -80,3 +80,7 @@ unwrap_or_default = "warn"
 
 [profile.dev.package]
 insta.opt-level = 3
+
+[profile.samply]
+inherits = "release"
+debug = true
