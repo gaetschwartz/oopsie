@@ -247,10 +247,9 @@ fn bench_traced(c: &mut Criterion) {
         b.iter(|| black_box(format!("{anyhow_err:?}")));
     });
 
-    let eyre_report = eyre::WrapErr::wrap_err(io_err(), "render").unwrap_err();
-    group.bench_function("eyre", |b| {
-        b.iter(|| black_box(format!("{eyre_report:?}")));
-    });
+    // eyre is intentionally absent: its default handler renders no backtrace
+    // (only color-eyre does), so it would be timing a message-only render here.
+    // It appears in `render_traced_colored` via color-eyre instead.
 
     group.finish();
 }
