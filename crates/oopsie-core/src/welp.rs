@@ -165,14 +165,14 @@ impl StdError for Welp {
 impl Diagnostic for Welp {
     fn oopsie_backtrace(&self) -> Option<&BackTrace> {
         match &self.0 {
-            WelpRepr::Sourced { .. } => None,
+            WelpRepr::Sourced { .. } => None, // TODO: Ideally we would not lose the source backtrace here.
             WelpRepr::Traced { traces, .. } => Some(&traces.0),
         }
     }
 
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         match &self.0 {
-            WelpRepr::Sourced { .. } => None,
+            WelpRepr::Sourced { .. } => None, // TODO: Ideally we would not lose the source span trace here.
             WelpRepr::Traced { traces, .. } => Some(&traces.1),
         }
     }
