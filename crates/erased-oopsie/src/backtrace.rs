@@ -1,21 +1,21 @@
 //! Serializable backtrace representation.
 
-use std::path::PathBuf;
-use std::{borrow::ToOwned, fmt};
+use std::fmt;
+use std::path;
 
 use serde::{Deserialize, Serialize};
 
 /// A serializable, type-erased representation of a backtrace.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ErasedBacktrace {
-    frames: Vec<ErasedFrame>,
+    frames: Box<[ErasedFrame]>,
 }
 
 /// A single frame in an erased backtrace.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ErasedFrame {
-    pub name: Option<String>,
-    pub filename: Option<PathBuf>,
+    pub name: Option<Box<str>>,
+    pub filename: Option<Box<path::Path>>,
     pub line: Option<u32>,
     pub column: Option<u32>,
 }
@@ -46,8 +46,8 @@ impl ErasedBacktrace {
             .iter()
             .flat_map(|frame| {
                 frame.symbols().iter().map(|sym| ErasedFrame {
-                    name: sym.name().map(|n| n.to_string()),
-                    filename: sym.filename().map(ToOwned::to_owned),
+                    name: sym.name().map(|n| n.to_string().into_boxed_str()),
+                    filename: sym.filename().map(Box::from),
                     line: sym.lineno(),
                     column: sym.colno(),
                 })
