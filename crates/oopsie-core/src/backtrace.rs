@@ -220,14 +220,14 @@ impl BackTrace {
     /// Returns a reference to the inner [`backtrace::Backtrace`].
     #[must_use]
     #[inline]
-    pub const fn inner(&self) -> &backtrace::Backtrace {
+    pub const fn as_backtrace(&self) -> &backtrace::Backtrace {
         &self.0
     }
 
     /// Returns a mutable reference to the inner [`backtrace::Backtrace`].
     #[must_use]
     #[inline]
-    pub const fn inner_mut(&mut self) -> &mut backtrace::Backtrace {
+    pub const fn as_backtrace_mut(&mut self) -> &mut backtrace::Backtrace {
         &mut self.0
     }
 
@@ -235,7 +235,7 @@ impl BackTrace {
     #[must_use]
     #[inline]
     pub fn frames(&self) -> &[backtrace::BacktraceFrame] {
-        self.inner().frames()
+        self.as_backtrace().frames()
     }
 
     /// Resolves the backtrace's symbols.
@@ -286,7 +286,7 @@ mod tests {
     fn test_backtrace_capture_produces_backtrace() {
         let bt = BackTrace::capture();
         // Backtrace should exist (may be empty on some platforms, but should not panic)
-        let _ = bt.inner().frames();
+        let _ = bt.as_backtrace().frames();
     }
 
     #[test]
@@ -300,8 +300,8 @@ mod tests {
         let extracted = BackTrace::capture_or_extract(&error);
         // Both should have the same frames count
         assert_eq!(
-            extracted.inner().frames().len(),
-            original_bt.inner().frames().len()
+            extracted.as_backtrace().frames().len(),
+            original_bt.as_backtrace().frames().len()
         );
     }
 
@@ -312,13 +312,13 @@ mod tests {
         // Should capture a fresh backtrace
         let captured = BackTrace::capture_or_extract(&error);
         // Should produce a valid backtrace (frames list is valid, may be empty)
-        let _ = captured.inner().frames();
+        let _ = captured.as_backtrace().frames();
     }
 
     #[test]
     fn test_backtrace_inner_returns_reference() {
         let bt = BackTrace::capture();
-        let inner = bt.inner();
+        let inner = bt.as_backtrace();
         // Should be able to call methods on the inner backtrace
         let _ = inner.frames();
     }

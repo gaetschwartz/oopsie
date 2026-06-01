@@ -37,8 +37,8 @@ impl SpanTrace {
     }
 
     #[inline]
-    pub fn with_spans(&self, f: impl FnMut(&'static tracing::Metadata<'static>, &str) -> bool) {
-        self.inner.with_spans(f);
+    pub const fn as_span_trace(&self) -> &tracing_error::SpanTrace {
+        &self.inner
     }
 }
 

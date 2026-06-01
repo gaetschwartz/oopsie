@@ -126,7 +126,7 @@ impl ErasedSpanTrace {
     #[must_use]
     pub fn from_spantrace_ref(st: &oopsie_core::SpanTrace) -> Self {
         let mut spans = Vec::new();
-        st.with_spans(|metadata, fields| {
+        st.as_span_trace().with_spans(|metadata, fields| {
             spans.push(ErasedSpan {
                 metadata: ErasedMetadata::from(metadata),
                 fields: fields.into(),

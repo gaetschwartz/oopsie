@@ -6,7 +6,7 @@
 //! directly, eliminating the need for those dependencies.
 
 use std::ops::Deref;
-use std::path::PathBuf;
+use std::path;
 use std::{borrow::ToOwned, fmt};
 
 use owo_colors::{OwoColorize as _, Style};
@@ -20,17 +20,17 @@ use crate::BackTrace;
 /// A single frame from a backtrace.
 pub struct BacktraceFrame {
     pub n: usize,
-    pub name: Option<String>,
-    pub filename: Option<PathBuf>,
+    pub name: Option<Box<str>>,
+    pub filename: Option<Box<path::Path>>,
     pub lineno: Option<u32>,
     pub colno: Option<u32>,
 }
 
 /// Metadata for a single span in a span trace.
 pub struct SpanMetadata {
-    pub name: String,
-    pub target: String,
-    pub file: Option<String>,
+    pub name: Box<str>,
+    pub target: Box<str>,
+    pub file: Option<Box<str>>,
     pub line: Option<u32>,
 }
 
@@ -65,8 +65,8 @@ impl BacktraceProvider for BackTrace {
             .flat_map(|(n, frame)| {
                 frame.symbols().iter().map(move |sym| BacktraceFrame {
                     n,
-                    name: sym.name().map(|s| s.to_string()),
-                    filename: sym.filename().map(ToOwned::to_owned),
+                    name: sym.name().map(|s| s.to_string().into_boxed_str()),
+                    filename: sym.filename().map(Box::from),
                     lineno: sym.lineno(),
                     colno: sym.colno(),
                 })
@@ -78,11 +78,11 @@ impl BacktraceProvider for BackTrace {
 
 impl SpanTraceProvider for crate::SpanTrace {
     fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata, &str) -> bool) {
-        crate::SpanTrace::with_spans(self, |md, fields| {
+        self.as_span_trace().with_spans(|md, fields| {
             let meta = SpanMetadata {
-                name: md.name().to_owned(),
-                target: md.target().to_owned(),
-                file: md.file().map(ToOwned::to_owned),
+                name: md.name().to_owned().into_boxed_str(),
+                target: md.target().to_owned().into_boxed_str(),
+                file: md.file().map(|f| f.to_owned().into_boxed_str()),
                 line: md.line(),
             };
             f(&meta, fields)
@@ -503,10 +503,14 @@ fn overlay_frame_filters(under: FrameFilterBox, above: FrameFilterBox) -> FrameF
 mod tests {
     use super::*;
 
-    fn make_frame(n: usize, name: Option<String>, lineno: Option<u32>) -> BacktraceFrame {
+    fn make_frame(
+        n: usize,
+        name: Option<impl Into<String>>,
+        lineno: Option<u32>,
+    ) -> BacktraceFrame {
         BacktraceFrame {
             n,
-            name,
+            name: name.map(|s| s.into().into_boxed_str()),
             filename: None,
             lineno,
             colno: None,
@@ -533,12 +537,12 @@ mod tests {
     fn test_error_backtrace_frame_filter() {
         let capture = make_frame(
             0,
-            Some("std::backtrace_rs::backtrace::libunwind::trace".into()),
+            Some("std::backtrace_rs::backtrace::libunwind::trace"),
             None,
         );
-        let app1 = make_frame(1, Some("my_crate::function_a".into()), None);
-        let app2 = make_frame(2, Some("my_crate::function_b".into()), None);
-        let runtime = make_frame(3, Some("std::rt::lang_start_internal::invoke".into()), None);
+        let app1 = make_frame(1, Some("my_crate::function_a"), None);
+        let app2 = make_frame(2, Some("my_crate::function_b"), None);
+        let runtime = make_frame(3, Some("std::rt::lang_start_internal::invoke"), None);
 
         let mut frames: Vec<&BacktraceFrame> = vec![&capture, &app1, &app2, &runtime];
         error_backtrace_frame_filter(&mut frames);
@@ -550,8 +554,8 @@ mod tests {
 
     #[test]
     fn test_error_backtrace_frame_filter_no_capture_no_runtime() {
-        let app1 = make_frame(0, Some("my_crate::function_a".into()), None);
-        let app2 = make_frame(1, Some("my_crate::function_b".into()), None);
+        let app1 = make_frame(0, Some("my_crate::function_a"), None);
+        let app2 = make_frame(1, Some("my_crate::function_b"), None);
 
         let mut frames: Vec<&BacktraceFrame> = vec![&app1, &app2];
         error_backtrace_frame_filter(&mut frames);
@@ -565,15 +569,15 @@ mod tests {
     fn test_error_backtrace_frame_filter_multiple_capture_frames() {
         let capture1 = make_frame(
             0,
-            Some("<std::backtrace::Backtrace>::create::something".into()),
+            Some("<std::backtrace::Backtrace>::create::something"),
             None,
         );
         let capture2 = make_frame(
             1,
-            Some("std::backtrace_rs::backtrace::libunwind::trace".into()),
+            Some("std::backtrace_rs::backtrace::libunwind::trace"),
             None,
         );
-        let app = make_frame(2, Some("my_crate::function_a".into()), None);
+        let app = make_frame(2, Some("my_crate::function_a"), None);
 
         let mut frames: Vec<&BacktraceFrame> = vec![&capture1, &capture2, &app];
         error_backtrace_frame_filter(&mut frames);
