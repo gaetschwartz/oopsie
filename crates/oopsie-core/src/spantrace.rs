@@ -45,17 +45,19 @@ impl SpanTrace {
 
 impl PartialEq for SpanTrace {
     fn eq(&self, other: &Self) -> bool {
-        let mut eq = false;
-        self.inner.with_spans(|a_md, a_fields| {
-            other.inner.with_spans(|b_md, b_fields| {
-                if a_md == b_md && a_fields == b_fields {
-                    eq = true;
-                }
-                false
+        // `with_spans` iterates until the closure returns `false`; returning
+        // `true` walks the whole trace. Span metadata is `&'static`, so a
+        // callsite always yields the same address across captures — identity
+        // comparison is both correct and cheaper than formatting.
+        fn spans(inner: &tracing_error::SpanTrace) -> Vec<(*const (), String)> {
+            let mut spans = Vec::new();
+            inner.with_spans(|metadata, fields| {
+                spans.push((std::ptr::from_ref(metadata).cast::<()>(), fields.to_owned()));
+                true
             });
-            false
-        });
-        eq
+            spans
+        }
+        spans(&self.inner) == spans(&other.inner)
     }
 }
 
@@ -154,6 +156,16 @@ impl crate::Capturable for OptionalSpanTrace {
         match trace.status() {
             tracing_error::SpanTraceStatus::CAPTURED => Self(Some(trace)),
             _ => Self(None),
+        }
+    }
+}
+
+impl crate::CaptureExt for OptionalSpanTrace {
+    #[inline]
+    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
+        match source.oopsie_spantrace().cloned() {
+            Some(trace) => Self::some(trace),
+            None => <Self as crate::Capturable>::capture(),
         }
     }
 }
@@ -282,5 +294,36 @@ mod tests {
         let trace = SpanTrace::capture();
         let opt: OptionalSpanTrace = Some(trace).into();
         assert!(opt.is_some());
+    }
+
+    #[test]
+    fn empty_span_traces_are_equal() {
+        // Without a subscriber, captures are uncaptured/empty; equality must be
+        // reflexive rather than reporting two empty traces as unequal.
+        let a = SpanTrace::capture();
+        let b = SpanTrace::capture();
+        assert_eq!(a, b);
+        assert_eq!(a, a.clone());
+    }
+
+    #[derive(Debug)]
+    struct DiagSource;
+
+    impl fmt::Display for DiagSource {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("diag source")
+        }
+    }
+
+    impl std::error::Error for DiagSource {}
+    impl crate::Diagnostic for DiagSource {}
+
+    #[test]
+    fn optional_span_trace_captures_from_diagnostic_source() {
+        // Regression: `OptionalSpanTrace` must implement `CaptureExt` so the
+        // macro's `resolve::<OptionalSpanTrace>()` path compiles for variants
+        // whose source implements `Diagnostic`.
+        let opt = <OptionalSpanTrace as crate::CaptureExt>::capture_or_extract(&DiagSource);
+        assert!(opt.is_none());
     }
 }

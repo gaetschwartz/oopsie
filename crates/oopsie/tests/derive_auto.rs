@@ -86,3 +86,32 @@ fn multiple_auto_fields() {
     let err = Multi { label: "test" }.build();
     assert!(matches!(err, MultiAutoError::Multi { ref label, .. } if label == "test"));
 }
+
+// ---- Test 5: OptionalSpanTrace capture field with a Diagnostic source ----
+//
+// Regression: when the source implements `Diagnostic`, the generated capture
+// path resolves through `CaptureExt`, which `OptionalSpanTrace` must implement.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum InnerDiagError {
+    #[oopsie("inner")]
+    Inner,
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum OptionalCaptureError {
+    #[oopsie("wraps a diagnostic source")]
+    Wrap {
+        source: InnerDiagError,
+        #[oopsie(capture)]
+        st: oopsie::OptionalSpanTrace,
+    },
+}
+
+#[test]
+fn optional_span_trace_capture_with_diagnostic_source() {
+    let err: OptionalCaptureError = Wrap.build_error(InnerDiagError::Inner);
+    assert!(matches!(err, OptionalCaptureError::Wrap { .. }));
+}
