@@ -29,6 +29,7 @@ fn strip_ansi(s: &str) -> String {
 
 #[test]
 fn test_report_basic() {
+    common::force_backtrace();
     let error = TestOopsie {
         message: "something failed",
     }
@@ -42,6 +43,7 @@ fn test_report_basic() {
 
 #[test]
 fn test_report_chain() {
+    common::force_backtrace();
     let inner = TestOopsie {
         message: "root cause",
     }
@@ -56,6 +58,7 @@ fn test_report_chain() {
 
 #[test]
 fn test_report_colored() {
+    common::force_backtrace();
     let error = TestOopsie {
         message: "colored test",
     }
@@ -87,6 +90,7 @@ pub struct ErrorWithHelp {
 
 #[test]
 fn test_report_with_help() {
+    common::force_backtrace();
     let error = ErrorWithHelpOopsie {
         message: "connection refused",
     }

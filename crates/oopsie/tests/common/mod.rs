@@ -22,9 +22,16 @@ pub fn init_test_subscriber() -> tracing::subscriber::DefaultGuard {
     tracing::subscriber::set_default(subscriber)
 }
 
+/// Force backtrace capture on the current thread so snapshots are deterministic
+/// regardless of the ambient `RUST_BACKTRACE` environment.
+pub fn force_backtrace() {
+    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+}
+
 /// Create an `ErrorWithSpanTrace` within instrumented functions to capture spantrace.
 #[expect(clippy::items_after_statements)]
 pub fn make_error() -> MyError {
+    force_backtrace();
     let _guard = init_test_subscriber();
 
     #[instrument(target = "sys", fields(id = 42))]
