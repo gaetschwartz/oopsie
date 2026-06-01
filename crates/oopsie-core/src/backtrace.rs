@@ -323,6 +323,38 @@ mod tests {
         let _ = inner.frames();
     }
 
+    #[test]
+    fn test_capture_is_empty_when_disabled() {
+        set_rust_backtrace_override(RustBacktrace::Disabled);
+        let bt = Backtrace::capture();
+        clear_rust_backtrace_override();
+        assert!(
+            bt.frames().is_empty(),
+            "disabled capture must record no frames, got {}",
+            bt.frames().len()
+        );
+    }
+
+    #[test]
+    fn test_capture_or_extract_is_empty_when_disabled() {
+        set_rust_backtrace_override(RustBacktrace::Disabled);
+        // No existing backtrace on the source, so this exercises the fresh
+        // capture path the derive macro uses.
+        let bt = Backtrace::capture_or_extract(&ErrorWithoutBacktrace);
+        clear_rust_backtrace_override();
+        assert!(bt.frames().is_empty());
+    }
+
+    #[test]
+    fn test_capture_records_frames_when_enabled() {
+        set_rust_backtrace_override(RustBacktrace::Enabled);
+        let bt = Backtrace::capture();
+        clear_rust_backtrace_override();
+        // Contrast with the disabled case: capture genuinely records frames
+        // when enabled, so the empty-when-disabled assertions aren't vacuous.
+        assert!(!bt.frames().is_empty());
+    }
+
     const _: () = {
         // Verify that Backtrace implements Capturable
         const fn is_capturable<T: crate::Capturable>() {}
