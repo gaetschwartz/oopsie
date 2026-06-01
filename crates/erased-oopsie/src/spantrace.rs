@@ -124,7 +124,7 @@ impl<'a> From<&'a tracing::Metadata<'_>> for ErasedMetadata {
 impl ErasedSpanTrace {
     /// Create an `ErasedSpanTrace` from a live `SpanTrace`.
     #[must_use]
-    pub fn from_spantrace(st: &oopsie_core::SpanTrace) -> Self {
+    pub fn from_spantrace_ref(st: &oopsie_core::SpanTrace) -> Self {
         let mut spans = Vec::new();
         st.with_spans(|metadata, fields| {
             spans.push(ErasedSpan {
@@ -150,8 +150,9 @@ impl ErasedSpanTrace {
 }
 
 impl From<&oopsie_core::SpanTrace> for ErasedSpanTrace {
+    #[inline]
     fn from(st: &oopsie_core::SpanTrace) -> Self {
-        Self::from_spantrace(st)
+        Self::from_spantrace_ref(st)
     }
 }
 

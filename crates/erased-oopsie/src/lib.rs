@@ -97,7 +97,7 @@ impl ErasedError {
             help: err.oopsie_help_text(),
         };
         let spantrace = err.oopsie_spantrace().map(ErasedSpanTrace::from);
-        let backtrace = err.oopsie_backtrace().map(ErasedBackTrace::from);
+        let backtrace = err.oopsie_backtrace().cloned().map(ErasedBackTrace::from);
 
         Self {
             message,

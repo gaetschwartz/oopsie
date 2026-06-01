@@ -1,7 +1,7 @@
 //! Serializable backtrace representation.
 
-use std::fmt;
 use std::path::PathBuf;
+use std::{borrow::ToOwned, fmt};
 
 use serde::{Deserialize, Serialize};
 
@@ -28,15 +28,26 @@ impl ErasedBackTrace {
     /// stripped — those are platform/toolchain-dependent implementation
     /// detail, never user-relevant.
     #[must_use]
-    pub fn from_backtrace(bt: &oopsie_core::BackTrace) -> Self {
+    #[inline]
+    pub fn from_backtrace_ref(bt: &oopsie_core::BackTrace) -> Self {
+        Self::from_backtrace(bt.clone())
+    }
+    /// Create an `ErasedBackTrace` from a live `BackTrace`.
+    ///
+    /// Frames belonging to the `backtrace` crate's own capture machinery
+    /// (`backtrace::backtrace::*` and `<backtrace::capture::*>::*`) are
+    /// stripped — those are platform/toolchain-dependent implementation
+    /// detail, never user-relevant.
+    #[must_use]
+    pub fn from_backtrace(mut bt: oopsie_core::BackTrace) -> Self {
+        bt.resolve();
         let frames = bt
-            .inner()
             .frames()
             .iter()
             .flat_map(|frame| {
                 frame.symbols().iter().map(|sym| ErasedFrame {
                     name: sym.name().map(|n| n.to_string()),
-                    filename: sym.filename().map(std::borrow::ToOwned::to_owned),
+                    filename: sym.filename().map(ToOwned::to_owned),
                     line: sym.lineno(),
                     column: sym.colno(),
                 })
@@ -48,13 +59,21 @@ impl ErasedBackTrace {
 
     /// Returns a slice of all frames.
     #[must_use]
+    #[inline]
     pub fn frames(&self) -> &[ErasedFrame] {
         &self.frames
     }
 }
 
 impl From<&oopsie_core::BackTrace> for ErasedBackTrace {
+    #[inline]
     fn from(bt: &oopsie_core::BackTrace) -> Self {
+        Self::from_backtrace_ref(bt)
+    }
+}
+impl From<oopsie_core::BackTrace> for ErasedBackTrace {
+    #[inline]
+    fn from(bt: oopsie_core::BackTrace) -> Self {
         Self::from_backtrace(bt)
     }
 }
