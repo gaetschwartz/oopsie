@@ -5,9 +5,9 @@
 //! the style of `color-backtrace` and `color-spantrace` but uses `owo_colors`
 //! directly, eliminating the need for those dependencies.
 
+use std::fmt;
 use std::ops::Deref;
 use std::path;
-use std::{borrow::ToOwned as _, fmt};
 
 use owo_colors::{OwoColorize as _, Style};
 
@@ -27,10 +27,10 @@ pub struct BacktraceFrame {
 }
 
 /// Metadata for a single span in a span trace.
-pub struct SpanMetadata {
-    pub name: Box<str>,
-    pub target: Box<str>,
-    pub file: Option<Box<str>>,
+pub struct SpanMetadata<'a> {
+    pub name: &'a str,
+    pub target: &'a str,
+    pub file: Option<&'a str>,
     pub line: Option<u32>,
 }
 
@@ -45,7 +45,7 @@ pub trait BacktraceProvider {
 
 /// Trait for types that can provide span trace information.
 pub trait SpanTraceProvider {
-    fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata, &str) -> bool);
+    fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata<'_>, &str) -> bool);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,12 +77,12 @@ impl BacktraceProvider for Backtrace {
 }
 
 impl SpanTraceProvider for crate::SpanTrace {
-    fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata, &str) -> bool) {
+    fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata<'_>, &str) -> bool) {
         self.as_span_trace().with_spans(|md, fields| {
             let meta = SpanMetadata {
-                name: md.name().to_owned().into_boxed_str(),
-                target: md.target().to_owned().into_boxed_str(),
-                file: md.file().map(|f| f.to_owned().into_boxed_str()),
+                name: md.name(),
+                target: md.target(),
+                file: md.file(),
                 line: md.line(),
             };
             f(&meta, fields)
@@ -241,6 +241,7 @@ pub struct TracePrinter {
 
 impl TracePrinter {
     /// Default `TracePrinter` with the default theme and frame filter.
+    #[must_use]
     pub const fn new() -> Self {
         Self::with_filter_and_theme_const(&error_backtrace_frame_filter, TraceTheme::DEFAULT)
     }
