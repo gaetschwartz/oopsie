@@ -61,8 +61,8 @@ impl BacktraceProvider for Backtrace {
         // platforms.
         Backtrace::frames(self)
             .iter()
-            .enumerate()
-            .flat_map(|(n, frame)| {
+            .zip(1..)
+            .flat_map(|(frame, n)| {
                 frame.symbols().iter().map(move |sym| BacktraceFrame {
                     n,
                     name: sym.name().map(|s| s.to_string().into_boxed_str()),
@@ -174,6 +174,17 @@ fn is_runtime_init_code(name: &str) -> bool {
 /// 1. Skips frames from the top that are backtrace capture machinery
 /// 2. Removes runtime initialization frames from the bottom
 pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
+    // Find the index of runtime init code at the bottom
+    let bottom_cutoff_idx = frames.iter().position(|frame| {
+        frame
+            .name
+            .as_ref()
+            .is_some_and(|name| is_runtime_init_code(name))
+    });
+    if let Some(bot) = bottom_cutoff_idx {
+        frames.drain(bot..);
+    }
+
     // Find the index of the last backtrace capture frame
     let top_cutoff_idx = frames
         .iter()
@@ -183,26 +194,10 @@ pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
                 .as_ref()
                 .is_some_and(|name| is_backtrace_capture_code(name))
         })
-        .map_or(0, |idx| idx + 1);
-
-    // Find the index of runtime init code at the bottom
-    let bottom_cutoff_idx = frames
-        .iter()
-        .position(|frame| {
-            frame
-                .name
-                .as_ref()
-                .is_some_and(|name| is_runtime_init_code(name))
-        })
-        .unwrap_or(frames.len());
-
-    // Keep only frames within the valid range
-    let frames_to_keep: Vec<usize> = frames[top_cutoff_idx..bottom_cutoff_idx]
-        .iter()
-        .map(|f| f.n)
-        .collect();
-
-    frames.retain(|frame| frames_to_keep.contains(&frame.n));
+        .map(|idx| idx + 1);
+    if let Some(top) = top_cutoff_idx {
+        frames.drain(..top);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
