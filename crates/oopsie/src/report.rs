@@ -48,6 +48,10 @@ impl<E: Diagnostic> Report<E> {
     }
 
     /// Runs the given function and returns a `Report` with the result.
+    ///
+    /// The colorized panic hook is installed only for the duration of `func`
+    /// and the previously installed hook is restored afterwards. A thread that
+    /// outlives `func` and panics later reverts to the prior hook.
     #[must_use]
     pub fn run<F>(func: F) -> Self
     where

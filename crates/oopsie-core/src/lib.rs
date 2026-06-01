@@ -77,6 +77,11 @@ pub use traits::*;
 pub use welp::{Welp, WelpOptionExt, WelpResultExt};
 
 /// Install the color backtrace printer.
+///
+/// Replaces the process-global panic hook via `std::panic::set_hook`, so this
+/// is intended to be called once, early in `main`. Callers needing to preserve
+/// a previously installed hook must save (`take_hook`) and restore it
+/// themselves, as `oopsie::Report::run` does.
 pub fn install() {
     color_backtrace::BacktracePrinter::new().install(color_backtrace::default_output_stream());
 }

@@ -29,8 +29,10 @@
 //!
 //! `Welp` is a 40-byte enum — `Sourced` carries `Box<str>` + `Box<dyn Error>`,
 //! `Traced` carries `Box<str>` + `Box<(Backtrace, SpanTrace)>`. The two
-//! variants are mutually exclusive: when a source is present, the source is
-//! responsible for surfacing traces; when not, fresh traces are captured.
+//! variants are mutually exclusive: a `Sourced` `Welp` captures no traces of
+//! its own (its [`Diagnostic`] trace accessors return `None`); a `Traced`
+//! `Welp` captures fresh traces at construction. Surfacing a diagnostic
+//! source's own traces through a wrapping `Welp` is not currently supported.
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -44,6 +46,7 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 /// string contexts.
 ///
 /// See the [module documentation](self) for a full overview.
+#[must_use = "this `Welp` error should be returned or propagated, not discarded"]
 pub struct Welp(WelpRepr);
 
 enum WelpRepr {
@@ -75,9 +78,9 @@ impl Welp {
         })
     }
 
-    /// Wrap an existing error with a string message. Trace surfacing is
-    /// delegated to the source's `Error::source()` chain — `Welp::wrap` does
-    /// not capture fresh traces.
+    /// Wrap an existing error with a string message. `Welp::wrap` captures no
+    /// traces of its own, and does not forward any the source may carry — its
+    /// [`Diagnostic`] accessors return `None`.
     ///
     /// ```
     /// use oopsie_core::Welp;

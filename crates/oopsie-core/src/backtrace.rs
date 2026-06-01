@@ -127,13 +127,15 @@ impl color_backtrace::Backtrace for Backtrace {
 /// Returns `true` for frames that are implementation/platform detail and
 /// should not appear in user-facing renderings.
 ///
-/// Covers two classes of noise:
+/// Covers three classes of noise:
 /// - **Top of stack**: the `backtrace` crate's own capture machinery
 ///   (`backtrace::backtrace::*`, `<backtrace::capture::*>::*`). macOS
 ///   captures them; Linux inlines them away.
 /// - **Bottom of stack**: OS-level thread / libc / pthread entry points
 ///   (`__pthread_*`, `__libc_start*`, etc.). These appear on some
 ///   platforms (macOS pthread) and not others (Linux's libc start).
+/// - **Panic/unwind plumbing**: the `__rust_try` shim emitted around
+///   `catch_unwind` boundaries — runtime plumbing, not user code.
 ///
 /// Filtering at the source means `Report`, `ErasedError`, and any future
 /// consumer all see a stable backtrace shape across macOS and Linux.
@@ -151,7 +153,8 @@ pub fn is_internal_frame(name: Option<&str>, filename: Option<&path::Path>) -> b
         if n.starts_with("backtrace::") || n.starts_with("<backtrace::") {
             return true;
         }
-        // Bottom-of-stack: OS thread / libc / pthread internals.
+        // Bottom-of-stack OS thread / libc / pthread internals, plus the
+        // `__rust_try` panic/unwind shim.
         if n.starts_with("__pthread_")
             || n.starts_with("_pthread_")
             || n.starts_with("__libc_start")
@@ -182,12 +185,9 @@ impl fmt::Debug for Backtrace {
         // identical across platforms (macOS captures them; Linux inlines
         // them away). We rebuild a `backtrace::Backtrace` from the filtered
         // frame vec to reuse the upstream Debug formatter verbatim.
-        fn primary_name(frame: &backtrace::BacktraceFrame) -> Option<String> {
-            frame
-                .symbols()
-                .iter()
-                .next()
-                .and_then(|s| s.name().map(|n| n.to_string()))
+        fn primary_name(frame: &backtrace::BacktraceFrame) -> Option<&str> {
+            let symbol = frame.symbols().first()?;
+            symbol.name()?.as_str()
         }
         fn primary_filename(frame: &backtrace::BacktraceFrame) -> Option<&path::Path> {
             frame
@@ -207,7 +207,7 @@ impl fmt::Debug for Backtrace {
             .filter(|frame| {
                 let name = primary_name(frame);
                 let filename = primary_filename(frame);
-                !is_internal_frame(name.as_deref(), filename)
+                !is_internal_frame(name, filename)
             })
             .cloned()
             .collect();

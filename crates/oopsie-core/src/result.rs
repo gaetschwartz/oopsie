@@ -1,4 +1,10 @@
-#![allow(unused)]
+//! Experimental `?`-ergonomics support via `try_trait_v2`.
+//!
+//! `MayBoxResult` is staged behind the `unstable-try-trait-v2` feature and is
+//! not yet wired into the public API or used internally — hence the
+//! module-wide `dead_code` allowance. It is exercised by its own tests.
+
+#![allow(dead_code)]
 use std::convert::Infallible;
 use std::ops::{ControlFlow, FromResidual, Residual, Try};
 
