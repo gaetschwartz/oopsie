@@ -21,18 +21,32 @@ use crate::trace_printer::TracePrinter;
 pub struct Report<E> {
     res: Result<(), E>,
     color_config: ColorConfig,
+    /// Resolved once at construction so repeated rendering never re-symbolicates.
+    /// `None` when there is no error or the captured backtrace is empty.
+    backtrace: Option<oopsie_core::Backtrace>,
 }
 
 impl<E: Diagnostic> Report<E> {
+    /// Resolve the error's backtrace once. Symbol resolution is the expensive
+    /// part of backtrace rendering, so we pay it here rather than on every
+    /// `Display`.
+    fn resolve_backtrace(res: &Result<(), E>) -> Option<oopsie_core::Backtrace> {
+        let mut backtrace = res.as_ref().err()?.oopsie_backtrace()?.clone();
+        backtrace.resolve();
+        (!backtrace.frames().is_empty()).then_some(backtrace)
+    }
+
     /// Create a new `Report` wrapping the given error.
     ///
     /// Uses automatic color detection based on environment variables and
     /// terminal detection.
     #[must_use]
     #[inline]
-    pub const fn from_std(error: E) -> Self {
+    pub fn from_std(error: E) -> Self {
+        let res = Err(error);
         Self {
-            res: Err(error),
+            backtrace: Self::resolve_backtrace(&res),
+            res,
             color_config: ColorConfig::auto(),
         }
     }
@@ -44,6 +58,7 @@ impl<E: Diagnostic> Report<E> {
         Self {
             res: Ok(()),
             color_config: ColorConfig::auto(),
+            backtrace: None,
         }
     }
 
@@ -62,6 +77,7 @@ impl<E: Diagnostic> Report<E> {
         let result = func();
         std::panic::set_hook(hook);
         Self {
+            backtrace: Self::resolve_backtrace(&result),
             res: result,
             color_config: ColorConfig::auto(),
         }
@@ -70,9 +86,11 @@ impl<E: Diagnostic> Report<E> {
     /// Create with explicit color configuration.
     #[must_use]
     #[inline]
-    pub const fn with_colors(error: E, color_config: ColorConfig) -> Self {
+    pub fn with_colors(error: E, color_config: ColorConfig) -> Self {
+        let res = Err(error);
         Self {
-            res: Err(error),
+            backtrace: Self::resolve_backtrace(&res),
+            res,
             color_config,
         }
     }
@@ -188,29 +206,27 @@ impl<E: Diagnostic> Report<E> {
     }
 
     /// Format the backtrace if available and captured.
+    ///
+    /// Both the colored and plain paths go through [`TracePrinter`]; the plain
+    /// path just swaps in the empty theme. This avoids the upstream `backtrace`
+    /// Debug formatter, which calls `std::env::current_dir()` (a filesystem
+    /// syscall) on every render.
     fn write_backtrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Some(backtrace) = self.error().and_then(|e| e.oopsie_backtrace()) else {
+        let Some(backtrace) = &self.backtrace else {
             return Ok(());
         };
-        let mut backtrace = backtrace.clone();
-        backtrace.resolve(); // Resolve here to ensure we have symbol information
-        if backtrace.frames().is_empty() {
-            return Ok(()); // Don't print backtrace if it's empty (e.g. on platforms where capture is unsupported)
-        }
 
         writeln!(f)?;
-        if self.color_config.should_colorize() {
-            writeln!(f)?;
-            let printer = if oopsie_core::rust_backtrace().is_full() {
-                TracePrinter::unfiltered()
-            } else {
-                TracePrinter::new()
-            };
-            printer.write_backtrace(f, &backtrace)?;
+        writeln!(f)?;
+        let mut printer = if oopsie_core::rust_backtrace().is_full() {
+            TracePrinter::unfiltered()
         } else {
-            writeln!(f, "{:━^80}", " BACKTRACE ")?;
-            write!(f, "{backtrace:?}")?;
+            TracePrinter::new()
+        };
+        if !self.color_config.should_colorize() {
+            printer = printer.plain();
         }
+        printer.write_backtrace(f, backtrace)?;
         Ok(())
     }
 }
@@ -242,10 +258,12 @@ where
 }
 
 #[cfg(feature = "unstable-try-trait-v2")]
-impl<T, E> core::ops::FromResidual<Result<T, E>> for Report<E> {
+impl<T, E: Diagnostic> core::ops::FromResidual<Result<T, E>> for Report<E> {
     fn from_residual(residual: Result<T, E>) -> Self {
+        let res = residual.map(drop);
         Self {
-            res: residual.map(drop),
+            backtrace: Self::resolve_backtrace(&res),
+            res,
             color_config: ColorConfig::default(),
         }
     }

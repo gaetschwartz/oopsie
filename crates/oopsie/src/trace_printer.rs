@@ -119,6 +119,20 @@ impl TraceTheme {
         header: Style::new().red(),
         frames_hidden: Style::new().cyan(),
     };
+
+    /// A theme that applies no styling — an empty `Style` emits no ANSI codes,
+    /// so this renders identically to the colored path minus the colors.
+    pub const PLAIN: Self = Self {
+        frame_number: Style::new(),
+        function_name: Style::new(),
+        function_hash: Style::new(),
+        file_path: Style::new(),
+        line_number: Style::new(),
+        separator: Style::new(),
+        fields: Style::new(),
+        header: Style::new(),
+        frames_hidden: Style::new(),
+    };
 }
 
 impl Default for TraceTheme {
@@ -288,6 +302,14 @@ impl TracePrinter {
     ) -> Self {
         self.frame_filter =
             overlay_frame_filters(self.frame_filter, BoxOrBorrow::Box(Box::new(filter)));
+        self
+    }
+
+    /// Switch to the plain (uncolored) theme, keeping the frame filter.
+    #[must_use]
+    #[inline]
+    pub const fn plain(mut self) -> Self {
+        self.theme = TraceTheme::PLAIN;
         self
     }
 
