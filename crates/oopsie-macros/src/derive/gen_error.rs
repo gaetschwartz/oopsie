@@ -70,7 +70,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         // Provide backtrace/spantrace refs from detected fields
         if let Some(bt_field) = &categorized.backtrace_field {
             provide_stmts.push(quote! {
-                request.provide_ref::<#oopsie_path::BackTrace>(#bt_field.as_ref());
+                request.provide_ref::<#oopsie_path::Backtrace>(#bt_field.as_ref());
             });
         }
         if let Some(st_field) = &categorized.spantrace_field {
@@ -196,7 +196,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         quote! {}
     } else {
         quote! {
-            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::BackTrace> {
+            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
                 match self {
                     #(#bt_arms)*
                     _ => ::core::option::Option::None,
@@ -315,7 +315,7 @@ pub fn gen_struct_error(
     // Provide backtrace/spantrace refs from detected fields
     if let Some(bt_field) = &categorized.backtrace_field {
         provide_stmts.push(quote! {
-            request.provide_ref::<#oopsie_path::BackTrace>(#bt_field.as_ref());
+            request.provide_ref::<#oopsie_path::Backtrace>(#bt_field.as_ref());
         });
     }
     if let Some(st_field) = &categorized.spantrace_field {
@@ -364,7 +364,7 @@ pub fn gen_struct_error(
 
     let bt_method = if let Some(bt_field) = &categorized.backtrace_field {
         quote! {
-            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::BackTrace> {
+            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
                 ::core::option::Option::Some(self.#bt_field.as_ref())
             }
         }

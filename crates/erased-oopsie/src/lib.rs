@@ -7,7 +7,7 @@
 mod backtrace;
 mod spantrace;
 
-pub use backtrace::{ErasedBackTrace, ErasedFrame};
+pub use backtrace::{ErasedBacktrace, ErasedFrame};
 pub use spantrace::{ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel};
 
 use std::fmt;
@@ -38,7 +38,7 @@ pub struct ErasedError {
     pub spantrace: Option<ErasedSpanTrace>,
 
     /// Serialized backtrace.
-    pub backtrace: Option<ErasedBackTrace>,
+    pub backtrace: Option<ErasedBacktrace>,
 }
 
 impl std::error::Error for ErasedError {}
@@ -97,7 +97,7 @@ impl ErasedError {
             help: err.oopsie_help_text(),
         };
         let spantrace = err.oopsie_spantrace().map(ErasedSpanTrace::from);
-        let backtrace = err.oopsie_backtrace().cloned().map(ErasedBackTrace::from);
+        let backtrace = err.oopsie_backtrace().cloned().map(ErasedBacktrace::from);
 
         Self {
             message,

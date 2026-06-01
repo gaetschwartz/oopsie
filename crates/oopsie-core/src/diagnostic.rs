@@ -1,6 +1,6 @@
 //! Simple trait for errors that expose diagnostic data.
 
-use crate::{BackTrace, ErrorCode, HelpText, SpanTrace};
+use crate::{Backtrace, ErrorCode, HelpText, SpanTrace};
 
 /// Trait for errors that expose diagnostic data.
 ///
@@ -10,7 +10,7 @@ use crate::{BackTrace, ErrorCode, HelpText, SpanTrace};
 pub trait Diagnostic: std::error::Error {
     /// Returns the backtrace captured when this error was created.
     #[inline]
-    fn oopsie_backtrace(&self) -> Option<&BackTrace> {
+    fn oopsie_backtrace(&self) -> Option<&Backtrace> {
         None
     }
 

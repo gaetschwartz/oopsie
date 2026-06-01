@@ -167,7 +167,7 @@ mod tests {
     fn test_config() -> FieldInjectorConfig {
         FieldInjectorConfig {
             backtrace_ident: format_ident!("__oopsie_backtrace"),
-            backtrace_type: quote! { ::std::boxed::Box<BackTrace> },
+            backtrace_type: quote! { ::std::boxed::Box<Backtrace> },
             backtrace_attrs: quote! { #[oopsie(backtrace)] },
             spantrace_ident: format_ident!("__oopsie_spantrace"),
             spantrace_type: quote! { ::std::boxed::Box<SpanTrace> },
@@ -183,7 +183,7 @@ mod tests {
 
     #[test]
     fn check_existing_fields_detects_backtrace() {
-        let fields = parse_fields(quote! { struct S { backtrace: BackTrace, message: String } });
+        let fields = parse_fields(quote! { struct S { backtrace: Backtrace, message: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
         let existence = check_existing_fields(&fields, &ts);
         assert!(existence.has_backtrace);

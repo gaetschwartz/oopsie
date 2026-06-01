@@ -34,7 +34,7 @@ impl FieldInjectorConfig {
         let timestamp_ident = format_ident!("__oopsie_timestamp");
 
         let backtrace_type = resolved.backtrace_type().map_or_else(
-            || quote! { ::std::boxed::Box<#oopsie_path::BackTrace> },
+            || quote! { ::std::boxed::Box<#oopsie_path::Backtrace> },
             |p| quote! { #p },
         );
         let spantrace_type = resolved.spantrace_type().map_or_else(

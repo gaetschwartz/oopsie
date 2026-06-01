@@ -11,7 +11,7 @@ use std::{borrow::ToOwned, fmt};
 
 use owo_colors::{OwoColorize as _, Style};
 
-use crate::BackTrace;
+use crate::Backtrace;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data types
@@ -52,14 +52,14 @@ pub trait SpanTraceProvider {
 // Implementations for core types
 // ─────────────────────────────────────────────────────────────────────────────
 
-impl BacktraceProvider for BackTrace {
+impl BacktraceProvider for Backtrace {
     fn frames(&self) -> Vec<BacktraceFrame> {
         // Filter `backtrace`-crate capture frames here too (same as in
-        // `oopsie_core::backtrace::BackTrace::Debug` and
-        // `erased_oopsie::ErasedBackTrace::from_backtrace`) so the colored
+        // `oopsie_core::backtrace::Backtrace::Debug` and
+        // `erased_oopsie::ErasedBacktrace::from_backtrace`) so the colored
         // and no-colors rendering paths produce the same shape across
         // platforms.
-        BackTrace::frames(self)
+        Backtrace::frames(self)
             .iter()
             .enumerate()
             .flat_map(|(n, frame)| {

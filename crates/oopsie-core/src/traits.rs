@@ -23,7 +23,7 @@ pub trait Contextual<E: std::error::Error> {
 
 /// A type that can auto-capture diagnostic data at the point of error construction.
 ///
-/// Implemented by [`BackTrace`](crate::BackTrace) and [`SpanTrace`](crate::SpanTrace) so they
+/// Implemented by [`Backtrace`](crate::Backtrace) and [`SpanTrace`](crate::SpanTrace) so they
 /// can be filled automatically. Mark a field with `#[oopsie(capture)]` to have it populated
 /// via this trait when the error is constructed — the field will not appear in the context
 /// selector and will not need to be supplied by the caller.
@@ -399,6 +399,6 @@ mod tests {
     const _: () = {
         // Verify that Box<T> implements Capturable when T: Capturable
         const fn is_capturable<T: Capturable>() {}
-        is_capturable::<Box<crate::BackTrace>>();
+        is_capturable::<Box<crate::Backtrace>>();
     };
 }

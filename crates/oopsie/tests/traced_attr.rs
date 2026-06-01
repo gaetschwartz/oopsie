@@ -104,11 +104,11 @@ fn traced_enum_module_naming() {
 #[oopsie(traced)]
 pub enum PreExistingBtError {
     #[oopsie("has backtrace")]
-    #[oopsie(provide(ref, oopsie::BackTrace => bt.as_ref()))]
+    #[oopsie(provide(ref, oopsie::Backtrace => bt.as_ref()))]
     HasBt {
         msg: String,
         #[oopsie(capture)]
-        bt: Box<oopsie::BackTrace>,
+        bt: Box<oopsie::Backtrace>,
     },
 }
 
@@ -143,7 +143,7 @@ fn traced_does_not_duplicate_spantrace() {
 pub struct PreExistingBtStructError {
     msg: String,
     #[oopsie(capture)]
-    bt: Box<oopsie::BackTrace>,
+    bt: Box<oopsie::Backtrace>,
 }
 
 #[test]

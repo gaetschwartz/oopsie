@@ -157,7 +157,7 @@ pub use oopsie_macros::oopsie;
 // tracing-subscriber) don't accidentally become part of oopsie's SemVer
 // contract via incidental glob re-export.
 pub use oopsie_core::{
-    AsErrorSource, BackTrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
+    AsErrorSource, Backtrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
     NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace, Welp,
     WelpOptionExt, WelpResultExt, clear_rust_backtrace_override, install, install_panic_hook,
     rust_backtrace, set_rust_backtrace_override,

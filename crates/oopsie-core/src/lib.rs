@@ -25,7 +25,7 @@ use std::io;
 use std::ops::Deref;
 
 pub use backtrace::{
-    BackTrace, RustBacktrace, clear_rust_backtrace_override, is_internal_frame, rust_backtrace,
+    Backtrace, RustBacktrace, clear_rust_backtrace_override, is_internal_frame, rust_backtrace,
     set_rust_backtrace_override,
 };
 use color_backtrace::termcolor;

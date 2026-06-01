@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// A serializable, type-erased representation of a backtrace.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ErasedBackTrace {
+pub struct ErasedBacktrace {
     frames: Vec<ErasedFrame>,
 }
 
@@ -20,8 +20,8 @@ pub struct ErasedFrame {
     pub column: Option<u32>,
 }
 
-impl ErasedBackTrace {
-    /// Create an `ErasedBackTrace` from a live `BackTrace`.
+impl ErasedBacktrace {
+    /// Create an `ErasedBacktrace` from a live `Backtrace`.
     ///
     /// Frames belonging to the `backtrace` crate's own capture machinery
     /// (`backtrace::backtrace::*` and `<backtrace::capture::*>::*`) are
@@ -29,17 +29,17 @@ impl ErasedBackTrace {
     /// detail, never user-relevant.
     #[must_use]
     #[inline]
-    pub fn from_backtrace_ref(bt: &oopsie_core::BackTrace) -> Self {
+    pub fn from_backtrace_ref(bt: &oopsie_core::Backtrace) -> Self {
         Self::from_backtrace(bt.clone())
     }
-    /// Create an `ErasedBackTrace` from a live `BackTrace`.
+    /// Create an `ErasedBacktrace` from a live `Backtrace`.
     ///
     /// Frames belonging to the `backtrace` crate's own capture machinery
     /// (`backtrace::backtrace::*` and `<backtrace::capture::*>::*`) are
     /// stripped — those are platform/toolchain-dependent implementation
     /// detail, never user-relevant.
     #[must_use]
-    pub fn from_backtrace(mut bt: oopsie_core::BackTrace) -> Self {
+    pub fn from_backtrace(mut bt: oopsie_core::Backtrace) -> Self {
         bt.resolve();
         let frames = bt
             .frames()
@@ -65,20 +65,20 @@ impl ErasedBackTrace {
     }
 }
 
-impl From<&oopsie_core::BackTrace> for ErasedBackTrace {
+impl From<&oopsie_core::Backtrace> for ErasedBacktrace {
     #[inline]
-    fn from(bt: &oopsie_core::BackTrace) -> Self {
+    fn from(bt: &oopsie_core::Backtrace) -> Self {
         Self::from_backtrace_ref(bt)
     }
 }
-impl From<oopsie_core::BackTrace> for ErasedBackTrace {
+impl From<oopsie_core::Backtrace> for ErasedBacktrace {
     #[inline]
-    fn from(bt: oopsie_core::BackTrace) -> Self {
+    fn from(bt: oopsie_core::Backtrace) -> Self {
         Self::from_backtrace(bt)
     }
 }
 
-impl fmt::Display for ErasedBackTrace {
+impl fmt::Display for ErasedBacktrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for (i, frame) in self.frames.iter().enumerate() {
             write!(f, "{i:>4}: ")?;

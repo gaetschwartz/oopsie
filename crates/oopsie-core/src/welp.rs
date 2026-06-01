@@ -28,14 +28,14 @@
 //! # Layout
 //!
 //! `Welp` is a 40-byte enum — `Sourced` carries `Box<str>` + `Box<dyn Error>`,
-//! `Traced` carries `Box<str>` + `Box<(BackTrace, SpanTrace)>`. The two
+//! `Traced` carries `Box<str>` + `Box<(Backtrace, SpanTrace)>`. The two
 //! variants are mutually exclusive: when a source is present, the source is
 //! responsible for surfacing traces; when not, fresh traces are captured.
 
 use std::error::Error as StdError;
 use std::fmt;
 
-use crate::{BackTrace, Capturable as _, Diagnostic, SpanTrace};
+use crate::{Backtrace, Capturable as _, Diagnostic, SpanTrace};
 
 /// A boxed `std::error::Error` that's `Send + Sync + 'static`.
 type BoxError = Box<dyn StdError + Send + Sync + 'static>;
@@ -53,7 +53,7 @@ enum WelpRepr {
     },
     Traced {
         message: Box<str>,
-        traces: Box<(BackTrace, SpanTrace)>,
+        traces: Box<(Backtrace, SpanTrace)>,
     },
 }
 
@@ -71,7 +71,7 @@ impl Welp {
     pub fn new(message: impl Into<String>) -> Self {
         Self(WelpRepr::Traced {
             message: message.into().into_boxed_str(),
-            traces: Box::new((BackTrace::capture(), SpanTrace::capture())),
+            traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
         })
     }
 
@@ -163,7 +163,7 @@ impl StdError for Welp {
 }
 
 impl Diagnostic for Welp {
-    fn oopsie_backtrace(&self) -> Option<&BackTrace> {
+    fn oopsie_backtrace(&self) -> Option<&Backtrace> {
         match &self.0 {
             WelpRepr::Sourced { .. } => None, // TODO: Ideally we would not lose the source backtrace here.
             WelpRepr::Traced { traces, .. } => Some(&traces.0),

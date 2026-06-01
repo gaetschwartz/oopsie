@@ -90,20 +90,20 @@ pub fn rust_backtrace() -> RustBacktrace {
 }
 
 #[derive(Clone)]
-pub struct BackTrace(backtrace::Backtrace);
+pub struct Backtrace(backtrace::Backtrace);
 
-impl crate::Capturable for BackTrace {
+impl crate::Capturable for Backtrace {
     #[inline]
     fn capture() -> Self {
         if rust_backtrace().is_enabled() {
-            BackTrace(backtrace::Backtrace::new_unresolved())
+            Backtrace(backtrace::Backtrace::new_unresolved())
         } else {
-            BackTrace(backtrace::Backtrace::from(vec![]))
+            Backtrace(backtrace::Backtrace::from(vec![]))
         }
     }
 }
 
-impl crate::CaptureExt for BackTrace {
+impl crate::CaptureExt for Backtrace {
     #[inline]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
         source
@@ -113,7 +113,7 @@ impl crate::CaptureExt for BackTrace {
     }
 }
 
-impl color_backtrace::Backtrace for BackTrace {
+impl color_backtrace::Backtrace for Backtrace {
     #[inline]
     fn frames(&self) -> Vec<color_backtrace::Frame> {
         let mut frames = color_backtrace::Backtrace::frames(&self.0);
@@ -176,7 +176,7 @@ pub fn is_internal_frame(name: Option<&str>, filename: Option<&path::Path>) -> b
     false
 }
 
-impl fmt::Debug for BackTrace {
+impl fmt::Debug for Backtrace {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Strip backtrace-crate capture frames so the rendered backtrace is
         // identical across platforms (macOS captures them; Linux inlines
@@ -216,7 +216,7 @@ impl fmt::Debug for BackTrace {
     }
 }
 
-impl BackTrace {
+impl Backtrace {
     /// Returns a reference to the inner [`backtrace::Backtrace`].
     #[must_use]
     #[inline]
@@ -252,7 +252,7 @@ mod tests {
 
     #[derive(Debug)]
     struct ErrorWithBacktrace {
-        backtrace: BackTrace,
+        backtrace: Backtrace,
     }
 
     impl fmt::Display for ErrorWithBacktrace {
@@ -264,7 +264,7 @@ mod tests {
     impl std::error::Error for ErrorWithBacktrace {}
 
     impl Diagnostic for ErrorWithBacktrace {
-        fn oopsie_backtrace(&self) -> Option<&BackTrace> {
+        fn oopsie_backtrace(&self) -> Option<&Backtrace> {
             Some(&self.backtrace)
         }
     }
@@ -284,20 +284,20 @@ mod tests {
 
     #[test]
     fn test_backtrace_capture_produces_backtrace() {
-        let bt = BackTrace::capture();
+        let bt = Backtrace::capture();
         // Backtrace should exist (may be empty on some platforms, but should not panic)
         let _ = bt.as_backtrace().frames();
     }
 
     #[test]
     fn test_backtrace_capture_or_extract_with_existing_backtrace() {
-        let original_bt = BackTrace::capture();
+        let original_bt = Backtrace::capture();
         let error = ErrorWithBacktrace {
             backtrace: original_bt.clone(),
         };
 
         // Should extract the existing backtrace, not capture a new one
-        let extracted = BackTrace::capture_or_extract(&error);
+        let extracted = Backtrace::capture_or_extract(&error);
         // Both should have the same frames count
         assert_eq!(
             extracted.as_backtrace().frames().len(),
@@ -310,28 +310,28 @@ mod tests {
         let error = ErrorWithoutBacktrace;
 
         // Should capture a fresh backtrace
-        let captured = BackTrace::capture_or_extract(&error);
+        let captured = Backtrace::capture_or_extract(&error);
         // Should produce a valid backtrace (frames list is valid, may be empty)
         let _ = captured.as_backtrace().frames();
     }
 
     #[test]
     fn test_backtrace_inner_returns_reference() {
-        let bt = BackTrace::capture();
+        let bt = Backtrace::capture();
         let inner = bt.as_backtrace();
         // Should be able to call methods on the inner backtrace
         let _ = inner.frames();
     }
 
     const _: () = {
-        // Verify that BackTrace implements Capturable
+        // Verify that Backtrace implements Capturable
         const fn is_capturable<T: crate::Capturable>() {}
-        is_capturable::<BackTrace>();
+        is_capturable::<Backtrace>();
     };
 
     const _: () = {
-        // Verify that BackTrace implements CaptureExt
+        // Verify that Backtrace implements CaptureExt
         const fn is_capture_ext<T: CaptureExt>() {}
-        is_capture_ext::<BackTrace>();
+        is_capture_ext::<Backtrace>();
     };
 }
