@@ -5,10 +5,13 @@
 //! the style of `color-backtrace` and `color-spantrace` but uses `owo_colors`
 //! directly, eliminating the need for those dependencies.
 
-use std::fmt;
+use std::ops::Deref;
 use std::path::PathBuf;
+use std::{borrow::ToOwned, fmt};
 
 use owo_colors::{OwoColorize as _, Style};
+
+use crate::BackTrace;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data types
@@ -49,22 +52,21 @@ pub trait SpanTraceProvider {
 // Implementations for core types
 // ─────────────────────────────────────────────────────────────────────────────
 
-impl BacktraceProvider for crate::BackTrace {
+impl BacktraceProvider for BackTrace {
     fn frames(&self) -> Vec<BacktraceFrame> {
         // Filter `backtrace`-crate capture frames here too (same as in
         // `oopsie_core::backtrace::BackTrace::Debug` and
         // `erased_oopsie::ErasedBackTrace::from_backtrace`) so the colored
         // and no-colors rendering paths produce the same shape across
         // platforms.
-        self.inner()
-            .frames()
+        BackTrace::frames(self)
             .iter()
             .enumerate()
             .flat_map(|(n, frame)| {
                 frame.symbols().iter().map(move |sym| BacktraceFrame {
                     n,
-                    name: sym.name().map(|n| n.to_string()),
-                    filename: sym.filename().map(std::borrow::ToOwned::to_owned),
+                    name: sym.name().map(|s| s.to_string()),
+                    filename: sym.filename().map(ToOwned::to_owned),
                     lineno: sym.lineno(),
                     colno: sym.colno(),
                 })
@@ -80,7 +82,7 @@ impl SpanTraceProvider for crate::SpanTrace {
             let meta = SpanMetadata {
                 name: md.name().to_owned(),
                 target: md.target().to_owned(),
-                file: md.file().map(std::borrow::ToOwned::to_owned),
+                file: md.file().map(ToOwned::to_owned),
                 line: md.line(),
             };
             f(&meta, fields)
@@ -105,19 +107,25 @@ pub struct TraceTheme {
     pub frames_hidden: Style,
 }
 
+impl TraceTheme {
+    /// Create a new `TraceTheme` with the specified styles.
+    pub const DEFAULT: Self = Self {
+        frame_number: Style::new().dimmed(),
+        function_name: Style::new().bright_red(),
+        function_hash: Style::new().bright_black(),
+        file_path: Style::new().purple(),
+        line_number: Style::new().purple(),
+        separator: Style::new().dimmed(),
+        fields: Style::new().bright_cyan(),
+        header: Style::new().red(),
+        frames_hidden: Style::new().cyan(),
+    };
+}
+
 impl Default for TraceTheme {
+    #[inline]
     fn default() -> Self {
-        Self {
-            frame_number: Style::new().dimmed(),
-            function_name: Style::new().bright_red(),
-            function_hash: Style::new().bright_black(),
-            file_path: Style::new().purple(),
-            line_number: Style::new().purple(),
-            separator: Style::new().dimmed(),
-            fields: Style::new().bright_cyan(),
-            header: Style::new().red(),
-            frames_hidden: Style::new().cyan(),
-        }
+        Self::DEFAULT
     }
 }
 
@@ -223,37 +231,58 @@ fn split_function_hash(name: &str) -> (&str, Option<&str>) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A closure that filters backtrace frames in-place.
-pub type FrameFilter = Box<dyn Fn(&mut Vec<&BacktraceFrame>)>;
+type FrameFilterBox = BoxOrBorrow<'static, dyn Fn(&mut Vec<&BacktraceFrame>)>;
 
 /// Renders backtraces and span traces with colors.
 pub struct TracePrinter {
     theme: TraceTheme,
-    frame_filters: Vec<FrameFilter>,
+    frame_filter: FrameFilterBox,
 }
 
 impl TracePrinter {
+    const FILTER: FrameFilterBox = BoxOrBorrow::Borrow(&error_backtrace_frame_filter);
+    const NOOP_FILTER: FrameFilterBox = BoxOrBorrow::Borrow(&noop_frame_filter);
+
     /// Create a new `TracePrinter` with the default theme and default frame filter.
     #[must_use]
-    pub fn new() -> Self {
+    #[inline]
+    pub const fn new() -> Self {
         Self {
-            theme: TraceTheme::default(),
-            frame_filters: vec![Box::new(error_backtrace_frame_filter)],
+            theme: TraceTheme::DEFAULT,
+            frame_filter: Self::FILTER,
+        }
+    }
+
+    /// Create a new `TracePrinter` with the default theme and no frame filtering.
+    ///
+    /// Every captured frame is rendered. Used to honor `RUST_BACKTRACE=full`.
+    #[must_use]
+    #[inline]
+    pub const fn unfiltered() -> Self {
+        Self {
+            theme: TraceTheme::DEFAULT,
+            frame_filter: Self::NOOP_FILTER,
         }
     }
 
     /// Create a new `TracePrinter` with a custom theme and default frame filter.
     #[must_use]
-    pub fn with_theme(theme: TraceTheme) -> Self {
+    #[inline]
+    pub const fn with_theme(theme: TraceTheme) -> Self {
         Self {
             theme,
-            frame_filters: vec![Box::new(error_backtrace_frame_filter)],
+            frame_filter: Self::FILTER,
         }
     }
 
     /// Add a frame filter for backtrace rendering.
     #[must_use]
-    pub fn add_frame_filter(mut self, filter: FrameFilter) -> Self {
-        self.frame_filters.push(filter);
+    pub fn add_frame_filter(
+        mut self,
+        filter: impl Fn(&mut Vec<&BacktraceFrame>) + 'static,
+    ) -> Self {
+        self.frame_filter =
+            overlay_frame_filters(self.frame_filter, BoxOrBorrow::Box(Box::new(filter)));
         self
     }
 
@@ -268,9 +297,7 @@ impl TracePrinter {
 
         // Apply frame filters
         let mut filtered: Vec<&BacktraceFrame> = all_frames.iter().collect();
-        for filter in &self.frame_filters {
-            filter(&mut filtered);
-        }
+        (self.frame_filter)(&mut filtered);
 
         let hidden_count = total_count - filtered.len();
 
@@ -430,9 +457,42 @@ impl TracePrinter {
 }
 
 impl Default for TracePrinter {
+    #[inline]
     fn default() -> Self {
         Self::new()
     }
+}
+
+enum BoxOrBorrow<'a, T: ?Sized> {
+    Borrow(&'a T),
+    Box(Box<T>),
+}
+impl<T: ?Sized> BoxOrBorrow<'_, T> {
+    #[inline]
+    pub fn as_ref(&self) -> &T {
+        match self {
+            BoxOrBorrow::Borrow(b) => b,
+            BoxOrBorrow::Box(b) => b,
+        }
+    }
+}
+impl<T: ?Sized> Deref for BoxOrBorrow<'_, T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.as_ref()
+    }
+}
+
+/// A frame filter that keeps every frame.
+const fn noop_frame_filter(_frames: &mut Vec<&BacktraceFrame>) {}
+
+fn overlay_frame_filters(under: FrameFilterBox, above: FrameFilterBox) -> FrameFilterBox {
+    BoxOrBorrow::Box(Box::new(move |frames: &mut Vec<&BacktraceFrame>| {
+        under.as_ref()(frames);
+        above.as_ref()(frames);
+    }))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

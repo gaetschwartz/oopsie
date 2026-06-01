@@ -158,8 +158,9 @@ pub use oopsie_macros::oopsie;
 // contract via incidental glob re-export.
 pub use oopsie_core::{
     AsErrorSource, BackTrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
-    NoSource, OptionExt, OptionalSpanTrace, ResultExt, SpanTrace, Welp, WelpOptionExt,
-    WelpResultExt, install, install_panic_hook,
+    NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace, Welp,
+    WelpOptionExt, WelpResultExt, clear_rust_backtrace_override, install, install_panic_hook,
+    rust_backtrace, set_rust_backtrace_override,
 };
 
 // Hidden re-export so macro-generated code can reach the autoref-probe

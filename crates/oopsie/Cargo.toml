@@ -16,6 +16,7 @@ unstable = ["unstable-error-generic-member-access", "unstable-try-trait-v2"]
 fancy = ["dep:owo-colors", "dep:serde", "dep:serde_json"]
 
 [dependencies]
+backtrace = "0.3.76"
 oopsie-core = { workspace = true }
 oopsie-macros = { workspace = true }
 owo-colors = { version = "4", optional = true }

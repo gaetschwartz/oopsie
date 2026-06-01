@@ -188,11 +188,21 @@ impl<E: Diagnostic> Report<E> {
         let Some(backtrace) = self.error().and_then(|e| e.oopsie_backtrace()) else {
             return Ok(());
         };
+        let mut backtrace = backtrace.clone();
+        backtrace.resolve(); // Resolve here to ensure we have symbol information
+        if backtrace.frames().is_empty() {
+            return Ok(()); // Don't print backtrace if it's empty (e.g. on platforms where capture is unsupported)
+        }
 
         writeln!(f)?;
         if self.color_config.should_colorize() {
             writeln!(f)?;
-            TracePrinter::new().write_backtrace(f, backtrace)?;
+            let printer = if oopsie_core::rust_backtrace().is_full() {
+                TracePrinter::unfiltered()
+            } else {
+                TracePrinter::new()
+            };
+            printer.write_backtrace(f, &backtrace)?;
         } else {
             writeln!(f, "{:━^80}", " BACKTRACE ")?;
             write!(f, "{backtrace:?}")?;
