@@ -37,6 +37,7 @@ impl SpanTrace {
     }
 
     #[inline]
+    #[must_use]
     pub const fn as_span_trace(&self) -> &tracing_error::SpanTrace {
         &self.inner
     }

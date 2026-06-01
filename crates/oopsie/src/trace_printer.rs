@@ -7,7 +7,7 @@
 
 use std::ops::Deref;
 use std::path;
-use std::{borrow::ToOwned, fmt};
+use std::{borrow::ToOwned as _, fmt};
 
 use owo_colors::{OwoColorize as _, Style};
 
