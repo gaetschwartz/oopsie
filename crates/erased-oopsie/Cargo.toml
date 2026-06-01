@@ -19,12 +19,17 @@ strum = { version = "0.28", features = ["derive"] }
 tracing = "0.1"
 
 [dev-dependencies]
+criterion = "0.8.2"
 insta = { version = "1.46.3", features = ["filters", "json", "redactions"] }
 konst = { version = "0.4.3", features = ["alloc"] }
 oopsie = { workspace = true }
 regex = "1.12.3"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
+
+[[bench]]
+name = "erased"
+harness = false
 
 [lints]
 workspace = true

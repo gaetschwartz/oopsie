@@ -27,9 +27,34 @@ serde_json = { version = "1", optional = true }
 workspace = true
 
 [dev-dependencies]
+anyhow = "1.0.102"
+criterion = "0.8.2"
+eyre = "0.6.12"
 insta = { version = "1.46.3", features = ["filters", "json", "redactions"] }
 rustversion = "1.0.22"
+snafu = { version = "0.9.1", features = ["backtrace"] }
 strip-ansi-escapes = "0.2.1"
+thiserror = "2.0.18"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 trybuild = "1.0.116"
+
+[[bench]]
+name = "capture"
+harness = false
+
+[[bench]]
+name = "construct"
+harness = false
+
+[[bench]]
+name = "propagate"
+harness = false
+
+[[bench]]
+name = "render"
+harness = false
+
+[[bench]]
+name = "vs_ecosystem"
+harness = false
