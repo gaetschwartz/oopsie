@@ -156,6 +156,44 @@ fn test_report_with_spantrace_debug() {
     });
 }
 
+/// The colored span renderer (`TracePrinter::write_span_frame`) is only reached
+/// when a report both carries spans *and* is colorized. Every existing spantrace
+/// test renders `.no_colors()`, which routes through core's `Display` instead, so
+/// `write_span_frame` was never exercised. The two renderers are distinguishable:
+/// `write_span_frame` numbers spans 1-based (`index` starts at 1) while core's
+/// `Display` numbers them 0-based — so the lines asserted below can *only* be
+/// produced by the colored path. We also confirm the span section is actually
+/// colorized (bright-red SGR 91 frame names), isolated from the backtrace.
+#[test]
+fn test_report_colored_spantrace_renders_frames() {
+    let error = common::make_error();
+    let raw = Report::from_std(error).force_colors().to_string();
+    let stripped = strip_ansi(&raw);
+
+    assert!(
+        stripped.contains("1: sys::inner_function"),
+        "colored path renders 1-based span frames; got:\n{stripped}"
+    );
+    assert!(
+        stripped.contains("2: controller::outer_function"),
+        "colored path renders 1-based span frames; got:\n{stripped}"
+    );
+    assert!(
+        stripped.contains("with ") && stripped.contains("at "),
+        "span frames should render their fields (`with`) and location (`at`)"
+    );
+
+    let span_start = raw
+        .find("SPANTRACE")
+        .expect("colored output has a SPANTRACE header");
+    let after = &raw[span_start..];
+    let span_section = after.find("BACKTRACE").map_or(after, |i| &after[..i]);
+    assert!(
+        span_section.contains("\u{1b}[91m"),
+        "span frame names should be bright-red (SGR 91) styled"
+    );
+}
+
 // --- Accessor method tests ---
 
 #[test]
