@@ -23,10 +23,18 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
     let mut traced_flag = false;
     let mut remaining: Vec<NestedMeta> = Vec::new();
     for m in meta {
-        if matches!(&m, NestedMeta::Meta(syn::Meta::Path(p)) if p.is_ident("traced")) {
-            traced_flag = true;
-        } else {
-            remaining.push(m);
+        match &m {
+            NestedMeta::Meta(syn::Meta::Path(p)) if p.is_ident("traced") => {
+                traced_flag = true;
+            }
+            NestedMeta::Meta(syn::Meta::List(list)) if list.path.is_ident("traced") => {
+                // `traced(arg, arg, ...)`: the flag plus inner args forwarded to
+                // `TracedArgs`, which has no `traced` key of its own.
+                traced_flag = true;
+                let inner = NestedMeta::parse_meta_list(list.tokens.clone())?;
+                remaining.extend(inner);
+            }
+            _ => remaining.push(m),
         }
     }
 
@@ -285,5 +293,44 @@ mod tests {
             },
         );
         result.unwrap_err();
+    }
+
+    #[test]
+    fn traced_list_form_parses_and_injects() {
+        // `traced(packed = false)` must parse (not error on unknown key `traced`)
+        // and still trigger field injection.
+        let result = expand(
+            quote! { traced(packed = false) },
+            quote! {
+                pub enum AppError {
+                    #[oopsie("boom")]
+                    Boom { info: String },
+                }
+            },
+        );
+        let output = result
+            .expect("traced(...) list form must parse")
+            .to_string();
+        // Unpacked => two separate injected fields.
+        assert!(output.contains("__oopsie_backtrace"), "{output}");
+        assert!(output.contains("__oopsie_spantrace"), "{output}");
+    }
+
+    #[test]
+    #[ignore = "packed injection lands in Tasks 5-7"]
+    fn traced_list_form_default_is_packed() {
+        let result = expand(
+            quote! { traced(boxed = false) },
+            quote! {
+                pub enum AppError {
+                    #[oopsie("boom")]
+                    Boom { info: String },
+                }
+            },
+        );
+        let output = result.expect("traced(boxed=false) must parse").to_string();
+        // packed default => single combined field, no separate ones.
+        assert!(output.contains("__oopsie_traces"), "{output}");
+        assert!(!output.contains("__oopsie_backtrace"), "{output}");
     }
 }
