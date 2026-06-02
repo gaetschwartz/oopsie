@@ -31,6 +31,24 @@ pub(super) fn is_spantrace_type(ty: &syn::Type) -> bool {
     is_ident_type(ty, "SpanTrace") || is_boxed_ident_type(ty, "SpanTrace")
 }
 
+/// `true` for a 2-tuple `(Backtrace, SpanTrace)` or `Box<(Backtrace,
+/// SpanTrace)>` — the packed trace field shape. Element order is fixed:
+/// backtrace first, spantrace second. Like `is_backtrace_type`, this is a
+/// best-effort last-segment match and cannot resolve paths.
+pub(crate) fn is_traces_type(ty: &syn::Type) -> bool {
+    // Unwrap one optional `Box<...>` layer, then require a 2-tuple whose
+    // elements are `Backtrace` and `SpanTrace` by last path segment.
+    let inner = extract_boxed_inner(ty).unwrap_or(ty);
+    let syn::Type::Tuple(tuple) = inner else {
+        return false;
+    };
+    let mut elems = tuple.elems.iter();
+    let (Some(a), Some(b), None) = (elems.next(), elems.next(), elems.next()) else {
+        return false;
+    };
+    is_ident_type(a, "Backtrace") && is_ident_type(b, "SpanTrace")
+}
+
 fn is_ident_type(ty: &syn::Type, ident: &str) -> bool {
     let syn::Type::Path(type_path) = ty else {
         return false;
@@ -222,5 +240,43 @@ mod tests {
     fn boxed_ident_type_tuple() {
         let ty: syn::Type = parse_quote!(());
         assert!(!is_boxed_ident_type(&ty, "anything"));
+    }
+
+    // is_traces_type tests
+
+    #[test]
+    fn traces_type_inline_tuple() {
+        let ty: syn::Type = parse_quote!((Backtrace, SpanTrace));
+        assert!(is_traces_type(&ty));
+    }
+
+    #[test]
+    fn traces_type_boxed_tuple() {
+        let ty: syn::Type = parse_quote!(Box<(Backtrace, SpanTrace)>);
+        assert!(is_traces_type(&ty));
+    }
+
+    #[test]
+    fn traces_type_qualified_elements() {
+        let ty: syn::Type = parse_quote!((oopsie::Backtrace, tracing_error::SpanTrace));
+        assert!(is_traces_type(&ty));
+    }
+
+    #[test]
+    fn traces_type_wrong_arity() {
+        let ty: syn::Type = parse_quote!((Backtrace, SpanTrace, u32));
+        assert!(!is_traces_type(&ty));
+    }
+
+    #[test]
+    fn traces_type_wrong_elements() {
+        let ty: syn::Type = parse_quote!((String, SpanTrace));
+        assert!(!is_traces_type(&ty));
+    }
+
+    #[test]
+    fn traces_type_not_tuple() {
+        let ty: syn::Type = parse_quote!(Backtrace);
+        assert!(!is_traces_type(&ty));
     }
 }
