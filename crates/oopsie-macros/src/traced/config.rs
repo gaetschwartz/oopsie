@@ -99,7 +99,10 @@ impl FieldInjectorConfig {
 }
 
 /// Tracks which fields already exist in a variant/struct.
-#[expect(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one presence flag per injectable trace/diagnostic field"
+)]
 #[derive(Default)]
 pub(super) struct FieldExistence {
     pub has_backtrace: bool,
@@ -109,7 +112,10 @@ pub(super) struct FieldExistence {
 }
 
 /// Tracks which fields should be injected.
-#[expect(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one injection flag per injectable trace/diagnostic field"
+)]
 pub(super) struct FieldsToInject {
     pub backtrace: bool,
     pub spantrace: bool,

@@ -76,7 +76,10 @@ impl TracedArgs {
 }
 
 /// Resolved trace settings after applying the explicit override model.
-#[expect(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "resolved enable/box flags, one per trace dimension"
+)]
 pub struct ResolvedTraceArgs<'a> {
     pub backtrace: bool,
     pub backtrace_settings: Option<&'a FieldSetting<true, TraceSettings>>,
