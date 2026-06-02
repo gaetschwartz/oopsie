@@ -27,9 +27,9 @@ impl RustBacktrace {
         // when `RUST_BACKTRACE=1`.
         let raw = std::env::var("RUST_LIB_BACKTRACE").or_else(|_| std::env::var("RUST_BACKTRACE"));
         match raw.as_deref() {
-            Ok("0") | Err(_) => RustBacktrace::Disabled,
-            Ok("full") => RustBacktrace::Full,
-            Ok(_) => RustBacktrace::Enabled,
+            Ok("0") | Err(_) => Self::Disabled,
+            Ok("full") => Self::Full,
+            Ok(_) => Self::Enabled,
         }
     }
 
@@ -37,7 +37,7 @@ impl RustBacktrace {
     #[inline]
     #[must_use]
     pub const fn is_enabled(self) -> bool {
-        matches!(self, RustBacktrace::Full | RustBacktrace::Enabled)
+        matches!(self, Self::Full | Self::Enabled)
     }
 
     /// Whether rendering should show every frame, skipping the trimming that
@@ -45,7 +45,7 @@ impl RustBacktrace {
     #[inline]
     #[must_use]
     pub const fn is_full(self) -> bool {
-        matches!(self, RustBacktrace::Full)
+        matches!(self, Self::Full)
     }
 }
 
@@ -96,9 +96,9 @@ impl crate::Capturable for Backtrace {
     #[inline]
     fn capture() -> Self {
         if rust_backtrace().is_enabled() {
-            Backtrace(backtrace::Backtrace::new_unresolved())
+            Self(backtrace::Backtrace::new_unresolved())
         } else {
-            Backtrace(backtrace::Backtrace::from(vec![]))
+            Self(backtrace::Backtrace::from(vec![]))
         }
     }
 }

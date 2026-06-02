@@ -65,6 +65,7 @@ string_lit_as_bytes = "warn"
 debug_assert_with_mut_call = "warn"
 tuple_array_conversions = "warn"
 unused_peekable = "warn"
+use_self = "warn"
 cast_possible_truncation = "allow"
 
 # Restrictions
@@ -109,6 +110,9 @@ as_underscore = "warn"
 pub_without_shorthand = "warn"
 nonstandard_macro_braces = "warn"
 unnecessary_safety_comment = "warn"
+redundant_type_annotations = "warn"
+renamed_function_params = "warn"
+ref_patterns = "warn"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

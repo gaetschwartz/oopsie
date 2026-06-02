@@ -25,11 +25,11 @@ impl From<TracingLevel> for tracing::Level {
     #[inline]
     fn from(level: TracingLevel) -> Self {
         match level {
-            TracingLevel::ERROR => tracing::Level::ERROR,
-            TracingLevel::WARN => tracing::Level::WARN,
-            TracingLevel::INFO => tracing::Level::INFO,
-            TracingLevel::DEBUG => tracing::Level::DEBUG,
-            TracingLevel::TRACE => tracing::Level::TRACE,
+            TracingLevel::ERROR => Self::ERROR,
+            TracingLevel::WARN => Self::WARN,
+            TracingLevel::INFO => Self::INFO,
+            TracingLevel::DEBUG => Self::DEBUG,
+            TracingLevel::TRACE => Self::TRACE,
         }
     }
 }

@@ -45,7 +45,7 @@ fn leaf_enum_build() {
         path: "/tmp/missing",
     }
     .build();
-    assert!(matches!(err, AppError::NotFound { ref path } if path == "/tmp/missing"));
+    assert!(matches!(err, AppError::NotFound { path } if path == "/tmp/missing"));
 }
 
 #[test]
@@ -53,7 +53,7 @@ fn leaf_enum_fail() {
     let result: Result<(), AppError> = NotFound { path: "gone" }.fail();
     assert!(result.is_err());
     let err = result.unwrap_err();
-    assert!(matches!(err, AppError::NotFound { ref path } if path == "gone"));
+    assert!(matches!(err, AppError::NotFound { path } if path == "gone"));
 }
 
 #[test]
@@ -87,7 +87,7 @@ fn source_only_unit_selector() {
 fn selector_into_bounds() {
     // NotFound selector field `path` has type String, but accepts &str via Into.
     let err = NotFound { path: "abc" }.build();
-    assert!(matches!(err, AppError::NotFound { ref path } if path == "abc"));
+    assert!(matches!(err, AppError::NotFound { path } if path == "abc"));
 }
 
 #[test]
@@ -181,5 +181,5 @@ fn error_suffix_stripped_with_oopsie_suffix() {
 fn leaf_selector_build_error_no_source() {
     // Leaf selectors implement Contextual<E, Source=NoSource> for OptionExt support.
     let err: AppError = NotFound { path: "x" }.build_error(NoSource);
-    assert!(matches!(err, AppError::NotFound { ref path } if path == "x"));
+    assert!(matches!(err, AppError::NotFound { path } if path == "x"));
 }

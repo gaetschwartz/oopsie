@@ -34,7 +34,7 @@ enum SuffixCustomError {
 #[test]
 fn custom_suffix() {
     let err = BetaCtx { msg: "oops" }.build();
-    assert!(matches!(err, SuffixCustomError::Beta { ref msg } if msg == "oops"));
+    assert!(matches!(err, SuffixCustomError::Beta { msg } if msg == "oops"));
 }
 
 // ---- Test 3: no suffix — selector = variant name ----

@@ -24,7 +24,7 @@ enum AutoExcludedError {
 fn auto_excluded_from_selector() {
     // The selector `Missing` should only have the `name` field, not `bt`.
     let err = Missing { name: "widget" }.build();
-    assert!(matches!(err, AutoExcludedError::Missing { ref name, .. } if name == "widget"));
+    assert!(matches!(err, AutoExcludedError::Missing { name, .. } if name == "widget"));
 }
 
 // ---- Test 2: auto backtrace is generated without panic ----
@@ -84,7 +84,7 @@ enum MultiAutoError {
 #[test]
 fn multiple_auto_fields() {
     let err = Multi { label: "test" }.build();
-    assert!(matches!(err, MultiAutoError::Multi { ref label, .. } if label == "test"));
+    assert!(matches!(err, MultiAutoError::Multi { label, .. } if label == "test"));
 }
 
 // ---- Test 5: OptionalSpanTrace capture field with a Diagnostic source ----

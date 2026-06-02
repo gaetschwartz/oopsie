@@ -76,8 +76,8 @@ fn expr_to_usize(expr: &syn::Expr) -> syn::Result<usize> {
 }
 
 impl darling::FromMeta for SizeConstraint {
-    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
-        match meta {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        match item {
             syn::Meta::List(list) => syn::parse2(list.tokens.clone())
                 .map_err(|e| darling::Error::custom(e).with_span(&list.tokens)),
             other => Err(darling::Error::custom(
@@ -255,8 +255,8 @@ fn parse_trailing_exprs(input: ParseStream) -> syn::Result<Vec<Expr>> {
 }
 
 impl darling::FromMeta for DisplayAttr {
-    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
-        match meta {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        match item {
             // `display("fmt", args)` / `help("fmt", args)`
             syn::Meta::List(list) => syn::parse2(list.tokens.clone())
                 .map_err(|e| darling::Error::custom(e).with_span(&list.tokens)),
@@ -431,8 +431,8 @@ impl darling::FromMeta for SourceKind {
         Ok(Self::Yes)
     }
 
-    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
-        match meta {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        match item {
             syn::Meta::Path(_) => Ok(Self::Yes),
             syn::Meta::List(list) => {
                 let parsed: SourceKindTransform = syn::parse2(list.tokens.clone())
@@ -481,8 +481,8 @@ impl ProvideAttr {
 }
 
 impl darling::FromMeta for ProvideAttr {
-    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
-        match meta {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        match item {
             syn::Meta::List(list) => syn::parse2(list.tokens.clone())
                 .map_err(|e| darling::Error::custom(e).with_span(&list.tokens)),
             other => Err(darling::Error::custom(

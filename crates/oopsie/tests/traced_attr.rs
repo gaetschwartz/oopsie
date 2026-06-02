@@ -18,7 +18,7 @@ pub enum AppError {
 fn traced_enum_basic() {
     // The derive generates module `app_oopsies` with selectors inside.
     let err = app_oopsies::ConnFailed { addr: "127.0.0.1" }.build();
-    assert!(matches!(err, AppError::ConnFailed { ref addr, .. } if addr == "127.0.0.1"));
+    assert!(matches!(&err, AppError::ConnFailed { addr, .. } if addr == "127.0.0.1"));
     assert_eq!(err.to_string(), "conn failed: 127.0.0.1");
 }
 
@@ -48,7 +48,7 @@ pub enum InjectError {
 fn traced_injects_backtrace() {
     // Should not panic — backtrace and spantrace are auto-injected by #[oopsie(traced)].
     let err = inject_oopsies::Injected { info: "test" }.build();
-    assert!(matches!(err, InjectError::Injected { ref info, .. } if info == "test"));
+    assert!(matches!(&err, InjectError::Injected { info, .. } if info == "test"));
 }
 
 // ---- Test 4: #[help] and #[code] on variant ----
@@ -66,7 +66,7 @@ pub enum HelpCodeError {
 #[test]
 fn traced_with_help_and_code() {
     let err = help_code_oopsies::Refused { target: "db" }.build();
-    assert!(matches!(err, HelpCodeError::Refused { ref target, .. } if target == "db"));
+    assert!(matches!(&err, HelpCodeError::Refused { target, .. } if target == "db"));
 
     #[cfg(feature = "unstable-error-generic-member-access")]
     {

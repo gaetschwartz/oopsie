@@ -253,7 +253,7 @@ mod tests {
     #[derive(Debug)]
     struct ChainedError {
         msg: &'static str,
-        source: Option<Box<ChainedError>>,
+        source: Option<Box<Self>>,
     }
 
     impl fmt::Display for ChainedError {

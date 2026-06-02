@@ -236,9 +236,9 @@ where
     E: Diagnostic,
 {
     fn report(self) -> ExitCode {
-        match self.res {
+        match &self.res {
             Ok(()) => ExitCode::SUCCESS,
-            Err(ref e) => {
+            Err(e) => {
                 eprintln!("{self}");
 
                 #[cfg(feature = "unstable-error-generic-member-access")]

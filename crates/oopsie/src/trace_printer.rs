@@ -60,7 +60,7 @@ impl BacktraceProvider for Backtrace {
         // frames that Linux inlines away). This does not make the colored and
         // Debug outputs identical in shape — the Debug path groups inlined
         // symbols under one frame number, this path numbers each symbol.
-        Backtrace::frames(self)
+        Self::frames(self)
             .iter()
             .flat_map(|frame| {
                 frame.symbols().iter().map(|sym| BacktraceFrame {

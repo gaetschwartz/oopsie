@@ -37,10 +37,10 @@ impl<const DEFAULT: bool, T: FromMeta + Default + Clone> FieldSetting<DEFAULT, T
 }
 
 impl<const DEFAULT: bool, T: FromMeta> FromMeta for FieldSetting<DEFAULT, T> {
-    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
-        if let syn::Meta::Path(_) = meta {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        if let syn::Meta::Path(_) = item {
             Ok(Self::Flag(true))
-        } else if let syn::Meta::NameValue(nv) = meta {
+        } else if let syn::Meta::NameValue(nv) = item {
             // Handle `field = true` / `field = false`
             if let syn::Expr::Lit(syn::ExprLit {
                 lit: syn::Lit::Bool(b),
@@ -49,11 +49,11 @@ impl<const DEFAULT: bool, T: FromMeta> FromMeta for FieldSetting<DEFAULT, T> {
             {
                 Ok(Self::Flag(b.value))
             } else {
-                let settings = Settings::<T>::from_meta(meta)?;
+                let settings = Settings::<T>::from_meta(item)?;
                 Ok(Self::Settings(settings))
             }
         } else {
-            let settings = Settings::<T>::from_meta(meta)?;
+            let settings = Settings::<T>::from_meta(item)?;
             Ok(Self::Settings(settings))
         }
     }
@@ -154,8 +154,8 @@ impl<T: syn::parse::Parse> Deref for SynParse<T> {
 }
 
 impl<T: syn::parse::Parse> FromMeta for SynParse<T> {
-    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
-        match meta {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        match item {
             syn::Meta::List(list) => syn::parse2(list.tokens.clone())
                 .map(Self)
                 .map_err(|e| darling::Error::custom(e).with_span(&list.tokens)),
@@ -195,8 +195,8 @@ pub enum MaybeAloneOopsieValue<T> {
 }
 
 impl<T: FromMeta> FromMeta for MaybeAloneOopsieValue<T> {
-    fn from_meta(meta: &syn::Meta) -> darling::Result<Self> {
-        match meta {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        match item {
             syn::Meta::Path(_) => Ok(Self::Alone),
             syn::Meta::List(list) => {
                 if let Ok(b) = syn::parse2::<syn::LitBool>(list.tokens.clone()) {
@@ -210,7 +210,7 @@ impl<T: FromMeta> FromMeta for MaybeAloneOopsieValue<T> {
                     .map_err(|e| darling::Error::custom(e).with_span(&list.tokens))?;
                 T::from_expr(&expr).map(Self::Value)
             }
-            syn::Meta::NameValue(_) => T::from_meta(meta).map(Self::Value),
+            syn::Meta::NameValue(_) => T::from_meta(item).map(Self::Value),
         }
     }
 }

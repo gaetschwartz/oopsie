@@ -36,7 +36,7 @@ pub trait Capturable {
 impl<T: Capturable> Capturable for Box<T> {
     #[track_caller]
     fn capture() -> Self {
-        Box::new(T::capture())
+        Self::new(T::capture())
     }
 }
 
@@ -56,7 +56,7 @@ pub trait CaptureExt: Capturable {
 impl<T: CaptureExt> CaptureExt for Box<T> {
     #[track_caller]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
-        Box::new(T::capture_or_extract(source))
+        Self::new(T::capture_or_extract(source))
     }
 }
 
