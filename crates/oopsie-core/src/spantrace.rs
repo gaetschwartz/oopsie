@@ -1,6 +1,6 @@
 //! SpanTrace wrapper with `Capturable` support.
 
-use std::fmt;
+use std::{collections::VecDeque, fmt};
 
 /// A wrapper around `tracing_error::SpanTrace`.
 #[derive(Debug, Clone)]
@@ -45,19 +45,35 @@ impl SpanTrace {
 
 impl PartialEq for SpanTrace {
     fn eq(&self, other: &Self) -> bool {
-        // `with_spans` iterates until the closure returns `false`; returning
-        // `true` walks the whole trace. Span metadata is `&'static`, so a
-        // callsite always yields the same address across captures — identity
-        // comparison is both correct and cheaper than formatting.
-        fn spans(inner: &tracing_error::SpanTrace) -> Vec<(*const (), String)> {
-            let mut spans = Vec::new();
-            inner.with_spans(|metadata, fields| {
-                spans.push((std::ptr::from_ref(metadata).cast::<()>(), fields.to_owned()));
-                true
-            });
-            spans
-        }
-        spans(&self.inner) == spans(&other.inner)
+        let a = &self.inner;
+        let b = &other.inner;
+
+        let mut a_frames = VecDeque::with_capacity(2);
+        a.with_spans(|a_md, a_fields| {
+            a_frames.push_back((
+                a_md.callsite(),
+                cfg_select! {
+                    debug_assertions => a_fields.to_owned(),
+                    _ => (),
+                },
+            ));
+            true
+        });
+        let mut equal = true;
+        b.with_spans(|b_md, b_fields| {
+            equal = match a_frames.pop_front() {
+                Some((a_callsite, a_fields)) => {
+                    a_callsite == b_md.callsite()
+                        && cfg_select! {
+                            debug_assertions => a_fields == b_fields,
+                            _ => true,
+                        }
+                }
+                None => false,
+            };
+            equal
+        });
+        equal && a_frames.is_empty()
     }
 }
 
@@ -294,6 +310,55 @@ mod tests {
         let trace = SpanTrace::capture();
         let opt: OptionalSpanTrace = Some(trace).into();
         assert!(opt.is_some());
+    }
+
+    fn with_error_subscriber<R>(f: impl FnOnce() -> R) -> R {
+        use tracing_subscriber::prelude::*;
+        let subscriber =
+            tracing_subscriber::Registry::default().with(tracing_error::ErrorLayer::default());
+        tracing::subscriber::with_default(subscriber, f)
+    }
+
+    // Fixed callsites shared across captures: a depth-3 stack leaf -> mid -> root.
+    // Same source location => same `&'static Metadata`, so two captures through
+    // the same functions yield identical stacks.
+    fn leaf() -> SpanTrace {
+        let _g = tracing::info_span!("leaf").entered();
+        SpanTrace::capture()
+    }
+    fn mid() -> SpanTrace {
+        let _g = tracing::info_span!("mid").entered();
+        leaf()
+    }
+    fn via_root_a() -> SpanTrace {
+        let _g = tracing::info_span!("root_a").entered();
+        mid()
+    }
+    fn via_root_b() -> SpanTrace {
+        let _g = tracing::info_span!("root_b").entered();
+        mid()
+    }
+
+    #[test]
+    fn identical_depth3_stacks_are_equal() {
+        let (a, b) = with_error_subscriber(|| (via_root_a(), via_root_a()));
+        assert_eq!(a.status(), tracing_error::SpanTraceStatus::CAPTURED);
+        assert_eq!(a, b);
+        assert_eq!(a, a.clone());
+    }
+
+    #[test]
+    fn depth3_stacks_differing_only_at_root_are_unequal() {
+        // Shared leaf+mid callsites, divergent root: the case a leaf-only or
+        // out-of-order comparison gets wrong.
+        let (a, b) = with_error_subscriber(|| (via_root_a(), via_root_b()));
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn shorter_stack_is_not_equal_to_deeper_one() {
+        let (deep, shallow) = with_error_subscriber(|| (via_root_a(), leaf()));
+        assert_ne!(deep, shallow);
     }
 
     #[test]
