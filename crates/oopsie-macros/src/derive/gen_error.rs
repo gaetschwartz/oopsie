@@ -68,15 +68,28 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         }
 
         // Provide backtrace/spantrace refs from detected fields
-        if let Some(bt_field) = &categorized.backtrace_field {
+        if let Some(tf) = &categorized.traces_field {
             provide_stmts.push(quote! {
-                request.provide_ref::<#oopsie_path::Backtrace>(#bt_field.as_ref());
+                request.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
             });
-        }
-        if let Some(st_field) = &categorized.spantrace_field {
             provide_stmts.push(quote! {
-                request.provide_ref::<#oopsie_path::SpanTrace>(#st_field.as_ref());
+                request.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
             });
+        } else {
+            if let Some(bt_field) = &categorized.backtrace_field {
+                provide_stmts.push(quote! {
+                    request.provide_ref::<#oopsie_path::Backtrace>(
+                        ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
+                    );
+                });
+            }
+            if let Some(st_field) = &categorized.spantrace_field {
+                provide_stmts.push(quote! {
+                    request.provide_ref::<#oopsie_path::SpanTrace>(
+                        ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
+                    );
+                });
+            }
         }
 
         // Provide from variant-level provide attrs (including auto error code from trace injection)
@@ -119,18 +132,32 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         // ── Diagnostic arms ──
 
         // Backtrace
-        if let Some(bt_field) = &categorized.backtrace_field {
+        if let Some(tf) = &categorized.traces_field {
             bt_arms.push(quote! {
                 #(#cfg_attrs)*
-                Self::#variant_ident { #bt_field, .. } => ::core::option::Option::Some(#bt_field.as_ref()),
+                Self::#variant_ident { #tf, .. } => ::core::option::Option::Some(&#tf.0),
+            });
+        } else if let Some(bt_field) = &categorized.backtrace_field {
+            bt_arms.push(quote! {
+                #(#cfg_attrs)*
+                Self::#variant_ident { #bt_field, .. } => ::core::option::Option::Some(
+                    ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
+                ),
             });
         }
 
         // Spantrace
-        if let Some(st_field) = &categorized.spantrace_field {
+        if let Some(tf) = &categorized.traces_field {
             st_arms.push(quote! {
                 #(#cfg_attrs)*
-                Self::#variant_ident { #st_field, .. } => ::core::option::Option::Some(#st_field.as_ref()),
+                Self::#variant_ident { #tf, .. } => ::core::option::Option::Some(&#tf.1),
+            });
+        } else if let Some(st_field) = &categorized.spantrace_field {
+            st_arms.push(quote! {
+                #(#cfg_attrs)*
+                Self::#variant_ident { #st_field, .. } => ::core::option::Option::Some(
+                    ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
+                ),
             });
         }
 
@@ -314,15 +341,28 @@ pub fn gen_struct_error(
     }
 
     // Provide backtrace/spantrace refs from detected fields
-    if let Some(bt_field) = &categorized.backtrace_field {
+    if let Some(tf) = &categorized.traces_field {
         provide_stmts.push(quote! {
-            request.provide_ref::<#oopsie_path::Backtrace>(#bt_field.as_ref());
+            request.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
         });
-    }
-    if let Some(st_field) = &categorized.spantrace_field {
         provide_stmts.push(quote! {
-            request.provide_ref::<#oopsie_path::SpanTrace>(#st_field.as_ref());
+            request.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
         });
+    } else {
+        if let Some(bt_field) = &categorized.backtrace_field {
+            provide_stmts.push(quote! {
+                request.provide_ref::<#oopsie_path::Backtrace>(
+                    ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
+                );
+            });
+        }
+        if let Some(st_field) = &categorized.spantrace_field {
+            provide_stmts.push(quote! {
+                request.provide_ref::<#oopsie_path::SpanTrace>(
+                    ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
+                );
+            });
+        }
     }
 
     // Struct-level provides (from #[oopsie(provide(...))] on the struct)
@@ -364,20 +404,36 @@ pub fn gen_struct_error(
 
     // ── Diagnostic impl for struct ──
 
-    let bt_method = if let Some(bt_field) = &categorized.backtrace_field {
+    let bt_method = if let Some(tf) = &categorized.traces_field {
         quote! {
             fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
-                ::core::option::Option::Some(self.#bt_field.as_ref())
+                ::core::option::Option::Some(&self.#tf.0)
+            }
+        }
+    } else if let Some(bt_field) = &categorized.backtrace_field {
+        quote! {
+            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
+                ::core::option::Option::Some(
+                    ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(&self.#bt_field)
+                )
             }
         }
     } else {
         quote! {}
     };
 
-    let st_method = if let Some(st_field) = &categorized.spantrace_field {
+    let st_method = if let Some(tf) = &categorized.traces_field {
         quote! {
             fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
-                ::core::option::Option::Some(self.#st_field.as_ref())
+                ::core::option::Option::Some(&self.#tf.1)
+            }
+        }
+    } else if let Some(st_field) = &categorized.spantrace_field {
+        quote! {
+            fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
+                ::core::option::Option::Some(
+                    ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(&self.#st_field)
+                )
             }
         }
     } else {
