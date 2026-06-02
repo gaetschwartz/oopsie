@@ -40,6 +40,13 @@ impl<T: Capturable> Capturable for Box<T> {
     }
 }
 
+impl<A: Capturable, B: Capturable> Capturable for (A, B) {
+    #[track_caller]
+    fn capture() -> Self {
+        (A::capture(), B::capture())
+    }
+}
+
 /// Extension of [`Capturable`] that tries to reuse traces from a source error.
 ///
 /// When an error with a source implements [`Diagnostic`](crate::Diagnostic), this trait
@@ -400,5 +407,21 @@ mod tests {
         // Verify that Box<T> implements Capturable when T: Capturable
         const fn is_capturable<T: Capturable>() {}
         is_capturable::<Box<crate::Backtrace>>();
+    };
+
+    #[test]
+    fn tuple_capture_produces_both_elements() {
+        use crate::{Backtrace, SpanTrace};
+        // Tuple capture yields both traces; neither call panics.
+        let (bt, st): (Backtrace, SpanTrace) = <(Backtrace, SpanTrace) as Capturable>::capture();
+        let _ = bt.frames();
+        let _ = st.status();
+    }
+
+    const _: () = {
+        const fn is_capturable<T: Capturable>() {}
+        // The headline default layout must be Capturable for free via Box<T>.
+        is_capturable::<Box<(crate::Backtrace, crate::SpanTrace)>>();
+        is_capturable::<(crate::Backtrace, crate::SpanTrace)>();
     };
 }
