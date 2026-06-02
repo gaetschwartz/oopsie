@@ -228,7 +228,10 @@ where
     ErrorLayer::new(JsonFields::default())
 }
 
-#[expect(dead_code)]
+#[expect(
+    dead_code,
+    reason = "color helper trait kept complete; not all methods are wired up yet"
+)]
 pub(crate) trait WriteColorExt {
     fn black(&mut self) -> io::Result<&mut Self>;
     fn blue(&mut self) -> io::Result<&mut Self>;

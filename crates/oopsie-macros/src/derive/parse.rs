@@ -12,7 +12,8 @@
     clippy::needless_continue,
     clippy::nonminimal_bool,
     clippy::if_not_else,
-    clippy::allow_attributes
+    clippy::allow_attributes,
+    reason = "darling's FromAttributes derive emits code tripping these lints, unreachable from our struct-level attributes"
 )]
 
 use syn::parse::{Parse, ParseStream};
@@ -384,7 +385,10 @@ fn merge_short_display(target: &mut Option<DisplayAttr>, short: DisplayAttr) -> 
 
 // ─── Field-level attributes ──────────────────────────────────────
 
-#[expect(clippy::struct_excessive_bools)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each boolean attribute keyword maps to its own bool field"
+)]
 #[derive(Debug, Default, darling::FromAttributes)]
 #[darling(attributes(oopsie))]
 pub struct FieldAttrs {
@@ -421,7 +425,10 @@ pub enum SourceKind {
 #[derive(derive_syn_parse::Parse)]
 struct SourceKindTransform {
     ty: Type,
-    #[expect(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "syntactic punctuation captured by the parser but never read"
+    )]
     comma: Token![,],
     transform: Expr,
 }
@@ -464,11 +471,17 @@ pub struct ProvideAttr {
     pub ref_kw: Option<Token![ref]>,
     /// Syntactic-only — captured by `derive(Parse)`, never read.
     #[parse_if(ref_kw.is_some())]
-    #[expect(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "syntactic punctuation captured by the parser but never read"
+    )]
     pub ref_comma: Option<Token![,]>,
     pub provided_type: Type,
     /// Syntactic-only — captured by `derive(Parse)`, never read.
-    #[expect(dead_code)]
+    #[expect(
+        dead_code,
+        reason = "syntactic punctuation captured by the parser but never read"
+    )]
     pub arrow: Token![=>],
     pub expr: Expr,
 }

@@ -2,7 +2,12 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
-#![allow(unused, clippy::all, clippy::pedantic)]
+#![allow(
+    unused,
+    clippy::all,
+    clippy::pedantic,
+    reason = "derive-macro test fixtures intentionally trip style lints"
+)]
 
 use oopsie::Oopsie;
 

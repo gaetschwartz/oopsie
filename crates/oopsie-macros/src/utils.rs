@@ -1,4 +1,7 @@
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared macro-helper utilities; not every helper is used by every derive"
+)]
 use std::ops::Deref;
 
 use darling::FromMeta;

@@ -78,7 +78,10 @@ impl ErasedError {
     ///
     /// This extracts the message, source chain, backtrace, spantrace,
     /// error code, and help text via the `Diagnostic` trait.
-    #[expect(clippy::needless_pass_by_value)]
+    #[expect(
+        clippy::needless_pass_by_value,
+        reason = "owned input mirrors the from_error_ref ergonomics"
+    )]
     pub fn from_error<E: oopsie_core::Diagnostic>(err: E) -> Self {
         Self::from_error_ref(&err)
     }

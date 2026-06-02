@@ -70,6 +70,7 @@ cast_possible_truncation = "allow"
 
 # Restrictions
 allow_attributes = "warn"
+allow_attributes_without_reason = "warn"
 assertions_on_result_states = "warn"
 deref_by_slicing = "warn"
 error_impl_error = "warn"

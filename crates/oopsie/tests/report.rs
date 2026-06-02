@@ -2,7 +2,10 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
-#![allow(clippy::all)]
+#![allow(
+    clippy::all,
+    reason = "integration test fixtures intentionally trip style lints"
+)]
 
 mod common;
 

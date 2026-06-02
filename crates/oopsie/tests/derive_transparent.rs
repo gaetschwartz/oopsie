@@ -2,7 +2,11 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
-#![allow(unused, clippy::all)]
+#![allow(
+    unused,
+    clippy::all,
+    reason = "derive-macro test fixtures intentionally trip style lints"
+)]
 
 use oopsie::Oopsie;
 use std::io;

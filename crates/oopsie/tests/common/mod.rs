@@ -29,7 +29,10 @@ pub fn force_backtrace() {
 }
 
 /// Create an `ErrorWithSpanTrace` within instrumented functions to capture spantrace.
-#[expect(clippy::items_after_statements)]
+#[expect(
+    clippy::items_after_statements,
+    reason = "instrumented helper fns must be items; defined inside make_error to capture the spantrace"
+)]
 pub fn make_error() -> MyError {
     force_backtrace();
     let _guard = init_test_subscriber();
