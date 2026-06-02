@@ -12,7 +12,7 @@ use super::inject::{
 
 pub fn expand_enum(
     args: &TracedArgs,
-    _args_span: Span,
+    args_span: Span,
     mut input: syn::ItemEnum,
 ) -> syn::Result<TokenStream2> {
     let enum_name = input.ident.to_string();
@@ -22,15 +22,25 @@ pub fn expand_enum(
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     let resolved = args.resolve();
+    resolved.validate(args_span)?;
     let config = FieldInjectorConfig::new(args, &resolved, &oopsie_path);
 
     // Process variants
     for variant in &mut input.variants {
         let existence = check_existing_fields(&variant.fields, &config.timestamp_type);
+
+        let packed = resolved.packed
+            && resolved.backtrace
+            && resolved.spantrace
+            && !existence.has_backtrace
+            && !existence.has_spantrace
+            && !existence.has_traces;
+
         let to_inject = FieldsToInject {
-            backtrace: resolved.backtrace && !existence.has_backtrace,
-            spantrace: resolved.spantrace && !existence.has_spantrace,
+            backtrace: !packed && resolved.backtrace && !existence.has_backtrace,
+            spantrace: !packed && resolved.spantrace && !existence.has_spantrace,
             timestamp: resolved.timestamp && !existence.has_timestamp,
+            traces: packed,
         };
 
         inject_fields(&mut variant.fields, &config, &to_inject)?;

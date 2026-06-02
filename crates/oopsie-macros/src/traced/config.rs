@@ -133,7 +133,7 @@ mod tests {
 
     #[test]
     fn packed_default_builds_boxed_tuple_traces_type() {
-        let cfg = config_for(parse_quote!(traced));
+        let cfg = config_for(parse_quote!(traced()));
         let s = cfg.traces_type.to_token_stream().to_string();
         assert!(s.contains("Box"), "{s}");
         assert!(s.contains("Backtrace") && s.contains("SpanTrace"), "{s}");

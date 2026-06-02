@@ -317,7 +317,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "packed injection lands in Tasks 5-7"]
     fn traced_list_form_default_is_packed() {
         let result = expand(
             quote! { traced(boxed = false) },

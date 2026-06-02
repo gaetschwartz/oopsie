@@ -403,6 +403,8 @@ pub struct FieldAttrs {
     #[darling(default)]
     pub spantrace: bool,
     #[darling(default)]
+    pub traces: bool,
+    #[darling(default)]
     pub help: bool,
 }
 
@@ -520,8 +522,8 @@ impl FieldAttrs {
 
         let mut result = Self::from_attributes(&field.attrs).map_err(syn::Error::from)?;
 
-        // `backtrace` / `spantrace` flags imply `capture`.
-        if result.backtrace || result.spantrace {
+        // `backtrace` / `spantrace` / `traces` flags imply `capture`.
+        if result.backtrace || result.spantrace || result.traces {
             result.capture = true;
         }
 
@@ -631,7 +633,7 @@ fn parse_short_display_body(input: ParseStream) -> syn::Result<DisplayAttr> {
             let ident = ahead.parse::<Ident>()?;
             let kw = ident.to_string();
             let is_keyword = match kw.as_str() {
-                "transparent" | "capture" | "backtrace" | "spantrace" => true,
+                "transparent" | "capture" | "backtrace" | "spantrace" | "traces" => true,
                 "module" | "suffix" | "from" => true,
                 "display" | "provide" | "size" => ahead.peek(syn::token::Paren),
                 "help" | "code" | "vis" | "path" => {

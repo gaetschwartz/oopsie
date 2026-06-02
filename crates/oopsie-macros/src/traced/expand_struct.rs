@@ -12,7 +12,7 @@ use super::inject::{
 
 pub fn expand_struct(
     args: &TracedArgs,
-    _args_span: Span,
+    args_span: Span,
     mut input: syn::ItemStruct,
 ) -> syn::Result<TokenStream2> {
     let struct_name = input.ident.to_string();
@@ -22,14 +22,26 @@ pub fn expand_struct(
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     let resolved = args.resolve();
+    resolved.validate(args_span)?;
     let config = FieldInjectorConfig::new(args, &resolved, &oopsie_path);
 
-    // Check existing fields and inject
     let existence = check_existing_fields(&input.fields, &config.timestamp_type);
+
+    // Packed only applies when both traces are enabled and no trace field
+    // already exists; otherwise fall back to per-field (unpacked) injection,
+    // which also covers the single-trace case.
+    let packed = resolved.packed
+        && resolved.backtrace
+        && resolved.spantrace
+        && !existence.has_backtrace
+        && !existence.has_spantrace
+        && !existence.has_traces;
+
     let to_inject = FieldsToInject {
-        backtrace: resolved.backtrace && !existence.has_backtrace,
-        spantrace: resolved.spantrace && !existence.has_spantrace,
+        backtrace: !packed && resolved.backtrace && !existence.has_backtrace,
+        spantrace: !packed && resolved.spantrace && !existence.has_spantrace,
         timestamp: resolved.timestamp && !existence.has_timestamp,
+        traces: packed,
     };
 
     inject_fields(&mut input.fields, &config, &to_inject)?;
