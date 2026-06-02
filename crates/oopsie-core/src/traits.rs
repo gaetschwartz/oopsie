@@ -67,6 +67,13 @@ impl<T: CaptureExt> CaptureExt for Box<T> {
     }
 }
 
+impl<A: CaptureExt, B: CaptureExt> CaptureExt for (A, B) {
+    #[track_caller]
+    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
+        (A::capture_or_extract(source), B::capture_or_extract(source))
+    }
+}
+
 /// Unit source type used by [`OptionExt`] context selectors and leaf errors.
 ///
 /// Leaf errors (those with no chained source) use this as their
@@ -423,5 +430,46 @@ mod tests {
         // The headline default layout must be Capturable for free via Box<T>.
         is_capturable::<Box<(crate::Backtrace, crate::SpanTrace)>>();
         is_capturable::<(crate::Backtrace, crate::SpanTrace)>();
+    };
+
+    #[test]
+    fn tuple_capture_ext_extracts_both_from_source() {
+        use crate::{Backtrace, CaptureExt, Diagnostic, SpanTrace};
+        use std::fmt;
+
+        #[derive(Debug)]
+        struct Src {
+            backtrace: Backtrace,
+            spantrace: SpanTrace,
+        }
+        impl fmt::Display for Src {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("src")
+            }
+        }
+        impl std::error::Error for Src {}
+        impl Diagnostic for Src {
+            fn oopsie_backtrace(&self) -> Option<&Backtrace> {
+                Some(&self.backtrace)
+            }
+            fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
+                Some(&self.spantrace)
+            }
+        }
+
+        let src = Src {
+            backtrace: Backtrace::capture(),
+            spantrace: SpanTrace::capture(),
+        };
+        let extracted = <(Backtrace, SpanTrace) as CaptureExt>::capture_or_extract(&src);
+        // The extracted backtrace must reuse the source's frame count, proving
+        // extraction (not a fresh capture).
+        assert_eq!(extracted.0.frames().len(), src.backtrace.frames().len());
+    }
+
+    const _: () = {
+        const fn is_capture_ext<T: CaptureExt>() {}
+        is_capture_ext::<Box<(crate::Backtrace, crate::SpanTrace)>>();
+        is_capture_ext::<(crate::Backtrace, crate::SpanTrace)>();
     };
 }
