@@ -880,6 +880,33 @@ mod tests {
     // Typo rejection is now done by darling itself (strict mode on
     // `EnumContainerAttrs` / `VariantAttrs` / `StructAttrs`). Coverage moved
     // to the per-scope `from_attrs` integration paths.
+
+    // ── CategorizedFields ──────────────────────────────────────────────
+
+    #[test]
+    fn categorize_detects_packed_traces_field_by_attr() {
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { #[oopsie(traces)] t: Box<(Backtrace, SpanTrace)>, msg: String }
+        };
+        let categorized = CategorizedFields::from_fields(&item.fields).unwrap();
+        assert_eq!(
+            categorized.traces_field.as_ref().map(ToString::to_string),
+            Some("t".to_string())
+        );
+        assert!(categorized.auto_fields.iter().any(|f| f.ident == "t"));
+        assert!(categorized.backtrace_field.is_none());
+        assert!(categorized.spantrace_field.is_none());
+    }
+
+    #[test]
+    fn categorize_detects_packed_traces_field_by_type() {
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { t: (Backtrace, SpanTrace) }
+        };
+        let categorized = CategorizedFields::from_fields(&item.fields).unwrap();
+        assert!(categorized.traces_field.is_some());
+        assert!(categorized.auto_fields.iter().any(|f| f.ident == "t"));
+    }
 }
 
 /// Categorized fields for a variant/struct.
@@ -897,6 +924,9 @@ pub struct CategorizedFields {
     pub backtrace_field: Option<Ident>,
     /// Field identified as spantrace (via `#[oopsie(spantrace)]` or name detection).
     pub spantrace_field: Option<Ident>,
+    /// Field holding the packed `(Backtrace, SpanTrace)` pair (via
+    /// `#[oopsie(traces)]`, name `traces`, or tuple-type detection).
+    pub traces_field: Option<Ident>,
     /// Field identified as help (via `#[oopsie(help)]`).
     pub help_field: Option<Ident>,
 }
@@ -929,6 +959,7 @@ impl CategorizedFields {
         let mut provides = Vec::new();
         let mut backtrace_field = None;
         let mut spantrace_field = None;
+        let mut traces_field = None;
         let mut help_field = None;
 
         let named = match fields {
@@ -941,6 +972,7 @@ impl CategorizedFields {
                     provides,
                     backtrace_field,
                     spantrace_field,
+                    traces_field,
                     help_field,
                 });
             }
@@ -971,6 +1003,12 @@ impl CategorizedFields {
             if attrs.spantrace || ident_str == "spantrace" || ident_str == "span_trace" {
                 spantrace_field = Some(ident.clone());
             }
+            let is_traces = attrs.traces
+                || ident_str == "traces"
+                || crate::traced::field_detect::is_traces_type(&field.ty);
+            if is_traces {
+                traces_field = Some(ident.clone());
+            }
             if attrs.help {
                 help_field = Some(ident.clone());
             }
@@ -987,7 +1025,7 @@ impl CategorizedFields {
                     ty: field.ty.clone(),
                     kind: attrs.from,
                 });
-            } else if attrs.capture {
+            } else if attrs.capture || is_traces {
                 auto_fields.push(AutoField {
                     ident,
                     ty: field.ty.clone(),
@@ -1007,6 +1045,7 @@ impl CategorizedFields {
             provides,
             backtrace_field,
             spantrace_field,
+            traces_field,
             help_field,
         })
     }
