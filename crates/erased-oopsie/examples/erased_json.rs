@@ -2,6 +2,11 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
+#![allow(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "examples print to demonstrate library output"
+)]
 //! Convert a live error into a serializable `ErasedError` and emit it as JSON.
 //!
 //! Run with: `cargo run --example erased_json -p erased-oopsie`

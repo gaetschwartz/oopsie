@@ -2,6 +2,11 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
+#![allow(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "examples print to demonstrate library output"
+)]
 //! Capture a backtrace automatically with `traced` and render it via `Report`.
 //!
 //! Run with: `cargo run --example traced`

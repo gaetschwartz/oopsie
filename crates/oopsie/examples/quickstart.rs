@@ -2,6 +2,11 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
+#![allow(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "examples print to demonstrate library output"
+)]
 //! Define a structured error enum and attach context as errors propagate.
 //!
 //! Run with: `cargo run --example quickstart`

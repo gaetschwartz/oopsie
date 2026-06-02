@@ -235,6 +235,10 @@ impl<E> Termination for Report<E>
 where
     E: Diagnostic,
 {
+    #[expect(
+        clippy::print_stderr,
+        reason = "Termination renders the error report to stderr at process exit"
+    )]
     fn report(self) -> ExitCode {
         match &self.res {
             Ok(()) => ExitCode::SUCCESS,

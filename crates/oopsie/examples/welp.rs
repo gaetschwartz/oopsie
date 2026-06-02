@@ -1,3 +1,8 @@
+#![allow(
+    clippy::print_stdout,
+    clippy::print_stderr,
+    reason = "examples print to demonstrate library output"
+)]
 //! `Welp` — a string-shaped escape hatch when a structured error is overkill.
 //!
 //! Run with: `cargo run --example welp`
