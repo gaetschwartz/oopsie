@@ -76,7 +76,13 @@ fn enable_env_backtraces() {
         // SAFETY: runs once before the benchmark body executes and before any
         // backtrace is captured, so no other thread reads or writes the
         // environment concurrently.
-        unsafe { std::env::set_var("RUST_BACKTRACE", "1") };
+        #[expect(
+            unsafe_code,
+            reason = "edition 2024 makes env::set_var unsafe; the Once guard upholds the no-concurrent-access requirement"
+        )]
+        unsafe {
+            std::env::set_var("RUST_BACKTRACE", "1");
+        };
     });
 }
 

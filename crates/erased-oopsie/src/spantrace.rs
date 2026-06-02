@@ -52,20 +52,20 @@ impl From<&tracing::Level> for TracingLevel {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A serializable, type-erased representation of a span trace.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ErasedSpanTrace {
     spans: Vec<ErasedSpan>,
 }
 
 /// A single span in an erased span trace.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ErasedSpan {
     pub metadata: ErasedMetadata,
     pub fields: Box<str>,
 }
 
 /// Serializable metadata from a tracing span.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ErasedMetadata {
     name: Box<str>,
     target: Box<str>,

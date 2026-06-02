@@ -68,7 +68,7 @@ impl<const DEFAULT: bool, T: FromMeta> FromMeta for FieldSetting<DEFAULT, T> {
 }
 
 #[derive(Debug, darling::FromMeta)]
-pub struct Settings<T: FromMeta> {
+pub struct Settings<T> {
     enabled: Option<bool>,
     #[darling(flatten)]
     settings: T,
