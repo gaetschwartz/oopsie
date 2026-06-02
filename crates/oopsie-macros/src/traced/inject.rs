@@ -4,7 +4,7 @@ use syn::punctuated::Punctuated;
 use syn::{Fields, FieldsNamed, parse_quote, token};
 
 use super::config::{FieldExistence, FieldInjectorConfig, FieldsToInject};
-use super::field_detect::{is_backtrace_type, is_spantrace_type};
+use super::field_detect::{is_backtrace_type, is_spantrace_type, is_traces_type};
 
 /// Check which fields already exist in a `Fields` collection.
 pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type) -> FieldExistence {
@@ -30,6 +30,19 @@ pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type)
             .ident
             .as_ref()
             .is_some_and(|id| id == "timestamp" || id == "__oopsie_timestamp");
+
+        let is_traces_name = field
+            .ident
+            .as_ref()
+            .is_some_and(|id| id == "traces" || id == "__oopsie_traces");
+
+        if is_traces_name || is_traces_type(&field.ty) {
+            // One packed field supplies both traces; mark all three so neither
+            // separate field is also injected.
+            existence.has_traces = true;
+            existence.has_backtrace = true;
+            existence.has_spantrace = true;
+        }
 
         if is_backtrace_name || is_backtrace_type(&field.ty) {
             existence.has_backtrace = true;
@@ -89,9 +102,17 @@ fn inject_into_named(
         timestamp_ident,
         timestamp_type,
         timestamp_provide_attr,
+        traces_ident,
+        traces_type,
+        traces_attrs,
         ..
     } = config;
 
+    if to_inject.traces {
+        fields
+            .named
+            .push(parse_quote! { #traces_attrs #traces_ident: #traces_type });
+    }
     if to_inject.backtrace {
         fields
             .named
@@ -183,6 +204,9 @@ mod tests {
             timestamp_ident: format_ident!("__oopsie_timestamp"),
             timestamp_type: parse_quote! { std::time::SystemTime },
             timestamp_provide_attr: None,
+            traces_ident: format_ident!("__oopsie_traces"),
+            traces_type: quote! { ::std::boxed::Box<(Backtrace, SpanTrace)> },
+            traces_attrs: quote! { #[oopsie(traces)] },
             code_type: quote! { ErrorCode },
         }
     }
@@ -235,6 +259,7 @@ mod tests {
             backtrace: true,
             spantrace: false,
             timestamp: false,
+            traces: false,
         };
         inject_fields(&mut fields, &config, &to_inject).unwrap();
         assert!(matches!(fields, syn::Fields::Named(_)));
@@ -248,6 +273,7 @@ mod tests {
             backtrace: true,
             spantrace: false,
             timestamp: false,
+            traces: false,
         };
         assert!(inject_fields(&mut fields, &config, &to_inject).is_err());
     }
@@ -306,5 +332,31 @@ mod tests {
     fn has_oopsie_name_value_ident_without_equals() {
         let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(code)] };
         assert!(!has_oopsie_name_value(&attrs, "code"));
+    }
+
+    #[test]
+    fn inject_fields_adds_packed_traces_field() {
+        let mut fields = parse_fields(quote! { struct S { msg: String } });
+        let config = test_config();
+        let to_inject = FieldsToInject {
+            backtrace: false,
+            spantrace: false,
+            timestamp: false,
+            traces: true,
+        };
+        inject_fields(&mut fields, &config, &to_inject).unwrap();
+        let rendered = quote! { #fields }.to_string();
+        assert!(rendered.contains("__oopsie_traces"), "{rendered}");
+    }
+
+    #[test]
+    fn check_existing_detects_packed_traces_by_type() {
+        let fields =
+            parse_fields(quote! { struct S { t: Box<(Backtrace, SpanTrace)>, msg: String } });
+        let ts: syn::Type = parse_quote!(std::time::Instant);
+        let existence = check_existing_fields(&fields, &ts);
+        assert!(existence.has_traces);
+        // A packed field stands in for both, suppressing separate injection.
+        assert!(existence.has_backtrace && existence.has_spantrace);
     }
 }
