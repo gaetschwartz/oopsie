@@ -207,3 +207,91 @@ fn traced_code_disabled() {
         );
     }
 }
+
+// ---- Trace storage layouts (packed/boxed matrix) ----
+
+use oopsie::Diagnostic as _;
+
+// Default: packed + boxed => one Box<(Backtrace, SpanTrace)> field.
+#[oopsie(traced)]
+pub enum DefaultPackedError {
+    #[oopsie("boom: {info}")]
+    Boom { info: String },
+}
+
+// packed + inline => one (Backtrace, SpanTrace) field.
+#[oopsie(traced(boxed = false))]
+pub enum PackedInlineError {
+    #[oopsie("boom: {info}")]
+    Boom { info: String },
+}
+
+// unpacked + boxed (prior default) => Box<Backtrace>, Box<SpanTrace>.
+#[oopsie(traced(packed = false))]
+pub enum SeparateBoxedError {
+    #[oopsie("boom: {info}")]
+    Boom { info: String },
+}
+
+// unpacked + inline => Backtrace, SpanTrace.
+#[oopsie(traced(packed = false, boxed = false))]
+pub enum SeparateInlineError {
+    #[oopsie("boom: {info}")]
+    Boom { info: String },
+}
+
+// mixed: both traces listed (explicit mode keeps both), spantrace inline.
+#[oopsie(traced(packed = false, backtrace, spantrace(boxed = false)))]
+pub enum MixedError {
+    #[oopsie("boom: {info}")]
+    Boom { info: String },
+}
+
+// Single trace (backtrace only) — packed is a no-op; lone boxed backtrace.
+#[oopsie(traced(backtrace))]
+pub enum SingleBacktraceError {
+    #[oopsie("boom: {info}")]
+    Boom { info: String },
+}
+
+fn assert_both_traces<E: oopsie::Diagnostic>(e: &E) {
+    assert!(e.oopsie_backtrace().is_some(), "backtrace accessor missing");
+    assert!(e.oopsie_spantrace().is_some(), "spantrace accessor missing");
+}
+
+#[test]
+fn layout_default_packed_exposes_both_traces() {
+    let e = default_packed_oopsies::Boom { info: "x" }.build();
+    assert_both_traces(&e);
+}
+
+#[test]
+fn layout_packed_inline_exposes_both_traces() {
+    let e = packed_inline_oopsies::Boom { info: "x" }.build();
+    assert_both_traces(&e);
+}
+
+#[test]
+fn layout_separate_boxed_exposes_both_traces() {
+    let e = separate_boxed_oopsies::Boom { info: "x" }.build();
+    assert_both_traces(&e);
+}
+
+#[test]
+fn layout_separate_inline_exposes_both_traces() {
+    let e = separate_inline_oopsies::Boom { info: "x" }.build();
+    assert_both_traces(&e);
+}
+
+#[test]
+fn layout_mixed_exposes_both_traces() {
+    let e = mixed_oopsies::Boom { info: "x" }.build();
+    assert_both_traces(&e);
+}
+
+#[test]
+fn layout_single_trace_fallback_backtrace_only() {
+    let e = single_backtrace_oopsies::Boom { info: "x" }.build();
+    assert!(e.oopsie_backtrace().is_some());
+    assert!(e.oopsie_spantrace().is_none());
+}
