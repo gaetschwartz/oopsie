@@ -99,6 +99,7 @@ impl FieldInjectorConfig {
 }
 
 /// Tracks which fields already exist in a variant/struct.
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Default)]
 pub(super) struct FieldExistence {
     pub has_backtrace: bool,
@@ -108,6 +109,7 @@ pub(super) struct FieldExistence {
 }
 
 /// Tracks which fields should be injected.
+#[expect(clippy::struct_excessive_bools)]
 pub(super) struct FieldsToInject {
     pub backtrace: bool,
     pub spantrace: bool,
@@ -124,8 +126,8 @@ mod tests {
     use super::*;
     use darling::FromMeta as _;
 
-    fn config_for(meta: syn::Meta) -> FieldInjectorConfig {
-        let args = TracedArgs::from_meta(&meta).unwrap();
+    fn config_for(meta: &syn::Meta) -> FieldInjectorConfig {
+        let args = TracedArgs::from_meta(meta).unwrap();
         let resolved = args.resolve();
         let path: syn::Path = parse_quote!(::oopsie);
         FieldInjectorConfig::new(&args, &resolved, &path)
@@ -133,7 +135,7 @@ mod tests {
 
     #[test]
     fn packed_default_builds_boxed_tuple_traces_type() {
-        let cfg = config_for(parse_quote!(traced()));
+        let cfg = config_for(&parse_quote!(traced()));
         let s = cfg.traces_type.to_token_stream().to_string();
         assert!(s.contains("Box"), "{s}");
         assert!(s.contains("Backtrace") && s.contains("SpanTrace"), "{s}");
@@ -141,21 +143,21 @@ mod tests {
 
     #[test]
     fn inline_packed_builds_unboxed_tuple() {
-        let cfg = config_for(parse_quote!(traced(boxed = false)));
+        let cfg = config_for(&parse_quote!(traced(boxed = false)));
         let s = cfg.traces_type.to_token_stream().to_string();
         assert!(!s.contains("Box"), "{s}");
     }
 
     #[test]
     fn unpacked_inline_backtrace_type_has_no_box() {
-        let cfg = config_for(parse_quote!(traced(packed = false, boxed = false)));
+        let cfg = config_for(&parse_quote!(traced(packed = false, boxed = false)));
         let s = cfg.backtrace_type.to_token_stream().to_string();
         assert!(!s.contains("Box"), "{s}");
     }
 
     #[test]
     fn unpacked_boxed_backtrace_type_has_box() {
-        let cfg = config_for(parse_quote!(traced(packed = false)));
+        let cfg = config_for(&parse_quote!(traced(packed = false)));
         let s = cfg.backtrace_type.to_token_stream().to_string();
         assert!(s.contains("Box"), "{s}");
     }

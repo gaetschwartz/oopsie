@@ -35,7 +35,7 @@ pub(super) fn is_spantrace_type(ty: &syn::Type) -> bool {
 /// SpanTrace)>` — the packed trace field shape. Element order is fixed:
 /// backtrace first, spantrace second. Like `is_backtrace_type`, this is a
 /// best-effort last-segment match and cannot resolve paths.
-pub(crate) fn is_traces_type(ty: &syn::Type) -> bool {
+pub fn is_traces_type(ty: &syn::Type) -> bool {
     // Unwrap one optional `Box<...>` layer, then require a 2-tuple whose
     // elements are `Backtrace` and `SpanTrace` by last path segment.
     let inner = extract_boxed_inner(ty).unwrap_or(ty);

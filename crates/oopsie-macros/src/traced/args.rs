@@ -76,6 +76,7 @@ impl TracedArgs {
 }
 
 /// Resolved trace settings after applying the explicit override model.
+#[expect(clippy::struct_excessive_bools)]
 pub struct ResolvedTraceArgs<'a> {
     pub backtrace: bool,
     pub backtrace_settings: Option<&'a FieldSetting<true, TraceSettings>>,
@@ -169,10 +170,10 @@ mod tests {
 
     use super::*;
 
-    fn args(meta: syn::Meta) -> TracedArgs {
+    fn args(meta: &syn::Meta) -> TracedArgs {
         // `#[oopsie(traced(...))]` arrives as the inner meta list; build the
         // `traced(...)` meta darling expects.
-        TracedArgs::from_meta(&meta).expect("parse traced args")
+        TracedArgs::from_meta(meta).expect("parse traced args")
     }
 
     fn args_list(meta: syn::MetaList) -> TracedArgs {
@@ -193,7 +194,7 @@ mod tests {
 
     #[test]
     fn packed_false_unpacks() {
-        let a = args(parse_quote!(traced(packed = false)));
+        let a = args(&parse_quote!(traced(packed = false)));
         let r = a.resolve();
         assert!(!r.packed);
         assert!(r.backtrace_boxed && r.spantrace_boxed);
@@ -201,7 +202,7 @@ mod tests {
 
     #[test]
     fn boxed_false_is_inline() {
-        let a = args(parse_quote!(traced(boxed = false)));
+        let a = args(&parse_quote!(traced(boxed = false)));
         let r = a.resolve();
         assert!(r.packed);
         assert!(!r.backtrace_boxed && !r.spantrace_boxed);
@@ -210,7 +211,7 @@ mod tests {
     #[test]
     fn per_trace_boxed_override_when_unpacked() {
         // Both traces listed (explicit mode keeps both enabled); spantrace inline.
-        let a = args(parse_quote!(traced(
+        let a = args(&parse_quote!(traced(
             packed = false,
             backtrace,
             spantrace(boxed = false)
@@ -226,7 +227,7 @@ mod tests {
     fn naming_one_trace_block_disables_the_other() {
         // Explicit-override model: mentioning only spantrace turns backtrace OFF.
         // This is why the mixed case must list both traces.
-        let a = args(parse_quote!(traced(spantrace(boxed = false))));
+        let a = args(&parse_quote!(traced(spantrace(boxed = false))));
         let r = a.resolve();
         assert!(r.spantrace);
         assert!(!r.backtrace);
@@ -235,18 +236,18 @@ mod tests {
     #[test]
     fn validate_rejects_packed_incoherent_boxing() {
         // Both traces enabled (explicit), packed default, boxing disagrees.
-        let a = args(parse_quote!(traced(backtrace, spantrace(boxed = false))));
+        let a = args(&parse_quote!(traced(backtrace, spantrace(boxed = false))));
         let r = a.resolve();
         assert!(r.backtrace && r.spantrace);
         assert!(r.packed);
         assert!(r.backtrace_boxed && !r.spantrace_boxed);
-        assert!(r.validate(proc_macro2::Span::call_site()).is_err());
+        r.validate(proc_macro2::Span::call_site()).unwrap_err();
     }
 
     #[test]
     fn validate_accepts_packed_uniform_inline() {
-        let a = args(parse_quote!(traced(boxed = false)));
+        let a = args(&parse_quote!(traced(boxed = false)));
         let r = a.resolve();
-        assert!(r.validate(proc_macro2::Span::call_site()).is_ok());
+        r.validate(proc_macro2::Span::call_site()).unwrap();
     }
 }

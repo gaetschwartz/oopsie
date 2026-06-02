@@ -891,7 +891,7 @@ mod tests {
         let categorized = CategorizedFields::from_fields(&item.fields).unwrap();
         assert_eq!(
             categorized.traces_field.as_ref().map(ToString::to_string),
-            Some("t".to_string())
+            Some("t".to_owned())
         );
         assert!(categorized.auto_fields.iter().any(|f| f.ident == "t"));
         assert!(categorized.backtrace_field.is_none());
