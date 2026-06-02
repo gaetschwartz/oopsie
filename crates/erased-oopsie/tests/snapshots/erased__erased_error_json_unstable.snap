@@ -45,7 +45,13 @@ expression: error
         "column": 0
       },
       {
-        "name": "<alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture",
+        "name": "oopsie_core::traits::Capturable::capture",
+        "filename": "[PATH]/crates/oopsie-core/src/traits.rs",
+        "line": -1,
+        "column": 0
+      },
+      {
+        "name": "<alloc::boxed::Box<(oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace)> as oopsie_core::traits::Capturable>::capture",
         "filename": "[PATH]/crates/oopsie-core/src/traits.rs",
         "line": -1,
         "column": 0
