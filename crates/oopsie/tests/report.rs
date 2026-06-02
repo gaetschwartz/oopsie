@@ -74,6 +74,35 @@ fn test_report_colored() {
     });
 }
 
+/// The colored render path must actually emit ANSI escapes. `test_report_colored`
+/// strips ANSI *before* snapshotting, so its snapshot is byte-identical to the
+/// plain one — a regression that silently dropped all styling would still pass.
+/// This is the positive counterpart to `test_with_colors_never_no_ansi`: it pins
+/// that `force_colors()` both colorizes (escapes present, incl. the specific red
+/// header SGR) and leaves the rendered text intact when the escapes are stripped.
+#[test]
+fn test_report_colored_emits_ansi() {
+    common::force_backtrace();
+    let error = TestOopsie {
+        message: "colored test",
+    }
+    .build();
+    let output = Report::from_std(error).force_colors().to_string();
+
+    assert!(
+        output.contains('\u{1b}'),
+        "force_colors() output should contain ANSI escapes, got: {output:?}"
+    );
+    assert!(
+        output.contains("\u{1b}[31m"),
+        "expected the red (SGR 31) `Error` header in colored output, got: {output:?}"
+    );
+    assert!(
+        strip_ansi(&output).contains("Error[report::TestError]: Test error: colored test"),
+        "stripping ANSI must leave the rendered text intact"
+    );
+}
+
 #[test]
 fn test_report_from() {
     let error = TestOopsie {
