@@ -1,0 +1,8 @@
+error: `packed` requires backtrace and spantrace to share one boxing mode; set both `boxed` the same, or use `packed = false` for per-trace boxing
+  --> tests/compile-fail/nightly/packed_incoherent_boxing.rs:9:1
+   |
+ 9 | / enum Bad {
+10 | |     #[oopsie("boom: {info}")]
+11 | |     Boom { info: String },
+12 | | }
+   | |_^
