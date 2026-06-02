@@ -11,8 +11,7 @@ all-features = true
 [features]
 default = []
 unstable-error-generic-member-access = []
-unstable-try-trait-v2 = ["dep:smallbox"]
-unstable = ["unstable-try-trait-v2", "unstable-error-generic-member-access"]
+unstable = ["unstable-error-generic-member-access"]
 
 [dependencies]
 backtrace = "0.3.76"
@@ -22,10 +21,6 @@ color-backtrace = { version = "0.7.2", features = [
 ] }
 color-eyre = "0.6.5"
 serde = { version = "1", features = ["derive"] }
-smallbox = { version = "0.8.8", features = [
-    "nightly",
-    "coerce",
-], optional = true }
 tracing = "0.1"
 tracing-error = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }

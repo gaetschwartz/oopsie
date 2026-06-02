@@ -15,7 +15,7 @@ unstable-error-generic-member-access = [
     "oopsie-core/unstable-error-generic-member-access",
     "snafu/unstable-provider-api",
 ]
-unstable-try-trait-v2 = ["oopsie-core/unstable-try-trait-v2"]
+unstable-try-trait-v2 = []
 unstable = ["unstable-error-generic-member-access", "unstable-try-trait-v2"]
 fancy = ["dep:owo-colors", "dep:serde", "dep:serde_json"]
 

@@ -1,10 +1,6 @@
 //! Core error types and utilities.
 
 #![cfg_attr(
-    feature = "unstable-try-trait-v2",
-    feature(try_trait_v2, try_trait_v2_residual)
-)]
-#![cfg_attr(
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
@@ -18,8 +14,6 @@
 
 mod backtrace;
 mod diagnostic;
-#[cfg(feature = "unstable-try-trait-v2")]
-mod result;
 pub mod spantrace;
 mod traits;
 mod welp;
