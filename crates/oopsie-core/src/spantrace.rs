@@ -339,6 +339,14 @@ mod tests {
         mid()
     }
 
+    // A single fixed callsite that records a field value. Two captures through
+    // this function share the same `&'static Metadata` (same source location),
+    // so they differ ONLY in the recorded value of `x`.
+    fn via_field(x: u32) -> SpanTrace {
+        let _g = tracing::info_span!("field_span", x).entered();
+        SpanTrace::capture()
+    }
+
     #[test]
     fn identical_depth3_stacks_are_equal() {
         let (a, b) = with_error_subscriber(|| (via_root_a(), via_root_a()));
@@ -369,6 +377,33 @@ mod tests {
         let b = SpanTrace::capture();
         assert_eq!(a, b);
         assert_eq!(a, a.clone());
+    }
+
+    #[test]
+    fn same_callsite_differing_field_values() {
+        // Both captures go through the *same* `info_span!` callsite, so the
+        // callsite comparison in `eq` can't tell them apart — only the recorded
+        // value of `x` differs. This is the one shape that reaches the
+        // field-value branch of `eq` with a non-equal result; every other
+        // inequality test diverges by span name (i.e. by callsite).
+        let (a, b) = with_error_subscriber(|| (via_field(1), via_field(2)));
+        assert_eq!(a.status(), tracing_error::SpanTraceStatus::CAPTURED);
+
+        // Control: identical callsite *and* identical field value compare equal
+        // in either build profile, proving the divergence below comes from the
+        // field values and nothing else.
+        let (c, d) = with_error_subscriber(|| (via_field(1), via_field(1)));
+        assert_eq!(c, d);
+
+        // Debug builds compare recorded field values; release builds compare
+        // callsites only (see the `cfg_select!` in `eq`).
+        #[cfg(debug_assertions)]
+        assert_ne!(a, b, "debug builds must distinguish differing field values");
+        #[cfg(not(debug_assertions))]
+        assert_eq!(
+            a, b,
+            "release builds compare callsites only, ignoring fields"
+        );
     }
 
     #[derive(Debug)]
