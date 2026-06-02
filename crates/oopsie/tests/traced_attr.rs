@@ -295,3 +295,27 @@ fn layout_single_trace_fallback_backtrace_only() {
     assert!(e.oopsie_backtrace().is_some());
     assert!(e.oopsie_spantrace().is_none());
 }
+
+// Struct path (symmetric to the enum cases above): default packed + boxed,
+// and the unpacked inline layout that exercises the `Borrow` accessor.
+#[oopsie(traced)]
+pub struct PackedStructError {
+    info: String,
+}
+
+#[oopsie(traced(packed = false, boxed = false))]
+pub struct InlineStructError {
+    info: String,
+}
+
+#[test]
+fn layout_struct_default_packed_exposes_both_traces() {
+    let e = PackedStructOopsie { info: "x" }.build();
+    assert_both_traces(&e);
+}
+
+#[test]
+fn layout_struct_separate_inline_exposes_both_traces() {
+    let e = InlineStructOopsie { info: "x" }.build();
+    assert_both_traces(&e);
+}

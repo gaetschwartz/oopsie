@@ -161,4 +161,14 @@ mod tests {
         let s = cfg.backtrace_type.to_token_stream().to_string();
         assert!(s.contains("Box"), "{s}");
     }
+
+    #[test]
+    fn custom_type_composes_into_packed_tuple() {
+        // Both traces listed (explicit mode keeps both); custom backtrace type
+        // must land as the first tuple element of the packed box.
+        let cfg = config_for(&parse_quote!(traced(backtrace(r#type = MyBt), spantrace)));
+        let s = cfg.traces_type.to_token_stream().to_string();
+        assert!(s.contains("MyBt"), "{s}");
+        assert!(s.contains("SpanTrace"), "{s}");
+    }
 }
