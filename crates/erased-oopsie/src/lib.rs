@@ -53,14 +53,17 @@ pub struct Diagnostics {
 
 impl Diagnostics {
     #[must_use]
+    #[inline]
     pub const fn is_none(&self) -> bool {
         self.code.is_none() && self.help.is_none()
     }
     #[must_use]
+    #[inline]
     pub fn code(&self) -> Option<&str> {
         self.code.as_deref()
     }
     #[must_use]
+    #[inline]
     pub fn help(&self) -> Option<&str> {
         self.help.as_deref()
     }

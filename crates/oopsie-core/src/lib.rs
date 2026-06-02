@@ -109,6 +109,7 @@ pub struct ErrorCode(Cow<'static, str>);
 impl ErrorCode {
     /// Build an `ErrorCode` from a `&'static str` in `const` context.
     #[must_use]
+    #[inline]
     pub const fn from_static(s: &'static str) -> Self {
         Self(Cow::Borrowed(s))
     }
@@ -169,6 +170,7 @@ pub struct HelpText(Cow<'static, str>);
 impl HelpText {
     /// Build a `HelpText` from a `&'static str` in `const` context.
     #[must_use]
+    #[inline]
     pub const fn from_static(s: &'static str) -> Self {
         Self(Cow::Borrowed(s))
     }

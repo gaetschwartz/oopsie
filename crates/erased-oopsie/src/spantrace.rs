@@ -22,6 +22,7 @@ pub enum TracingLevel {
 }
 
 impl From<TracingLevel> for tracing::Level {
+    #[inline]
     fn from(level: TracingLevel) -> Self {
         match level {
             TracingLevel::ERROR => tracing::Level::ERROR,
@@ -34,6 +35,7 @@ impl From<TracingLevel> for tracing::Level {
 }
 
 impl From<&tracing::Level> for TracingLevel {
+    #[inline]
     fn from(level: &tracing::Level) -> Self {
         match *level {
             tracing::Level::ERROR => Self::ERROR,
@@ -78,31 +80,37 @@ pub struct ErasedMetadata {
 
 impl ErasedMetadata {
     #[must_use]
+    #[inline]
     pub fn name(&self) -> &str {
         &self.name
     }
 
     #[must_use]
+    #[inline]
     pub fn target(&self) -> &str {
         &self.target
     }
 
     #[must_use]
+    #[inline]
     pub const fn level(&self) -> TracingLevel {
         self.level
     }
 
     #[must_use]
+    #[inline]
     pub fn module_path(&self) -> Option<&str> {
         self.module_path.as_deref()
     }
 
     #[must_use]
+    #[inline]
     pub fn file(&self) -> Option<&str> {
         self.file.as_deref()
     }
 
     #[must_use]
+    #[inline]
     pub const fn line(&self) -> Option<u32> {
         self.line
     }

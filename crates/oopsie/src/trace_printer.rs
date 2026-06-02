@@ -255,6 +255,7 @@ pub struct TracePrinter {
 impl TracePrinter {
     /// Default `TracePrinter` with the default theme and frame filter.
     #[must_use]
+    #[inline]
     pub const fn new() -> Self {
         Self::with_filter_and_theme_const(&error_backtrace_frame_filter, TraceTheme::DEFAULT)
     }

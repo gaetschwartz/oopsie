@@ -80,12 +80,14 @@ impl ColorConfig {
 ///
 /// This affects the default behavior when no explicit color configuration is
 /// provided to `Report`.
+#[inline]
 pub fn set_color_mode(mode: ColorConfig) {
     COLOR_MODE.store(mode as u8, Ordering::SeqCst);
 }
 
 /// Get the current global color mode.
 #[must_use]
+#[inline]
 pub fn get_color_mode() -> ColorConfig {
     match COLOR_MODE.load(Ordering::SeqCst) {
         0 => ColorConfig::Auto,
