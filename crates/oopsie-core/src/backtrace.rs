@@ -355,6 +355,69 @@ mod tests {
         assert!(!bt.frames().is_empty());
     }
 
+    #[test]
+    fn is_internal_frame_drops_unresolvable_frames() {
+        // Neither symbol name nor filename — only the no/no arm returns true.
+        assert!(is_internal_frame(None, None));
+        assert!(!is_internal_frame(
+            None,
+            Some(std::path::Path::new("/home/u/src/main.rs"))
+        ));
+    }
+
+    #[test]
+    fn is_internal_frame_drops_backtrace_capture_machinery() {
+        assert!(is_internal_frame(Some("backtrace::backtrace::trace"), None));
+        assert!(is_internal_frame(
+            Some("<backtrace::capture::Backtrace>::new"),
+            None
+        ));
+    }
+
+    #[test]
+    fn is_internal_frame_drops_os_and_unwind_internals() {
+        for name in [
+            "__pthread_cond_wait",
+            "_pthread_start",
+            "__libc_start_main",
+            "__GI___clone",
+            "__rust_try",
+        ] {
+            assert!(
+                is_internal_frame(Some(name), None),
+                "expected `{name}` to be filtered"
+            );
+        }
+    }
+
+    #[test]
+    fn is_internal_frame_drops_by_backtrace_crate_path_component() {
+        let p =
+            std::path::Path::new("/home/u/.cargo/registry/src/index/backtrace-0.3.71/src/lib.rs");
+        assert!(is_internal_frame(Some("backtrace_rs::foo"), Some(p)));
+        // The name alone does NOT match (`backtrace_rs::` is not `backtrace::`),
+        // so the path component `backtrace-0.3.71` is what triggers the filter.
+        assert!(!is_internal_frame(Some("backtrace_rs::foo"), None));
+    }
+
+    #[test]
+    fn is_internal_frame_keeps_user_code() {
+        // Benign user frame.
+        assert!(!is_internal_frame(
+            Some("my_crate::do_work"),
+            Some(std::path::Path::new("/home/u/proj/src/main.rs"))
+        ));
+        // False-positive guard: a path containing `my-backtrace-experiments`
+        // must NOT match — the check is on whole components prefixed
+        // `backtrace-`, not substrings.
+        assert!(!is_internal_frame(
+            Some("my_crate::do_work"),
+            Some(std::path::Path::new(
+                "/home/u/my-backtrace-experiments/src/lib.rs"
+            ))
+        ));
+    }
+
     const _: () = {
         // Verify that Backtrace implements Capturable
         const fn is_capturable<T: crate::Capturable>() {}
