@@ -4,6 +4,10 @@
     feature = "unstable-try-trait-v2",
     feature(try_trait_v2, try_trait_v2_residual)
 )]
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 // Doctests that use `#[derive(Oopsie)]` will see the macro emit a `provide`
 // impl when the unstable feature is active; inject the corresponding language
 // feature flag so those doctests compile under `--features unstable`.

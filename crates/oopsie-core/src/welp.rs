@@ -30,9 +30,14 @@
 //! `Welp` is a 40-byte enum — `Sourced` carries `Box<str>` + `Box<dyn Error>`,
 //! `Traced` carries `Box<str>` + `Box<(Backtrace, SpanTrace)>`. The two
 //! variants are mutually exclusive: a `Sourced` `Welp` captures no traces of
-//! its own (its [`Diagnostic`] trace accessors return `None`); a `Traced`
-//! `Welp` captures fresh traces at construction. Surfacing a diagnostic
-//! source's own traces through a wrapping `Welp` is not currently supported.
+//! its own; a `Traced` `Welp` captures fresh traces at construction.
+//!
+//! A `Sourced` `Welp` still surfaces its source's traces when the
+//! `unstable-error-generic-member-access` feature is enabled: its [`Diagnostic`]
+//! accessors and `Error::provide` forward to the boxed source via the Provider
+//! API, so an oopsie-aware source's backtrace/span-trace flows through. Without
+//! that feature there is no portable way to reach into the source, so the
+//! accessors return `None`.
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -79,8 +84,9 @@ impl Welp {
     }
 
     /// Wrap an existing error with a string message. `Welp::wrap` captures no
-    /// traces of its own, and does not forward any the source may carry — its
-    /// [`Diagnostic`] accessors return `None`.
+    /// traces of its own. With the `unstable-error-generic-member-access`
+    /// feature it forwards traces the source provides through its [`Diagnostic`]
+    /// accessors; otherwise those accessors return `None`.
     ///
     /// ```
     /// use oopsie_core::Welp;
@@ -163,21 +169,50 @@ impl StdError for Welp {
             WelpRepr::Traced { .. } => None,
         }
     }
+
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    fn provide<'a>(&'a self, request: &mut core::error::Request<'a>) {
+        match &self.0 {
+            WelpRepr::Sourced { source, .. } => source.provide(request),
+            WelpRepr::Traced { traces, .. } => {
+                request
+                    .provide_ref::<Backtrace>(&traces.0)
+                    .provide_ref::<SpanTrace>(&traces.1);
+            }
+        }
+    }
 }
 
 impl Diagnostic for Welp {
     fn oopsie_backtrace(&self) -> Option<&Backtrace> {
         match &self.0 {
-            WelpRepr::Sourced { .. } => None, // TODO: Ideally we would not lose the source backtrace here.
+            WelpRepr::Sourced { source, .. } => source_request_ref::<Backtrace>(source),
             WelpRepr::Traced { traces, .. } => Some(&traces.0),
         }
     }
 
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         match &self.0 {
-            WelpRepr::Sourced { .. } => None, // TODO: Ideally we would not lose the source span trace here.
+            WelpRepr::Sourced { source, .. } => source_request_ref::<SpanTrace>(source),
             WelpRepr::Traced { traces, .. } => Some(&traces.1),
         }
+    }
+}
+
+/// Pull a `T` reference out of a boxed source error via the Provider API. A
+/// `Sourced` `Welp` carries no traces of its own, so the only way to surface a
+/// source's backtrace/span-trace is to query what the source itself provides.
+/// Without the unstable Provider API there is no portable way to do this, so
+/// the trace is genuinely unavailable and we return `None`.
+fn source_request_ref<T: 'static>(source: &BoxError) -> Option<&T> {
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    {
+        core::error::request_ref::<T>(&**source)
+    }
+    #[cfg(not(feature = "unstable-error-generic-member-access"))]
+    {
+        _ = source; // silence unused variable warning
+        None
     }
 }
 
@@ -426,6 +461,38 @@ mod tests {
         let dbg = format!("{err:?}");
         assert!(dbg.contains("solo"));
         assert!(!dbg.contains("source"));
+    }
+
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[test]
+    fn traced_provides_traces_via_request_ref() {
+        let err = Welp::new("solo");
+        assert!(core::error::request_ref::<Backtrace>(&err).is_some());
+        assert!(core::error::request_ref::<SpanTrace>(&err).is_some());
+    }
+
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[test]
+    fn sourced_recovers_traces_from_diagnostic_source() {
+        let outer = Welp::wrap(Welp::new("inner"), "outer");
+        assert!(outer.oopsie_backtrace().is_some());
+        assert!(outer.oopsie_spantrace().is_some());
+    }
+
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[test]
+    fn sourced_forwards_source_provide() {
+        let outer = Welp::wrap(Welp::new("inner"), "outer");
+        assert!(core::error::request_ref::<Backtrace>(&outer).is_some());
+        assert!(core::error::request_ref::<SpanTrace>(&outer).is_some());
+    }
+
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[test]
+    fn sourced_recovers_nothing_from_foreign_source() {
+        let outer = Welp::wrap(std::io::Error::other("x"), "outer");
+        assert!(outer.oopsie_backtrace().is_none());
+        assert!(outer.oopsie_spantrace().is_none());
     }
 
     // Compile-time guarantees about `Welp`'s shape.
