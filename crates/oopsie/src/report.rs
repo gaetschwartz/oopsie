@@ -31,7 +31,7 @@ impl<E: Diagnostic> Report<E> {
     /// part of backtrace rendering, so we pay it here rather than on every
     /// `Display`.
     fn resolve_backtrace(res: &Result<(), E>) -> Option<oopsie_core::Backtrace> {
-        let mut backtrace = res.as_ref().err()?.oopsie_backtrace()?.clone();
+        let backtrace = res.as_ref().err()?.oopsie_backtrace()?.clone();
         backtrace.resolve();
         (!backtrace.frames().is_empty()).then_some(backtrace)
     }

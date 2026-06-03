@@ -21,13 +21,6 @@ pub struct ErasedFrame {
 }
 
 impl ErasedBacktrace {
-    /// Create an `ErasedBacktrace` from a live `Backtrace`. See
-    /// [`from_backtrace`](Self::from_backtrace).
-    #[must_use]
-    #[inline]
-    pub fn from_backtrace_ref(bt: &oopsie_core::Backtrace) -> Self {
-        Self::from_backtrace(bt.clone())
-    }
     /// Create an `ErasedBacktrace` from a live `Backtrace`.
     ///
     /// Frames that [`oopsie_core::is_internal_frame`] considers
@@ -36,7 +29,7 @@ impl ErasedBacktrace {
     /// is set. The keep/drop decision is made per frame on its primary symbol,
     /// matching the non-erased `Backtrace` `Debug` rendering.
     #[must_use]
-    pub fn from_backtrace(mut bt: oopsie_core::Backtrace) -> Self {
+    pub fn from_backtrace(bt: &oopsie_core::Backtrace) -> Self {
         bt.resolve();
         let full = oopsie_core::rust_backtrace().is_full();
         let frames = bt
@@ -76,13 +69,13 @@ impl ErasedBacktrace {
 impl From<&oopsie_core::Backtrace> for ErasedBacktrace {
     #[inline]
     fn from(bt: &oopsie_core::Backtrace) -> Self {
-        Self::from_backtrace_ref(bt)
+        Self::from_backtrace(bt)
     }
 }
 impl From<oopsie_core::Backtrace> for ErasedBacktrace {
     #[inline]
     fn from(bt: oopsie_core::Backtrace) -> Self {
-        Self::from_backtrace(bt)
+        Self::from_backtrace(&bt)
     }
 }
 
@@ -166,10 +159,10 @@ mod tests {
         let bt = <oopsie_core::Backtrace as oopsie_core::Capturable>::capture();
 
         // Enabled: `is_internal_frame` machinery is stripped.
-        let filtered = ErasedBacktrace::from_backtrace(bt.clone());
+        let filtered = ErasedBacktrace::from_backtrace(&bt);
         // Full: the `if full { return true }` short-circuit keeps every symbol.
         oopsie_core::set_rust_backtrace_override(oopsie_core::RustBacktrace::Full);
-        let full = ErasedBacktrace::from_backtrace(bt.clone());
+        let full = ErasedBacktrace::from_backtrace(&bt);
         oopsie_core::clear_rust_backtrace_override();
 
         assert!(

@@ -89,16 +89,40 @@ pub fn rust_backtrace() -> RustBacktrace {
     *CACHED
 }
 
+enum Inner {
+    Captured(LazyLock<Capture, helper::LazyResolve>),
+    Resolved(Capture),
+    Disabled(backtrace::Backtrace), // Always empty, used when capture is disabled to avoid the LazyLock indirection.
+}
+
+impl Clone for Inner {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Captured(bt) => Self::Resolved((&**bt).clone()),
+            Self::Resolved(bt) => Self::Resolved(bt.clone()),
+            Self::Disabled(bt) => Self::Disabled(bt.clone()),
+        }
+    }
+}
+
 #[derive(Clone)]
-pub struct Backtrace(backtrace::Backtrace);
+pub struct Backtrace {
+    inner: Inner,
+}
 
 impl crate::Capturable for Backtrace {
     #[inline]
     fn capture() -> Self {
         if rust_backtrace().is_enabled() {
-            Self(backtrace::Backtrace::new_unresolved())
+            Self {
+                inner: Inner::Captured(LazyLock::new(helper::lazy_resolve(Capture {
+                    backtrace: backtrace::Backtrace::new_unresolved(),
+                }))),
+            }
         } else {
-            Self(backtrace::Backtrace::from(vec![]))
+            Self {
+                inner: Inner::Disabled(backtrace::Backtrace::from(vec![])),
+            }
         }
     }
 }
@@ -116,7 +140,7 @@ impl crate::CaptureExt for Backtrace {
 impl color_backtrace::Backtrace for Backtrace {
     #[inline]
     fn frames(&self) -> Vec<color_backtrace::Frame> {
-        let mut frames = color_backtrace::Backtrace::frames(&self.0);
+        let mut frames = color_backtrace::Backtrace::frames(self.as_backtrace());
         if !rust_backtrace().is_full() {
             frames.retain(|f| !is_internal_frame(f.name.as_deref(), f.filename.as_deref()));
         }
@@ -199,7 +223,7 @@ impl fmt::Debug for Backtrace {
         // `full` means "show everything captured" — defer to the upstream
         // formatter without any trimming.
         if rust_backtrace().is_full() {
-            return fmt::Debug::fmt(&self.0, f);
+            return fmt::Debug::fmt(&self.as_backtrace(), f);
         }
         let kept: Vec<backtrace::BacktraceFrame> = self
             .frames()
@@ -220,15 +244,12 @@ impl Backtrace {
     /// Returns a reference to the inner [`backtrace::Backtrace`].
     #[must_use]
     #[inline]
-    pub const fn as_backtrace(&self) -> &backtrace::Backtrace {
-        &self.0
-    }
-
-    /// Returns a mutable reference to the inner [`backtrace::Backtrace`].
-    #[must_use]
-    #[inline]
-    pub const fn as_backtrace_mut(&mut self) -> &mut backtrace::Backtrace {
-        &mut self.0
+    pub fn as_backtrace(&self) -> &backtrace::Backtrace {
+        match &self.inner {
+            Inner::Captured(bt) => &bt.backtrace,
+            Inner::Disabled(bt) => bt,
+            Inner::Resolved(bt) => &bt.backtrace,
+        }
     }
 
     /// Returns the frames of the backtrace.
@@ -238,10 +259,43 @@ impl Backtrace {
         self.as_backtrace().frames()
     }
 
-    /// Resolves the backtrace's symbols.
+    /// Force symbol resolution now, caching the result in place.
+    ///
+    /// Resolution is otherwise deferred until the first frame access
+    /// ([`as_backtrace`](Self::as_backtrace) / [`frames`](Self::frames)). Call
+    /// this to pay that cost at a controlled point — e.g. once up front rather
+    /// than during rendering.
     #[inline]
-    pub fn resolve(&mut self) {
-        self.0.resolve();
+    pub fn resolve(&self) {
+        let _ = self.as_backtrace();
+    }
+}
+
+#[derive(Clone)]
+struct Capture {
+    backtrace: backtrace::Backtrace,
+}
+
+mod helper {
+    use std::panic::UnwindSafe;
+
+    use super::*;
+
+    // `LazyLock<T, F>`'s second parameter must be a *named* type, but
+    // `lazy_resolve` returns a state-capturing closure — and stable Rust cannot
+    // name an unboxed closure type. Boxing erases it behind `dyn FnOnce`, which
+    // itself satisfies `F`, at the cost of one allocation per captured trace.
+    // Once `type_alias_impl_trait` stabilizes, replace this alias with
+    // `impl FnOnce() -> Capture + Send + Sync + UnwindSafe` (+ `#[define_opaque]`
+    // on `lazy_resolve`) to store the closure inline and drop the allocation —
+    // exactly what `std`'s own `Backtrace` does.
+    pub(super) type LazyResolve = Box<dyn FnOnce() -> Capture + Send + Sync + UnwindSafe>;
+
+    pub(super) fn lazy_resolve(mut capture: Capture) -> LazyResolve {
+        Box::new(move || {
+            capture.backtrace.resolve();
+            capture
+        })
     }
 }
 

@@ -26,7 +26,7 @@ fn bench_capture(c: &mut Criterion) {
     group.bench_function("resolve", |b| {
         b.iter_batched(
             Backtrace::capture,
-            |mut bt| {
+            |bt| {
                 bt.resolve();
                 black_box(bt)
             },
