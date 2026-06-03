@@ -119,3 +119,100 @@ fn optional_span_trace_capture_with_diagnostic_source() {
     let err: OptionalCaptureError = Wrap.build_error(InnerDiagError::Inner);
     assert!(matches!(err, OptionalCaptureError::Wrap { .. }));
 }
+
+// ════════════════════════════════════════════════════════════════════════
+// Multiple heterogeneous #[oopsie(capture)] fields — gap 37
+//
+// `gen_auto_inits` iterates over ALL auto fields and calls `.capture()` on each
+// with no type constraint, so any mix of `Capturable` types auto-initializes.
+// These tests exercise (1) three heterogeneous capture fields in one variant,
+// (2) a tuple `Capturable` field, and (3) a user-defined `Capturable` type.
+// ════════════════════════════════════════════════════════════════════════
+
+// (1) three capture fields of three different Capturable types in one variant.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum TripleCaptureError {
+    #[oopsie("triple")]
+    Triple {
+        label: String,
+        #[oopsie(capture)]
+        bt: Box<oopsie::Backtrace>,
+        #[oopsie(capture)]
+        st: Box<oopsie::SpanTrace>,
+        #[oopsie(capture)]
+        ost: oopsie::OptionalSpanTrace,
+    },
+}
+
+#[test]
+fn three_heterogeneous_capture_fields_all_initialize() {
+    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+    // Only `label` is on the selector; the three capture fields are auto-filled.
+    let err = Triple { label: "x" }.build();
+    let TripleCaptureError::Triple { bt, st, ost, .. } = &err;
+    // Each captured field is concretely populated (content, not just presence):
+    assert!(!bt.frames().is_empty(), "backtrace must capture frames");
+    // SpanTrace and OptionalSpanTrace captured without a subscriber: they exist
+    // and render (possibly empty) without panicking.
+    let _ = st.status();
+    let _ = ost.to_string();
+}
+
+// (2) a single capture field whose type is a `(A, B)` tuple Capturable.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum TupleCaptureError {
+    #[oopsie("tuple")]
+    Tuple {
+        #[oopsie(capture)]
+        traces: (oopsie::Backtrace, oopsie::SpanTrace),
+    },
+}
+
+#[test]
+fn tuple_capture_field_initializes_both_elements() {
+    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+    let err = Tuple.build();
+    let TupleCaptureError::Tuple { traces } = &err;
+    // The tuple `Capturable` impl captured both halves.
+    assert!(
+        !traces.0.frames().is_empty(),
+        "tuple backtrace half must capture frames"
+    );
+    let _ = traces.1.status();
+}
+
+// (3) a user-defined Capturable type used as a capture field.
+#[derive(Debug, Default)]
+struct Marker {
+    captured: bool,
+}
+
+impl oopsie::Capturable for Marker {
+    fn capture() -> Self {
+        Self { captured: true }
+    }
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum CustomCaptureError {
+    #[oopsie("custom capture")]
+    Custom {
+        info: String,
+        #[oopsie(capture)]
+        marker: Marker,
+    },
+}
+
+#[test]
+fn user_defined_capturable_field_is_captured() {
+    let err = Custom { info: "x" }.build();
+    let CustomCaptureError::Custom { marker, .. } = &err;
+    // Proves `Marker::capture()` (not `Default::default()`) ran for the field.
+    assert!(
+        marker.captured,
+        "custom Capturable::capture must populate the field"
+    );
+}

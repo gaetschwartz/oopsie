@@ -137,3 +137,96 @@ fn short_form_with_args_and_other_attrs() {
     .build();
     assert_eq!(err.to_string(), "code 42 at main.rs");
 }
+
+// ---- Format specifiers passed verbatim to write! ----
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum DebugSpecError {
+    #[oopsie("value {val:?}")]
+    Value { val: i32 },
+    #[oopsie("text {text:?}")]
+    Text { text: String },
+}
+
+#[test]
+fn debug_format_specifier() {
+    let err = Value { val: 42i32 }.build();
+    assert_eq!(format!("{err}"), "value 42");
+
+    let err = Text {
+        text: "hi".to_owned(),
+    }
+    .build();
+    assert_eq!(format!("{err}"), "text \"hi\"");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum IntSpecError {
+    #[oopsie("code: {code:x}, mask: {mask:b}, perms: {perms:o}")]
+    Bits { code: u32, mask: u8, perms: u16 },
+}
+
+#[test]
+fn integer_format_specifiers() {
+    let err = Bits {
+        code: 0x2au32,
+        mask: 0b11001001u8,
+        perms: 0o755u16,
+    }
+    .build();
+    assert_eq!(format!("{err}"), "code: 2a, mask: 11001001, perms: 755");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum BraceEscapeError {
+    #[oopsie("msg: {{x}}")]
+    Literal {},
+    #[oopsie("{{ {val} }}")]
+    Mixed { val: u32 },
+}
+
+#[test]
+fn brace_escaping() {
+    let err = Literal {}.build();
+    assert_eq!(format!("{err}"), "msg: {x}");
+
+    let err = Mixed { val: 7u32 }.build();
+    assert_eq!(format!("{err}"), "{ 7 }");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum PadSpecError {
+    #[oopsie("Value:[{value:>10}]")]
+    RightAlign { value: u32 },
+    #[oopsie("[{value:0<5}]")]
+    FillLeft { value: u32 },
+}
+
+#[test]
+fn width_align_padding_specifiers() {
+    let err = RightAlign { value: 42u32 }.build();
+    assert_eq!(format!("{err}"), "Value:[        42]");
+
+    let err = FillLeft { value: 42u32 }.build();
+    assert_eq!(format!("{err}"), "[42000]");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum RepeatFieldError {
+    #[oopsie("prefix {value} middle {value} suffix")]
+    Repeat { value: String },
+}
+
+#[test]
+fn same_field_used_twice() {
+    let err = Repeat {
+        value: "X".to_owned(),
+    }
+    .build();
+    assert_eq!(err.to_string(), "prefix X middle X suffix");
+}

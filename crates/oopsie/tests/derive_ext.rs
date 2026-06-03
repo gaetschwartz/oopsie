@@ -18,6 +18,9 @@ enum AppError {
     #[oopsie("io failed: {detail}")]
     IoFailed { source: io::Error, detail: String },
 
+    #[oopsie("not found: {detail}")]
+    NotFoundIo { source: io::Error, detail: String },
+
     #[oopsie("missing key: {key}")]
     MissingKey { key: String },
 
@@ -47,6 +50,65 @@ fn result_with_context() {
     let err = converted.unwrap_err();
     assert!(matches!(err, AppError::IoFailed { .. }));
     assert_eq!(err.to_string(), "io failed: writing output");
+}
+
+// Gap 2: `with_context`'s closure receives `&source_error` and may inspect it
+// (traits.rs:186-192 passes `&error` to the closure) to build the selector —
+// choosing a variant or populating a field from the source.
+
+/// Classify an io error into a typed `AppError`, choosing the *variant* from the
+/// source's `ErrorKind`. Because each variant has its own selector type, the
+/// branch returning a different variant lives behind its own `with_context`
+/// call; the `?`/return threads the chosen variant out.
+fn classify(result: Result<(), io::Error>) -> Result<(), AppError> {
+    let Err(e) = result else { return Ok(()) };
+    let kind = e.kind();
+    let src: Result<(), io::Error> = Err(e);
+    if kind == io::ErrorKind::NotFound {
+        // Closure inspects the moved-in source again to fill `detail`.
+        src.with_context(|io_err| NotFoundIo {
+            detail: format!("kind={:?}", io_err.kind()),
+        })
+    } else {
+        src.with_context(|io_err| IoFailed {
+            detail: format!("kind={:?}", io_err.kind()),
+        })
+    }
+}
+
+#[test]
+fn with_context_closure_inspects_source_to_pick_variant() {
+    // NotFound source -> NotFoundIo variant.
+    let err = classify(Err(io::Error::new(io::ErrorKind::NotFound, "absent"))).unwrap_err();
+    assert!(matches!(err, AppError::NotFoundIo { .. }));
+    assert_eq!(err.to_string(), "not found: kind=NotFound");
+
+    // Any other source -> IoFailed variant.
+    let err = classify(Err(io::Error::new(io::ErrorKind::PermissionDenied, "nope"))).unwrap_err();
+    assert!(matches!(err, AppError::IoFailed { .. }));
+    assert_eq!(err.to_string(), "io failed: kind=PermissionDenied");
+}
+
+#[test]
+fn with_context_closure_populates_field_from_source() {
+    // The closure reads a string off the source error and threads it into the
+    // selector's `detail` field, then the source is still moved into the error.
+    let io_err = io::Error::new(io::ErrorKind::PermissionDenied, "boom: code 13");
+    let result: Result<(), io::Error> = Err(io_err);
+    let converted: Result<(), AppError> = result.with_context(|e| IoFailed {
+        detail: format!("source said: {e}"),
+    });
+    let err = converted.unwrap_err();
+    match &err {
+        AppError::IoFailed { source, detail } => {
+            assert_eq!(detail, "source said: boom: code 13");
+            // The original source error is preserved (moved in after inspection).
+            assert_eq!(source.kind(), io::ErrorKind::PermissionDenied);
+            assert_eq!(source.to_string(), "boom: code 13");
+        }
+        other => panic!("expected IoFailed, got {other:?}"),
+    }
+    assert_eq!(err.to_string(), "io failed: source said: boom: code 13");
 }
 
 #[test]

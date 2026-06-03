@@ -2,7 +2,11 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
-#![allow(unused, clippy::all)]
+#![allow(
+    unused,
+    clippy::all,
+    reason = "derive-macro test fixtures intentionally trip style lints"
+)]
 
 //! `#[cfg(...)]` propagation onto generated selectors and the generated
 //! `From`/`Contextual`/`Display`/source match arms.
@@ -17,7 +21,7 @@
 //! `cfg(any())` never is. The extraction logic treats them exactly like a
 //! `cfg(feature = "...")` gate, so this exercises the same propagation path.
 
-use oopsie::Oopsie;
+use oopsie::{Oopsie, oopsie};
 
 /// Exists only under an always-false cfg — i.e. never. Any generated code that
 /// names it must therefore also be gated out, or this file won't compile.
@@ -52,4 +56,38 @@ fn cfg_gated_out_variant_emits_no_dangling_refs() {
     // `CfgError::Gone` and `GhostType` (both compiled out) and fail to build.
     let err = PresentOopsie { n: 1u32 }.build();
     assert!(matches!(err, CfgError::Present { .. }));
+}
+
+// ---- Gap 35: cfg propagation under the `#[oopsie(...)]` attribute-macro form ----
+//
+// The attribute macro (oopsie_attr/mod.rs) delegates to `derive::expand_enum`,
+// so the same cfg-forwarding path must apply. Here one variant is gated behind
+// an ACTIVE cfg (`cfg(test)` — these are compiled as a test binary) and another
+// behind an INACTIVE cfg (`cfg(any())`). The inactive variant references a type
+// that only exists under the inactive cfg, so if forwarding broke, the generated
+// selector/From/Display arms would name a compiled-out type and fail to build.
+
+/// Only exists under the never-satisfied cfg; the gated-out variant references it.
+#[cfg(any())]
+pub struct AttrGhost;
+
+#[oopsie]
+#[oopsie(module(false), suffix)]
+pub enum AttrCfgError {
+    #[cfg(test)]
+    #[oopsie("active: {n}")]
+    Active { n: u32 },
+
+    #[cfg(any())]
+    #[oopsie("inactive")]
+    Inactive { ghost: AttrGhost },
+}
+
+#[test]
+fn attr_cfg_active_variant_builds() {
+    // The `cfg(test)` variant is active in the test binary, so its selector
+    // exists and works.
+    let err = ActiveOopsie { n: 7u32 }.build();
+    assert!(matches!(err, AttrCfgError::Active { n: 7 }));
+    assert_eq!(err.to_string(), "active: 7");
 }

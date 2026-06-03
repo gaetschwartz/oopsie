@@ -487,3 +487,174 @@ fn no_help_field_returns_none() {
         "variant without help should return None"
     );
 }
+
+// ---- help() format-string interpolation referencing variant fields (gaps 7 & 9) ----
+//
+// `help("fmt {}", expr)` parses as a DisplayAttr and renders through `::std::format!`,
+// exactly like `display(...)`. The generated `oopsie_help_text()` accessor binds the
+// variant's fields (mirroring the display arm), so the positional args may reference
+// them. (As with `display`, prefer `{}` + arg over inline `{field}` capture, which
+// would make the explicit arg redundant. `code = "..."` stays a plain string.)
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum HelpInterpError {
+    // Single positional arg referencing the `host` field.
+    #[oopsie("connect failed")]
+    #[oopsie(help("Retry connecting to {}", host))]
+    SingleField { host: String },
+
+    // Multiple positional args, each referencing a variant field.
+    #[oopsie("ingest failed")]
+    #[oopsie(help("got {} errors in {}", count, module))]
+    MultiField { count: u32, module: String },
+}
+
+#[test]
+fn help_single_field_interpolation_renders_value() {
+    use oopsie::Diagnostic as _;
+    let err = SingleField {
+        host: "db.local".to_owned(),
+    }
+    .build();
+    let help = err.oopsie_help_text();
+    assert!(help.is_some(), "should render interpolated help text");
+    assert_eq!(&*help.unwrap(), "Retry connecting to db.local");
+}
+
+#[test]
+fn help_multi_field_interpolation_renders_value() {
+    use oopsie::Diagnostic as _;
+    let err = MultiField {
+        count: 3u32,
+        module: "ingest".to_owned(),
+    }
+    .build();
+    let help = err.oopsie_help_text();
+    assert!(help.is_some(), "should render interpolated help text");
+    assert_eq!(&*help.unwrap(), "got 3 errors in ingest");
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn help_field_interpolation_via_provider() {
+    let err = SingleField {
+        host: "db.local".to_owned(),
+    }
+    .build();
+    let help = core::error::request_value::<oopsie::HelpText>(&err);
+    assert!(
+        help.is_some(),
+        "provider path should yield interpolated help"
+    );
+    assert_eq!(&*help.unwrap(), "Retry connecting to db.local");
+}
+
+// ---- oopsie_error_code() stable accessor (static + dynamic code) ----
+//
+// `code = "..."` is a plain string with no interpolation. The stable
+// `oopsie_error_code()` accessor must surface it on stable toolchains; the
+// Provider API (`request_value::<ErrorCode>`) reaches parity on nightly.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum CodeAccessorError {
+    #[oopsie("static coded")]
+    #[oopsie(code = "test::code")]
+    StaticCode { msg: String },
+
+    #[oopsie("dynamic coded")]
+    #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from("dyn::code")))]
+    DynamicCode { msg: String },
+
+    #[oopsie("uncoded")]
+    NoCode { msg: String },
+}
+
+#[test]
+fn error_code_accessor_returns_static_code() {
+    use oopsie::Diagnostic as _;
+    let err = StaticCode {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    let code = err.oopsie_error_code();
+    assert!(code.is_some(), "static code should be accessible on stable");
+    assert_eq!(code.unwrap().as_str(), "test::code");
+}
+
+#[test]
+fn error_code_accessor_returns_none_when_absent() {
+    use oopsie::Diagnostic as _;
+    let err = NoCode {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    assert!(
+        err.oopsie_error_code().is_none(),
+        "variant without code should return None"
+    );
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn error_code_accessor_and_provider_agree() {
+    use oopsie::Diagnostic as _;
+    let err = StaticCode {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    let via_accessor = err.oopsie_error_code().expect("accessor yields code");
+    let via_provider =
+        core::error::request_value::<oopsie::ErrorCode>(&err).expect("provider yields code");
+    assert_eq!(via_accessor.as_str(), via_provider.as_str());
+    assert_eq!(via_accessor.as_str(), "test::code");
+}
+
+#[test]
+fn error_code_accessor_surfaces_dynamic_provide() {
+    use oopsie::Diagnostic as _;
+    let err = DynamicCode {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    // A variant-level `provide(ErrorCode => ...)` is also surfaced through the
+    // stable accessor (gen_error.rs folds it into the same `code_arms`).
+    let code = err.oopsie_error_code();
+    assert!(
+        code.is_some(),
+        "dynamic provide(ErrorCode) reaches accessor"
+    );
+    assert_eq!(code.unwrap().as_str(), "dyn::code");
+}
+
+#[test]
+fn error_code_renders_via_display_end_to_end() {
+    use oopsie::Diagnostic as _;
+    // End-to-end: a built error's code reaches the accessor and renders through
+    // `ErrorCode`'s Display, which is the surface `Report` uses for
+    // `Error[<code>]:`.
+    let err = StaticCode {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    let code = err.oopsie_error_code().expect("code present");
+    assert_eq!(format!("{code}"), "test::code");
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn error_code_dynamic_accessor_and_provider_agree() {
+    use oopsie::Diagnostic as _;
+    let err = DynamicCode {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    let via_accessor = err
+        .oopsie_error_code()
+        .expect("accessor yields dynamic code");
+    let via_provider =
+        core::error::request_value::<oopsie::ErrorCode>(&err).expect("provider yields code");
+    assert_eq!(via_accessor.as_str(), "dyn::code");
+    assert_eq!(via_accessor.as_str(), via_provider.as_str());
+}

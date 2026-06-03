@@ -9,7 +9,9 @@
 
 mod common;
 
-use erased_oopsie::ErasedError;
+use erased_oopsie::{
+    ErasedBacktrace, ErasedError, ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel,
+};
 use oopsie::oopsie;
 
 #[oopsie(traced)]
@@ -166,4 +168,187 @@ fn test_write_json_output_is_valid_json_with_expected_fields() {
         json["diagnostics"]["help"], "Try restarting the service",
         "JSON diagnostics.help should match oopsie help attribute"
     );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAP 46: ErasedFrame Display — name=Some, filename=None
+//
+// `ErasedBacktrace::frames` is private with no public frame-taking constructor,
+// but the type derives `Deserialize`, so an integration test reconstructs it
+// from JSON to exercise the `name = Some, filename = None` Display branch
+// (a name line, with no trailing `at` location line).
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_erased_frame_display_name_without_location() {
+    let json = serde_json::json!({
+        "frames": [
+            { "name": "my::func", "filename": null, "line": null, "column": null }
+        ]
+    });
+    let bt: ErasedBacktrace = serde_json::from_value(json).unwrap();
+    assert_eq!(bt.to_string(), "  1: my::func\n");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAP 47: Clone — explicit clone() assertions on the erased types.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_erased_error_clone() {
+    let original = ErasedError::from_error(common::make_error());
+    let cloned = original.clone();
+    assert_eq!(original.message, cloned.message);
+    assert_eq!(original.source_chain, cloned.source_chain);
+    assert_eq!(
+        original.diagnostics.code(),
+        cloned.diagnostics.code(),
+        "cloned diagnostics code must match"
+    );
+    assert_eq!(
+        original.diagnostics.help(),
+        cloned.diagnostics.help(),
+        "cloned diagnostics help must match"
+    );
+}
+
+#[test]
+fn test_erased_backtrace_clone() {
+    let json = serde_json::json!({
+        "frames": [
+            { "name": "frame::one", "filename": "src/lib.rs", "line": 10, "column": 2 }
+        ]
+    });
+    let original: ErasedBacktrace = serde_json::from_value(json).unwrap();
+    let cloned = original.clone();
+    assert_eq!(original.to_string(), cloned.to_string());
+    assert_eq!(original.frames().len(), cloned.frames().len());
+}
+
+#[test]
+fn test_erased_spantrace_and_span_and_metadata_clone() {
+    let json = serde_json::json!({
+        "spans": [{
+            "metadata": {
+                "name": "span", "target": "tgt", "level": "INFO",
+                "file": "src/lib.rs", "line": 7
+            },
+            "fields": "k=v"
+        }]
+    });
+    let spantrace: ErasedSpanTrace = serde_json::from_value(json).unwrap();
+    let cloned_spantrace = spantrace.clone();
+    assert_eq!(spantrace, cloned_spantrace);
+
+    let span: ErasedSpan = serde_json::from_value(serde_json::json!({
+        "metadata": { "name": "s", "target": "t", "level": "WARN" },
+        "fields": ""
+    }))
+    .unwrap();
+    let cloned_span = span.clone();
+    assert_eq!(span, cloned_span);
+
+    let metadata = cloned_span.metadata;
+    assert_eq!(span.metadata, metadata);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAP 48: PartialEq/Eq — direct equality assertions on the erased span types.
+// (Only the spantrace family derives PartialEq/Eq; ErasedError/ErasedBacktrace
+// do not, so they are excluded.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_erased_spantrace_partial_eq() {
+    let json = serde_json::json!({
+        "spans": [{
+            "metadata": { "name": "n", "target": "t", "level": "INFO" },
+            "fields": "a=1"
+        }]
+    });
+    let left: ErasedSpanTrace = serde_json::from_value(json.clone()).unwrap();
+    let right: ErasedSpanTrace = serde_json::from_value(json).unwrap();
+    assert_eq!(left, right, "identical spantraces must be equal");
+
+    let other: ErasedSpanTrace = serde_json::from_value(serde_json::json!({
+        "spans": [{
+            "metadata": { "name": "different", "target": "t", "level": "INFO" },
+            "fields": "a=1"
+        }]
+    }))
+    .unwrap();
+    assert_ne!(
+        left, other,
+        "spantraces differing in span name must be unequal"
+    );
+}
+
+#[test]
+fn test_erased_span_and_metadata_partial_eq() {
+    let make = |fields: &str| -> ErasedSpan {
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "n", "target": "t", "level": "DEBUG" },
+            "fields": fields
+        }))
+        .unwrap()
+    };
+    let a = make("x=1");
+    let b = make("x=1");
+    let c = make("x=2");
+    assert_eq!(a, b, "identical spans must be equal");
+    assert_ne!(a, c, "spans differing in fields must be unequal");
+
+    let meta_a: ErasedMetadata = serde_json::from_value(serde_json::json!({
+        "name": "m", "target": "t", "level": "ERROR"
+    }))
+    .unwrap();
+    let meta_b: ErasedMetadata = serde_json::from_value(serde_json::json!({
+        "name": "m", "target": "t", "level": "ERROR"
+    }))
+    .unwrap();
+    let meta_c: ErasedMetadata = serde_json::from_value(serde_json::json!({
+        "name": "m", "target": "t", "level": "WARN"
+    }))
+    .unwrap();
+    assert_eq!(meta_a, meta_b, "identical metadata must be equal");
+    assert_ne!(
+        meta_a, meta_c,
+        "metadata differing in level must be unequal"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAP 55: ErasedSpanTrace Display — empty spans vector renders the empty string.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_erased_spantrace_display_empty_spans() {
+    let spantrace: ErasedSpanTrace =
+        serde_json::from_value(serde_json::json!({ "spans": [] })).unwrap();
+    assert_eq!(spantrace.to_string(), "");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GAP 56: TracingLevel <-> tracing::Level — bidirectional mapping for all 5 levels.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_tracing_level_bidirectional_conversion() {
+    let cases = [
+        (TracingLevel::TRACE, tracing::Level::TRACE),
+        (TracingLevel::DEBUG, tracing::Level::DEBUG),
+        (TracingLevel::INFO, tracing::Level::INFO),
+        (TracingLevel::WARN, tracing::Level::WARN),
+        (TracingLevel::ERROR, tracing::Level::ERROR),
+    ];
+    for (erased, tracing_level) in cases {
+        let forward: tracing::Level = erased.into();
+        assert_eq!(forward, tracing_level, "TracingLevel -> tracing::Level");
+
+        let back = TracingLevel::from(&tracing_level);
+        assert_eq!(back, erased, "&tracing::Level -> TracingLevel");
+
+        let roundtrip = TracingLevel::from(&tracing::Level::from(erased));
+        assert_eq!(roundtrip, erased, "TracingLevel roundtrip must be identity");
+    }
 }

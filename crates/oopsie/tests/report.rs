@@ -9,9 +9,11 @@
 
 mod common;
 
+use std::fmt;
 use std::process::Termination as _;
 
-use oopsie::{Contextual as _, Report, oopsie};
+use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter, TraceTheme};
+use oopsie::{Contextual as _, Report, RustBacktrace, oopsie};
 
 #[oopsie(traced)]
 #[oopsie("Test error: {message}")]
@@ -301,4 +303,415 @@ fn test_with_colors_never_no_ansi() {
     assert!(output.contains("with_colors test"));
     // No ANSI escape codes when color is disabled
     assert!(!output.contains("\x1b["));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TracePrinter synthetic-backtrace tests (gaps 39, 41, 45)
+//
+// `TracePrinter::write_backtrace` takes a `&impl BacktraceProvider`, so a
+// hand-built provider lets us pin down rendering of frame shapes that a real
+// captured backtrace can't deterministically produce: a non-`None` column
+// number, and a frame list whose top/bottom the default filter actually trims
+// (yielding a non-zero hidden count).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// A `BacktraceProvider` over a fixed list of frames, so rendering is fully
+/// deterministic and independent of the real call stack.
+struct FixedFrames(Vec<BacktraceFrame>);
+
+impl BacktraceProvider for FixedFrames {
+    fn frames(&self) -> Vec<BacktraceFrame> {
+        self.0.iter().map(frame_clone).collect()
+    }
+}
+
+fn frame(name: &str, lineno: Option<u32>, colno: Option<u32>) -> BacktraceFrame {
+    BacktraceFrame {
+        name: Some(name.into()),
+        filename: Some(std::path::Path::new("src/lib.rs").into()),
+        lineno,
+        colno,
+    }
+}
+
+fn frame_clone(f: &BacktraceFrame) -> BacktraceFrame {
+    BacktraceFrame {
+        name: f.name.clone(),
+        filename: f.filename.clone(),
+        lineno: f.lineno,
+        colno: f.colno,
+    }
+}
+
+/// Adapts a `TracePrinter` + provider into a `Display` so we can drive the
+/// `fmt::Formatter`-based `write_backtrace` from a test and capture its output.
+struct RenderBacktrace<'a, P>(&'a TracePrinter, &'a P);
+
+impl<P: BacktraceProvider> fmt::Display for RenderBacktrace<'_, P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.write_backtrace(f, self.1)
+    }
+}
+
+fn render_backtrace<P: BacktraceProvider>(printer: &TracePrinter, provider: &P) -> String {
+    RenderBacktrace(printer, provider).to_string()
+}
+
+/// Gap 39: the default filter trims backtrace-capture frames off the top and
+/// runtime-init frames off the bottom; the trimmed count must surface as a
+/// "... N frames hidden ..." notice.
+#[test]
+fn test_backtrace_hidden_frame_count_message() {
+    // Two capture frames (top) + two app frames + one runtime frame (bottom).
+    // The default filter removes 3, leaving the 2 app frames.
+    let provider = FixedFrames(vec![
+        frame("std::backtrace_rs::backtrace::libunwind::trace", None, None),
+        frame("<std::backtrace::Backtrace>::create::inner", None, None),
+        frame("my_crate::function_a", Some(10), None),
+        frame("my_crate::function_b", Some(20), None),
+        frame("std::rt::lang_start_internal::invoke", None, None),
+    ]);
+
+    let printer = TracePrinter::new().plain();
+    let output = render_backtrace(&printer, &provider);
+
+    assert!(
+        output.contains("... 3 frames hidden ..."),
+        "expected hidden-frame notice with count 3, got:\n{output}"
+    );
+    assert!(output.contains("my_crate::function_a"));
+    assert!(output.contains("my_crate::function_b"));
+    assert!(
+        !output.contains("lang_start_internal"),
+        "runtime-init frame should be filtered out"
+    );
+}
+
+/// Gap 39 (negative): when nothing is trimmed the notice must not appear.
+#[test]
+fn test_backtrace_no_hidden_frames_no_message() {
+    let provider = FixedFrames(vec![
+        frame("my_crate::function_a", Some(10), None),
+        frame("my_crate::function_b", Some(20), None),
+    ]);
+
+    let printer = TracePrinter::new().plain();
+    let output = render_backtrace(&printer, &provider);
+
+    assert!(
+        !output.contains("frames hidden"),
+        "no frames were trimmed, so no notice should render, got:\n{output}"
+    );
+}
+
+/// Gap 41: a frame carrying a column number renders `:lineno:colno`.
+#[test]
+fn test_backtrace_frame_renders_colno() {
+    let provider = FixedFrames(vec![frame("my_crate::function_a", Some(42), Some(7))]);
+
+    let printer = TracePrinter::new().plain();
+    let output = render_backtrace(&printer, &provider);
+
+    assert!(
+        output.contains("src/lib.rs:42:7"),
+        "expected line:col `:42:7` in output, got:\n{output}"
+    );
+}
+
+/// Gap 41 (negative): with no column number only `:lineno` is rendered, never a
+/// trailing `:`.
+#[test]
+fn test_backtrace_frame_no_colno_renders_only_lineno() {
+    let provider = FixedFrames(vec![frame("my_crate::function_a", Some(42), None)]);
+
+    let printer = TracePrinter::new().plain();
+    let output = render_backtrace(&printer, &provider);
+
+    assert!(
+        output.contains("src/lib.rs:42"),
+        "expected `:42` in output, got:\n{output}"
+    );
+    assert!(
+        !output.contains("src/lib.rs:42:"),
+        "no column number means no trailing `:`, got:\n{output}"
+    );
+}
+
+/// Gap 45: `with_filter_and_theme` installs a fully custom filter (replacing the
+/// default), and the supplied theme is honored.
+#[test]
+fn test_trace_printer_with_filter_and_theme_custom_filter() {
+    let provider = FixedFrames(vec![
+        frame("keep::alpha", Some(1), None),
+        frame("drop::beta", Some(2), None),
+        frame("keep::gamma", Some(3), None),
+    ]);
+
+    // Custom filter: drop any frame whose name starts with "drop::".
+    let printer = TracePrinter::with_filter_and_theme(
+        |frames| {
+            frames.retain(|frame| {
+                frame
+                    .name
+                    .as_deref()
+                    .is_none_or(|name| !name.starts_with("drop::"))
+            });
+        },
+        TraceTheme::PLAIN,
+    );
+    let output = render_backtrace(&printer, &provider);
+
+    assert!(output.contains("keep::alpha"), "got:\n{output}");
+    assert!(output.contains("keep::gamma"), "got:\n{output}");
+    assert!(
+        !output.contains("drop::beta"),
+        "custom filter should remove `drop::beta`, got:\n{output}"
+    );
+    // One of three frames removed -> hidden notice with count 1.
+    assert!(output.contains("... 1 frames hidden ..."), "got:\n{output}");
+}
+
+/// Gap 45: `add_frame_filter` composes ON TOP of the existing filter — both the
+/// default (capture/runtime trimming) and the added predicate apply in sequence.
+#[test]
+fn test_trace_printer_add_frame_filter_composes() {
+    let provider = FixedFrames(vec![
+        frame("std::backtrace_rs::backtrace::libunwind::trace", None, None),
+        frame("keep::alpha", Some(1), None),
+        frame("drop::beta", Some(2), None),
+        frame("std::rt::lang_start_internal::invoke", None, None),
+    ]);
+
+    // Start from the default filter (which trims the capture + runtime frames),
+    // then add a second filter removing `drop::` frames.
+    let printer = TracePrinter::new().plain().add_frame_filter(|frames| {
+        frames.retain(|frame| {
+            frame
+                .name
+                .as_deref()
+                .is_none_or(|name| !name.starts_with("drop::"))
+        });
+    });
+    let output = render_backtrace(&printer, &provider);
+
+    assert!(output.contains("keep::alpha"), "got:\n{output}");
+    assert!(
+        !output.contains("libunwind"),
+        "default filter (under) should still trim capture frames, got:\n{output}"
+    );
+    assert!(
+        !output.contains("lang_start_internal"),
+        "default filter (under) should still trim runtime frames, got:\n{output}"
+    );
+    assert!(
+        !output.contains("drop::beta"),
+        "added filter (over) should remove `drop::beta`, got:\n{output}"
+    );
+    // 3 of 4 frames removed (2 by default filter, 1 by the added one).
+    assert!(output.contains("... 3 frames hidden ..."), "got:\n{output}");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RUST_BACKTRACE=full unfiltered rendering (gap 40)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Gap 40 (unit): `TracePrinter::unfiltered()` keeps every frame — including the
+/// backtrace-capture and runtime-init frames that `TracePrinter::new()` (the
+/// default filter) would trim — so it never emits a "frames hidden" notice.
+/// This is the deterministic counterpart to the integration test below, which
+/// cannot rely on a real captured stack matching the filter's prefixes.
+#[test]
+fn test_trace_printer_unfiltered_keeps_all_frames() {
+    let frames = vec![
+        frame("std::backtrace_rs::backtrace::libunwind::trace", None, None),
+        frame("my_crate::function_a", Some(10), None),
+        frame("std::rt::lang_start_internal::invoke", None, None),
+    ];
+
+    let unfiltered_out = render_backtrace(
+        &TracePrinter::unfiltered().plain(),
+        &FixedFrames(frames.iter().map(frame_clone).collect()),
+    );
+    let filtered_out = render_backtrace(
+        &TracePrinter::new().plain(),
+        &FixedFrames(frames.iter().map(frame_clone).collect()),
+    );
+
+    // Unfiltered keeps the capture + runtime frames the default filter removes.
+    assert!(
+        unfiltered_out.contains("libunwind"),
+        "got:\n{unfiltered_out}"
+    );
+    assert!(
+        unfiltered_out.contains("lang_start_internal"),
+        "got:\n{unfiltered_out}"
+    );
+    assert!(
+        !unfiltered_out.contains("frames hidden"),
+        "unfiltered must never report hidden frames, got:\n{unfiltered_out}"
+    );
+
+    // The default filter drops both, so it is strictly shorter and reports the
+    // hidden count.
+    assert!(!filtered_out.contains("libunwind"), "got:\n{filtered_out}");
+    assert!(
+        filtered_out.contains("... 2 frames hidden ..."),
+        "got:\n{filtered_out}"
+    );
+    assert!(unfiltered_out.len() > filtered_out.len());
+}
+
+/// Gap 40 (integration): with the effective backtrace setting forced to `Full`,
+/// `Report` routes through `TracePrinter::unfiltered()`, so its backtrace render
+/// never carries a "frames hidden" notice.
+///
+/// The override is thread-local (set via `set_rust_backtrace_override`), so this
+/// is safe under test parallelism; we restore `Enabled` before returning.
+///
+/// NOTE: we cannot assert "Full is longer than the filtered render" here. The
+/// default filter only trims frames whose names match its hardcoded
+/// capture/runtime prefixes, and under the nextest harness the real captured
+/// stack matches none of them (capture frames go through `oopsie_core`'s
+/// `Capturable`, and the bottom frames are the test-harness thread, not
+/// `main`/`lang_start`). So for a *real* error the filtered and unfiltered
+/// renders are identical — the length difference only shows on synthetic frames
+/// (see `test_trace_printer_unfiltered_keeps_all_frames`).
+#[test]
+fn test_report_backtrace_full_renders_without_hidden_notice() {
+    common::force_backtrace();
+
+    oopsie::set_rust_backtrace_override(RustBacktrace::Full);
+    let error = TestOopsie {
+        message: "full backtrace",
+    }
+    .build();
+    let output = Report::from_std(error).no_colors().to_string();
+    oopsie::set_rust_backtrace_override(RustBacktrace::Enabled);
+
+    assert!(
+        output.contains("BACKTRACE"),
+        "Full mode should still render a backtrace section, got:\n{output}"
+    );
+    assert!(
+        !output.contains("frames hidden"),
+        "unfiltered (Full) render must not emit a hidden-frames notice, got:\n{output}"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NO_COLOR / FORCE_COLOR honored in Report Auto mode (gaps 42, 43)
+//
+// CAVEAT: `ColorConfig::Auto` reads NO_COLOR / FORCE_COLOR exactly once and
+// caches the result in a process-global `OnceLock`. These tests therefore set
+// the env var as their FIRST action and rely on nextest running each test in
+// its OWN PROCESS (so the cache starts empty per test). Under a single-process
+// `cargo test` run they would be racy/order-dependent — run them via nextest.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Gap 42: with `NO_COLOR` set and no explicit color override, a `Report` in
+/// Auto mode must emit no ANSI escapes.
+#[test]
+#[expect(
+    unsafe_code,
+    reason = "env mutation is unsafe on edition 2024; isolated per-process by nextest"
+)]
+fn test_report_auto_no_color_env_suppresses_ansi() {
+    // SAFETY: set before any `Auto.should_colorize()` runs in this process; under
+    // nextest this test owns its process so nothing else has cached the result.
+    unsafe {
+        std::env::set_var("NO_COLOR", "1");
+        std::env::remove_var("FORCE_COLOR");
+    }
+
+    let error = TestOopsie {
+        message: "no_color test",
+    }
+    .build();
+    // No `.no_colors()` / `.force_colors()` — stays in Auto mode.
+    let output = Report::from_std(error).to_string();
+
+    assert!(
+        !output.contains('\u{1b}'),
+        "NO_COLOR set: Auto mode must suppress ANSI escapes, got: {output:?}"
+    );
+    assert!(output.contains("no_color test"));
+}
+
+/// Gap 43: with `FORCE_COLOR` set (and NO_COLOR absent), a `Report` in Auto mode
+/// must emit ANSI escapes even though the test's stderr is not a terminal.
+#[test]
+#[expect(
+    unsafe_code,
+    reason = "env mutation is unsafe on edition 2024; isolated per-process by nextest"
+)]
+fn test_report_auto_force_color_env_enables_ansi() {
+    common::force_backtrace();
+    // SAFETY: see `test_report_auto_no_color_env_suppresses_ansi`. NO_COLOR takes
+    // precedence over FORCE_COLOR, so it must be cleared for this to take effect.
+    unsafe {
+        std::env::remove_var("NO_COLOR");
+        std::env::set_var("FORCE_COLOR", "1");
+    }
+
+    let error = TestOopsie {
+        message: "force_color test",
+    }
+    .build();
+    let output = Report::from_std(error).to_string();
+
+    assert!(
+        output.contains('\u{1b}'),
+        "FORCE_COLOR set: Auto mode must emit ANSI escapes, got: {output:?}"
+    );
+    assert!(
+        strip_ansi(&output).contains("force_color test"),
+        "stripping ANSI must leave the rendered text intact"
+    );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Report FromResidual — `?` in a fn returning Report<E> (gap 44)
+// Requires the nightly `unstable-try-trait-v2` feature.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Gap 44: the `?` operator works directly in a function returning `Report<E>`
+/// via the `FromResidual` impl. An `Err` short-circuits into a `Report` carrying
+/// the error; an `Ok` flows through to the explicit return.
+#[cfg(feature = "unstable-try-trait-v2")]
+#[test]
+fn test_report_from_residual_question_mark() {
+    fn fallible(fail: bool) -> Result<u8, TestError> {
+        if fail {
+            TestOopsie {
+                message: "residual failure",
+            }
+            .fail()
+        } else {
+            Ok(7)
+        }
+    }
+
+    // `?` on an `Err` short-circuits the function, converting the residual into a
+    // `Report` via `FromResidual`.
+    fn run(fail: bool) -> Report<TestError> {
+        let value = fallible(fail)?;
+        assert_eq!(value, 7);
+        Report::ok()
+    }
+
+    common::force_backtrace();
+
+    let err_report = run(true);
+    assert!(err_report.error().is_some());
+    assert!(
+        err_report
+            .into_error()
+            .unwrap()
+            .to_string()
+            .contains("residual failure")
+    );
+
+    let ok_report = run(false);
+    assert!(ok_report.error().is_none());
+    assert!(ok_report.to_string().is_empty());
 }

@@ -1,4 +1,8 @@
 //! Shared helpers for oopsie integration tests.
+#![allow(
+    dead_code,
+    reason = "each integration-test binary compiles this module fresh and uses only a subset of the helpers"
+)]
 
 use oopsie::{ResultExt as _, oopsie};
 use tracing::instrument;

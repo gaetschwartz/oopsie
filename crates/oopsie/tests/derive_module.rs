@@ -84,3 +84,93 @@ fn module_false_no_wrapping() {
     assert!(matches!(err, FlatError::Internal));
     assert_eq!(err.to_string(), "internal");
 }
+
+// Test 4: Bare enum (no container `#[oopsie(...)]`) — enums default to an
+// auto-named module. `AppError` → strip "Error" → "App" → snake_case → "app"
+// → module `app_oopsies`.
+#[derive(Debug, Oopsie)]
+enum AppError {
+    #[oopsie("connection failed")]
+    Connect,
+
+    #[oopsie("disk full: {bytes}")]
+    DiskFull { bytes: u64 },
+}
+
+#[test]
+fn bare_enum_default_auto_module() {
+    let err = app_oopsies::Connect.build();
+    assert!(matches!(err, AppError::Connect));
+    assert_eq!(err.to_string(), "connection failed");
+
+    let err = app_oopsies::DiskFull { bytes: 4096u64 }.build();
+    assert!(matches!(err, AppError::DiskFull { bytes: 4096 }));
+    assert_eq!(err.to_string(), "disk full: 4096");
+}
+
+// Test 5: Enum literally named `Error` with module wrapping. The auto-naming
+// in gen_module.rs strips the "Error" suffix unconditionally (no non-empty
+// filter, unlike selector naming), leaving "". snake_case("") is "", which is
+// empty so no underscore is appended, and "oopsies" is pushed — the module is
+// named bare `oopsies` (not `_oopsies`).
+#[derive(Debug, Oopsie)]
+#[oopsie(module)]
+enum Error {
+    #[oopsie("generic error")]
+    Generic,
+
+    #[oopsie("specific: {what}")]
+    Specific { what: String },
+}
+
+#[test]
+fn enum_named_error_module_is_oopsies() {
+    let err = oopsies::Generic.build();
+    assert!(matches!(err, Error::Generic));
+    assert_eq!(err.to_string(), "generic error");
+
+    let err = oopsies::Specific { what: "boom" }.build();
+    assert!(matches!(err, Error::Specific { .. }));
+    assert_eq!(err.to_string(), "specific: boom");
+}
+
+// Test 6: Module wrapping combined with a variant-level `vis(...)` override.
+// The container default visibility is `pub(crate)`; only `PublicVariant`
+// overrides to `pub`. Both selectors live inside the `test_oopsies` module, so
+// the module wrapping still applies. `pub use` of the `pub` selector compiles
+// (it's genuinely `pub`); re-exporting a `pub(crate)` selector would be E0365.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(test_oopsies))]
+pub enum MixedModuleVisError {
+    #[oopsie("private variant")]
+    PrivateVariant { detail: String },
+
+    #[oopsie("public variant")]
+    #[oopsie(vis(pub))]
+    PublicVariant { code: i32 },
+}
+
+pub use test_oopsies::PublicVariant;
+
+#[test]
+fn module_wrapping_with_variant_vis_override() {
+    // Module wrapping applies to both selectors regardless of vis.
+    let err = test_oopsies::PrivateVariant { detail: "secret" }.build();
+    assert!(matches!(err, MixedModuleVisError::PrivateVariant { .. }));
+    assert_eq!(err.to_string(), "private variant");
+
+    // The `pub`-overridden selector is reachable both via the module path and
+    // via the crate-level `pub use` re-export above.
+    let err = test_oopsies::PublicVariant { code: 7i32 }.build();
+    assert!(matches!(
+        err,
+        MixedModuleVisError::PublicVariant { code: 7 }
+    ));
+    assert_eq!(err.to_string(), "public variant");
+
+    let err = PublicVariant { code: 42i32 }.build();
+    assert!(matches!(
+        err,
+        MixedModuleVisError::PublicVariant { code: 42 }
+    ));
+}

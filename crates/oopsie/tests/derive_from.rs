@@ -111,3 +111,74 @@ fn source_auto_detected() {
     let src = err.source().expect("should have a source");
     assert_eq!(src.to_string(), "timed out");
 }
+
+// ====================================================================
+// Struct-form equivalents of the enum tests above. The struct derive
+// shares CategorizedFields::from_fields with the enum derive, so the
+// same `from` / `from(Type, transform)` / auto-box source semantics
+// apply — but on the struct selector (default suffix `Oopsie`, with a
+// trailing `Error` stripped from the base name).
+// ====================================================================
+
+// ---- Gap 13: struct #[oopsie(from)] on non-"source"-named field ----
+
+#[derive(Debug, Oopsie)]
+struct DynamicSourceError {
+    #[oopsie(from)]
+    inner: io::Error,
+    context: String,
+}
+
+#[test]
+fn struct_from_marks_non_source_field() {
+    let io_err = io::Error::new(io::ErrorKind::BrokenPipe, "pipe broke");
+    // Selector is `DynamicSourceOopsie` ("Error" stripped, `Oopsie` suffix).
+    // `inner` is the marked source, so it is NOT a selector user-field; only
+    // `context` is, and it takes the source via `build_error`.
+    let err: DynamicSourceError = DynamicSourceOopsie {
+        context: "while syncing".to_owned(),
+    }
+    .build_error(io_err);
+    assert_eq!(err.context, "while syncing");
+    let src = err.source().expect("should have a source");
+    assert_eq!(src.to_string(), "pipe broke");
+}
+
+// ---- Gap 14: struct #[oopsie(from(Type, transform))] ----
+
+#[derive(Debug, Oopsie)]
+#[oopsie("struct transform: {source}")]
+struct StructTransformError {
+    #[oopsie(from(io::Error, Box::new))]
+    source: Box<io::Error>,
+}
+
+#[test]
+fn struct_from_with_transform() {
+    let io_err = io::Error::new(io::ErrorKind::NotFound, "not found");
+    // The selector's `build_error` accepts the pre-transform `io::Error` and
+    // applies `Box::new` internally.
+    let err: StructTransformError = StructTransformOopsie.build_error(io_err);
+    assert_eq!(err.to_string(), "struct transform: not found");
+    let src = err.source().expect("should have a source");
+    assert_eq!(src.to_string(), "not found");
+}
+
+// ---- Gap 15: struct auto-boxed Box<Concrete> source field ----
+
+#[derive(Debug, Oopsie)]
+#[oopsie("struct auto-box: {source}")]
+struct StructAutoBoxError {
+    source: Box<io::Error>,
+}
+
+#[test]
+fn struct_auto_box_source() {
+    let io_err = io::Error::new(io::ErrorKind::PermissionDenied, "denied");
+    // Auto-box: the field is `Box<io::Error>` (T: Sized), so the selector
+    // accepts the unwrapped `io::Error` and boxes it internally.
+    let err: StructAutoBoxError = StructAutoBoxOopsie.build_error(io_err);
+    assert_eq!(err.to_string(), "struct auto-box: denied");
+    let src = err.source().expect("should have a source");
+    assert_eq!(src.to_string(), "denied");
+}

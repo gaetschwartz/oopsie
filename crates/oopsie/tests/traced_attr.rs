@@ -166,9 +166,19 @@ pub enum BacktraceOnlyError {
 
 #[test]
 fn traced_explicit_backtrace_only() {
-    // Only backtrace should be injected, not spantrace
+    // Bare `#[oopsie(backtrace)]` must behave identically to the nested
+    // `#[oopsie(traced(backtrace))]` form: backtrace injected, spantrace NOT.
+    use oopsie::Diagnostic as _;
     let err = backtrace_only_oopsies::BtOnly { msg: "test" }.build();
     assert_eq!(err.to_string(), "bt only");
+    assert!(
+        err.oopsie_backtrace().is_some(),
+        "bare backtrace form must inject a backtrace"
+    );
+    assert!(
+        err.oopsie_spantrace().is_none(),
+        "bare backtrace form must NOT inject a spantrace"
+    );
 }
 
 // ---- Test 10: explicit override — spantrace only ----
@@ -339,4 +349,208 @@ fn wrong_typed_backtrace_field_is_ordinary_and_real_backtrace_injected() {
     assert_both_traces(&e);
     // The user's same-named field is untouched (not treated as a backtrace).
     assert_eq!(e.backtrace, "external textual backtrace");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Timestamp injection (gaps 1, 32, 36)
+//
+// Findings characterized by these tests:
+// * `#[oopsie(traced(timestamp))]` injects a `__oopsie_timestamp` field. Unlike
+//   backtrace/spantrace it is NOT auto-captured — it appears on the context
+//   selector and the caller supplies the value. Default type is
+//   `std::time::SystemTime`.
+// * Bare `#[oopsie(timestamp)]` is the explicit-override form: it injects ONLY
+//   the timestamp; backtrace/spantrace are NOT injected (the diagnostic
+//   accessors return `None`).
+// * `timestamp(chrono = true)` swaps the field type to
+//   `::chrono::DateTime<::chrono::Local>` — this requires `chrono` to be a
+//   dependency of the consuming crate (here: a dev-dependency of `oopsie`).
+//   The leading `::` means the field references the crate-root `chrono`.
+// * `chrono` and `provide` are opt-in: an omitted flag inside a `timestamp(...)`
+//   block stays disabled. `timestamp(provide = true)` surfaces the timestamp
+//   through the `Provider` API (queryable via `request_value::<SystemTime>()`).
+// ════════════════════════════════════════════════════════════════════════
+
+// gap 32 / 36: nested `traced(timestamp)` — default SystemTime field.
+#[oopsie(traced(timestamp))]
+pub enum TimestampError {
+    #[oopsie("ts: {info}")]
+    Boom { info: String },
+}
+
+#[test]
+fn timestamp_nested_injects_systemtime_field() {
+    let now = std::time::SystemTime::now();
+    let e = timestamp_oopsies::Boom {
+        info: "x".to_owned(),
+        __oopsie_timestamp: now,
+    }
+    .build();
+    assert_eq!(e.to_string(), "ts: x");
+    let TimestampError::Boom {
+        __oopsie_timestamp, ..
+    } = &e;
+    // Field is concretely `SystemTime` and round-trips the supplied value.
+    let stored: &std::time::SystemTime = __oopsie_timestamp;
+    assert_eq!(*stored, now);
+}
+
+// gap 36: bare `#[oopsie(timestamp)]` — explicit-override form, timestamp ONLY.
+#[oopsie(timestamp)]
+pub enum BareTimestampError {
+    #[oopsie("bare ts")]
+    Boom { info: String },
+}
+
+#[test]
+fn timestamp_bare_form_injects_only_timestamp() {
+    use oopsie::Diagnostic as _;
+    let now = std::time::SystemTime::now();
+    let e = bare_timestamp_oopsies::Boom {
+        info: "x".to_owned(),
+        __oopsie_timestamp: now,
+    }
+    .build();
+    let BareTimestampError::Boom {
+        __oopsie_timestamp, ..
+    } = &e;
+    let _: &std::time::SystemTime = __oopsie_timestamp;
+    // Explicit-override model: naming timestamp disables the default traces.
+    assert!(
+        e.oopsie_backtrace().is_none(),
+        "bare timestamp must not inject a backtrace"
+    );
+    assert!(
+        e.oopsie_spantrace().is_none(),
+        "bare timestamp must not inject a spantrace"
+    );
+}
+
+// gap 1 / 32: `timestamp(chrono = true)` swaps the field type to chrono's
+// DateTime<Local>. `provide` stays off (opt-in), so no extra deps are required.
+#[oopsie(traced(timestamp(chrono = true)))]
+pub enum ChronoTimestampError {
+    #[oopsie("chrono ts")]
+    Boom { info: String },
+}
+
+#[test]
+fn timestamp_chrono_flag_swaps_field_type_to_datetime_local() {
+    let dt = chrono::Local::now();
+    let e = chrono_timestamp_oopsies::Boom {
+        info: "x".to_owned(),
+        __oopsie_timestamp: dt,
+    }
+    .build();
+    assert_eq!(e.to_string(), "chrono ts");
+    let ChronoTimestampError::Boom {
+        __oopsie_timestamp, ..
+    } = &e;
+    // The field type is concretely `chrono::DateTime<chrono::Local>`; assigning
+    // it to that binding fails to compile if the macro chose any other type.
+    let stored: &chrono::DateTime<chrono::Local> = __oopsie_timestamp;
+    assert_eq!(*stored, dt);
+}
+
+// gap 1 / 36: `timestamp(provide = true)` surfaces the injected timestamp through
+// the Provider API. Previously unusable (the config emitted a bare
+// `#[oopsie(provide)]` the parser rejected); now it emits a real
+// `provide(SystemTime => *field)`.
+#[oopsie(traced(timestamp(provide = true)))]
+pub enum ProvidedTimestampError {
+    #[oopsie("provided ts")]
+    Boom { info: String },
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn timestamp_provide_surfaces_via_provider_api() {
+    let now = std::time::SystemTime::now();
+    let e = provided_timestamp_oopsies::Boom {
+        info: "x".to_owned(),
+        __oopsie_timestamp: now,
+    }
+    .build();
+    let got = core::error::request_value::<std::time::SystemTime>(&e);
+    assert_eq!(
+        got,
+        Some(now),
+        "timestamp must be queryable via the provider API"
+    );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Custom backtrace/spantrace type override (gap 33)
+//
+// Findings:
+// * `backtrace(r#type = Path)` injects `Path` as the field type. Constraints
+//   discovered: (a) the override's last path segment must be literally
+//   `Backtrace` (the injector tags the field `#[oopsie(backtrace)]`, whose
+//   field-type validation requires that segment name); (b) the type must
+//   implement `Capturable` AND `Borrow<oopsie::Backtrace>` (the generated
+//   Diagnostic accessor borrows it as `&oopsie::Backtrace`); (c) it must be
+//   inline (`boxed = false` on the trace) — `Box<Custom>` only borrows to
+//   `Custom`, not to `oopsie::Backtrace`, so a boxed custom type won't compile.
+// ════════════════════════════════════════════════════════════════════════
+
+mod custom_trace {
+    use std::borrow::Borrow;
+
+    #[derive(Debug)]
+    #[expect(
+        unnameable_types,
+        reason = "pub fixture type in a private module: referenced by the generated pub Diagnostic accessor but not nameable at pub"
+    )]
+    pub struct Backtrace {
+        pub inner: oopsie::Backtrace,
+        pub tag: u32,
+    }
+
+    impl oopsie::Capturable for Backtrace {
+        fn capture() -> Self {
+            Self {
+                inner: oopsie::Capturable::capture(),
+                tag: 0xC0FFEE,
+            }
+        }
+    }
+
+    impl Borrow<oopsie::Backtrace> for Backtrace {
+        fn borrow(&self) -> &oopsie::Backtrace {
+            &self.inner
+        }
+    }
+}
+
+#[oopsie(traced(
+    packed = false,
+    backtrace(r#type = custom_trace::Backtrace, boxed = false),
+    spantrace(boxed = false)
+))]
+pub enum CustomBacktraceError {
+    #[oopsie("custom bt: {info}")]
+    Boom { info: String },
+}
+
+#[test]
+fn custom_backtrace_type_is_injected_and_captured() {
+    use oopsie::Diagnostic as _;
+    let e = custom_backtrace_oopsies::Boom {
+        info: "x".to_owned(),
+    }
+    .build();
+
+    let CustomBacktraceError::Boom {
+        __oopsie_backtrace, ..
+    } = &e;
+    // The injected field is the custom newtype, not `oopsie::Backtrace`. Binding
+    // to `&custom_trace::Backtrace` only typechecks if the override took effect,
+    // and the tag proves our `Capturable::capture` ran.
+    let bt: &custom_trace::Backtrace = __oopsie_backtrace;
+    assert_eq!(bt.tag, 0xC0FFEE);
+
+    // The custom type still satisfies the Diagnostic accessor via Borrow, and
+    // the separately-listed spantrace is injected normally.
+    assert!(e.oopsie_backtrace().is_some());
+    assert!(e.oopsie_spantrace().is_some());
 }

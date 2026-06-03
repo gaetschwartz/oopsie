@@ -70,6 +70,10 @@ mod container_vis {
 
     #[derive(Debug, Oopsie)]
     #[oopsie(vis(pub), module(false), suffix)]
+    #[expect(
+        unnameable_types,
+        reason = "pub enum in a private module: deliberately reachable via the re-exported pub selector but not nameable at pub"
+    )]
     pub enum WidgetError {
         #[oopsie("boom: {value}")]
         Boom { value: u32 },
@@ -95,6 +99,10 @@ mod variant_vis {
 
     #[derive(Debug, Oopsie)]
     #[oopsie(module(false), suffix)]
+    #[expect(
+        unnameable_types,
+        reason = "pub enum in a private module: deliberately reachable via the re-exported pub selector but not nameable at pub"
+    )]
     pub enum MixedError {
         #[oopsie("loud: {n}")]
         #[oopsie(vis(pub))]
@@ -110,4 +118,49 @@ pub use variant_vis::LoudOopsie;
 fn variant_vis_pub_overrides_container_default() {
     let err = LoudOopsie { n: 3u32 }.build();
     assert!(matches!(err, variant_vis::MixedError::Loud { n: 3 }));
+}
+
+// ---- Test 6: variant literally named `Error`, suffix stripping (no suffix) ----
+//
+// `selector_name` strips a trailing "Error" only when the remainder is
+// non-empty (`.filter(|s| !s.is_empty())`). For a variant named exactly
+// `Error`, stripping would leave "", which the filter rejects, so the base
+// `"Error"` is kept. With no suffix (enum default), the selector struct is
+// named `Error` — identical to the variant name, not an empty ident.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum NestedSuffixError {
+    #[oopsie("error variant: {detail}")]
+    Error { detail: String },
+}
+
+#[test]
+fn variant_named_error_keeps_name_without_suffix() {
+    let err = Error {
+        detail: "kaboom".to_owned(),
+    }
+    .build();
+    assert_eq!(err.to_string(), "error variant: kaboom");
+    assert!(matches!(err, NestedSuffixError::Error { detail } if detail == "kaboom"));
+}
+
+// ---- Test 7: variant named `Error` with a custom suffix appended ----
+//
+// Same base preservation as above, but with a suffix the selector becomes
+// base + suffix = `Error` + `Oopsie` = `ErrorOopsie` (the "Error" is not
+// stripped because stripping it would empty the base).
+
+#[derive(Debug, Oopsie)]
+#[oopsie(suffix, module(false))]
+enum SuffixedErrorVariant {
+    #[oopsie("suffixed error: {code}")]
+    Error { code: i32 },
+}
+
+#[test]
+fn variant_named_error_with_suffix_appends() {
+    let err = ErrorOopsie { code: 13i32 }.build();
+    assert!(matches!(err, SuffixedErrorVariant::Error { code: 13 }));
+    assert_eq!(err.to_string(), "suffixed error: 13");
 }

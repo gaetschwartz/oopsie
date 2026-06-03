@@ -187,3 +187,117 @@ fn leaf_selector_build_error_no_source() {
     let err: AppError = NotFound { path: "x" }.build_error(NoSource);
     assert!(matches!(err, AppError::NotFound { path } if path == "x"));
 }
+
+// ---- Gap 10: selector fields accept any `Into<field_ty>`, not just &str -> String ----
+
+/// Wrapper carrying a custom `From<Meters> for u16` so we can confirm the
+/// selector's `__T: Into<field_ty>` bound accepts user-defined conversions.
+struct Meters(u16);
+
+impl From<Meters> for u16 {
+    fn from(m: Meters) -> Self {
+        m.0
+    }
+}
+
+/// Wrapper with a custom `From<HostName> for String` (distinct from the stdlib
+/// `&str -> String` path already exercised by `selector_into_bounds`).
+struct HostName(&'static str);
+
+impl From<HostName> for String {
+    fn from(h: HostName) -> Self {
+        format!("host::{}", h.0)
+    }
+}
+
+#[test]
+fn selector_accepts_custom_into_impls() {
+    // `Config { host: String, port: u16 }` — pass custom wrapper types whose
+    // `From` impls feed the generated `Into<String>` / `Into<u16>` bounds.
+    let err = Config {
+        host: HostName("db"),
+        port: Meters(443),
+    }
+    .build();
+    match &err {
+        AppError::Config { host, port } => {
+            assert_eq!(host, "host::db");
+            assert_eq!(*port, 443);
+        }
+        other => panic!("expected Config, got {other:?}"),
+    }
+}
+
+// ---- Gap 12: generated selector struct derives Debug, Copy, Clone ----
+// gen_selectors.rs:127,133 emit `#[derive(Debug, Copy, Clone)]` on every selector
+// (both unit and field-bearing). Copy IS derived, so a move-after-use compiles.
+
+#[test]
+fn selector_derives_debug_clone_copy() {
+    // Unit selector (Timeout: source-only variant -> unit struct).
+    let unit = Timeout;
+    assert_eq!(format!("{unit:?}"), "Timeout");
+    let unit_clone = unit.clone();
+    // Copy: using `unit` after the `let unit2 = unit` move below must still compile.
+    let unit2 = unit;
+    let _ = unit;
+    assert_eq!(format!("{unit2:?}"), "Timeout");
+    assert_eq!(format!("{unit_clone:?}"), "Timeout");
+
+    // Field-bearing selector. Debug output includes the field name and value.
+    let sel = NotFound { path: "/tmp/x" };
+    let dbg = format!("{sel:?}");
+    assert!(dbg.contains("NotFound"), "debug was {dbg:?}");
+    assert!(dbg.contains("/tmp/x"), "debug was {dbg:?}");
+
+    let sel_clone = sel.clone();
+    // Copy: build() consumes by value yet `sel` remains usable afterwards.
+    let e1 = sel.build();
+    let e2 = sel.build();
+    assert!(matches!(e1, AppError::NotFound { .. }));
+    assert!(matches!(e2, AppError::NotFound { .. }));
+
+    let e3 = sel_clone.build();
+    assert!(matches!(e3, AppError::NotFound { .. }));
+}
+
+// ---- Gap 51: selector struct fields are `pub` ----
+// gen_selectors.rs:114 unconditionally emits `pub #field_ident`. Visibility is
+// observable by reading/destructuring the field through a struct-literal-built
+// selector instance, and across a module boundary.
+
+mod external {
+    use super::{AppError, Config};
+    use oopsie::Contextual as _;
+
+    /// If `host`/`port` were private, this function (in a child module) could
+    /// neither construct nor read those fields.
+    pub fn build_via_pub_fields() -> AppError {
+        let sel = Config {
+            host: "remote",
+            port: 9000u16,
+        };
+        // Read pub fields back out before consuming the selector.
+        assert_eq!(sel.host, "remote");
+        assert_eq!(sel.port, 9000u16);
+        sel.build()
+    }
+}
+
+#[test]
+fn selector_fields_are_pub() {
+    let sel = NotFound { path: "visible" };
+    // Direct field read — only compiles if `path` is `pub`.
+    let p: &str = sel.path;
+    assert_eq!(p, "visible");
+
+    // Destructuring a pub field.
+    let NotFound { path } = NotFound {
+        path: "destructured",
+    };
+    assert_eq!(path, "destructured");
+
+    // Field access works from a separate module too.
+    let err = external::build_via_pub_fields();
+    assert!(matches!(err, AppError::Config { .. }));
+}

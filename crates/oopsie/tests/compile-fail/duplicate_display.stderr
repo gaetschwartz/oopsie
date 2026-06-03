@@ -1,0 +1,5 @@
+error: duplicate display: short form and `display(...)` cannot both be specified
+ --> tests/compile-fail/duplicate_display.rs:8:14
+  |
+8 |     #[oopsie("short form")]
+  |              ^^^^^^^^^^^^
