@@ -68,9 +68,12 @@ impl FieldInjectorConfig {
         } else {
             parse_quote! { ::std::time::SystemTime }
         };
-        let timestamp_provide_attr = resolved
-            .timestamp_provide()
-            .then(|| quote! { #[oopsie(provide)] });
+        // Surface the injected timestamp through the `Provider` API by value
+        // (both `SystemTime` and `chrono::DateTime` are `Copy`). The field is
+        // bound by reference in the generated `provide` arm, hence the deref.
+        let timestamp_provide_attr = resolved.timestamp_provide().then(|| {
+            quote! { #[oopsie(provide(#timestamp_type => *#timestamp_ident))] }
+        });
         let backtrace_attrs = quote! { #[oopsie(backtrace)] };
         let spantrace_attrs = quote! { #[oopsie(spantrace)] };
         let traces_attrs = quote! { #[oopsie(traces)] };
@@ -176,5 +179,62 @@ mod tests {
         let s = cfg.traces_type.to_token_stream().to_string();
         assert!(s.contains("MyBt"), "{s}");
         assert!(s.contains("SpanTrace"), "{s}");
+    }
+
+    // ── timestamp field type & provide attr codegen (gaps 1, 32, 36) ──
+
+    #[test]
+    fn timestamp_default_type_is_system_time() {
+        // Bare `timestamp` (no settings block) → SystemTime, no provide.
+        let cfg = config_for(&parse_quote!(traced(timestamp)));
+        let s = cfg.timestamp_type.to_token_stream().to_string();
+        assert!(s.contains("SystemTime"), "{s}");
+        assert!(!s.contains("DateTime"), "{s}");
+        assert!(cfg.timestamp_provide_attr.is_none());
+    }
+
+    #[test]
+    fn timestamp_chrono_type_is_datetime_local() {
+        // `chrono` is opt-in and independent of `provide`.
+        let cfg = config_for(&parse_quote!(traced(timestamp(chrono = true))));
+        let s = cfg.timestamp_type.to_token_stream().to_string();
+        // Leading `::` keeps the field independent of a local `chrono` binding.
+        assert!(s.contains("chrono"), "{s}");
+        assert!(s.contains("DateTime"), "{s}");
+        assert!(s.contains("Local"), "{s}");
+        assert!(
+            cfg.timestamp_provide_attr.is_none(),
+            "provide is opt-in: {s}"
+        );
+    }
+
+    #[test]
+    fn timestamp_provide_omitted_emits_no_attr() {
+        let cfg = config_for(&parse_quote!(traced(timestamp(chrono = true))));
+        assert!(cfg.timestamp_provide_attr.is_none());
+    }
+
+    #[test]
+    fn timestamp_provide_emits_valid_provide_attr() {
+        // `provide = true` emits a real `provide(Type => expr)` attr — NOT a bare
+        // `#[oopsie(provide)]`, which the provide parser rejects.
+        let cfg = config_for(&parse_quote!(traced(timestamp(provide = true))));
+        let attr = cfg
+            .timestamp_provide_attr
+            .expect("provide = true emits an attr");
+        let s = attr.to_token_stream().to_string();
+        assert!(s.contains("oopsie") && s.contains("provide"), "{s}");
+        assert!(
+            s.contains("=>"),
+            "must be the valid `Type => expr` form: {s}"
+        );
+        assert!(
+            s.contains("SystemTime"),
+            "provides the timestamp's type: {s}"
+        );
+        assert!(
+            s.contains("__oopsie_timestamp"),
+            "references the field: {s}"
+        );
     }
 }

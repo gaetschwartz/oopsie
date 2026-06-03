@@ -259,9 +259,23 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                     Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from_static(#fmt)),
                 });
             } else {
+                // The format args may reference variant fields by name, so bind
+                // them in the pattern (mirroring the `display` arm).
+                let help_field_names: Vec<&syn::Ident> = match &variant.fields {
+                    syn::Fields::Named(f) => {
+                        f.named.iter().filter_map(|f| f.ident.as_ref()).collect()
+                    }
+                    syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
+                };
+                let help_pattern = if help_field_names.is_empty() {
+                    quote! { Self::#variant_ident { .. } }
+                } else {
+                    quote! { Self::#variant_ident { #(#help_field_names),*, .. } }
+                };
                 help_arms.push(quote! {
                     #(#cfg_attrs)*
-                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*))),
+                    #[allow(unused_variables)]
+                    #help_pattern => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*))),
                 });
             }
         }

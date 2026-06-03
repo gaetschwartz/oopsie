@@ -149,8 +149,10 @@ pub struct TraceSettings {
 
 #[derive(Debug, darling::FromMeta)]
 pub struct TimestampSettings {
-    pub chrono: BetterFlag<true>,
-    pub provide: BetterFlag<true>,
+    // Opt-in: an omitted flag inside a `timestamp(...)` block stays disabled, so
+    // `timestamp(chrono = true)` does not silently also enable `provide`.
+    pub chrono: BetterFlag<false>,
+    pub provide: BetterFlag<false>,
 }
 
 #[derive(Debug, darling::FromMeta)]
@@ -252,5 +254,82 @@ mod tests {
         let a = args(&parse_quote!(traced(boxed = false)));
         let r = a.resolve();
         r.validate(proc_macro2::Span::call_site()).unwrap();
+    }
+
+    // ── timestamp parsing & flag resolution (gaps 1, 32, 36) ──────────
+
+    #[test]
+    fn default_mode_disables_timestamp() {
+        // Bare `traced()` enables backtrace+spantrace but NOT timestamp.
+        let a = args_list(parse_quote!(traced()));
+        let r = a.resolve();
+        assert!(!r.timestamp);
+        assert!(r.backtrace && r.spantrace);
+    }
+
+    #[test]
+    fn bare_timestamp_enables_only_timestamp() {
+        // Explicit-override model: naming timestamp turns the traces OFF.
+        let a = args(&parse_quote!(traced(timestamp)));
+        let r = a.resolve();
+        assert!(r.timestamp);
+        assert!(!r.backtrace);
+        assert!(!r.spantrace);
+    }
+
+    #[test]
+    fn timestamp_chrono_flag_parses() {
+        let a = args(&parse_quote!(traced(timestamp(
+            chrono = true,
+            provide = false
+        ))));
+        let r = a.resolve();
+        assert!(r.timestamp);
+        assert!(r.timestamp_chrono());
+    }
+
+    #[test]
+    fn bare_timestamp_chrono_resolves_false() {
+        // The bare `timestamp` path (no settings list) has no `opt_settings`, so
+        // both sub-flags resolve to false: default field type is `SystemTime`.
+        let a = args(&parse_quote!(traced(timestamp)));
+        let r = a.resolve();
+        assert!(r.timestamp);
+        assert!(!r.timestamp_chrono());
+        assert!(!r.timestamp_provide());
+    }
+
+    #[test]
+    fn timestamp_chrono_defaults_to_disabled_inside_settings_block() {
+        // Opt-in: `chrono` omitted inside a settings block stays disabled, so
+        // `timestamp(provide = true)` alone keeps the `SystemTime` field type.
+        let a = args(&parse_quote!(traced(timestamp(provide = true))));
+        let r = a.resolve();
+        assert!(!r.timestamp_chrono());
+        assert!(r.timestamp_provide());
+    }
+
+    #[test]
+    fn timestamp_chrono_false_inside_settings_block() {
+        let a = args(&parse_quote!(traced(timestamp(chrono = false))));
+        let r = a.resolve();
+        assert!(!r.timestamp_chrono());
+    }
+
+    #[test]
+    fn timestamp_provide_flag_defaults_to_disabled() {
+        // Opt-in: `provide` omitted stays disabled, so `timestamp(chrono = true)`
+        // does not emit a provide attr.
+        let a = args(&parse_quote!(traced(timestamp(chrono = true))));
+        let r = a.resolve();
+        assert!(!r.timestamp_provide(), "provide is opt-in when omitted");
+        assert!(r.timestamp_chrono());
+    }
+
+    #[test]
+    fn timestamp_provide_true_resolves_enabled() {
+        let a = args(&parse_quote!(traced(timestamp(provide = true))));
+        let r = a.resolve();
+        assert!(r.timestamp_provide());
     }
 }
