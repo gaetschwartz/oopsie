@@ -1,7 +1,7 @@
 //! Error trait impl generation for `#[derive(Oopsie)]`.
 
 use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::{DeriveInput, Type};
 
 use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr, StructAttrs, VariantAttrs};
@@ -58,6 +58,11 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         unreachable!()
     };
 
+    // Mangled `provide` parameter: the arm destructures every field name (so
+    // provide exprs can reference fields), which would shadow a parameter named
+    // `request` if a user field is also named `request`.
+    let req = format_ident!("__request");
+
     let mut source_arms = Vec::new();
     let mut provide_arms = Vec::new();
 
@@ -102,34 +107,34 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         if let Some(source_field) = &categorized.source {
             let source_ident = &source_field.ident;
             provide_stmts.push(quote! {
-                ::core::error::Error::provide(#source_ident.as_error_source(), request);
+                ::core::error::Error::provide(#source_ident.as_error_source(), #req);
             });
         }
 
         // Provide from field-level provide attrs
         for (_field_ident, provide_attr) in &categorized.provides {
-            provide_stmts.push(gen_provide_call(provide_attr));
+            provide_stmts.push(gen_provide_call(provide_attr, &req));
         }
 
         // Provide backtrace/spantrace refs from detected fields
         if let Some(tf) = &categorized.traces_field {
             provide_stmts.push(quote! {
-                request.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
+                #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
             });
             provide_stmts.push(quote! {
-                request.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
+                #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
             });
         } else {
             if let Some(bt_field) = &categorized.backtrace_field {
                 provide_stmts.push(quote! {
-                    request.provide_ref::<#oopsie_path::Backtrace>(
+                    #req.provide_ref::<#oopsie_path::Backtrace>(
                         ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
                     );
                 });
             }
             if let Some(st_field) = &categorized.spantrace_field {
                 provide_stmts.push(quote! {
-                    request.provide_ref::<#oopsie_path::SpanTrace>(
+                    #req.provide_ref::<#oopsie_path::SpanTrace>(
                         ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
                     );
                 });
@@ -138,16 +143,16 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
 
         // Provide from variant-level provide attrs (including auto error code from trace injection)
         for provide_attr in &variant_attrs.provides {
-            provide_stmts.push(gen_provide_call(provide_attr));
+            provide_stmts.push(gen_provide_call(provide_attr, &req));
         }
 
         // Provide from help/code in VariantAttrs
         if let Some(help) = &variant_attrs.help {
-            provide_stmts.push(gen_help_provide(help, oopsie_path));
+            provide_stmts.push(gen_help_provide(help, oopsie_path, &req));
         }
         if let Some(code) = &variant_attrs.code {
             provide_stmts.push(quote! {
-                request.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#code));
+                #req.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#code));
             });
         }
 
@@ -287,7 +292,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         } else {
             quote! {
                 #[allow(unused_variables)]
-                fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
+                fn provide<'__a>(&'__a self, #req: &mut ::core::error::Request<'__a>) {
                     use #oopsie_path::AsErrorSource as _;
                     match self {
                         #(#provide_arms)*
@@ -398,6 +403,10 @@ pub fn gen_struct_error(
     let categorized = CategorizedFields::from_fields(&data.fields)?;
     let variant_attrs = attrs;
 
+    // Mangled `provide` parameter (see `gen_enum_error`): the destructure binds
+    // every field name, which would shadow a parameter named `request`.
+    let req = format_ident!("__request");
+
     let source_body = if let Some(source_field) = &categorized.source {
         let source_ident = &source_field.ident;
         quote! {
@@ -417,34 +426,34 @@ pub fn gen_struct_error(
     if let Some(source_field) = &categorized.source {
         let source_ident = &source_field.ident;
         provide_stmts.push(quote! {
-            ::core::error::Error::provide(#source_ident.as_error_source(), request);
+            ::core::error::Error::provide(#source_ident.as_error_source(), #req);
         });
     }
 
     // Field-level provides
     for (_field_ident, provide_attr) in &categorized.provides {
-        provide_stmts.push(gen_provide_call(provide_attr));
+        provide_stmts.push(gen_provide_call(provide_attr, &req));
     }
 
     // Provide backtrace/spantrace refs from detected fields
     if let Some(tf) = &categorized.traces_field {
         provide_stmts.push(quote! {
-            request.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
+            #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
         });
         provide_stmts.push(quote! {
-            request.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
+            #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
         });
     } else {
         if let Some(bt_field) = &categorized.backtrace_field {
             provide_stmts.push(quote! {
-                request.provide_ref::<#oopsie_path::Backtrace>(
+                #req.provide_ref::<#oopsie_path::Backtrace>(
                     ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
                 );
             });
         }
         if let Some(st_field) = &categorized.spantrace_field {
             provide_stmts.push(quote! {
-                request.provide_ref::<#oopsie_path::SpanTrace>(
+                #req.provide_ref::<#oopsie_path::SpanTrace>(
                     ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
                 );
             });
@@ -453,16 +462,16 @@ pub fn gen_struct_error(
 
     // Struct-level provides (from #[oopsie(provide(...))] on the struct)
     for provide_attr in &attrs.provides {
-        provide_stmts.push(gen_provide_call(provide_attr));
+        provide_stmts.push(gen_provide_call(provide_attr, &req));
     }
 
     // Help/code from VariantAttrs (user-specified via #[oopsie(help = "...", code = "...")])
     if let Some(help) = &variant_attrs.help {
-        provide_stmts.push(gen_help_provide(help, oopsie_path));
+        provide_stmts.push(gen_help_provide(help, oopsie_path, &req));
     }
     if let Some(code) = &variant_attrs.code {
         provide_stmts.push(quote! {
-            request.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#code));
+            #req.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#code));
         });
     }
 
@@ -480,7 +489,7 @@ pub fn gen_struct_error(
         } else {
             quote! {
                 #[allow(unused_variables)]
-                fn provide<'__a>(&'__a self, request: &mut ::core::error::Request<'__a>) {
+                fn provide<'__a>(&'__a self, #req: &mut ::core::error::Request<'__a>) {
                     use #oopsie_path::AsErrorSource as _;
                     #destructure
                     #(#provide_stmts)*
@@ -610,27 +619,27 @@ pub fn gen_struct_error(
     })
 }
 
-fn gen_help_provide(help: &DisplayAttr, oopsie_path: &syn::Path) -> TokenStream2 {
+fn gen_help_provide(help: &DisplayAttr, oopsie_path: &syn::Path, req: &syn::Ident) -> TokenStream2 {
     let fmt = &help.format_str;
     let args = &help.args;
     if args.is_empty() {
         quote! {
-            request.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from_static(#fmt));
+            #req.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from_static(#fmt));
         }
     } else {
         quote! {
-            request.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*)));
+            #req.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*)));
         }
     }
 }
 
-fn gen_provide_call(attr: &ProvideAttr) -> TokenStream2 {
+fn gen_provide_call(attr: &ProvideAttr, req: &syn::Ident) -> TokenStream2 {
     let ty = &attr.provided_type;
     let expr = &attr.expr;
     if attr.is_ref() {
-        quote! { request.provide_ref_with::<#ty>(|| #expr); }
+        quote! { #req.provide_ref_with::<#ty>(|| #expr); }
     } else {
-        quote! { request.provide_value_with::<#ty>(|| #expr); }
+        quote! { #req.provide_value_with::<#ty>(|| #expr); }
     }
 }
 

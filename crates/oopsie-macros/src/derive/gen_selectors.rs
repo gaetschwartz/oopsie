@@ -71,8 +71,10 @@ pub fn gen_enum_selectors(
                     impl #ty_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics {
                         #[track_caller]
                         fn from(source: #param_ty) -> Self {
-                            #body_assign
+                            // Capture probes borrow `&source` before
+                            // `body_assign` moves it into the renamed field.
                             #(#auto_inits)*
+                            #body_assign
                             #enum_ident::#variant_ident {
                                 #source_ident,
                                 #(#user_inits)*
@@ -227,8 +229,10 @@ pub fn gen_struct_selector(
                 impl ::core::convert::From<#param_ty> for #struct_ident {
                     #[track_caller]
                     fn from(source: #param_ty) -> Self {
-                        #body_assign
+                        // Capture probes borrow `&source` before `body_assign`
+                        // moves it into the renamed field.
                         #(#auto_inits)*
+                        #body_assign
                         Self { #source_ident, #(#auto_names,)* }
                     }
                 }
@@ -405,8 +409,12 @@ fn gen_build_error(
 
             #[track_caller]
             fn build_error(self, source: Self::Source) -> #enum_ident {
-                #source_assign
+                // Capture probes borrow `&source`, so they must run before
+                // `source_assign` moves `source` into the (possibly renamed)
+                // field. They also see the pre-transform value, preserving the
+                // source's own trace.
                 #(#auto_inits)*
+                #source_assign
                 #enum_ident::#variant_ident {
                     #(#user_inits,)*
                     #source_ident,
@@ -525,8 +533,10 @@ fn gen_build_error_struct(
 
             #[track_caller]
             fn build_error(self, source: Self::Source) -> #struct_ident {
-                #source_assign
+                // Capture probes borrow `&source` before `source_assign` moves
+                // it (see the enum path).
                 #(#auto_inits)*
+                #source_assign
                 #struct_ident {
                     #(#user_inits,)*
                     #source_ident,

@@ -1,7 +1,7 @@
 //! Display impl generation for `#[derive(Oopsie)]`.
 
 use proc_macro2::TokenStream as TokenStream2;
-use quote::quote;
+use quote::{format_ident, quote};
 use syn::DeriveInput;
 
 use super::parse::{DisplayAttr, StructAttrs, VariantAttrs};
@@ -14,6 +14,11 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let syn::Data::Enum(data) = &input.data else {
         unreachable!()
     };
+
+    // Mangled formatter binding: the destructure binds every field name (so the
+    // format string can interpolate `{field}`), which would shadow a `Formatter`
+    // parameter named `f` if a user field is also named `f`.
+    let fmtr = format_ident!("__oopsie_f");
 
     let mut arms = Vec::new();
     for variant in &data.variants {
@@ -41,11 +46,11 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
         };
 
         let write_call = if let Some(display) = &variant_attrs.display {
-            gen_write_call(display)
+            gen_write_call(display, &fmtr)
         } else {
             // Default: use variant name as display string
             let name = variant_ident.to_string();
-            quote! { ::core::write!(f, #name) }
+            quote! { ::core::write!(#fmtr, #name) }
         };
 
         arms.push(quote! {
@@ -56,7 +61,7 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     Ok(quote! {
         impl #impl_generics ::core::fmt::Display for #enum_ident #ty_generics #where_clause {
-            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+            fn fmt(&self, #fmtr: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 match self {
                     #(#arms)*
                 }
@@ -90,16 +95,20 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> TokenStre
         }
     };
 
+    // See `gen_enum_display`: the field destructure would shadow a `Formatter`
+    // parameter named `f` when a user field is also named `f`.
+    let fmtr = format_ident!("__oopsie_f");
+
     let write_call = if let Some(display) = &variant_attrs.display {
-        gen_write_call(display)
+        gen_write_call(display, &fmtr)
     } else {
         let name = struct_ident.to_string();
-        quote! { ::core::write!(f, #name) }
+        quote! { ::core::write!(#fmtr, #name) }
     };
 
     quote! {
         impl #impl_generics ::core::fmt::Display for #struct_ident #ty_generics #where_clause {
-            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+            fn fmt(&self, #fmtr: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 #destructure
                 #write_call
             }
@@ -107,12 +116,12 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> TokenStre
     }
 }
 
-fn gen_write_call(display: &DisplayAttr) -> TokenStream2 {
+fn gen_write_call(display: &DisplayAttr, fmtr: &syn::Ident) -> TokenStream2 {
     let fmt = &display.format_str;
     let args = &display.args;
     if args.is_empty() {
-        quote! { ::core::write!(f, #fmt) }
+        quote! { ::core::write!(#fmtr, #fmt) }
     } else {
-        quote! { ::core::write!(f, #fmt, #(#args),*) }
+        quote! { ::core::write!(#fmtr, #fmt, #(#args),*) }
     }
 }

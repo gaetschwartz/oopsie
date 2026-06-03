@@ -126,6 +126,13 @@ fn expand_struct(
     })
 }
 
+/// Whether a derive path names `ident` in its final segment, so qualified
+/// spellings (`::core::fmt::Debug`, `oopsie::Oopsie`) are recognized the same as
+/// the bare ident. `is_ident` only matches single-segment paths.
+fn derive_path_is(path: &syn::Path, ident: &str) -> bool {
+    path.segments.last().is_some_and(|seg| seg.ident == ident)
+}
+
 /// Adjust the `#[derive(...)]` attributes on an item:
 /// - Remove `Oopsie` (the attr macro handles code generation itself).
 /// - Ensure `Debug` is present (required by `std::error::Error`).
@@ -151,10 +158,10 @@ fn fix_derives(attrs: &mut Vec<syn::Attribute>) {
 
         let filtered: Vec<syn::Path> = paths
             .into_iter()
-            .filter(|p| !p.is_ident("Oopsie"))
+            .filter(|p| !derive_path_is(p, "Oopsie"))
             .collect();
 
-        has_debug = has_debug || filtered.iter().any(|p| p.is_ident("Debug"));
+        has_debug = has_debug || filtered.iter().any(|p| derive_path_is(p, "Debug"));
 
         if !filtered.is_empty() {
             new_attrs.push(syn::parse_quote! { #[derive(#(#filtered),*)] });
@@ -281,6 +288,50 @@ mod tests {
         assert!(
             !output.contains("core :: fmt :: Debug"),
             "fix_derives should not inject extra Debug when already present:\n{output}"
+        );
+    }
+
+    #[test]
+    fn qualified_debug_not_duplicated() {
+        let result = expand(
+            quote! {},
+            quote! {
+                #[derive(::core::fmt::Debug, Clone)]
+                pub enum AppError {
+                    #[oopsie("Fail")]
+                    Fail,
+                }
+            },
+        );
+        let output = result.unwrap().to_string();
+        // The user already qualified Debug; `fix_derives` must recognize it and
+        // NOT inject a second `::core::fmt::Debug` (which would be a duplicate
+        // impl). Only the user's qualified path should remain.
+        assert_eq!(
+            output.matches("core :: fmt :: Debug").count(),
+            1,
+            "qualified Debug must not be duplicated:\n{output}"
+        );
+    }
+
+    #[test]
+    fn qualified_oopsie_stripped() {
+        let result = expand(
+            quote! {},
+            quote! {
+                #[derive(oopsie::Oopsie)]
+                pub enum AppError {
+                    #[oopsie("Fail")]
+                    Fail,
+                }
+            },
+        );
+        let output = result.unwrap().to_string();
+        // The attr macro generates the impls itself, so a qualified
+        // `oopsie::Oopsie` derive must be stripped from the emitted item.
+        assert!(
+            !output.contains("oopsie :: Oopsie"),
+            "qualified Oopsie derive should be stripped:\n{output}"
         );
     }
 
