@@ -352,3 +352,36 @@ fn test_tracing_level_bidirectional_conversion() {
         assert_eq!(roundtrip, erased, "TracingLevel roundtrip must be identity");
     }
 }
+
+// Regression (amber-lattice C4): `from_error_ref` eagerly walks `Error::source()`
+// with `successors(...).collect()`. A user `source()` that returns itself (or an
+// ancestor) is a cycle the std `Error` contract does not forbid, so the walk must
+// be bounded — otherwise this serialization-facing API hangs / OOMs on a single
+// ill-behaved foreign error.
+#[test]
+fn from_error_ref_terminates_on_cyclic_source() {
+    use oopsie::Diagnostic;
+    use std::error::Error;
+    use std::fmt;
+
+    #[derive(Debug)]
+    struct Cyclic;
+    impl fmt::Display for Cyclic {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("cyclic")
+        }
+    }
+    impl Error for Cyclic {
+        fn source(&self) -> Option<&(dyn Error + 'static)> {
+            Some(self)
+        }
+    }
+    impl Diagnostic for Cyclic {}
+
+    let erased = ErasedError::from_error_ref(&Cyclic);
+    assert!(
+        erased.source_chain.len() <= 256,
+        "source chain must be bounded on a cyclic source(), got {}",
+        erased.source_chain.len()
+    );
+}

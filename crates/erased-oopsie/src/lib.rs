@@ -17,6 +17,10 @@ use serde::{Deserialize, Serialize};
 
 use oopsie_core::{ErrorCode, HelpText};
 
+/// Upper bound on the source chain length collected by `from_error_ref`, to
+/// keep a cyclic or pathologically deep `Error::source()` chain from hanging.
+const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
+
 /// A serializable, cloneable error representation that preserves the full
 /// error context including backtrace, spantrace, and source chain.
 ///
@@ -93,7 +97,12 @@ impl ErasedError {
     pub fn from_error_ref<E: oopsie_core::Diagnostic>(err: &E) -> Self {
         let message = err.to_string().into();
 
+        // `Error::source` is user-implemented and may form a cycle (returning
+        // `self` or an ancestor); the std contract does not forbid it. Cap the
+        // eager walk so a foreign cyclic chain can't hang or OOM this
+        // serialization entry point.
         let source_chain = std::iter::successors(err.source(), |e| e.source())
+            .take(MAX_SOURCE_CHAIN_DEPTH)
             .map(ToString::to_string)
             .map(Box::from)
             .collect();
