@@ -214,23 +214,21 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
+    // Locks derive codegen for a transparent variant as a user actually writes
+    // it. Trace surfacing through a transparent, trace-injected wrapper runs the
+    // full inject→derive pipeline and is covered by the `traced_transparent`
+    // test in `oopsie/tests/derive_transparent.rs` — a derive-only unit test
+    // can only fake post-injection fields, which drifts from real inject output.
     #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn test_derive_enum_with_transparent() {
         let input = quote! {
-            #[oopsie(module(error_with_span_trace_oopsies))]
+            #[oopsie(module(transparent_wrapper_oopsies))]
             #[oopsie(vis(pub(crate)))]
             #[oopsie(path = "crate")]
-            pub enum ErrorWithSpanTrace {
+            pub enum TransparentWrapper {
                 #[oopsie(display("Inner error happened"), transparent)]
-                #[oopsie(provide(ref, crate::Backtrace => __oopsie_backtrace.as_ref()))]
-                Inner {
-                    source: ErrorWithSpanTraceInner,
-                    #[oopsie(capture)]
-                    __oopsie_backtrace: ::std::boxed::Box<crate::Backtrace>,
-                    #[oopsie(capture)]
-                    __oopsie_spantrace: ::std::boxed::Box<crate::SpanTrace>,
-                },
+                Inner { source: InnerError },
             }
         };
         let output = expand(input).unwrap().to_string();

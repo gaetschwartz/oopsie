@@ -79,3 +79,57 @@ fn mixed_transparent_and_regular() {
     assert!(matches!(err, MixedError::Custom { .. }));
     assert_eq!(err.to_string(), "custom: bad thing");
 }
+
+// Real-macro coverage for the stable diagnostic accessors on a transparent,
+// trace-injected wrapper. Uses the actual `#[oopsie(traced)]` attribute macro
+// (inject → derive) rather than a hand-written post-injection shape, so it
+// cannot drift from what injection emits.
+#[cfg(feature = "unstable-error-generic-member-access")]
+mod traced_transparent {
+    use oopsie::Diagnostic as _;
+
+    #[oopsie::oopsie(traced)]
+    pub enum Leaf {
+        #[oopsie("leaf boom: {detail}")]
+        Boom { detail: String },
+    }
+
+    #[oopsie::oopsie(traced)]
+    pub enum Wrapper {
+        #[oopsie(display("wrapper around leaf"), transparent)]
+        Around { source: Leaf },
+    }
+
+    // A transparent traced wrapper forwards to its source first in `provide()`,
+    // so the deepest (leaf) trace fills the slot. The stable accessor must agree.
+    #[test]
+    fn transparent_traced_stable_matches_provider_deepest() {
+        use leaf_oopsies::Boom;
+
+        let leaf = Boom { detail: "x" }.build();
+        let outer: Wrapper = Wrapper::from(leaf);
+
+        let bt_provide = core::error::request_ref::<oopsie::Backtrace>(&outer)
+            .expect("provider path yields a backtrace");
+        let st_provide = core::error::request_ref::<oopsie::SpanTrace>(&outer)
+            .expect("provider path yields a span trace");
+
+        let bt_stable = outer
+            .oopsie_backtrace()
+            .expect("stable accessor yields a backtrace");
+        let st_stable = outer
+            .oopsie_spantrace()
+            .expect("stable accessor yields a span trace");
+
+        assert!(
+            std::ptr::eq(bt_provide, bt_stable),
+            "transparent traced wrapper: stable oopsie_backtrace() must surface the same \
+             deepest backtrace as the provider API"
+        );
+        assert!(
+            std::ptr::eq(st_provide, st_stable),
+            "transparent traced wrapper: stable oopsie_spantrace() must surface the same \
+             deepest span trace as the provider API"
+        );
+    }
+}

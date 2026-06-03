@@ -342,6 +342,44 @@ fn nested_attr_macro_backtrace_propagated() {
     );
 }
 
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn stable_accessor_surfaces_deepest_trace() {
+    use attr_inner_oopsies::Boom;
+    use attr_outer_oopsies::Wrapper;
+    use oopsie::Diagnostic as _;
+
+    let inner = Boom { msg: "deep" }.build();
+    let outer: AttrOuterError = Wrapper { ctx: "shallow" }.build_error(inner);
+
+    // The unstable provider path walks source-first under std's first-wins
+    // `Request`, so it surfaces the deepest (inner, origin-most) trace.
+    let bt_provide = core::error::request_ref::<oopsie::Backtrace>(&outer)
+        .expect("provider path yields a backtrace");
+    let st_provide = core::error::request_ref::<oopsie::SpanTrace>(&outer)
+        .expect("provider path yields a span trace");
+
+    // The stable accessor must agree: the same deepest trace, not the outer
+    // wrapper's shallow wrap-site one. Pointer identity proves we surfaced the
+    // very same `Backtrace`/`SpanTrace` the provider path filled the slot with.
+    let bt_stable = outer
+        .oopsie_backtrace()
+        .expect("stable accessor yields a backtrace");
+    let st_stable = outer
+        .oopsie_spantrace()
+        .expect("stable accessor yields a span trace");
+
+    assert!(
+        std::ptr::eq(bt_provide, bt_stable),
+        "oopsie_backtrace() must surface the same deepest backtrace as the provider API, \
+         not the outer wrapper's wrap-site one"
+    );
+    assert!(
+        std::ptr::eq(st_provide, st_stable),
+        "oopsie_spantrace() must surface the same deepest span trace as the provider API"
+    );
+}
+
 // ---- Bug fix: help/code with bare #[derive(Oopsie)] using = syntax ----
 
 #[derive(Debug, Oopsie)]

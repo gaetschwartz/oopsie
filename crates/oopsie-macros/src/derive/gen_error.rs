@@ -6,6 +6,49 @@ use syn::{DeriveInput, Type};
 
 use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr, StructAttrs, VariantAttrs};
 
+/// Build the body of a `oopsie_backtrace`/`oopsie_spantrace` accessor that
+/// surfaces the deepest available trace: prefer the source's (origin-most)
+/// trace, falling back to this layer's own field. This mirrors the source-first
+/// ordering of the generated `provide()` (plus std's first-wins `Request`) so
+/// the stable accessor and the provider path return the same trace. Without the
+/// `unstable-error-generic-member-access` feature `source_trace` yields `None`,
+/// so the body degrades to the own field. Returns `None` when the layer has
+/// neither a source nor an own trace.
+fn trace_accessor_body(
+    own: Option<TokenStream2>,
+    source_access: Option<TokenStream2>,
+    trace_ty: &TokenStream2,
+    oopsie_path: &syn::Path,
+) -> Option<TokenStream2> {
+    match (own, source_access) {
+        (Some(own), Some(src)) => Some(quote! {
+            #oopsie_path::__private::source_trace::<#trace_ty>(#src)
+                .or(::core::option::Option::Some(#own))
+        }),
+        (Some(own), None) => Some(quote! { ::core::option::Option::Some(#own) }),
+        (None, Some(src)) => Some(quote! {
+            #oopsie_path::__private::source_trace::<#trace_ty>(#src)
+        }),
+        (None, None) => None,
+    }
+}
+
+/// Idents an accessor match arm must bind: the own-trace field and/or the
+/// source field, in that order.
+fn accessor_pattern_binds(
+    own: Option<&syn::Ident>,
+    source: Option<&syn::Ident>,
+) -> Vec<syn::Ident> {
+    let mut binds = Vec::new();
+    if let Some(own) = own {
+        binds.push(own.clone());
+    }
+    if let Some(source) = source {
+        binds.push(source.clone());
+    }
+    binds
+}
+
 /// Generate `std::error::Error` impl for an enum.
 pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Result<TokenStream2> {
     let enum_ident = &input.ident;
@@ -23,6 +66,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
     let mut st_arms = Vec::new();
     let mut code_arms = Vec::new();
     let mut help_arms = Vec::new();
+    let mut accessor_uses_source = false;
 
     for variant in &data.variants {
         let variant_ident = &variant.ident;
@@ -131,34 +175,53 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
 
         // ── Diagnostic arms ──
 
+        let source_ident = categorized.source.as_ref().map(|s| &s.ident);
+        let src_access = source_ident.map(|s| quote! { #s.as_error_source() });
+        let bt_ty = quote! { #oopsie_path::Backtrace };
+        let st_ty = quote! { #oopsie_path::SpanTrace };
+
         // Backtrace
-        if let Some(tf) = &categorized.traces_field {
-            bt_arms.push(quote! {
-                #(#cfg_attrs)*
-                Self::#variant_ident { #tf, .. } => ::core::option::Option::Some(&#tf.0),
-            });
+        let (bt_own, bt_bind) = if let Some(tf) = &categorized.traces_field {
+            (Some(quote! { &#tf.0 }), Some(tf))
         } else if let Some(bt_field) = &categorized.backtrace_field {
+            (
+                Some(quote! {
+                    ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
+                }),
+                Some(bt_field),
+            )
+        } else {
+            (None, None)
+        };
+        if let Some(body) = trace_accessor_body(bt_own, src_access.clone(), &bt_ty, oopsie_path) {
+            let binds = accessor_pattern_binds(bt_bind, source_ident);
             bt_arms.push(quote! {
                 #(#cfg_attrs)*
-                Self::#variant_ident { #bt_field, .. } => ::core::option::Option::Some(
-                    ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
-                ),
+                Self::#variant_ident { #(#binds,)* .. } => #body,
             });
+            accessor_uses_source |= source_ident.is_some();
         }
 
         // Spantrace
-        if let Some(tf) = &categorized.traces_field {
-            st_arms.push(quote! {
-                #(#cfg_attrs)*
-                Self::#variant_ident { #tf, .. } => ::core::option::Option::Some(&#tf.1),
-            });
+        let (st_own, st_bind) = if let Some(tf) = &categorized.traces_field {
+            (Some(quote! { &#tf.1 }), Some(tf))
         } else if let Some(st_field) = &categorized.spantrace_field {
+            (
+                Some(quote! {
+                    ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
+                }),
+                Some(st_field),
+            )
+        } else {
+            (None, None)
+        };
+        if let Some(body) = trace_accessor_body(st_own, src_access.clone(), &st_ty, oopsie_path) {
+            let binds = accessor_pattern_binds(st_bind, source_ident);
             st_arms.push(quote! {
                 #(#cfg_attrs)*
-                Self::#variant_ident { #st_field, .. } => ::core::option::Option::Some(
-                    ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
-                ),
+                Self::#variant_ident { #(#binds,)* .. } => #body,
             });
+            accessor_uses_source |= source_ident.is_some();
         }
 
         // Error code: check for user-specified code first, then auto-generated from provide attrs
@@ -219,12 +282,20 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             }
         };
 
+    // Bring `as_error_source` into scope for arms that descend into a source.
+    let accessor_use_aes = if accessor_uses_source {
+        quote! { use #oopsie_path::AsErrorSource as _; }
+    } else {
+        quote! {}
+    };
+
     // Generate Diagnostic methods
     let bt_method = if bt_arms.is_empty() {
         quote! {}
     } else {
         quote! {
             fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
+                #accessor_use_aes
                 match self {
                     #(#bt_arms)*
                     _ => ::core::option::Option::None,
@@ -238,6 +309,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
     } else {
         quote! {
             fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
+                #accessor_use_aes
                 match self {
                     #(#st_arms)*
                     _ => ::core::option::Option::None,
@@ -404,40 +476,53 @@ pub fn gen_struct_error(
 
     // ── Diagnostic impl for struct ──
 
-    let bt_method = if let Some(tf) = &categorized.traces_field {
-        quote! {
-            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
-                ::core::option::Option::Some(&self.#tf.0)
-            }
-        }
-    } else if let Some(bt_field) = &categorized.backtrace_field {
-        quote! {
-            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
-                ::core::option::Option::Some(
-                    ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(&self.#bt_field)
-                )
-            }
-        }
+    let struct_source = categorized.source.as_ref().map(|s| &s.ident);
+    let struct_src_access = struct_source.map(|s| quote! { self.#s.as_error_source() });
+    let struct_use_aes = if struct_source.is_some() {
+        quote! { use #oopsie_path::AsErrorSource as _; }
     } else {
         quote! {}
     };
+    let bt_ty = quote! { #oopsie_path::Backtrace };
+    let st_ty = quote! { #oopsie_path::SpanTrace };
 
-    let st_method = if let Some(tf) = &categorized.traces_field {
-        quote! {
-            fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
-                ::core::option::Option::Some(&self.#tf.1)
-            }
-        }
-    } else if let Some(st_field) = &categorized.spantrace_field {
-        quote! {
-            fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
-                ::core::option::Option::Some(
-                    ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(&self.#st_field)
-                )
-            }
-        }
+    let bt_own = if let Some(tf) = &categorized.traces_field {
+        Some(quote! { &self.#tf.0 })
     } else {
-        quote! {}
+        categorized.backtrace_field.as_ref().map(|bt_field| {
+            quote! {
+                ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(&self.#bt_field)
+            }
+        })
+    };
+    let bt_method =
+        match trace_accessor_body(bt_own, struct_src_access.clone(), &bt_ty, oopsie_path) {
+            Some(body) => quote! {
+                fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
+                    #struct_use_aes
+                    #body
+                }
+            },
+            None => quote! {},
+        };
+
+    let st_own = if let Some(tf) = &categorized.traces_field {
+        Some(quote! { &self.#tf.1 })
+    } else {
+        categorized.spantrace_field.as_ref().map(|st_field| {
+            quote! {
+                ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(&self.#st_field)
+            }
+        })
+    };
+    let st_method = match trace_accessor_body(st_own, struct_src_access, &st_ty, oopsie_path) {
+        Some(body) => quote! {
+            fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
+                #struct_use_aes
+                #body
+            }
+        },
+        None => quote! {},
     };
 
     let code_method = if let Some(code) = &variant_attrs.code {

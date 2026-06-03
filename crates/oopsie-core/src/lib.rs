@@ -65,6 +65,33 @@ pub mod __private {
             C::capture()
         }
     }
+
+    /// Pull the deepest `T` reachable from a source error via the Provider API.
+    ///
+    /// The generated `provide()` forwards to the source before providing its
+    /// own trace, and std's `Request` is first-wins, so the deepest provider in
+    /// the chain fills the slot — this surfaces the origin-most trace rather
+    /// than a wrap-site one. Derived stable accessors call this on their source
+    /// so they agree with the provider path.
+    ///
+    /// Returns `None` without `unstable-error-generic-member-access`: descending
+    /// into a type-erased `dyn Error` source is not portable there, and the
+    /// caller falls back to the wrapper's own field.
+    #[inline]
+    #[must_use]
+    pub fn source_trace<'a, T: 'static>(
+        source: &'a (dyn std::error::Error + 'static),
+    ) -> Option<&'a T> {
+        #[cfg(feature = "unstable-error-generic-member-access")]
+        {
+            core::error::request_ref::<T>(source)
+        }
+        #[cfg(not(feature = "unstable-error-generic-member-access"))]
+        {
+            let _ = source;
+            None
+        }
+    }
 }
 
 pub use spantrace::{OptionalSpanTrace, SpanTrace};

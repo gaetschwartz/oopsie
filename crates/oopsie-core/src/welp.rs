@@ -205,15 +205,7 @@ impl Diagnostic for Welp {
 /// Without the unstable Provider API there is no portable way to do this, so
 /// the trace is genuinely unavailable and we return `None`.
 fn source_request_ref<T: 'static>(source: &BoxError) -> Option<&T> {
-    #[cfg(feature = "unstable-error-generic-member-access")]
-    {
-        core::error::request_ref::<T>(&**source)
-    }
-    #[cfg(not(feature = "unstable-error-generic-member-access"))]
-    {
-        _ = source; // silence unused variable warning
-        None
-    }
+    crate::__private::source_trace::<T>(&**source)
 }
 
 /// Extension trait on [`Result`] for attaching a string message that produces
