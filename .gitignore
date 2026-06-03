@@ -3,3 +3,13 @@ mutants.out*/
 .worktrees/
 docs/.local/
 profile.json.gz
+# audit outputs — only final reports and cross-run summaries are committed
+.gaetan/outputs/audit/**
+!.gaetan/outputs/audit/
+!.gaetan/outputs/audit/*/
+!.gaetan/outputs/audit/*/run-*/
+!.gaetan/outputs/audit/*/run-*/FINAL-REPORT.md
+!.gaetan/outputs/audit/*/CROSS-RUN-SUMMARY.md
+
+# sealed directory — never committed
+.gaetan/sealed/**
