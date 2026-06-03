@@ -512,7 +512,7 @@ impl FieldAttrs {
     /// Parse `#[oopsie(...)]` on a field, then apply name/type-based
     /// auto-detection on top:
     /// - field named `source` → `from = Yes` (unless attrs already set `from`)
-    /// - field named `backtrace`/`back_trace`/`spantrace`/`span_trace`
+    /// - field whose type is a backtrace/spantrace/packed-traces type
     ///   → `capture = true`
     /// - `backtrace` / `spantrace` flags imply `capture = true`
     /// - source field whose type is `Box<T>` (non-trait-object) auto-upgrades
@@ -535,12 +535,12 @@ impl FieldAttrs {
             result.from = SourceKind::Yes;
         }
 
-        // Auto-capture for trace fields by name.
-        if let Some(ident) = &field.ident
-            && (ident == "backtrace"
-                || ident == "back_trace"
-                || ident == "spantrace"
-                || ident == "span_trace")
+        // Auto-capture for trace fields, detected by type. A field merely
+        // *named* `backtrace`/`spantrace` of an unrelated type is an ordinary
+        // field, not auto-captured.
+        if crate::traced::field_detect::is_backtrace_type(&field.ty)
+            || crate::traced::field_detect::is_spantrace_type(&field.ty)
+            || crate::traced::field_detect::is_traces_type(&field.ty)
         {
             result.capture = true;
         }
@@ -551,7 +551,10 @@ impl FieldAttrs {
         // `from(T, transform)` already sets `Transformed` and takes precedence.
         if matches!(result.from, SourceKind::Yes)
             && let Some(inner) = crate::traced::field_detect::extract_boxed_inner(&field.ty)
-            && !matches!(inner, syn::Type::TraitObject(_))
+            && !matches!(
+                crate::traced::field_detect::peel_groups(inner),
+                syn::Type::TraitObject(_)
+            )
         {
             result.from = SourceKind::Transformed {
                 source_type: Box::new(inner.clone()),
@@ -907,6 +910,62 @@ mod tests {
         assert!(categorized.traces_field.is_some());
         assert!(categorized.auto_fields.iter().any(|f| f.ident == "t"));
     }
+
+    #[test]
+    fn categorize_ignores_wrongly_typed_trace_named_fields() {
+        // A field merely *named* `backtrace`/`spantrace`/`traces` of an
+        // unrelated type is an ordinary field, never a trace field.
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { backtrace: String, spantrace: u32, traces: Vec<String> }
+        };
+        let categorized = CategorizedFields::from_fields(&item.fields).unwrap();
+        assert!(categorized.backtrace_field.is_none());
+        assert!(categorized.spantrace_field.is_none());
+        assert!(categorized.traces_field.is_none());
+        // Left untouched as ordinary (non-captured) user fields.
+        for name in ["backtrace", "spantrace", "traces"] {
+            assert!(categorized.user_fields.iter().any(|f| f.ident == name));
+            assert!(!categorized.auto_fields.iter().any(|f| f.ident == name));
+        }
+    }
+
+    #[test]
+    fn categorize_classifies_trace_fields_by_type_regardless_of_name() {
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { bt: Backtrace, st: SpanTrace }
+        };
+        let categorized = CategorizedFields::from_fields(&item.fields).unwrap();
+        assert_eq!(
+            categorized
+                .backtrace_field
+                .as_ref()
+                .map(ToString::to_string),
+            Some("bt".to_owned())
+        );
+        assert_eq!(
+            categorized
+                .spantrace_field
+                .as_ref()
+                .map(ToString::to_string),
+            Some("st".to_owned())
+        );
+    }
+
+    #[test]
+    fn categorize_rejects_explicit_backtrace_attr_on_wrong_type() {
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { #[oopsie(backtrace)] b: String }
+        };
+        CategorizedFields::from_fields(&item.fields).unwrap_err();
+    }
+
+    #[test]
+    fn categorize_rejects_packed_traces_alongside_standalone_backtrace() {
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { traces: (Backtrace, SpanTrace), bt: Backtrace }
+        };
+        CategorizedFields::from_fields(&item.fields).unwrap_err();
+    }
 }
 
 /// Categorized fields for a variant/struct.
@@ -920,12 +979,12 @@ pub struct CategorizedFields {
     pub user_fields: Vec<UserField>,
     /// Provider attributes from fields.
     pub provides: Vec<(Ident, ProvideAttr)>,
-    /// Field identified as backtrace (via `#[oopsie(backtrace)]` or name detection).
+    /// Field identified as backtrace (via `#[oopsie(backtrace)]` or `Backtrace` type).
     pub backtrace_field: Option<Ident>,
-    /// Field identified as spantrace (via `#[oopsie(spantrace)]` or name detection).
+    /// Field identified as spantrace (via `#[oopsie(spantrace)]` or `SpanTrace` type).
     pub spantrace_field: Option<Ident>,
     /// Field holding the packed `(Backtrace, SpanTrace)` pair (via
-    /// `#[oopsie(traces)]`, name `traces`, or tuple-type detection).
+    /// `#[oopsie(traces)]` or tuple-type detection).
     pub traces_field: Option<Ident>,
     /// Field identified as help (via `#[oopsie(help)]`).
     pub help_field: Option<Ident>,
@@ -953,6 +1012,8 @@ pub struct UserField {
 impl CategorizedFields {
     /// Categorize fields of a variant/struct into source, auto, and user fields.
     pub fn from_fields(fields: &syn::Fields) -> syn::Result<Self> {
+        use crate::traced::field_detect::{is_backtrace_type, is_spantrace_type, is_traces_type};
+
         let mut source = None;
         let mut auto_fields = Vec::new();
         let mut user_fields = Vec::new();
@@ -995,18 +1056,37 @@ impl CategorizedFields {
                 provides.push((ident.clone(), p.clone()));
             }
 
-            // Detect backtrace/spantrace/help fields
-            let ident_str = ident.to_string();
-            if attrs.backtrace || ident_str == "backtrace" || ident_str == "back_trace" {
+            // Detect backtrace/spantrace/traces/help fields. A trace field is
+            // one carrying an explicit `#[oopsie(...)]` attribute or whose type
+            // matches (by last path segment). A field merely *named* `backtrace`
+            // of the wrong type is an ordinary field — the real trace is injected
+            // separately under a mangled name.
+            if attrs.backtrace && !is_backtrace_type(&field.ty) {
+                return Err(syn::Error::new_spanned(
+                    field,
+                    "`#[oopsie(backtrace)]` requires a field whose type's last path segment is `Backtrace`",
+                ));
+            }
+            if attrs.spantrace && !is_spantrace_type(&field.ty) {
+                return Err(syn::Error::new_spanned(
+                    field,
+                    "`#[oopsie(spantrace)]` requires a field whose type's last path segment is `SpanTrace`",
+                ));
+            }
+            if attrs.traces && !is_traces_type(&field.ty) {
+                return Err(syn::Error::new_spanned(
+                    field,
+                    "`#[oopsie(traces)]` requires a field of type `(Backtrace, SpanTrace)`",
+                ));
+            }
+            let is_traces = attrs.traces || is_traces_type(&field.ty);
+            if (attrs.backtrace || is_backtrace_type(&field.ty)) && backtrace_field.is_none() {
                 backtrace_field = Some(ident.clone());
             }
-            if attrs.spantrace || ident_str == "spantrace" || ident_str == "span_trace" {
+            if (attrs.spantrace || is_spantrace_type(&field.ty)) && spantrace_field.is_none() {
                 spantrace_field = Some(ident.clone());
             }
-            let is_traces = attrs.traces
-                || ident_str == "traces"
-                || crate::traced::field_detect::is_traces_type(&field.ty);
-            if is_traces {
+            if is_traces && traces_field.is_none() {
                 traces_field = Some(ident.clone());
             }
             if attrs.help {
@@ -1035,6 +1115,24 @@ impl CategorizedFields {
                     ident,
                     ty: field.ty.clone(),
                 });
+            }
+        }
+
+        // A packed `traces` field already supplies both traces; a coexisting
+        // standalone backtrace/spantrace field would be silently dropped by the
+        // `traces`-first emit chains in gen_error, so reject the ambiguity.
+        if traces_field.is_some() {
+            if let Some(bt) = &backtrace_field {
+                return Err(syn::Error::new_spanned(
+                    bt,
+                    "a packed `traces` field cannot coexist with a separate `backtrace` field",
+                ));
+            }
+            if let Some(st) = &spantrace_field {
+                return Err(syn::Error::new_spanned(
+                    st,
+                    "a packed `traces` field cannot coexist with a separate `spantrace` field",
+                ));
             }
         }
 

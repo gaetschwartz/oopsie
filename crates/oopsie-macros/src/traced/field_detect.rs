@@ -1,5 +1,20 @@
 //! Field detection helpers for backtrace/spantrace types.
 
+/// Peel `Type::Paren` / `Type::Group` wrappers to reach the underlying type.
+/// syn parses a parenthesized trait object (`(dyn Error + Send)`) as
+/// `Type::Paren(Type::TraitObject)`, which would otherwise slip past a bare
+/// `matches!(_, Type::TraitObject(_))` guard.
+pub fn peel_groups(ty: &syn::Type) -> &syn::Type {
+    let mut ty = ty;
+    loop {
+        match ty {
+            syn::Type::Paren(p) => ty = &p.elem,
+            syn::Type::Group(g) => ty = &g.elem,
+            _ => return ty,
+        }
+    }
+}
+
 /// If `ty` is `Box<T>`, return the inner type `T`.
 pub fn extract_boxed_inner(ty: &syn::Type) -> Option<&syn::Type> {
     let syn::Type::Path(type_path) = ty else {
@@ -18,16 +33,20 @@ pub fn extract_boxed_inner(ty: &syn::Type) -> Option<&syn::Type> {
     })
 }
 
-// These match on the type's last path segment only, so an unrelated user type
-// whose final segment is `Backtrace`/`SpanTrace` (e.g. `foo::Backtrace`) is
-// treated as an existing trace field and suppresses injection. Field-name
-// detection (in `check_existing_fields`) is the primary signal; this type-name
-// match is a best-effort supplement that cannot resolve paths.
-pub(super) fn is_backtrace_type(ty: &syn::Type) -> bool {
+// Trace fields are classified (in `parse.rs`) and detected as already-present
+// (in `check_existing_fields`) by these predicates alone: a field is a trace
+// field iff it carries an explicit `#[oopsie(backtrace|spantrace|traces)]`
+// attribute or its type matches here. Matching is on the type's last path
+// segment only — a proc-macro has no type information, so re-exports
+// (`oopsie::Backtrace`, `oopsie_core::Backtrace`) all match, an opaque alias
+// (`type Bt = Backtrace; field: Bt`) does not, and an unrelated user type whose
+// final segment is `Backtrace` is a false positive. The explicit attribute is
+// the escape hatch for the alias case.
+pub fn is_backtrace_type(ty: &syn::Type) -> bool {
     is_ident_type(ty, "Backtrace") || is_boxed_ident_type(ty, "Backtrace")
 }
 
-pub(super) fn is_spantrace_type(ty: &syn::Type) -> bool {
+pub fn is_spantrace_type(ty: &syn::Type) -> bool {
     is_ident_type(ty, "SpanTrace") || is_boxed_ident_type(ty, "SpanTrace")
 }
 
@@ -278,5 +297,19 @@ mod tests {
     fn traces_type_not_tuple() {
         let ty: syn::Type = parse_quote!(Backtrace);
         assert!(!is_traces_type(&ty));
+    }
+
+    // peel_groups tests
+
+    #[test]
+    fn peel_groups_unwraps_parenthesized_trait_object() {
+        let ty: syn::Type = parse_quote!((dyn Error + Send));
+        assert!(matches!(peel_groups(&ty), syn::Type::TraitObject(_)));
+    }
+
+    #[test]
+    fn peel_groups_passes_through_plain_type() {
+        let ty: syn::Type = parse_quote!(io::Error);
+        assert!(matches!(peel_groups(&ty), syn::Type::Path(_)));
     }
 }

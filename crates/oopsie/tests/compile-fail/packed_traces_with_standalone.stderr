@@ -1,0 +1,5 @@
+error: a packed `traces` field cannot coexist with a separate `backtrace` field
+  --> tests/compile-fail/packed_traces_with_standalone.rs:15:5
+   |
+15 |     bt: oopsie::Backtrace,
+   |     ^^

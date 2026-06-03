@@ -193,6 +193,12 @@ impl<E: Diagnostic> Report<E> {
         let Some(span_trace) = self.error().and_then(|e| e.oopsie_spantrace()) else {
             return Ok(());
         };
+        // An empty/unsupported trace yields zero frames; emitting the header
+        // would leave a lone `SPANTRACE` banner with no body. Mirror the
+        // backtrace path, which suppresses empty traces.
+        if !span_trace.is_captured() {
+            return Ok(());
+        }
 
         writeln!(f)?;
         if self.color_config.should_colorize() {

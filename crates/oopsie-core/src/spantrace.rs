@@ -30,6 +30,15 @@ impl SpanTrace {
         self.inner.status()
     }
 
+    /// `true` if a span trace was actually captured (an active span existed and
+    /// the subscriber supports `SpanTrace`). An empty/unsupported trace yields
+    /// no frames and should not be rendered as a `SPANTRACE` section.
+    #[must_use]
+    #[inline]
+    pub fn is_captured(&self) -> bool {
+        matches!(self.status(), tracing_error::SpanTraceStatus::CAPTURED)
+    }
+
     #[must_use]
     #[inline]
     pub fn into_span_trace(self) -> tracing_error::SpanTrace {
@@ -179,9 +188,14 @@ impl crate::Capturable for OptionalSpanTrace {
 impl crate::CaptureExt for OptionalSpanTrace {
     #[inline]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
-        match source.oopsie_spantrace().cloned() {
-            Some(trace) => Self::some(trace),
-            None => <Self as crate::Capturable>::capture(),
+        match source.oopsie_spantrace() {
+            // Keep the source's trace only if capture actually succeeded; an
+            // Empty/Unsupported trace must not flip `is_some()` to true (the
+            // type's documented invariant) — fall back to a fresh capture.
+            Some(trace) if matches!(trace.status(), tracing_error::SpanTraceStatus::CAPTURED) => {
+                Self::some(trace.clone())
+            }
+            _ => <Self as crate::Capturable>::capture(),
         }
     }
 }
@@ -424,6 +438,32 @@ mod tests {
         // macro's `resolve::<OptionalSpanTrace>()` path compiles for variants
         // whose source implements `Diagnostic`.
         let opt = <OptionalSpanTrace as crate::CaptureExt>::capture_or_extract(&DiagSource);
+        assert!(opt.is_none());
+    }
+
+    #[derive(Debug)]
+    struct DiagSourceWithEmptyTrace(SpanTrace);
+
+    impl fmt::Display for DiagSourceWithEmptyTrace {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("diag source")
+        }
+    }
+
+    impl std::error::Error for DiagSourceWithEmptyTrace {}
+    impl crate::Diagnostic for DiagSourceWithEmptyTrace {
+        fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
+            Some(&self.0)
+        }
+    }
+
+    #[test]
+    fn capture_or_extract_drops_empty_source_trace() {
+        // With no active subscriber the captured trace is empty/unsupported.
+        // Extracting it must not flip `is_some()` to true (the type invariant).
+        let src = DiagSourceWithEmptyTrace(SpanTrace::capture());
+        assert!(!src.0.is_captured(), "precondition: source trace is empty");
+        let opt = <OptionalSpanTrace as crate::CaptureExt>::capture_or_extract(&src);
         assert!(opt.is_none());
     }
 }

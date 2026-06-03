@@ -4,8 +4,6 @@ expression: report.to_string()
 ---
 Error[report::TestError]: Test error: something failed
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   1: oopsie_core::traits::Capturable::capture

@@ -17,26 +17,12 @@ pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type)
     };
 
     for field in iter {
-        let is_backtrace_name = field
-            .ident
-            .as_ref()
-            .is_some_and(|id| id == "backtrace" || id == "back_trace");
-        let is_spantrace_name = field
-            .ident
-            .as_ref()
-            .is_some_and(|id| id == "spantrace" || id == "span_trace");
-
         let is_timestamp_name = field
             .ident
             .as_ref()
             .is_some_and(|id| id == "timestamp" || id == "__oopsie_timestamp");
 
-        let is_traces_name = field
-            .ident
-            .as_ref()
-            .is_some_and(|id| id == "traces" || id == "__oopsie_traces");
-
-        if is_traces_name || is_traces_type(&field.ty) {
+        if is_traces_type(&field.ty) {
             // One packed field supplies both traces; mark all three so neither
             // separate field is also injected.
             existence.has_traces = true;
@@ -44,10 +30,10 @@ pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type)
             existence.has_spantrace = true;
         }
 
-        if is_backtrace_name || is_backtrace_type(&field.ty) {
+        if is_backtrace_type(&field.ty) {
             existence.has_backtrace = true;
         }
-        if is_spantrace_name || is_spantrace_type(&field.ty) {
+        if is_spantrace_type(&field.ty) {
             existence.has_spantrace = true;
         }
         // Match by name as well as exact type: a user-written `SystemTime`

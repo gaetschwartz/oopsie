@@ -6,8 +6,6 @@ Error[report::ErrorWithHelp]: Something went wrong: connection refused
 
   help: Try restarting the service
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   1: oopsie_core::traits::Capturable::capture

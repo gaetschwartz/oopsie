@@ -319,3 +319,24 @@ fn layout_struct_separate_inline_exposes_both_traces() {
     let e = InlineStructOopsie { info: "x" }.build();
     assert_both_traces(&e);
 }
+
+// A field merely *named* `backtrace` of an unrelated type is an ordinary field,
+// not the error's backtrace. The real backtrace is still injected and surfaced.
+#[oopsie(traced)]
+pub struct WrongTypedBacktraceError {
+    backtrace: String,
+    info: String,
+}
+
+#[test]
+fn wrong_typed_backtrace_field_is_ordinary_and_real_backtrace_injected() {
+    let e = WrongTypedBacktraceOopsie {
+        backtrace: "external textual backtrace",
+        info: "x",
+    }
+    .build();
+    // The injected packed trace is still surfaced via the stable accessor.
+    assert_both_traces(&e);
+    // The user's same-named field is untouched (not treated as a backtrace).
+    assert_eq!(e.backtrace, "external textual backtrace");
+}

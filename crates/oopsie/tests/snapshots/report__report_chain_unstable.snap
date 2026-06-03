@@ -5,8 +5,6 @@ expression: report.to_string()
 Error[report::OuterError]: Outer error
   ╰─▶ Test error: root cause
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   1: oopsie_core::traits::Capturable::capture

@@ -26,8 +26,8 @@ impl ErasedBacktrace {
     /// Frames that [`oopsie_core::is_internal_frame`] considers
     /// implementation/platform detail (capture machinery, OS/libc entry
     /// points, unresolvable frames) are stripped, unless `RUST_BACKTRACE=full`
-    /// is set. The keep/drop decision is made per frame on its primary symbol,
-    /// matching the non-erased `Backtrace` `Debug` rendering.
+    /// is set. The keep/drop decision is made per emitted symbol, so an internal
+    /// symbol inlined behind a user-code primary cannot leak into the output.
     #[must_use]
     pub fn from_backtrace(bt: &oopsie_core::Backtrace) -> Self {
         bt.resolve();
@@ -35,24 +35,20 @@ impl ErasedBacktrace {
         let frames = bt
             .frames()
             .iter()
-            .filter(|frame| {
+            .flat_map(|frame| frame.symbols().iter())
+            .filter(|sym| {
                 if full {
                     return true;
                 }
-                let primary = frame.symbols().first();
-                let name = primary
-                    .and_then(backtrace::BacktraceSymbol::name)
-                    .and_then(|n| n.as_str());
-                let filename = primary.and_then(|s| s.filename());
+                let name = sym.name().and_then(|n| n.as_str());
+                let filename = sym.filename();
                 !oopsie_core::is_internal_frame(name, filename)
             })
-            .flat_map(|frame| {
-                frame.symbols().iter().map(|sym| ErasedFrame {
-                    name: sym.name().map(|n| n.to_string().into_boxed_str()),
-                    filename: sym.filename().map(Box::from),
-                    line: sym.lineno(),
-                    column: sym.colno(),
-                })
+            .map(|sym| ErasedFrame {
+                name: sym.name().map(|n| n.to_string().into_boxed_str()),
+                filename: sym.filename().map(Box::from),
+                line: sym.lineno(),
+                column: sym.colno(),
             })
             .collect();
         Self { frames }

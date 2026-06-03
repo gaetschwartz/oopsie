@@ -102,7 +102,12 @@ impl ErasedError {
             code: err.oopsie_error_code(),
             help: err.oopsie_help_text(),
         };
-        let spantrace = err.oopsie_spantrace().map(ErasedSpanTrace::from);
+        // Skip empty/unsupported traces: they carry no frames and would render
+        // as a lone `SPANTRACE` header with no body.
+        let spantrace = err
+            .oopsie_spantrace()
+            .filter(|st| st.is_captured())
+            .map(ErasedSpanTrace::from);
         let backtrace = err.oopsie_backtrace().cloned().map(ErasedBacktrace::from);
 
         Self {

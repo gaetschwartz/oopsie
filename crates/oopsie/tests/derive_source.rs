@@ -2,6 +2,13 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
+// The parenthesized-trait-object regression test deliberately writes
+// `Box<(dyn Error + ...)>`; the derive re-emits that type in generated code,
+// so the lint must be relaxed crate-wide for this fixture.
+#![expect(
+    unused_parens,
+    reason = "parenthesized trait object is the regression under test"
+)]
 
 //! Test that `Error::source()` works for three source-field shapes:
 //!   1. A concrete `Error` type      — `source: std::io::Error`
@@ -72,6 +79,24 @@ fn struct_boxed_dyn_source_chain_intact() {
     let inner: Box<dyn StdError + Send + Sync + 'static> =
         Box::new(std::io::Error::other("disk full"));
     let e = StructBoxedDyn { source: inner };
+    let s = StdError::source(&e).expect("source missing");
+    assert_eq!(s.to_string(), "disk full");
+}
+
+// Parenthesized boxed trait object: syn parses the inner as `Type::Paren(...)`,
+// which must still be recognized as a trait object (not auto-unboxed into an
+// unsized `Source`).
+#[derive(Debug, Oopsie)]
+#[oopsie("struct-shaped parenthesized boxed dyn source")]
+pub struct StructParenBoxedDyn {
+    source: Box<(dyn StdError + Send + Sync + 'static)>,
+}
+
+#[test]
+fn struct_paren_boxed_dyn_source_chain_intact() {
+    let inner: Box<(dyn StdError + Send + Sync + 'static)> =
+        Box::new(std::io::Error::other("disk full"));
+    let e = StructParenBoxedDyn { source: inner };
     let s = StdError::source(&e).expect("source missing");
     assert_eq!(s.to_string(), "disk full");
 }

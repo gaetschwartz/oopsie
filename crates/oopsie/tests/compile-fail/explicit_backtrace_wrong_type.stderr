@@ -1,0 +1,6 @@
+error: `#[oopsie(backtrace)]` requires a field whose type's last path segment is `Backtrace`
+  --> tests/compile-fail/explicit_backtrace_wrong_type.rs:12:5
+   |
+12 | /     #[oopsie(backtrace)]
+13 | |     backtrace: String,
+   | |_____________________^
