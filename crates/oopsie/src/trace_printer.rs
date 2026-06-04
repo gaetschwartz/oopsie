@@ -388,10 +388,10 @@ impl TracePrinter {
         // Frame number: right-aligned in 3 chars
         write!(
             f,
-            "{}",
-            format_args!("{number:>3}").style(self.theme.frame_number)
+            "{}{}",
+            format_args!("{number:>3}").style(self.theme.frame_number),
+            ": ".style(self.theme.separator)
         )?;
-        write!(f, "{}", ": ".style(self.theme.separator))?;
 
         // Function name
         if let Some(name) = &frame.name {
@@ -407,9 +407,12 @@ impl TracePrinter {
 
         // File location
         if let Some(filename) = &frame.filename {
-            write!(f, "           ")?; // 11 spaces
-            write!(f, "{}", "at ".style(self.theme.separator))?;
-            write!(f, "{}", filename.display().style(self.theme.file_path))?;
+            write!(
+                f,
+                "           {}{}",
+                "at ".style(self.theme.separator),
+                filename.display().style(self.theme.file_path)
+            )?;
             if let Some(lineno) = frame.lineno {
                 write!(
                     f,
