@@ -98,7 +98,7 @@ enum Inner {
 impl Clone for Inner {
     fn clone(&self) -> Self {
         match self {
-            Self::Captured(bt) => Self::Resolved((&**bt).clone()),
+            Self::Captured(bt) => Self::Resolved((**bt).clone()),
             Self::Resolved(bt) => Self::Resolved(bt.clone()),
             Self::Disabled(bt) => Self::Disabled(bt.clone()),
         }
