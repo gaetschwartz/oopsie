@@ -22,6 +22,6 @@ test *ARGS: doctest
 # since nightly diagnostics use wider span underlines that don't match
 # stable's renderer) and insta snapshots.
 [env("INSTA_UPDATE", "always")]
-test-bless *ARGS: doctest
+test-bless *ARGS:
     TRYBUILD=overwrite cargo +stable nextest run {{ ARGS }}
     cargo nextest run --features unstable {{ ARGS }}
