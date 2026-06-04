@@ -39,67 +39,67 @@ expression: error
   "backtrace": {
     "frames": [
       {
-        "name": "oopsie_core::traits::Capturable::capture",
+        "name": "capture",
         "filename": "[PATH]/crates/oopsie-core/src/backtrace.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "oopsie_core::traits::Capturable::capture",
+        "name": "capture<oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace>",
         "filename": "[PATH]/crates/oopsie-core/src/traits.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "<alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture",
+        "name": "capture<(oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace)>",
         "filename": "[PATH]/crates/oopsie-core/src/traits.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "erased::common::MyErrorInnerOopsie<T>::build",
+        "name": "build<alloc::string::String>",
         "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "erased::common::MyErrorInnerOopsie<T>::fail",
+        "name": "fail<alloc::string::String, ()>",
         "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "erased::common::make_error::inner_function",
+        "name": "inner_function",
         "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "erased::common::make_error::outer_function",
+        "name": "outer_function",
         "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "erased::common::make_error",
+        "name": "make_error",
         "filename": "[PATH]/crates/erased-oopsie/tests/common/mod.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "erased::test_erased_error_json",
+        "name": "test_erased_error_json",
         "filename": "[PATH]/crates/erased-oopsie/tests/erased.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "erased::test_erased_error_json::{closure}",
+        "name": "{closure}",
         "filename": "[PATH]/crates/erased-oopsie/tests/erased.rs",
         "line": -1,
         "column": 0
       },
       {
-        "name": "core::ops::function::FnOnce::call_once",
+        "name": "call_once<erased::test_erased_error_json::{closure_env#0}, ()>",
         "filename": "[STDLIB]/library/core/src/ops/function.rs",
         "line": -1,
         "column": 0

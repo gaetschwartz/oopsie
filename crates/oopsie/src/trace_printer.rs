@@ -154,15 +154,19 @@ const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
     "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::Capturable>::",
 ];
 
-/// Prefixes for runtime initialization frames that should be skipped.
+/// Prefixes for runtime-entry frames below user code; the bottom cutoff drains
+/// from the first match down. These must match the runtime that *calls* the
+/// entry point, never the entry point itself — a bare `"main"` would match the
+/// user's own `main` and trim it. `__rust_begin_short_backtrace` is the
+/// `std`-planted user/runtime boundary marker.
 const RUNTIME_INIT_PREFIXES: &[&str] = &[
+    "std::sys::backtrace::__rust_begin_short_backtrace",
+    "__rust_begin_short_backtrace",
     "std::rt::lang_start::",
     "std::rt::lang_start_internal::",
     "std::panicking::catch_unwind::",
     "std::panic::catch_unwind::",
     "__rustc",
-    "_main",
-    "main",
     "__libc_start",
     "__scrt_common_main",
 ];
@@ -323,32 +327,52 @@ impl TracePrinter {
         let all_frames = bt.frames();
         let total_count = all_frames.len();
 
-        // Apply frame filters
         let mut filtered: Vec<&BacktraceFrame> = all_frames.iter().collect();
         (self.frame_filter)(&mut filtered);
 
-        let hidden_count = total_count - filtered.len();
+        // Split the hidden count by which end frames were trimmed from, so the
+        // notice renders where the gap actually is. Kept frames still point into
+        // `all_frames`, so the last one's original index gives the bottom count;
+        // any remainder (including holes a custom filter punches) goes on top.
+        let total_hidden = total_count - filtered.len();
+        let bottom_hidden = match filtered.last() {
+            Some(last) => {
+                let last_idx = all_frames
+                    .iter()
+                    .rposition(|frame| std::ptr::eq(frame, *last))
+                    .unwrap_or(total_count - 1);
+                total_count - 1 - last_idx
+            }
+            None => 0,
+        };
+        let top_hidden = total_hidden - bottom_hidden;
 
-        // Header
         writeln!(
             f,
             "{}",
             format_args!("{:━^80}", " BACKTRACE ").style(self.theme.header)
         )?;
 
-        // Hidden frames notice (top)
-        if hidden_count > 0 {
+        if top_hidden > 0 {
             writeln!(
                 f,
                 "{}",
-                format_args!("   ... {hidden_count} frames hidden ...")
+                format_args!("   ... {top_hidden} frames hidden ...")
                     .style(self.theme.frames_hidden)
             )?;
         }
 
-        // Render each frame, numbered 1-based.
         for (i, frame) in filtered.iter().enumerate() {
             self.write_backtrace_frame(f, i + 1, frame)?;
+        }
+
+        if bottom_hidden > 0 {
+            writeln!(
+                f,
+                "{}",
+                format_args!("   ... {bottom_hidden} frames hidden ...")
+                    .style(self.theme.frames_hidden)
+            )?;
         }
 
         Ok(())
@@ -553,7 +577,13 @@ mod tests {
         assert!(is_runtime_init_code(
             "std::rt::lang_start_internal::something"
         ));
+        assert!(is_runtime_init_code(
+            "__rust_begin_short_backtrace<fn(), ()>"
+        ));
         assert!(!is_runtime_init_code("my_crate::main_logic"));
+        // A bare `main` prefix would match (and hide) the user's own entry point.
+        assert!(!is_runtime_init_code("main"));
+        assert!(!is_runtime_init_code("my_app::main"));
     }
 
     #[test]

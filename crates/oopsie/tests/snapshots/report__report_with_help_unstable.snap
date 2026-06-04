@@ -6,21 +6,20 @@ Error[report::ErrorWithHelp]: Something went wrong: connection refused
 
   help: Try restarting the service
 
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1: oopsie_core::traits::Capturable::capture
+  1: capture
            at [CRATE_DIR]-core/src/backtrace.rs:[LOC]
-  2: oopsie_core::traits::Capturable::capture
+  2: capture<oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace>
            at [CRATE_DIR]-core/src/traits.rs:[LOC]
-  3: <alloc::boxed::Box<(oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace)> as oopsie_core::traits::Capturable>::capture
+  3: capture<(oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace)>
            at [CRATE_DIR]-core/src/traits.rs:[LOC]
-  4: report::ErrorWithHelpOopsie<T>::build
+  4: build<&str>
            at [CRATE_DIR]/tests/report.rs:[LOC]
-  5: report::test_report_with_help
+  5: test_report_with_help
            at [CRATE_DIR]/tests/report.rs:[LOC]
-  6: report::test_report_with_help::{closure}
+  6: {closure}
            at [CRATE_DIR]/tests/report.rs:[LOC]
-  7: core::ops::function::FnOnce::call_once
+  7: call_once<report::test_report_with_help::{closure_env#0}, ()>
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
   8: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce>::call_once
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]

@@ -15,27 +15,27 @@ Error:
            with {"foo":true,"name":"Alice"}
              at crates/erased-oopsie/tests/common/mod.rs:[LOC]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1: oopsie_core::traits::Capturable::capture
+  1: capture
            at [WORKSPACE_ROOT]/crates/oopsie-core/src/backtrace.rs:[LOC]
-  2: oopsie_core::traits::Capturable::capture
+  2: capture<oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace>
            at [WORKSPACE_ROOT]/crates/oopsie-core/src/traits.rs:[LOC]
-  3: <alloc::boxed::Box<(oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace)> as oopsie_core::traits::Capturable>::capture
+  3: capture<(oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace)>
            at [WORKSPACE_ROOT]/crates/oopsie-core/src/traits.rs:[LOC]
-  4: erased::common::MyErrorInnerOopsie<T>::build
+  4: build<alloc::string::String>
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-  5: erased::common::MyErrorInnerOopsie<T>::fail
+  5: fail<alloc::string::String, ()>
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-  6: erased::common::make_error::inner_function
+  6: inner_function
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-  7: erased::common::make_error::outer_function
+  7: outer_function
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-  8: erased::common::make_error
+  8: make_error
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
-  9: erased::test_erased_error_display
+  9: test_erased_error_display
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/erased.rs:[LOC]
- 10: erased::test_erased_error_display::{closure}
+ 10: {closure}
            at [WORKSPACE_ROOT]/crates/erased-oopsie/tests/erased.rs:[LOC]
- 11: core::ops::function::FnOnce::call_once
+ 11: call_once<erased::test_erased_error_display::{closure_env#0}, ()>
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
  12: <fn() -> core::result::Result<(), alloc::string::String> as core::ops::function::FnOnce>::call_once
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]

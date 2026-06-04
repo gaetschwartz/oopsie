@@ -375,12 +375,28 @@ fn test_backtrace_hidden_frame_count_message() {
     let printer = TracePrinter::new().plain();
     let output = render_backtrace(&printer, &provider);
 
+    // Two capture frames trim off the top, one runtime frame off the bottom;
+    // each notice must render at the end it was trimmed from.
+    let top_notice = "... 2 frames hidden ...";
+    let bottom_notice = "... 1 frames hidden ...";
     assert!(
-        output.contains("... 3 frames hidden ..."),
-        "expected hidden-frame notice with count 3, got:\n{output}"
+        output.contains(top_notice),
+        "expected top hidden-frame notice (count 2), got:\n{output}"
+    );
+    assert!(
+        output.contains(bottom_notice),
+        "expected bottom hidden-frame notice (count 1), got:\n{output}"
     );
     assert!(output.contains("my_crate::function_a"));
     assert!(output.contains("my_crate::function_b"));
+    assert!(
+        output.find(top_notice).unwrap() < output.find("my_crate::function_a").unwrap(),
+        "top notice must precede the first kept frame, got:\n{output}"
+    );
+    assert!(
+        output.rfind(bottom_notice).unwrap() > output.find("my_crate::function_b").unwrap(),
+        "bottom notice must follow the last kept frame, got:\n{output}"
+    );
     assert!(
         !output.contains("lang_start_internal"),
         "runtime-init frame should be filtered out"
@@ -507,8 +523,15 @@ fn test_trace_printer_add_frame_filter_composes() {
         !output.contains("drop::beta"),
         "added filter (over) should remove `drop::beta`, got:\n{output}"
     );
-    // 3 of 4 frames removed (2 by default filter, 1 by the added one).
-    assert!(output.contains("... 3 frames hidden ..."), "got:\n{output}");
+    // 3 removed: 1 capture frame off the top, `drop::beta` + runtime off the bottom.
+    assert!(
+        output.contains("... 1 frames hidden ..."),
+        "expected top notice (count 1), got:\n{output}"
+    );
+    assert!(
+        output.contains("... 2 frames hidden ..."),
+        "expected bottom notice (count 2), got:\n{output}"
+    );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -551,11 +574,15 @@ fn test_trace_printer_unfiltered_keeps_all_frames() {
         "unfiltered must never report hidden frames, got:\n{unfiltered_out}"
     );
 
-    // The default filter drops both, so it is strictly shorter and reports the
-    // hidden count.
+    // The default filter drops one frame off each end, as two separate notices.
     assert!(!filtered_out.contains("libunwind"), "got:\n{filtered_out}");
+    assert_eq!(
+        filtered_out.matches("frames hidden").count(),
+        2,
+        "expected a top and a bottom hidden-frames notice, got:\n{filtered_out}"
+    );
     assert!(
-        filtered_out.contains("... 2 frames hidden ..."),
+        filtered_out.contains("... 1 frames hidden ..."),
         "got:\n{filtered_out}"
     );
     assert!(unfiltered_out.len() > filtered_out.len());

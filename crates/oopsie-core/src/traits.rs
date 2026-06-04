@@ -35,6 +35,7 @@ pub trait Capturable {
 
 impl<T: Capturable> Capturable for Box<T> {
     #[track_caller]
+    #[inline]
     fn capture() -> Self {
         Self::new(T::capture())
     }
@@ -42,6 +43,7 @@ impl<T: Capturable> Capturable for Box<T> {
 
 impl<A: Capturable, B: Capturable> Capturable for (A, B) {
     #[track_caller]
+    #[inline]
     fn capture() -> Self {
         (A::capture(), B::capture())
     }

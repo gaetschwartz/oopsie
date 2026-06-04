@@ -223,7 +223,6 @@ impl<E: Diagnostic> Report<E> {
         };
 
         writeln!(f)?;
-        writeln!(f)?;
         let mut printer = if oopsie_core::rust_backtrace().is_full() {
             TracePrinter::unfiltered()
         } else {
