@@ -30,9 +30,12 @@ fn deep_call(index: u32) -> Result<(), LoadError> {
 }
 
 fn main() {
-    // Capture is gated on RUST_BACKTRACE; force it on so the example always
-    // shows frames regardless of the ambient environment.
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    if RustBacktrace::detect_opt().is_none() {
+        eprintln!(
+            "Warning: RUST_BACKTRACE environment variable not set; force-enabling backtrace capture for this example. Set RUST_BACKTRACE=1 to enable by default."
+        );
+        set_rust_backtrace_override(RustBacktrace::Enabled);
+    }
 
     let err = deep_call(3).unwrap_err();
     print!("{}", Report::from_std(err));

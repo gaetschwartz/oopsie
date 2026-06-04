@@ -1,6 +1,8 @@
 use std::cell::Cell;
 use std::sync::LazyLock;
-use std::{fmt, path};
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::Ordering::Relaxed;
+use std::{env, fmt, path};
 
 use crate::Capturable as _;
 
@@ -10,27 +12,46 @@ use crate::Capturable as _;
 /// same convention as `std`: `RUST_LIB_BACKTRACE` is consulted first and, if
 /// unset, `RUST_BACKTRACE`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum RustBacktrace {
     /// Capture disabled — no frames are recorded.
-    Disabled,
+    Disabled = 1,
     /// Capture enabled, rendered as the trimmed "short" view.
-    Enabled,
+    Enabled = 2,
     /// Capture enabled, rendered untrimmed — every frame is shown.
-    Full,
+    Full = 3,
 }
 
 impl RustBacktrace {
-    fn detect() -> Self {
+    pub fn detect_opt() -> Option<Self> {
+        const NONE: u8 = u8::MAX;
+        const NOT_SET: u8 = 0;
+
+        static ENABLED: AtomicU8 = AtomicU8::new(NOT_SET);
+        if let Some(cached) = match ENABLED.load(Relaxed) {
+            1 => Some(Some(RustBacktrace::Disabled)),
+            2 => Some(Some(RustBacktrace::Enabled)),
+            3 => Some(Some(RustBacktrace::Full)),
+            NONE => Some(None),
+            NOT_SET => None,
+            _ => unreachable!(),
+        } {
+            return cached;
+        }
+
         // `RUST_LIB_BACKTRACE` wins when set; otherwise fall back to
         // `RUST_BACKTRACE`. `or_else` only fires on `Err` (var unset or
         // non-unicode), so an explicit `RUST_LIB_BACKTRACE=0` disables even
         // when `RUST_BACKTRACE=1`.
-        let raw = std::env::var("RUST_LIB_BACKTRACE").or_else(|_| std::env::var("RUST_BACKTRACE"));
-        match raw.as_deref() {
-            Ok("0") | Err(_) => Self::Disabled,
-            Ok("full") => Self::Full,
-            Ok(_) => Self::Enabled,
-        }
+        let raw = env::var("RUST_LIB_BACKTRACE").or_else(|_| env::var("RUST_BACKTRACE"));
+        let enabled = match raw.as_deref() {
+            Ok("0") => Some(Self::Disabled),
+            Ok("full") => Some(Self::Full),
+            Ok(_) => Some(Self::Enabled),
+            Err(_) => None,
+        };
+        ENABLED.store(enabled.map_or(NONE, |f| f as u8), Relaxed);
+        enabled
     }
 
     /// Whether frames should be captured at all.
@@ -82,11 +103,10 @@ pub fn clear_rust_backtrace_override() {
 #[must_use]
 #[inline]
 pub fn rust_backtrace() -> RustBacktrace {
-    static CACHED: LazyLock<RustBacktrace> = LazyLock::new(RustBacktrace::detect);
     if let Some(over) = OVERRIDE.with(Cell::get) {
         return over;
     }
-    *CACHED
+    RustBacktrace::detect_opt().unwrap_or(RustBacktrace::Disabled)
 }
 
 enum Inner {
