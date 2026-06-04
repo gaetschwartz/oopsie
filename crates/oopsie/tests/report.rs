@@ -302,7 +302,7 @@ fn test_with_colors_never_no_ansi() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TracePrinter synthetic-backtrace tests (gaps 39, 41, 45)
+// TracePrinter synthetic-backtrace tests
 //
 // `TracePrinter::write_backtrace` takes a `&impl BacktraceProvider`, so a
 // hand-built provider lets us pin down rendering of frame shapes that a real
@@ -353,7 +353,7 @@ fn render_backtrace<P: BacktraceProvider>(printer: &TracePrinter, provider: &P) 
     RenderBacktrace(printer, provider).to_string()
 }
 
-/// Gap 39: the default filter trims backtrace-capture frames off the top and
+/// The default filter trims backtrace-capture frames off the top and
 /// runtime-init frames off the bottom; the trimmed count must surface as a
 /// "... N frames hidden ..." notice.
 #[test]
@@ -399,7 +399,7 @@ fn test_backtrace_hidden_frame_count_message() {
     );
 }
 
-/// Gap 39 (negative): when nothing is trimmed the notice must not appear.
+/// When nothing is trimmed the notice must not appear.
 #[test]
 fn test_backtrace_no_hidden_frames_no_message() {
     let provider = FixedFrames(vec![
@@ -416,7 +416,7 @@ fn test_backtrace_no_hidden_frames_no_message() {
     );
 }
 
-/// Gap 41: a frame carrying a column number renders `:lineno:colno`.
+/// A frame carrying a column number renders `:lineno:colno`.
 #[test]
 fn test_backtrace_frame_renders_colno() {
     let provider = FixedFrames(vec![frame("my_crate::function_a", Some(42), Some(7))]);
@@ -430,8 +430,7 @@ fn test_backtrace_frame_renders_colno() {
     );
 }
 
-/// Gap 41 (negative): with no column number only `:lineno` is rendered, never a
-/// trailing `:`.
+/// With no column number only `:lineno` is rendered, never a trailing `:`.
 #[test]
 fn test_backtrace_frame_no_colno_renders_only_lineno() {
     let provider = FixedFrames(vec![frame("my_crate::function_a", Some(42), None)]);
@@ -449,7 +448,7 @@ fn test_backtrace_frame_no_colno_renders_only_lineno() {
     );
 }
 
-/// Gap 45: `with_filter_and_theme` installs a fully custom filter (replacing the
+/// `with_filter_and_theme` installs a fully custom filter (replacing the
 /// default), and the supplied theme is honored.
 #[test]
 fn test_trace_printer_with_filter_and_theme_custom_filter() {
@@ -483,7 +482,7 @@ fn test_trace_printer_with_filter_and_theme_custom_filter() {
     assert!(output.contains("... 1 frames hidden ..."), "got:\n{output}");
 }
 
-/// Gap 45: `add_frame_filter` composes ON TOP of the existing filter — both the
+/// `add_frame_filter` composes ON TOP of the existing filter — both the
 /// default (capture/runtime trimming) and the added predicate apply in sequence.
 #[test]
 fn test_trace_printer_add_frame_filter_composes() {
@@ -531,10 +530,10 @@ fn test_trace_printer_add_frame_filter_composes() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RUST_BACKTRACE=full unfiltered rendering (gap 40)
+// RUST_BACKTRACE=full unfiltered rendering
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Gap 40 (unit): `TracePrinter::unfiltered()` keeps every frame — including the
+/// `TracePrinter::unfiltered()` keeps every frame — including the
 /// backtrace-capture and runtime-init frames that `TracePrinter::new()` (the
 /// default filter) would trim — so it never emits a "frames hidden" notice.
 /// This is the deterministic counterpart to the integration test below, which
@@ -584,7 +583,7 @@ fn test_trace_printer_unfiltered_keeps_all_frames() {
     assert!(unfiltered_out.len() > filtered_out.len());
 }
 
-/// Gap 40 (integration): with the effective backtrace setting forced to `Full`,
+/// With the effective backtrace setting forced to `Full`,
 /// `Report` routes through `TracePrinter::unfiltered()`, so its backtrace render
 /// never carries a "frames hidden" notice.
 ///
@@ -622,11 +621,11 @@ fn test_report_backtrace_full_renders_without_hidden_notice() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Report FromResidual — `?` in a fn returning Report<E> (gap 44)
+// Report FromResidual — `?` in a fn returning Report<E>
 // Requires the nightly `unstable-try-trait-v2` feature.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Gap 44: the `?` operator works directly in a function returning `Report<E>`
+/// The `?` operator works directly in a function returning `Report<E>`
 /// via the `FromResidual` impl. An `Err` short-circuits into a `Report` carrying
 /// the error; an `Ok` flows through to the explicit return.
 #[cfg(feature = "unstable-try-trait-v2")]

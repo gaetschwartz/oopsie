@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn maybe_alone_value_via_name_value_form_widening() {
-        // Widened form: `key = name` was previously rejected; now accepted.
+        // `key = name` name-value form resolves to Value.
         let meta: syn::Meta = parse_quote!(key = "my_name");
         let parsed = MaybeAloneOopsieValue::<syn::Ident>::from_meta(&meta).unwrap();
         match parsed {

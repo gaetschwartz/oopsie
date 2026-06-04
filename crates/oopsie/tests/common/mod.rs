@@ -34,7 +34,7 @@ pub fn force_backtrace() {
     oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
 }
 
-/// Create an `ErrorWithSpanTrace` within instrumented functions to capture spantrace.
+/// Create a `MyError` within instrumented functions to capture spantrace.
 #[expect(
     clippy::items_after_statements,
     reason = "instrumented helper fns must be items; defined inside make_error to capture the spantrace"

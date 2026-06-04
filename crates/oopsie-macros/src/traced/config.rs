@@ -181,7 +181,7 @@ mod tests {
         assert!(s.contains("SpanTrace"), "{s}");
     }
 
-    // ── timestamp field type & provide attr codegen (gaps 1, 32, 36) ──
+    // ── timestamp field type & provide attr codegen ──
 
     #[test]
     fn timestamp_default_type_is_system_time() {

@@ -12,7 +12,7 @@ use oopsie::{Diagnostic as _, Oopsie};
 use std::error::Error as _;
 use std::io;
 
-// ─── Enum transparent: From impl + custom display (Tests 1 & 2) ───
+// ─── Enum transparent: From impl + custom display ───
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -47,7 +47,7 @@ fn transparent_source_delegates_to_inner() {
     assert_eq!(src.to_string(), "pipe broke");
 }
 
-// ─── GAP 31: transparent variant + capture + source, auto field asserted ───
+// ─── transparent variant + capture + source, auto field asserted ───
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -68,7 +68,7 @@ fn transparent_with_auto_fields() {
     let err: TracedError = TracedError::from(io_err);
     assert_eq!(err.to_string(), "traced io error");
 
-    // GAP 31: the capture field is initialized and reachable via destructuring.
+    // the capture field is initialized and reachable via destructuring.
     let TracedError::TracedIo { bt, .. } = &err;
     assert!(
         !bt.frames().is_empty(),
@@ -77,10 +77,10 @@ fn transparent_with_auto_fields() {
     // `oopsie_backtrace()` is intentionally NOT asserted here: a transparent
     // variant delegates the accessor to its source, and a trace-less io::Error
     // source yields None. The own capture field's population (asserted above) is
-    // the gap-31 guarantee; accessor delegation is covered by `traced_transparent`.
+    // what this test guarantees; accessor delegation is covered by `traced_transparent`.
 }
 
-// ─── GAP 19: transparent variant with a user (non-source, non-auto) field ───
+// ─── transparent variant with a user (non-source, non-auto) field ───
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -99,7 +99,7 @@ fn transparent_variant_with_user_field_defaults() {
     assert_eq!(err.to_string(), "wrapped with user field");
 }
 
-// ─── GAP 18: transparent variant + from(Type, transform) ───
+// ─── transparent variant + from(Type, transform) ───
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -123,7 +123,7 @@ fn transparent_variant_with_transform() {
     assert_eq!(err.source().expect("has source").to_string(), "nope");
 }
 
-// ─── GAP 11: transparent variant + from(Type, transform) + auto field ───
+// ─── transparent variant + from(Type, transform) + auto field ───
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -150,7 +150,7 @@ fn transparent_transform_with_auto_field() {
     );
 }
 
-// ─── GAP 21: transparent variant with auto-boxed Box<T> source ───
+// ─── transparent variant with auto-boxed Box<T> source ───
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -170,7 +170,7 @@ fn transparent_auto_boxed_source() {
     assert_eq!(err.source().expect("has source").to_string(), "reset");
 }
 
-// ─── Mixed transparent and regular variants (Test 4) ───
+// ─── Mixed transparent and regular variants ───
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -196,13 +196,12 @@ fn mixed_transparent_and_regular() {
     assert_eq!(err.to_string(), "custom: bad thing");
 }
 
-// ─── GAP 52: transparent variant WITHOUT a source field ───
+// ─── transparent variant WITHOUT a source field ───
 //
 // When `transparent` is set but the variant/struct has no `source` field, the
 // macro generates an EMPTY token stream for that variant: no `From` impl, no
 // selector. The enum still compiles and the variant is constructible by hand,
-// but there is no generated conversion. This characterizes that behavior; it
-// is NOT a compile error (the compile-fail agent owns nothing here).
+// but there is no generated conversion. This is NOT a compile error.
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -233,7 +232,7 @@ fn transparent_without_source_generates_nothing() {
 // struct From impl does NOT emit user-field defaults, so a transparent struct
 // may only carry a source plus auto (capture) fields.
 
-// GAP 0 + GAP 16: transparent struct with a source field.
+// transparent struct with a source field.
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -255,7 +254,7 @@ fn transparent_struct_from_and_display() {
     );
 }
 
-// GAP 17: transparent struct with from(Type, transform) in the From impl.
+// transparent struct with from(Type, transform) in the From impl.
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -274,7 +273,7 @@ fn transparent_struct_with_transform() {
     assert_eq!(err.to_string(), "transformed struct");
 }
 
-// GAP 20: transparent struct with an auto (capture) field.
+// transparent struct with an auto (capture) field.
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -291,7 +290,7 @@ fn transparent_struct_with_auto_field() {
     let io_err = io::Error::new(io::ErrorKind::Other, "boom");
     let err: TracedStruct = TracedStruct::from(io_err);
     assert_eq!(err.to_string(), "traced struct");
-    // GAP 20: the capture field is initialized and reachable.
+    // the capture field is initialized and reachable.
     assert!(
         !err.bt.frames().is_empty(),
         "struct auto backtrace must be captured"

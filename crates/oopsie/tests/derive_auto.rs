@@ -121,7 +121,7 @@ fn optional_span_trace_capture_with_diagnostic_source() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Multiple heterogeneous #[oopsie(capture)] fields — gap 37
+// Multiple heterogeneous #[oopsie(capture)] fields
 //
 // `gen_auto_inits` iterates over ALL auto fields and calls `.capture()` on each
 // with no type constraint, so any mix of `Capturable` types auto-initializes.

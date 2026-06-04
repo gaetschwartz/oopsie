@@ -488,7 +488,7 @@ fn no_help_field_returns_none() {
     );
 }
 
-// ---- help() format-string interpolation referencing variant fields (gaps 7 & 9) ----
+// ---- help() format-string interpolation referencing variant fields ----
 //
 // `help("fmt {}", expr)` parses as a DisplayAttr and renders through `::std::format!`,
 // exactly like `display(...)`. The generated `oopsie_help_text()` accessor binds the

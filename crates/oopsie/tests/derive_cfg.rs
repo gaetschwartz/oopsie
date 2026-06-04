@@ -58,7 +58,7 @@ fn cfg_gated_out_variant_emits_no_dangling_refs() {
     assert!(matches!(err, CfgError::Present { .. }));
 }
 
-// ---- Gap 35: cfg propagation under the `#[oopsie(...)]` attribute-macro form ----
+// ---- cfg propagation under the `#[oopsie(...)]` attribute-macro form ----
 //
 // The attribute macro (oopsie_attr/mod.rs) delegates to `derive::expand_enum`,
 // so the same cfg-forwarding path must apply. Here one variant is gated behind

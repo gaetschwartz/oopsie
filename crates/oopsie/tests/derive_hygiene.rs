@@ -1,13 +1,12 @@
-//! Regression tests for proc-macro identifier-hygiene defects found by the
-//! `amber-lattice` logic audit (HIGH cluster). Each previously-broken
-//! combination is exercised here so the generated code is forced to compile and
-//! behave:
+//! Regression tests for proc-macro identifier-hygiene defects. Each
+//! previously-broken combination is exercised here so the generated code is
+//! forced to compile and behave:
 //!
-//! - C1/C2: a renamed `#[oopsie(from)]` source combined with a `#[oopsie(capture)]`
+//! - a renamed `#[oopsie(from)]` source combined with a `#[oopsie(capture)]`
 //!   field made `build_error` move `source` and then borrow it (`E0382`).
-//! - C5/C6: a user field literally named `f` shadowed the `Formatter` parameter
+//! - a user field literally named `f` shadowed the `Formatter` parameter
 //!   in the generated `Display::fmt`.
-//! - C7: a user field literally named `request` shadowed the `&mut Request`
+//! - a user field literally named `request` shadowed the `&mut Request`
 //!   parameter in the generated `Error::provide` (unstable feature only).
 #![cfg_attr(
     feature = "unstable-error-generic-member-access",
@@ -23,7 +22,7 @@ use oopsie::{Contextual as _, Oopsie};
 use std::error::Error as _;
 use std::io;
 
-// ── C1: renamed `#[oopsie(from)]` source + a capture field (enum) ───────────
+// ── renamed `#[oopsie(from)]` source + a capture field (enum) ───────────────
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -45,7 +44,7 @@ fn c1_renamed_from_source_plus_capture_enum() {
     assert_eq!(err.source().expect("has source").to_string(), "pipe broke");
 }
 
-// ── C2: renamed `#[oopsie(from)]` source + a capture field (struct) ─────────
+// ── renamed `#[oopsie(from)]` source + a capture field (struct) ─────────────
 
 #[derive(Debug, Oopsie)]
 struct RenamedFromStructError {
@@ -63,7 +62,7 @@ fn c2_renamed_from_source_plus_capture_struct() {
     assert_eq!(err.source().expect("has source").to_string(), "pipe broke");
 }
 
-// ── C5: user field literally named `f` (enum Display) ───────────────────────
+// ── user field literally named `f` (enum Display) ───────────────────────────
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -78,7 +77,7 @@ fn c5_field_named_f_display_enum() {
     assert_eq!(err.to_string(), "value is 42");
 }
 
-// ── C6: user field literally named `f` (struct Display) ─────────────────────
+// ── user field literally named `f` (struct Display) ─────────────────────────
 
 #[derive(Debug, Oopsie)]
 #[oopsie("value is {f}")]
@@ -92,7 +91,7 @@ fn c6_field_named_f_display_struct() {
     assert_eq!(err.to_string(), "value is 7");
 }
 
-// ── C7: user field literally named `request` (provide; unstable only) ───────
+// ── user field literally named `request` (provide; unstable only) ───────────
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]

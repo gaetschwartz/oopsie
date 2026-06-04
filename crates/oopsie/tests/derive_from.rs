@@ -120,7 +120,7 @@ fn source_auto_detected() {
 // trailing `Error` stripped from the base name).
 // ====================================================================
 
-// ---- Gap 13: struct #[oopsie(from)] on non-"source"-named field ----
+// ---- struct #[oopsie(from)] on non-"source"-named field ----
 
 #[derive(Debug, Oopsie)]
 struct DynamicSourceError {
@@ -144,7 +144,7 @@ fn struct_from_marks_non_source_field() {
     assert_eq!(src.to_string(), "pipe broke");
 }
 
-// ---- Gap 14: struct #[oopsie(from(Type, transform))] ----
+// ---- struct #[oopsie(from(Type, transform))] ----
 
 #[derive(Debug, Oopsie)]
 #[oopsie("struct transform: {source}")]
@@ -164,7 +164,7 @@ fn struct_from_with_transform() {
     assert_eq!(src.to_string(), "not found");
 }
 
-// ---- Gap 15: struct auto-boxed Box<Concrete> source field ----
+// ---- struct auto-boxed Box<Concrete> source field ----
 
 #[derive(Debug, Oopsie)]
 #[oopsie("struct auto-box: {source}")]

@@ -171,7 +171,7 @@ fn test_write_json_output_is_valid_json_with_expected_fields() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GAP 46: ErasedFrame Display — name=Some, filename=None
+// ErasedFrame Display — name=Some, filename=None
 //
 // `ErasedBacktrace::frames` is private with no public frame-taking constructor,
 // but the type derives `Deserialize`, so an integration test reconstructs it
@@ -191,7 +191,7 @@ fn test_erased_frame_display_name_without_location() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GAP 47: Clone — explicit clone() assertions on the erased types.
+// Clone — explicit clone() assertions on the erased types.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -253,7 +253,7 @@ fn test_erased_spantrace_and_span_and_metadata_clone() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GAP 48: PartialEq/Eq — direct equality assertions on the erased span types.
+// PartialEq/Eq — direct equality assertions on the erased span types.
 // (Only the spantrace family derives PartialEq/Eq; ErasedError/ErasedBacktrace
 // do not, so they are excluded.)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -318,7 +318,7 @@ fn test_erased_span_and_metadata_partial_eq() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GAP 55: ErasedSpanTrace Display — empty spans vector renders the empty string.
+// ErasedSpanTrace Display — empty spans vector renders the empty string.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -329,7 +329,7 @@ fn test_erased_spantrace_display_empty_spans() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GAP 56: TracingLevel <-> tracing::Level — bidirectional mapping for all 5 levels.
+// TracingLevel <-> tracing::Level — bidirectional mapping for all 5 levels.
 // ─────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -353,7 +353,7 @@ fn test_tracing_level_bidirectional_conversion() {
     }
 }
 
-// Regression (amber-lattice C4): `from_error_ref` eagerly walks `Error::source()`
+// Regression: `from_error_ref` eagerly walks `Error::source()`
 // with `successors(...).collect()`. A user `source()` that returns itself (or an
 // ancestor) is a cycle the std `Error` contract does not forbid, so the walk must
 // be bounded — otherwise this serialization-facing API hangs / OOMs on a single

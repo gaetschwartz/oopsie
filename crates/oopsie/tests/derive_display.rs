@@ -89,7 +89,7 @@ fn struct_no_display_fallback() {
     assert_eq!(format!("{err}"), "BareStruct");
 }
 
-// ---- Bug fix: short form display with positional format args ----
+// ---- short form display with positional format args ----
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]

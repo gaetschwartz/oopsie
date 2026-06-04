@@ -1,9 +1,8 @@
 //! A custom panic hook that renders panics through [`TracePrinter`].
 //!
-//! This replaces the previous `color_eyre`-backed hook: it captures a backtrace
-//! and span trace at panic time and renders them with the same colored
-//! machinery used by [`Report`](crate::Report), so panic output matches the
-//! library's error output and pulls in no extra dependency.
+//! It captures a backtrace and span trace at panic time and renders them with
+//! the same colored machinery used by [`Report`](crate::Report), so panic
+//! output matches the library's error output.
 
 use std::fmt;
 use std::panic::PanicHookInfo;
@@ -65,8 +64,8 @@ impl<'a> PanicReport<'a> {
 
     fn write_header(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let colorize = self.color_config.should_colorize();
-        // `PanicHookInfo::payload_as_str` would be cleaner but is only stable
-        // since 1.91; downcast manually to stay within the crate's MSRV.
+        // `PanicHookInfo::payload_as_str` would be cleaner but postdates the
+        // crate's MSRV; downcast manually instead.
         let payload = self.info.payload();
         let message = payload
             .downcast_ref::<&str>()

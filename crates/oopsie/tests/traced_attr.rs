@@ -352,7 +352,7 @@ fn wrong_typed_backtrace_field_is_ordinary_and_real_backtrace_injected() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Timestamp injection (gaps 1, 32, 36)
+// Timestamp injection
 //
 // Findings characterized by these tests:
 // * `#[oopsie(traced(timestamp))]` injects a `__oopsie_timestamp` field. Unlike
@@ -371,7 +371,7 @@ fn wrong_typed_backtrace_field_is_ordinary_and_real_backtrace_injected() {
 //   through the `Provider` API (queryable via `request_value::<SystemTime>()`).
 // ════════════════════════════════════════════════════════════════════════
 
-// gap 32 / 36: nested `traced(timestamp)` — default SystemTime field.
+// nested `traced(timestamp)` — default SystemTime field.
 #[oopsie(traced(timestamp))]
 pub enum TimestampError {
     #[oopsie("ts: {info}")]
@@ -395,7 +395,7 @@ fn timestamp_nested_injects_systemtime_field() {
     assert_eq!(*stored, now);
 }
 
-// gap 36: bare `#[oopsie(timestamp)]` — explicit-override form, timestamp ONLY.
+// bare `#[oopsie(timestamp)]` — explicit-override form, timestamp ONLY.
 #[oopsie(timestamp)]
 pub enum BareTimestampError {
     #[oopsie("bare ts")]
@@ -426,7 +426,7 @@ fn timestamp_bare_form_injects_only_timestamp() {
     );
 }
 
-// gap 1 / 32: `timestamp(chrono = true)` swaps the field type to chrono's
+// `timestamp(chrono = true)` swaps the field type to chrono's
 // DateTime<Local>. `provide` stays off (opt-in), so no extra deps are required.
 #[oopsie(traced(timestamp(chrono = true)))]
 pub enum ChronoTimestampError {
@@ -452,10 +452,8 @@ fn timestamp_chrono_flag_swaps_field_type_to_datetime_local() {
     assert_eq!(*stored, dt);
 }
 
-// gap 1 / 36: `timestamp(provide = true)` surfaces the injected timestamp through
-// the Provider API. Previously unusable (the config emitted a bare
-// `#[oopsie(provide)]` the parser rejected); now it emits a real
-// `provide(SystemTime => *field)`.
+// `timestamp(provide = true)` surfaces the injected timestamp through
+// the Provider API by emitting a real `provide(SystemTime => *field)`.
 #[oopsie(traced(timestamp(provide = true)))]
 pub enum ProvidedTimestampError {
     #[oopsie("provided ts")]
@@ -480,7 +478,7 @@ fn timestamp_provide_surfaces_via_provider_api() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Custom backtrace/spantrace type override (gap 33)
+// Custom backtrace/spantrace type override
 //
 // Findings:
 // * `backtrace(r#type = Path)` injects `Path` as the field type. Constraints

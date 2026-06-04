@@ -263,7 +263,7 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Tests for from_error / from_error_ref (kills Default::default mutants)
+    // Tests for from_error / from_error_ref
     // ─────────────────────────────────────────────────────────────────────
 
     /// A simple chained error type for testing from_error / from_error_ref.
@@ -322,7 +322,7 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Tests for write_json (kills Ok(()) mutant)
+    // Tests for write_json
     // ─────────────────────────────────────────────────────────────────────
 
     #[test]
@@ -345,7 +345,7 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Tests for write_text arrow logic (kills <, -, == mutants)
+    // Tests for write_text arrow logic
     // ─────────────────────────────────────────────────────────────────────
 
     #[test]
@@ -418,7 +418,7 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Tests for format_short arrow logic (kills <, -, == mutants)
+    // Tests for format_short arrow logic
     // ─────────────────────────────────────────────────────────────────────
 
     #[test]
@@ -481,7 +481,7 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Test for write_html (kills Ok(()) mutant)
+    // Test for write_html
     // ─────────────────────────────────────────────────────────────────────
 
     #[test]
@@ -505,7 +505,7 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Test for IoToFmt::write (kills Ok(0) and Ok(1) mutants)
+    // Test for IoToFmt::write
     // ─────────────────────────────────────────────────────────────────────
 
     #[test]
@@ -534,7 +534,7 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Test for Display impl (kills Ok(Default::default()) mutant)
+    // Test for Display impl
     // ─────────────────────────────────────────────────────────────────────
 
     #[test]

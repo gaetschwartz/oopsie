@@ -5,9 +5,6 @@
 //! - Variant/struct: display, transparent, help, code
 //! - Field: from, capture, provide
 
-// `darling::FromAttributes` derive emits code that trips these pedantic
-// lints inside its generated impl body, which our struct-level attributes
-// can't reach.
 #![allow(
     clippy::needless_continue,
     clippy::nonminimal_bool,
@@ -880,9 +877,8 @@ mod tests {
         assert_eq!(kept.len(), 2);
     }
 
-    // Typo rejection is now done by darling itself (strict mode on
-    // `EnumContainerAttrs` / `VariantAttrs` / `StructAttrs`). Coverage moved
-    // to the per-scope `from_attrs` integration paths.
+    // Typo rejection is handled by darling's strict mode on the per-scope
+    // attribute structs; coverage lives in the `from_attrs` integration paths.
 
     // ── CategorizedFields ──────────────────────────────────────────────
 

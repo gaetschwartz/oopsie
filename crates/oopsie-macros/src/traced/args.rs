@@ -176,8 +176,6 @@ mod tests {
     use super::*;
 
     fn args(meta: &syn::Meta) -> TracedArgs {
-        // `#[oopsie(traced(...))]` arrives as the inner meta list; build the
-        // `traced(...)` meta darling expects.
         TracedArgs::from_meta(meta).expect("parse traced args")
     }
 
@@ -256,7 +254,7 @@ mod tests {
         r.validate(proc_macro2::Span::call_site()).unwrap();
     }
 
-    // ── timestamp parsing & flag resolution (gaps 1, 32, 36) ──────────
+    // ── timestamp parsing & flag resolution ──────────
 
     #[test]
     fn default_mode_disables_timestamp() {

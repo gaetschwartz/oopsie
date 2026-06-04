@@ -82,7 +82,7 @@ fn size_struct_passes() {
     let _ = std::mem::size_of::<StructWithSize>();
 }
 
-// ---- GAP 26: exact size(N) on a realistic String-carrying struct ----
+// ---- exact size(N) on a realistic String-carrying struct ----
 // A struct holding a single `String` is 24 bytes on a 64-bit target (ptr + len + cap).
 // `size(24)` is an exact match, so the generated `== 24` const assertion compiles.
 
@@ -101,7 +101,7 @@ fn size_exact_realistic_passes() {
     };
 }
 
-// ---- GAP 27: tight size(..=N) upper bound on a String struct ----
+// ---- tight size(..=N) upper bound on a String struct ----
 // A single-`String` struct is exactly 24 bytes, so `..=24` is the tightest upper
 // bound that still compiles (the generated `<= 24` assertion holds).
 
@@ -120,7 +120,7 @@ fn size_at_most_tight_passes() {
     };
 }
 
-// ---- GAP 28: multi-data-variant enum with a size constraint ----
+// ---- multi-data-variant enum with a size constraint ----
 // Two data-carrying variants: a `String` (24 bytes) and a `u32`. The String
 // variant dominates and the discriminant fits in the String's niche, so the
 // enum is 24 bytes. `..=24` exercises the constraint across multiple variants.
@@ -143,7 +143,7 @@ fn size_multi_variant_enum_passes() {
     let _b = MultiVariantError::Code { code: 7 };
 }
 
-// ---- GAP 54: lower-bound-only size(N..) with a meaningful N ----
+// ---- lower-bound-only size(N..) with a meaningful N ----
 // The String-carrying enum is 24 bytes, satisfying the generated `>= 16` assertion.
 
 #[derive(Debug, Oopsie)]

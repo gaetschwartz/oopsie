@@ -52,9 +52,8 @@ fn result_with_context() {
     assert_eq!(err.to_string(), "io failed: writing output");
 }
 
-// Gap 2: `with_context`'s closure receives `&source_error` and may inspect it
-// (traits.rs:186-192 passes `&error` to the closure) to build the selector —
-// choosing a variant or populating a field from the source.
+// `with_context`'s closure receives `&source_error` and may inspect it to build
+// the selector — choosing a variant or populating a field from the source.
 
 /// Classify an io error into a typed `AppError`, choosing the *variant* from the
 /// source's `ErrorKind`. Because each variant has its own selector type, the

@@ -27,7 +27,7 @@
 //!
 //! # Layout
 //!
-//! `Welp` is a 40-byte enum — `Sourced` carries `Box<str>` + `Box<dyn Error>`,
+//! `Welp` is a small enum — `Sourced` carries `Box<str>` + `Box<dyn Error>`,
 //! `Traced` carries `Box<str>` + `Box<(Backtrace, SpanTrace)>`. The two
 //! variants are mutually exclusive: a `Sourced` `Welp` captures no traces of
 //! its own; a `Traced` `Welp` captures fresh traces at construction.

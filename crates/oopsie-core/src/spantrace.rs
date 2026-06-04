@@ -243,7 +243,6 @@ mod tests {
         let _ = tracing.into_span_trace();
     }
 
-    // Keep ALL the OptionalSpanTrace tests that don't use serde/fallback
     #[test]
     fn test_optional_span_trace_none_into_inner() {
         let opt = OptionalSpanTrace::none();
@@ -282,7 +281,7 @@ mod tests {
         assert!(opt.is_none());
     }
 
-    // Tests that need a SpanTrace instance (use capture() instead of serde)
+    // Tests that need a live SpanTrace instance.
     #[test]
     fn test_optional_span_trace_some_into_inner() {
         let trace = SpanTrace::capture();

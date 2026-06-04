@@ -30,7 +30,7 @@ fn test_extract_boxed_spantrace_via_provide_ref() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Captured trace CONTENT (not just presence) — gap 30
+// Captured trace CONTENT (not just presence)
 // ════════════════════════════════════════════════════════════════════════
 
 #[oopsie(traced)]
@@ -97,7 +97,7 @@ fn captured_spantrace_status_is_captured_within_span() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// Extraction path vs fresh-capture path — gap 29
+// Extraction path vs fresh-capture path
 //
 // When the wrapped source implements `Diagnostic`, the generated capture code
 // routes through `CaptureExt::capture_or_extract` and REUSES the source's

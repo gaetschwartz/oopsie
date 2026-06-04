@@ -188,7 +188,7 @@ fn leaf_selector_build_error_no_source() {
     assert!(matches!(err, AppError::NotFound { path } if path == "x"));
 }
 
-// ---- Gap 10: selector fields accept any `Into<field_ty>`, not just &str -> String ----
+// ---- selector fields accept any `Into<field_ty>`, not just &str -> String ----
 
 /// Wrapper carrying a custom `From<Meters> for u16` so we can confirm the
 /// selector's `__T: Into<field_ty>` bound accepts user-defined conversions.
@@ -228,9 +228,9 @@ fn selector_accepts_custom_into_impls() {
     }
 }
 
-// ---- Gap 12: generated selector struct derives Debug, Copy, Clone ----
-// gen_selectors.rs:127,133 emit `#[derive(Debug, Copy, Clone)]` on every selector
-// (both unit and field-bearing). Copy IS derived, so a move-after-use compiles.
+// ---- generated selector struct derives Debug, Copy, Clone ----
+// Every selector (both unit and field-bearing) derives `Debug, Copy, Clone`, so a
+// move-after-use compiles.
 
 #[test]
 fn selector_derives_debug_clone_copy() {
@@ -261,10 +261,10 @@ fn selector_derives_debug_clone_copy() {
     assert!(matches!(e3, AppError::NotFound { .. }));
 }
 
-// ---- Gap 51: selector struct fields are `pub` ----
-// gen_selectors.rs:114 unconditionally emits `pub #field_ident`. Visibility is
-// observable by reading/destructuring the field through a struct-literal-built
-// selector instance, and across a module boundary.
+// ---- selector struct fields are `pub` ----
+// Selector fields are unconditionally `pub`. Visibility is observable by
+// reading/destructuring the field through a struct-literal-built selector
+// instance, and across a module boundary.
 
 mod external {
     use super::{AppError, Config};
