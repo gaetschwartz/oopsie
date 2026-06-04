@@ -21,6 +21,7 @@ test *ARGS: doctest
 # Re-run the full test suite, overwriting trybuild stderr (stable-only,
 # since nightly diagnostics use wider span underlines that don't match
 # stable's renderer) and insta snapshots.
+[env("INSTA_UPDATE", "always")]
 test-bless *ARGS: doctest
-    TRYBUILD=overwrite INSTA_UPDATE=always cargo +stable nextest run {{ ARGS }}
-    INSTA_UPDATE=always cargo nextest run --features unstable {{ ARGS }}
+    TRYBUILD=overwrite cargo +stable nextest run {{ ARGS }}
+    cargo nextest run --features unstable {{ ARGS }}
