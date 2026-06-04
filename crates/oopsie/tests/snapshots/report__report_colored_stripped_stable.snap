@@ -1,19 +1,19 @@
 ---
 source: crates/oopsie/tests/report.rs
-expression: output
+expression: report
 ---
-Error[report::TestError]: Test error: colored test
+[1m[31mError[39m[0m[2m[[0m[34m[2mreport::TestError[0m[39m[2m][0m: Test error: colored test
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ... 8 frames hidden ...
-  1: build<&str>
-           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  2: test_report_colored
-           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  3: {closure#0}
-           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  4: call_once<report::test_report_colored::{closure_env#0}, ()>
-           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-  5: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
-           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-   ... 20 frames hidden ...
+[31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[36m   ... 8 frames hidden ...[0m
+[2m  1[0m[2m: [0m[91mbuild<&str>[0m
+           [2mat [0m[35m[WORKSPACE]/crates/oopsie/tests/report.rs[0m[35m:18[0m[35m:1[0m
+[2m  2[0m[2m: [0m[91mtest_report_colored[0m
+           [2mat [0m[35m[WORKSPACE]/crates/oopsie/tests/report.rs[0m[35m:75[0m[35m:6[0m
+[2m  3[0m[2m: [0m[91m{closure#0}[0m
+           [2mat [0m[35m[WORKSPACE]/crates/oopsie/tests/report.rs[0m[35m:70[0m[35m:25[0m
+[2m  4[0m[2m: [0m[91mcall_once<report::test_report_colored::{closure_env#0}, ()>[0m
+           [2mat [0m[35m[STDLIB]/library/core/src/ops/function.rs[0m[35m:250[0m[35m:5[0m
+[2m  5[0m[2m: [0m[91m<fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once[0m
+           [2mat [0m[35m[STDLIB]/library/core/src/ops/function.rs[0m[35m:250[0m[35m:5[0m
+[36m   ... 20 frames hidden ...[0m

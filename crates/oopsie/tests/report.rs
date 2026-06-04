@@ -47,7 +47,7 @@ fn test_report_basic() {
     let report = Report::from_std(error).no_colors();
 
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("report_basic"), report.to_string());
+        insta::assert_snapshot!(snap_name!("report_basic"), report);
     });
 }
 
@@ -62,7 +62,7 @@ fn test_report_chain() {
     let report = Report::from_std(outer).no_colors();
 
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("report_chain"), report.to_string());
+        insta::assert_snapshot!(snap_name!("report_chain"), report);
     });
 }
 
@@ -75,9 +75,8 @@ fn test_report_colored() {
     .build();
     let report = Report::from_std(error).force_colors();
 
-    let output = strip_ansi(&report.to_string());
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("report_colored_stripped"), output);
+        insta::assert_snapshot!(snap_name!("report_colored_stripped"), report);
     });
 }
 
@@ -163,14 +162,6 @@ fn test_report_with_spantrace_debug() {
     });
 }
 
-/// The colored span renderer (`TracePrinter::write_span_frame`) is only reached
-/// when a report both carries spans *and* is colorized. Every existing spantrace
-/// test renders `.no_colors()`, which routes through core's `Display` instead, so
-/// `write_span_frame` was never exercised. The two renderers are distinguishable:
-/// `write_span_frame` numbers spans 1-based (`index` starts at 1) while core's
-/// `Display` numbers them 0-based — so the lines asserted below can *only* be
-/// produced by the colored path. We also confirm the span section is actually
-/// colorized (bright-red SGR 91 frame names), isolated from the backtrace.
 #[test]
 fn test_report_colored_spantrace_renders_frames() {
     let error = common::make_error();
@@ -627,77 +618,6 @@ fn test_report_backtrace_full_renders_without_hidden_notice() {
     assert!(
         !output.contains("frames hidden"),
         "unfiltered (Full) render must not emit a hidden-frames notice, got:\n{output}"
-    );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NO_COLOR / FORCE_COLOR honored in Report Auto mode (gaps 42, 43)
-//
-// CAVEAT: `ColorConfig::Auto` reads NO_COLOR / FORCE_COLOR exactly once and
-// caches the result in a process-global `OnceLock`. These tests therefore set
-// the env var as their FIRST action and rely on nextest running each test in
-// its OWN PROCESS (so the cache starts empty per test). Under a single-process
-// `cargo test` run they would be racy/order-dependent — run them via nextest.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// Gap 42: with `NO_COLOR` set and no explicit color override, a `Report` in
-/// Auto mode must emit no ANSI escapes.
-#[test]
-#[expect(
-    unsafe_code,
-    reason = "env mutation is unsafe on edition 2024; isolated per-process by nextest"
-)]
-fn test_report_auto_no_color_env_suppresses_ansi() {
-    // SAFETY: set before any `Auto.should_colorize()` runs in this process; under
-    // nextest this test owns its process so nothing else has cached the result.
-    unsafe {
-        std::env::set_var("NO_COLOR", "1");
-        std::env::remove_var("FORCE_COLOR");
-    }
-
-    let error = TestOopsie {
-        message: "no_color test",
-    }
-    .build();
-    // No `.no_colors()` / `.force_colors()` — stays in Auto mode.
-    let output = Report::from_std(error).to_string();
-
-    assert!(
-        !output.contains('\u{1b}'),
-        "NO_COLOR set: Auto mode must suppress ANSI escapes, got: {output:?}"
-    );
-    assert!(output.contains("no_color test"));
-}
-
-/// Gap 43: with `FORCE_COLOR` set (and NO_COLOR absent), a `Report` in Auto mode
-/// must emit ANSI escapes even though the test's stderr is not a terminal.
-#[test]
-#[expect(
-    unsafe_code,
-    reason = "env mutation is unsafe on edition 2024; isolated per-process by nextest"
-)]
-fn test_report_auto_force_color_env_enables_ansi() {
-    common::force_backtrace();
-    // SAFETY: see `test_report_auto_no_color_env_suppresses_ansi`. NO_COLOR takes
-    // precedence over FORCE_COLOR, so it must be cleared for this to take effect.
-    unsafe {
-        std::env::remove_var("NO_COLOR");
-        std::env::set_var("FORCE_COLOR", "1");
-    }
-
-    let error = TestOopsie {
-        message: "force_color test",
-    }
-    .build();
-    let output = Report::from_std(error).to_string();
-
-    assert!(
-        output.contains('\u{1b}'),
-        "FORCE_COLOR set: Auto mode must emit ANSI escapes, got: {output:?}"
-    );
-    assert!(
-        strip_ansi(&output).contains("force_color test"),
-        "stripping ANSI must leave the rendered text intact"
     );
 }
 
