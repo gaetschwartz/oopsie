@@ -39,6 +39,36 @@ expression: error
   "backtrace": {
     "frames": [
       {
+        "name": "trace",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/libunwind.rs",
+        "line": -1,
+        "column": 0
+      },
+      {
+        "name": "trace_unsynchronized<backtrace::capture::{impl#4}::create::{closure_env#0}>",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/mod.rs",
+        "line": -1,
+        "column": 0
+      },
+      {
+        "name": "trace<backtrace::capture::{impl#4}::create::{closure_env#0}>",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/backtrace/mod.rs",
+        "line": -1,
+        "column": 0
+      },
+      {
+        "name": "create",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/capture.rs",
+        "line": -1,
+        "column": 0
+      },
+      {
+        "name": "new_unresolved",
+        "filename": "[REGISTRY]/backtrace-[VERSION]/src/capture.rs",
+        "line": -1,
+        "column": 0
+      },
+      {
         "name": "capture",
         "filename": "[PATH]/crates/oopsie-core/src/backtrace.rs",
         "line": -1,
@@ -221,6 +251,12 @@ expression: error
       {
         "name": "<std::sys::thread::unix::Thread>::new::thread_start",
         "filename": "[STDLIB]/library/std/src/sys/thread/unix.rs",
+        "line": -1,
+        "column": 0
+      },
+      {
+        "name": "__pthread_cond_wait",
+        "filename": null,
         "line": -1,
         "column": 0
       }

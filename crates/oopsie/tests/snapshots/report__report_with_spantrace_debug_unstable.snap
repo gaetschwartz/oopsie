@@ -1,5 +1,5 @@
 ---
-source: crates/oopsie/tests/daisy_fancy_report.rs
+source: crates/oopsie/tests/report.rs
 expression: "format!(\"{error:#}\")"
 ---
 Inner error happened

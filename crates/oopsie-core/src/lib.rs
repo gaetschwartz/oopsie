@@ -23,7 +23,7 @@ use std::io;
 use std::ops::Deref;
 
 pub use backtrace::{
-    Backtrace, RustBacktrace, clear_rust_backtrace_override, is_internal_frame, rust_backtrace,
+    Backtrace, RustBacktrace, clear_rust_backtrace_override, rust_backtrace,
     set_rust_backtrace_override,
 };
 use color_backtrace::termcolor;
@@ -32,6 +32,9 @@ pub use diagnostic::Diagnostic;
 /// Private helpers used by macro-generated code. Not part of the public API.
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::backtrace::{
+        is_backtrace_capture_code, is_internal_frame, is_runtime_init_code,
+    };
     /// Autoref probe for capture deduplication.
     ///
     /// When the concrete source type implements `Diagnostic`, the high-priority

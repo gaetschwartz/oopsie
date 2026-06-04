@@ -23,27 +23,19 @@ pub struct ErasedFrame {
 impl ErasedBacktrace {
     /// Create an `ErasedBacktrace` from a live `Backtrace`.
     ///
-    /// Frames that [`oopsie_core::is_internal_frame`] considers
-    /// implementation/platform detail (capture machinery, OS/libc entry
-    /// points, unresolvable frames) are stripped, unless `RUST_BACKTRACE=full`
-    /// is set. The keep/drop decision is made per emitted symbol, so an internal
-    /// symbol inlined behind a user-code primary cannot leak into the output.
+    /// Captures every resolved symbol verbatim — including capture machinery,
+    /// OS/libc entry points, and unresolvable frames. Hiding
+    /// implementation/platform detail is a render-time concern; this snapshot
+    /// stays raw so a consumer can still render the full stack later.
     #[must_use]
     pub fn from_backtrace(bt: &oopsie_core::Backtrace) -> Self {
+        // Resolve the backtrace to get symbol information.
         bt.resolve();
-        let full = oopsie_core::rust_backtrace().is_full();
+
         let frames = bt
             .frames()
             .iter()
             .flat_map(|frame| frame.symbols().iter())
-            .filter(|sym| {
-                if full {
-                    return true;
-                }
-                let name = sym.name().and_then(|n| n.as_str());
-                let filename = sym.filename();
-                !oopsie_core::is_internal_frame(name, filename)
-            })
             .map(|sym| ErasedFrame {
                 name: sym.name().map(|n| n.to_string().into_boxed_str()),
                 filename: sym.filename().map(Box::from),
@@ -150,30 +142,24 @@ mod tests {
     }
 
     #[test]
-    fn from_backtrace_filters_internal_frames_unless_full() {
+    fn from_backtrace_retains_raw_internal_frames() {
         oopsie_core::set_rust_backtrace_override(oopsie_core::RustBacktrace::Enabled);
         let bt = <oopsie_core::Backtrace as oopsie_core::Capturable>::capture();
-
-        // Enabled: `is_internal_frame` machinery is stripped.
-        let filtered = ErasedBacktrace::from_backtrace(&bt);
-        // Full: the `if full { return true }` short-circuit keeps every symbol.
-        oopsie_core::set_rust_backtrace_override(oopsie_core::RustBacktrace::Full);
-        let full = ErasedBacktrace::from_backtrace(&bt);
         oopsie_core::clear_rust_backtrace_override();
 
+        let erased = ErasedBacktrace::from_backtrace(&bt);
+
+        // The capture path itself runs through internal machinery, so a raw
+        // snapshot must contain at least one internal frame — proving filtering
+        // is deferred to render time rather than applied here.
         assert!(
-            full.frames().len() >= filtered.frames().len(),
-            "full ({}) must keep at least as many frames as filtered ({})",
-            full.frames().len(),
-            filtered.frames().len()
+            erased.frames().iter().any(|fr| {
+                oopsie_core::__private::is_internal_frame(
+                    fr.name.as_deref(),
+                    fr.filename.as_deref(),
+                )
+            }),
+            "from_backtrace should retain raw internal frames, not strip them at capture"
         );
-        // Postcondition of the filtered path: nothing internal survives.
-        for fr in filtered.frames() {
-            assert!(
-                !oopsie_core::is_internal_frame(fr.name.as_deref(), fr.filename.as_deref()),
-                "filtered backtrace leaked an internal frame: {:?}",
-                fr.name
-            );
-        }
     }
 }

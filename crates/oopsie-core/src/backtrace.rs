@@ -157,69 +157,84 @@ impl crate::CaptureExt for Backtrace {
     }
 }
 
-impl color_backtrace::Backtrace for Backtrace {
-    #[inline]
-    fn frames(&self) -> Vec<color_backtrace::Frame> {
-        let mut frames = color_backtrace::Backtrace::frames(self.as_backtrace());
-        if !rust_backtrace().is_full() {
-            frames.retain(|f| !is_internal_frame(f.name.as_deref(), f.filename.as_deref()));
-        }
-        frames
-    }
-}
-
 /// Returns `true` for frames that are implementation/platform detail and
 /// should not appear in user-facing renderings.
-///
-/// Covers three classes of noise:
-/// - **Top of stack**: the `backtrace` crate's own capture machinery
-///   (`backtrace::backtrace::*`, `<backtrace::capture::*>::*`). macOS
-///   captures them; Linux inlines them away.
-/// - **Bottom of stack**: OS-level thread / libc / pthread entry points
-///   (`__pthread_*`, `__libc_start*`, etc.). These appear on some
-///   platforms (macOS pthread) and not others (Linux's libc start).
-/// - **Panic/unwind plumbing**: the `__rust_try` shim emitted around
-///   `catch_unwind` boundaries — runtime plumbing, not user code.
-///
-/// Filtering at the source means `Report`, `ErasedError`, and any future
-/// consumer all see a stable backtrace shape across macOS and Linux.
 #[must_use]
 pub fn is_internal_frame(name: Option<&str>, filename: Option<&path::Path>) -> bool {
-    // Unresolvable frame (no symbol name, no filename). On Linux these
-    // typically sit at the bottom of stack where the dynamic linker can't
-    // resolve into a Rust/libc function — they're never user-actionable and
-    // their presence varies by platform/build. Drop them.
-    if name.is_none() && filename.is_none() {
+    let Some(name) = name else {
+        // Unresolvable frames are almost certainly internal — e.g. the
+        // `__rust_try` shim is always nameless, and the backtrace crate's
+        // capture frames often are too. User code is much more likely to have
+        // at least some symbol information.
+        return true;
+    };
+    if is_backtrace_capture_code(name, filename) || is_runtime_init_code(name, filename) {
         return true;
     }
-    if let Some(n) = name {
-        // Top-of-stack: `backtrace` crate capture machinery.
-        if n.starts_with("backtrace::") || n.starts_with("<backtrace::") {
-            return true;
-        }
-        // Bottom-of-stack OS thread / libc / pthread internals, plus the
-        // `__rust_try` panic/unwind shim.
-        if n.starts_with("__pthread_")
-            || n.starts_with("_pthread_")
-            || n.starts_with("__libc_start")
-            || n.starts_with("__GI___")
-            || n.starts_with("__rust_try")
-        {
-            return true;
-        }
+    false
+}
+
+/// Prefixes for backtrace capture frames that should be skipped.
+const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
+    "std::backtrace_rs::backtrace::",
+    "<std::backtrace::Backtrace>::create",
+    "<std::backtrace::Backtrace as oopsie_core::Capturable>::",
+    "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::Capturable>::",
+];
+
+/// Prefixes for runtime-entry frames below user code; the bottom cutoff drains
+/// from the first match down.
+const RUNTIME_INIT_PREFIXES: &[&str] = &[
+    "std::sys::backtrace::__rust_begin_short_backtrace",
+    "test::__rust_begin_short_backtrace",
+    "__rust_begin_short_backtrace",
+    "std::rt::lang_start",
+    "std::panicking::catch_unwind::",
+    "std::panic::catch_unwind::",
+    "__rustc",
+    "__libc_start",
+    "__scrt_common_main",
+];
+
+const CRATE_SRC_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/");
+
+/// Check if a frame name matches backtrace capture code.
+#[inline]
+pub fn is_backtrace_capture_code(name: &str, filename: Option<&path::Path>) -> bool {
+    if BACKTRACE_CAPTURE_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+        || filename.is_some_and(|f| f.starts_with(CRATE_SRC_PATH))
+    {
+        return true;
     }
-    if let Some(p) = filename {
-        // Path components are the cleanest match: avoids false positives on
-        // e.g. `/home/.../my-backtrace-experiments/...`.
-        for component in p.components() {
-            if let path::Component::Normal(s) = component
-                && let Some(s) = s.to_str()
-                && s.starts_with("backtrace-")
-            {
-                return true;
-            }
-        }
+
+    false
+}
+
+/// Check if a frame name matches runtime initialization code.
+#[inline]
+pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
+    if RUNTIME_INIT_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+    {
+        return true;
     }
+
+    if let Some(name) = name
+        .strip_prefix("std[")
+        .or_else(|| name.strip_prefix("test["))
+    {
+        if let Some((_, mut name)) = name.split_once("]::") {
+            name = name.strip_prefix("sys::backtrace::").unwrap_or(name);
+            let val = RUNTIME_INIT_PREFIXES
+                .iter()
+                .any(|prefix| name.starts_with(prefix));
+            return val;
+        };
+    }
+
     false
 }
 
@@ -357,6 +372,12 @@ mod tests {
     impl Diagnostic for ErrorWithoutBacktrace {}
 
     #[test]
+    fn test_rust_backtrace_override() {
+        set_rust_backtrace_override(RustBacktrace::Enabled);
+        assert_eq!(rust_backtrace(), RustBacktrace::Enabled);
+    }
+
+    #[test]
     fn test_backtrace_capture_produces_backtrace() {
         let bt = Backtrace::capture();
         // Backtrace should exist (may be empty on some platforms, but should not panic)
@@ -430,10 +451,11 @@ mod tests {
     }
 
     #[test]
-    fn is_internal_frame_drops_unresolvable_frames() {
-        // Neither symbol name nor filename — only the no/no arm returns true.
+    fn is_internal_frame_drops_nameless_frames() {
+        // Any frame without a symbol name is treated as internal, whether or
+        // not a filename resolved.
         assert!(is_internal_frame(None, None));
-        assert!(!is_internal_frame(
+        assert!(is_internal_frame(
             None,
             Some(std::path::Path::new("/home/u/src/main.rs"))
         ));
@@ -441,21 +463,26 @@ mod tests {
 
     #[test]
     fn is_internal_frame_drops_backtrace_capture_machinery() {
-        assert!(is_internal_frame(Some("backtrace::backtrace::trace"), None));
         assert!(is_internal_frame(
-            Some("<backtrace::capture::Backtrace>::new"),
+            Some("std::backtrace_rs::backtrace::libunwind::trace"),
+            None
+        ));
+        assert!(is_internal_frame(
+            Some("<std::backtrace::Backtrace>::create"),
             None
         ));
     }
 
     #[test]
-    fn is_internal_frame_drops_os_and_unwind_internals() {
+    fn is_internal_frame_drops_runtime_entry_points() {
+        // Frames at the bottom-of-stack runtime boundary. Lower-level OS/libc
+        // frames below these (pthread, `__GI___*`) are not matched per-frame —
+        // the render-time bottom cutoff drains everything beneath the boundary.
         for name in [
-            "__pthread_cond_wait",
-            "_pthread_start",
             "__libc_start_main",
-            "__GI___clone",
-            "__rust_try",
+            "__scrt_common_main_seh",
+            "std::rt::lang_start_internal",
+            "__rust_begin_short_backtrace<fn(), ()>",
         ] {
             assert!(
                 is_internal_frame(Some(name), None),
@@ -465,13 +492,70 @@ mod tests {
     }
 
     #[test]
-    fn is_internal_frame_drops_by_backtrace_crate_path_component() {
-        let p =
-            std::path::Path::new("/home/u/.cargo/registry/src/index/backtrace-0.3.71/src/lib.rs");
-        assert!(is_internal_frame(Some("backtrace_rs::foo"), Some(p)));
-        // The name alone does NOT match (`backtrace_rs::` is not `backtrace::`),
-        // so the path component `backtrace-0.3.71` is what triggers the filter.
-        assert!(!is_internal_frame(Some("backtrace_rs::foo"), None));
+    fn test_is_backtrace_capture_code() {
+        assert!(is_backtrace_capture_code(
+            "std::backtrace_rs::backtrace::libunwind::trace",
+            None
+        ));
+        assert!(!is_backtrace_capture_code("my_crate::do_stuff", None));
+    }
+
+    #[test]
+    fn test_is_runtime_init_code() {
+        assert!(is_runtime_init_code(
+            "std::rt::lang_start_internal::something",
+            None
+        ));
+        assert!(is_runtime_init_code(
+            "__rust_begin_short_backtrace<fn(), ()>",
+            None
+        ));
+        assert!(!is_runtime_init_code("my_crate::main_logic", None));
+        // A bare `main` prefix would match (and hide) the user's own entry point.
+        assert!(!is_runtime_init_code("main", None));
+        assert!(!is_runtime_init_code("my_app::main", None));
+    }
+
+    #[test]
+    fn test_is_runtime_init_code_bracket_form() {
+        // v0-mangled `crate[hash]::path` form: the `crate[hash]` segment is
+        // stripped and an inner `sys::backtrace::` prefix is peeled before
+        // matching against the runtime-init prefixes.
+        assert!(is_runtime_init_code(
+            "test[a1b2c3d4]::__rust_begin_short_backtrace",
+            None
+        ));
+        assert!(is_runtime_init_code(
+            "std[a1b2c3d4]::sys::backtrace::__rust_begin_short_backtrace",
+            None
+        ));
+        // A user symbol inside the bracket form is kept.
+        assert!(!is_runtime_init_code(
+            "std[a1b2c3d4]::collections::HashMap::insert",
+            None
+        ));
+        // Only `std[`/`test[` get the bracket treatment.
+        assert!(!is_runtime_init_code(
+            "mycrate[a1b2c3d4]::__rust_begin_short_backtrace",
+            None
+        ));
+    }
+
+    #[test]
+    fn is_internal_frame_drops_oopsie_core_src_path() {
+        // Capture frames live in oopsie-core's own `src/`; matching them by
+        // path lets the renderer sweep them even when their symbol names
+        // (`capture`, backtrace-crate internals) match no known prefix.
+        let p = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/src/backtrace.rs"));
+        assert!(is_internal_frame(
+            Some("oopsie_core::backtrace::Backtrace::capture"),
+            Some(p)
+        ));
+        // The same name outside oopsie-core/src is kept.
+        assert!(!is_internal_frame(
+            Some("oopsie_core::backtrace::Backtrace::capture"),
+            None
+        ));
     }
 
     #[test]
@@ -481,9 +565,8 @@ mod tests {
             Some("my_crate::do_work"),
             Some(std::path::Path::new("/home/u/proj/src/main.rs"))
         ));
-        // False-positive guard: a path containing `my-backtrace-experiments`
-        // must NOT match — the check is on whole components prefixed
-        // `backtrace-`, not substrings.
+        // A user path that merely contains `backtrace` is not capture code:
+        // only oopsie-core's own `src/` matches by path.
         assert!(!is_internal_frame(
             Some("my_crate::do_work"),
             Some(std::path::Path::new(

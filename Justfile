@@ -14,14 +14,15 @@ doctest:
     cargo test --doc --workspace --features unstable
 
 # Run tests for both stable and nightly toolchains.
-test *ARGS: doctest
+nextest *ARGS:
     cargo +stable nextest run {{ ARGS }}
     cargo nextest run --features unstable {{ ARGS }}
+
+test *ARGS: (nextest ARGS) doctest
 
 # Re-run the full test suite, overwriting trybuild stderr (stable-only,
 # since nightly diagnostics use wider span underlines that don't match
 # stable's renderer) and insta snapshots.
-[env("INSTA_UPDATE", "always")]
 test-bless *ARGS:
-    TRYBUILD=overwrite cargo +stable nextest run {{ ARGS }}
-    cargo nextest run --features unstable {{ ARGS }}
+    INSTA_UPDATE=always TRYBUILD=overwrite cargo +stable nextest run --no-fail-fast {{ ARGS }} || true
+    INSTA_UPDATE=always cargo nextest run --features unstable --no-fail-fast {{ ARGS }} || true

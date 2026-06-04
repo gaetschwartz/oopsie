@@ -53,13 +53,6 @@ pub trait SpanTraceProvider {
 
 impl BacktraceProvider for Backtrace {
     fn frames(&self) -> Vec<BacktraceFrame> {
-        // Apply the same internal-frame filter as the `Debug` impl
-        // (`oopsie_core::backtrace::Backtrace`) and
-        // `erased_oopsie::ErasedBacktrace::from_backtrace` so each rendering
-        // path is stable across platforms (macOS captures `backtrace`-crate
-        // frames that Linux inlines away). This does not make the colored and
-        // Debug outputs identical in shape — the Debug path groups inlined
-        // symbols under one frame number, this path numbers each symbol.
         Self::frames(self)
             .iter()
             .flat_map(|frame| {
@@ -70,7 +63,6 @@ impl BacktraceProvider for Backtrace {
                     colno: sym.colno(),
                 })
             })
-            .filter(|f| !oopsie_core::is_internal_frame(f.name.as_deref(), f.filename.as_deref()))
             .collect()
     }
 }
@@ -146,45 +138,6 @@ impl Default for TraceTheme {
 // Frame filtering
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Prefixes for backtrace capture frames that should be skipped.
-const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
-    "std::backtrace_rs::backtrace::",
-    "<std::backtrace::Backtrace>::create",
-    "<std::backtrace::Backtrace as oopsie_core::Capturable>::",
-    "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::Capturable>::",
-];
-
-/// Prefixes for runtime-entry frames below user code; the bottom cutoff drains
-/// from the first match down. These must match the runtime that *calls* the
-/// entry point, never the entry point itself — a bare `"main"` would match the
-/// user's own `main` and trim it. `__rust_begin_short_backtrace` is the
-/// `std`-planted user/runtime boundary marker.
-const RUNTIME_INIT_PREFIXES: &[&str] = &[
-    "std::sys::backtrace::__rust_begin_short_backtrace",
-    "__rust_begin_short_backtrace",
-    "std::rt::lang_start::",
-    "std::rt::lang_start_internal::",
-    "std::panicking::catch_unwind::",
-    "std::panic::catch_unwind::",
-    "__rustc",
-    "__libc_start",
-    "__scrt_common_main",
-];
-
-/// Check if a frame name matches backtrace capture code.
-fn is_backtrace_capture_code(name: &str) -> bool {
-    BACKTRACE_CAPTURE_PREFIXES
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
-}
-
-/// Check if a frame name matches runtime initialization code.
-fn is_runtime_init_code(name: &str) -> bool {
-    RUNTIME_INIT_PREFIXES
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
-}
-
 /// Default frame filter for error backtraces.
 ///
 /// This filter:
@@ -193,10 +146,9 @@ fn is_runtime_init_code(name: &str) -> bool {
 pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
     // Find the index of runtime init code at the bottom
     let bottom_cutoff_idx = frames.iter().position(|frame| {
-        frame
-            .name
-            .as_ref()
-            .is_some_and(|name| is_runtime_init_code(name))
+        frame.name.as_ref().is_some_and(|name| {
+            oopsie_core::__private::is_runtime_init_code(name, frame.filename.as_deref())
+        })
     });
     if let Some(bot) = bottom_cutoff_idx {
         frames.drain(bot..);
@@ -206,20 +158,15 @@ pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
     let top_cutoff_idx = frames
         .iter()
         .rposition(|frame| {
-            frame
-                .name
-                .as_ref()
-                .is_some_and(|name| is_backtrace_capture_code(name))
+            frame.name.as_ref().is_some_and(|name| {
+                oopsie_core::__private::is_backtrace_capture_code(name, frame.filename.as_deref())
+            })
         })
         .map(|idx| idx + 1);
     if let Some(top) = top_cutoff_idx {
         frames.drain(..top);
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Hash stripping
-// ─────────────────────────────────────────────────────────────────────────────
 
 /// Split a function name into (base, hash_suffix).
 /// The hash suffix is `::h` followed by exactly 16 hex characters at the end.
@@ -565,28 +512,6 @@ mod tests {
             lineno,
             colno: None,
         }
-    }
-
-    #[test]
-    fn test_is_backtrace_capture_code() {
-        assert!(is_backtrace_capture_code(
-            "std::backtrace_rs::backtrace::libunwind::trace"
-        ));
-        assert!(!is_backtrace_capture_code("my_crate::do_stuff"));
-    }
-
-    #[test]
-    fn test_is_runtime_init_code() {
-        assert!(is_runtime_init_code(
-            "std::rt::lang_start_internal::something"
-        ));
-        assert!(is_runtime_init_code(
-            "__rust_begin_short_backtrace<fn(), ()>"
-        ));
-        assert!(!is_runtime_init_code("my_crate::main_logic"));
-        // A bare `main` prefix would match (and hide) the user's own entry point.
-        assert!(!is_runtime_init_code("main"));
-        assert!(!is_runtime_init_code("my_app::main"));
     }
 
     #[test]

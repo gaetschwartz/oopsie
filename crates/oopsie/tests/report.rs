@@ -13,7 +13,7 @@ use std::fmt;
 use std::process::Termination as _;
 
 use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter, TraceTheme};
-use oopsie::{Contextual as _, Report, RustBacktrace, oopsie};
+use oopsie::{Contextual as _, Report, RustBacktrace, oopsie, rust_backtrace};
 
 #[oopsie(traced)]
 #[oopsie("Test error: {message}")]
@@ -35,6 +35,11 @@ fn strip_ansi(s: &str) -> String {
 #[test]
 fn test_report_basic() {
     common::force_backtrace();
+    assert_eq!(
+        rust_backtrace(),
+        RustBacktrace::Enabled,
+        "backtrace override should be enabled for deterministic snapshots"
+    );
     let error = TestOopsie {
         message: "something failed",
     }

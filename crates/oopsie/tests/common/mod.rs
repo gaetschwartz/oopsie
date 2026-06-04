@@ -4,6 +4,8 @@
     reason = "each integration-test binary compiles this module fresh and uses only a subset of the helpers"
 )]
 
+use std::{path::PathBuf, sync::LazyLock};
+
 use oopsie::{ResultExt as _, oopsie};
 use tracing::instrument;
 use tracing_subscriber::prelude::*;
@@ -57,43 +59,53 @@ pub fn make_error() -> MyError {
     outer_function(true, "Alice").expect_err("Should produce an error")
 }
 
+pub static RUSTC_SYSROOT: LazyLock<String> = LazyLock::new(|| {
+    String::from_utf8(
+        std::process::Command::new("rustc")
+            .arg("--print")
+            .arg("sysroot")
+            .output()
+            .expect("failed to run rustc")
+            .stdout,
+    )
+    .expect("invalid UTF-8 in rustc sysroot")
+    .trim()
+    .to_string()
+});
+pub static WORKSPACE_ROOT: LazyLock<String> = LazyLock::new(|| {
+    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .to_string_lossy()
+        .to_string()
+});
+pub static CARGO_HOME: LazyLock<String> = LazyLock::new(|| {
+    std::env::var("CARGO_HOME")
+        .map_or_else(
+            |_| {
+                PathBuf::from(std::env::var("HOME").expect("HOME environment variable not set"))
+                    .join(".cargo")
+            },
+            |val| PathBuf::from(val),
+        )
+        .to_string_lossy()
+        .to_string()
+});
+
 #[macro_export]
 macro_rules! redact {
     (backtrace, $bl:block) => {
         insta::with_settings! {
           { filters => [
-            // Strip nightly's `crate[hash]` bracket form AND stable's
-            // `::h<16hex>` suffix form to empty — they appear at different
-            // positions per toolchain, so collapsing both to nothing is the
-            // only way to make a single snapshot match both.
-            (r"\[[0-9a-f]{7,16}\]", ""),
-            (r"::h[0-9a-f]{16}\b", ""),
-            // Normalize demangling differences between toolchains:
-            // - `Box<concrete>` (nightly) / `Box<T>` (stable)
-            // - `<__Tn>` synthetic param names (stable)
-            // - `<MyType<X>>::method` outer-wrap (nightly) vs
-            //   `MyType<__T0>::method` (stable)
-            // - `::<()>` empty-return turbofish (nightly)
-            (r"Box<[^,>]+>", "Box<T>"),
-            (r"<__T\d+>", "<T>"),
-            (r"<(\w+(?:::\w+)*)<[^<>]+>>::", "$1<T>::"),
-            (r"::<\(\)>", ""),
-            (r"\{closure#\d+\}", "{closure}"),
-            (r"\{\{closure\}\}", "{closure}"),
-            (r" as (\w+(?:::\w+)*)<[^<>]+>", " as $1"),
-            (r"<[^<>]+ as (\w+(?:::\w+)*)>::", "$1::"),
-            (r"rs:\d+(:\d+)?", "rs:[LOC]"),
+            (r"\[[0-9a-f]{7,16}\]", "[[HASH]]"),
+            (r"::h[0-9a-f]{7,16}\b", "::h[HASH]"),
             (r"\/[a-f0-9]+\/", "/[HASH]/"),
-            (&env!("CARGO_MANIFEST_DIR"), "[CRATE_DIR]"),
-            (String::from_utf8(
-              std::process::Command::new("rustc")
-                .arg("--print")
-                .arg("sysroot")
-                .output()
-                .expect("failed to run rustc")
-                .stdout
-            ).expect("invalid UTF-8 in rustc sysroot").trim(), "[SYS_ROOT]"),
-            (&format!("{}/.cargo/registry/src/", env!("HOME")), "[CARGO_REGISTRY]/"),
+            (r"rs:\d+(:\d+)?", "rs:[LOC]"),
+            (&*$crate::common::WORKSPACE_ROOT, "[WORKSPACE]"),
+            (&*$crate::common::RUSTC_SYSROOT, "[SYS_ROOT]"),
+            (&*$crate::common::CARGO_HOME, "[CARGO_HOME]/"),
             // Stdlib path normalization: local `[SYS_ROOT]/lib/rustlib/src/rust/library/`
             // and CI `/rustc/[HASH]/library/` both → `[STDLIB]/library/`.
             (r"\[SYS_ROOT\]/lib/rustlib/src/rust/library/", "[STDLIB]/library/"),
@@ -102,18 +114,16 @@ macro_rules! redact {
     };
 }
 
-#[cfg(feature = "unstable-error-generic-member-access")]
 #[macro_export]
 macro_rules! snap_name {
-    ($name:literal) => {
-        concat!($name, "_unstable")
-    };
-}
-
-#[cfg(not(feature = "unstable-error-generic-member-access"))]
-#[macro_export]
-macro_rules! snap_name {
-    ($name:literal) => {
-        concat!($name, "_stable")
-    };
+    ($name:literal) => {{
+        #[cfg(feature = "unstable")]
+        {
+            concat!($name, "_unstable")
+        }
+        #[cfg(not(feature = "unstable"))]
+        {
+            concat!($name, "_stable")
+        }
+    }};
 }
