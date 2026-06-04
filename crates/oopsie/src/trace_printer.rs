@@ -168,6 +168,41 @@ pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
     }
 }
 
+/// Trims the panic runtime that sits *above* the user's `panic!` call site.
+///
+/// A panicking stack carries the panic hook's own frames plus the `core`/`std`
+/// panic-raising plumbing above the user code that triggered the panic. This
+/// drains everything down to (and including) the last such frame so the user's
+/// call site becomes the first frame. It does not touch the bottom of the
+/// stack — pair it with [`error_backtrace_frame_filter`] (see
+/// [`panic_frame_filter`]) to also trim the runtime-init tail.
+pub fn post_panic_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
+    let top_cutoff_idx = frames
+        .iter()
+        .rposition(|frame| {
+            frame.name.as_ref().is_some_and(|name| {
+                oopsie_core::__private::is_post_panic_code(name, frame.filename.as_deref())
+            })
+        })
+        .map(|idx| idx + 1);
+    if let Some(top) = top_cutoff_idx {
+        frames.drain(..top);
+    }
+}
+
+/// Frame filter for panic backtraces.
+///
+/// Trims the panic-raising plumbing above the user's `panic!` site
+/// ([`post_panic_frame_filter`]) and then the runtime-init tail below `main`
+/// ([`error_backtrace_frame_filter`]). The order matters: the top trim removes
+/// the unwind entry frame (`__rustc::rust_begin_unwind`) first, so the bottom
+/// trim's runtime-prefix match cannot mistake it for the runtime boundary and
+/// drain user code along with it.
+pub fn panic_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
+    post_panic_frame_filter(frames);
+    error_backtrace_frame_filter(frames);
+}
+
 /// Split a function name into (base, hash_suffix).
 /// The hash suffix is `::h` followed by exactly 16 hex characters at the end.
 fn split_function_hash(name: &str) -> (&str, Option<&str>) {
@@ -553,6 +588,78 @@ mod tests {
 
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
+    }
+
+    #[test]
+    fn test_post_panic_frame_filter() {
+        // Top-of-stack order on a panic: the hook closure, std/core panic
+        // plumbing, then the user's `panic!` site, then user code.
+        let hook = make_frame(
+            Some("oopsie::panic_hook::install_panic_hook::{{closure}}"),
+            None,
+        );
+        let rust_panic = make_frame(Some("std::panicking::rust_panic_with_hook"), None);
+        let begin = make_frame(
+            Some("std::panicking::begin_panic_handler::{{closure}}"),
+            None,
+        );
+        let panic_fmt = make_frame(Some("core::panicking::panic_fmt"), None);
+        let user_site = make_frame(Some("my_crate::do_work"), None);
+        let user_main = make_frame(Some("my_crate::main"), None);
+
+        let mut frames: Vec<&BacktraceFrame> = vec![
+            &hook,
+            &rust_panic,
+            &begin,
+            &panic_fmt,
+            &user_site,
+            &user_main,
+        ];
+        post_panic_frame_filter(&mut frames);
+
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].name.as_deref(), Some("my_crate::do_work"));
+        assert_eq!(frames[1].name.as_deref(), Some("my_crate::main"));
+    }
+
+    #[test]
+    fn test_post_panic_frame_filter_no_panic_frames() {
+        // With no panic-runtime frames present the filter is a no-op.
+        let app1 = make_frame(Some("my_crate::function_a"), None);
+        let app2 = make_frame(Some("my_crate::function_b"), None);
+
+        let mut frames: Vec<&BacktraceFrame> = vec![&app1, &app2];
+        post_panic_frame_filter(&mut frames);
+
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
+    }
+
+    #[test]
+    fn test_panic_frame_filter_trims_both_ends() {
+        // A realistic panic stack: capture machinery + the unwind entry above
+        // user code, and the runtime-init tail (with `catch_unwind` frames that
+        // must NOT pull the top cut down) below `main`.
+        let capture = make_frame(Some("std::backtrace_rs::backtrace::libunwind::trace"), None);
+        let unwind = make_frame(Some("__rustc[ab12cd34]::rust_begin_unwind"), None);
+        let panic_fmt = make_frame(Some("core[ab12cd34]::panicking::panic_fmt"), None);
+        let user_site = make_frame(Some("my_crate::parse_header"), None);
+        let user_main = make_frame(Some("my_crate::main"), None);
+        let begin = make_frame(Some("__rust_begin_short_backtrace<fn(), ()>"), None);
+        let catch = make_frame(
+            Some("std[ab12cd34]::panicking::catch_unwind::do_call"),
+            None,
+        );
+        let main_c = make_frame(Some("_main"), None);
+
+        let mut frames: Vec<&BacktraceFrame> = vec![
+            &capture, &unwind, &panic_fmt, &user_site, &user_main, &begin, &catch, &main_c,
+        ];
+        panic_frame_filter(&mut frames);
+
+        assert_eq!(frames.len(), 2);
+        assert_eq!(frames[0].name.as_deref(), Some("my_crate::parse_header"));
+        assert_eq!(frames[1].name.as_deref(), Some("my_crate::main"));
     }
 
     #[test]

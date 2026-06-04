@@ -853,7 +853,6 @@ version = "0.1.0"
 dependencies = [
  "backtrace",
  "color-backtrace",
- "color-eyre",
  "oopsie",
  "serde",
  "tracing",

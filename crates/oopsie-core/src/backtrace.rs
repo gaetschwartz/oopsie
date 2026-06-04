@@ -182,6 +182,34 @@ const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
     "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::Capturable>::",
 ];
 
+/// Prefixes for the panic *raising* runtime that sits directly above the user's
+/// `panic!` site: the `core`/`std` panic machinery and unwind entry points.
+///
+/// Deliberately excludes `std::panicking::catch_unwind` (and its `try`/`do_call`
+/// helpers): those frames sit at the *bottom* of the stack, below `main`, where
+/// the runtime catches the unwind. Matching them would let a reverse search for
+/// the panic boundary be dragged all the way down, trimming user code.
+const POST_PANIC_PREFIXES: &[&str] = &[
+    "core::panicking::",
+    "std::panicking::panic",
+    "std::panicking::begin_panic",
+    "std::panicking::rust_panic",
+    "std::sys::backtrace::__rust_end_short_backtrace",
+    "rust_begin_unwind",
+    "__rust_start_panic",
+];
+
+/// Crate-less tail forms of [`POST_PANIC_PREFIXES`], matched after a v0-mangled
+/// `crate[hash]::` segment (and an inner `sys::backtrace::`) is peeled off.
+fn is_post_panic_tail(tail: &str) -> bool {
+    tail.starts_with("panicking::panic")
+        || tail.starts_with("panicking::begin_panic")
+        || tail.starts_with("panicking::rust_panic")
+        || tail.starts_with("__rust_end_short_backtrace")
+        || tail.starts_with("rust_begin_unwind")
+        || tail.starts_with("__rust_start_panic")
+}
+
 /// Prefixes for runtime-entry frames below user code; the bottom cutoff drains
 /// from the first match down.
 const RUNTIME_INIT_PREFIXES: &[&str] = &[
@@ -207,6 +235,36 @@ pub fn is_backtrace_capture_code(name: &str, filename: Option<&path::Path>) -> b
         || filename.is_some_and(|f| f.starts_with(CRATE_SRC_PATH))
     {
         return true;
+    }
+
+    false
+}
+
+/// Check if a frame name matches panic-runtime code that sits above the user's
+/// `panic!` site (`core::panicking`, `std::panicking`, unwind entry points).
+#[inline]
+#[must_use]
+pub fn is_post_panic_code(name: &str, _filename: Option<&path::Path>) -> bool {
+    if POST_PANIC_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+    {
+        return true;
+    }
+
+    // Newer std renders internal frames as `crate[hash]::path` (v0 mangling)
+    // rather than the demangled `crate::path`. The unwind entry in particular
+    // shows up as `__rustc[hash]::rust_begin_unwind`. Strip the bracket segment
+    // and match the tail against the crate-less prefix forms.
+    if let Some(rest) = name
+        .strip_prefix("std[")
+        .or_else(|| name.strip_prefix("core["))
+        .or_else(|| name.strip_prefix("__rustc["))
+    {
+        if let Some((_, tail)) = rest.split_once("]::") {
+            let tail = tail.strip_prefix("sys::backtrace::").unwrap_or(tail);
+            return is_post_panic_tail(tail);
+        }
     }
 
     false
@@ -537,6 +595,61 @@ mod tests {
         // Only `std[`/`test[` get the bracket treatment.
         assert!(!is_runtime_init_code(
             "mycrate[a1b2c3d4]::__rust_begin_short_backtrace",
+            None
+        ));
+    }
+
+    #[test]
+    fn test_is_post_panic_code() {
+        assert!(is_post_panic_code("core::panicking::panic_fmt", None));
+        assert!(is_post_panic_code(
+            "std::panicking::begin_panic_handler::{{closure}}",
+            None
+        ));
+        assert!(is_post_panic_code("rust_begin_unwind", None));
+        assert!(is_post_panic_code(
+            "std::sys::backtrace::__rust_end_short_backtrace::<…>",
+            None
+        ));
+        // `catch_unwind` sits below `main`, not above the panic site, and must
+        // NOT be treated as panic-raising plumbing.
+        assert!(!is_post_panic_code(
+            "std::panicking::catch_unwind::do_call",
+            None
+        ));
+        // User code and the user's own panic call site are kept.
+        assert!(!is_post_panic_code("my_app::do_work", None));
+        assert!(!is_post_panic_code("my_app::main", None));
+    }
+
+    #[test]
+    fn test_is_post_panic_code_bracket_form() {
+        // v0-mangled `crate[hash]::path` form for the panic runtime.
+        assert!(is_post_panic_code(
+            "std[a1b2c3d4]::panicking::begin_panic_handler",
+            None
+        ));
+        assert!(is_post_panic_code(
+            "core[a1b2c3d4]::panicking::panic_fmt",
+            None
+        ));
+        assert!(is_post_panic_code(
+            "std[a1b2c3d4]::sys::backtrace::__rust_end_short_backtrace",
+            None
+        ));
+        // The unwind entry is emitted under the `__rustc` pseudo-crate.
+        assert!(is_post_panic_code(
+            "__rustc[a1b2c3d4]::rust_begin_unwind",
+            None
+        ));
+        // `catch_unwind` in bracket form is still excluded.
+        assert!(!is_post_panic_code(
+            "std[a1b2c3d4]::panicking::catch_unwind::do_call",
+            None
+        ));
+        // A user symbol inside the bracket form is kept.
+        assert!(!is_post_panic_code(
+            "std[a1b2c3d4]::collections::HashMap::insert",
             None
         ));
     }

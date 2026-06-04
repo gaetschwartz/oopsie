@@ -159,8 +159,8 @@ pub use oopsie_macros::oopsie;
 pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
     NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace, Welp,
-    WelpOptionExt, WelpResultExt, clear_rust_backtrace_override, install, install_panic_hook,
-    rust_backtrace, set_rust_backtrace_override,
+    WelpOptionExt, WelpResultExt, clear_rust_backtrace_override, install, rust_backtrace,
+    set_rust_backtrace_override,
 };
 
 // Hidden re-export so macro-generated code can reach the autoref-probe
@@ -209,6 +209,11 @@ pub use color::{ColorConfig, get_color_mode, set_color_mode};
 mod report;
 #[cfg(feature = "fancy")]
 pub use report::Report;
+
+#[cfg(feature = "fancy")]
+mod panic_hook;
+#[cfg(feature = "fancy")]
+pub use panic_hook::install_panic_hook;
 
 #[cfg(feature = "fancy")]
 pub mod trace_printer;
