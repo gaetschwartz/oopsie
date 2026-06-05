@@ -140,10 +140,42 @@ pub(super) fn has_oopsie_name_value(attrs: &[syn::Attribute], key: &str) -> bool
     false
 }
 
+/// Check whether any `#[oopsie(...)]` attribute on this item contains a bare
+/// flag like `transparent` — an ident not followed by `=` (name-value) or a
+/// `(...)` group (call/list form). Complements [`has_oopsie_name_value`].
+pub(super) fn has_oopsie_flag(attrs: &[syn::Attribute], key: &str) -> bool {
+    for attr in attrs {
+        if !attr.path().is_ident("oopsie") {
+            continue;
+        }
+        let Ok(tokens) = attr.parse_args::<proc_macro2::TokenStream>() else {
+            continue;
+        };
+        let mut iter = tokens.into_iter().peekable();
+        while let Some(tok) = iter.next() {
+            let proc_macro2::TokenTree::Ident(ident) = &tok else {
+                continue;
+            };
+            if ident != key {
+                continue;
+            }
+            match iter.peek() {
+                Some(proc_macro2::TokenTree::Punct(p)) if p.as_char() == '=' => {}
+                Some(proc_macro2::TokenTree::Group(_)) => {}
+                _ => return true,
+            }
+        }
+    }
+    false
+}
+
 /// Add Oopsie provide attributes for auto-generated error code.
 ///
 /// Backtrace and spantrace are handled by Diagnostic via field detection, so
 /// only ErrorCode needs a provide attr for nightly Error::provide support.
+///
+/// A `transparent` item is skipped: its code is forwarded from the source, and
+/// an injected auto-code would shadow that forward in code-resolution.
 pub(super) fn add_provide_attrs(
     attrs: &mut Vec<syn::Attribute>,
     config: &FieldInjectorConfig,
@@ -151,12 +183,14 @@ pub(super) fn add_provide_attrs(
     variant_name: Option<&str>,
     code_enabled: bool,
     has_user_code: bool,
+    is_transparent: bool,
 ) {
     let FieldInjectorConfig { code_type, .. } = config;
 
-    // Only generate auto-code from module_path!() when the code feature is enabled
-    // AND the user did not specify their own `code = "..."` on the variant/struct.
-    if code_enabled && !has_user_code {
+    // Auto-code is the fallback: skip it when the feature is off, when the user
+    // wrote their own `code = "..."`, or when the item is `transparent` (its code
+    // comes from the source).
+    if code_enabled && !has_user_code && !is_transparent {
         let mut name = type_name.to_owned();
         if let Some(v) = variant_name {
             name.push_str("::");
@@ -270,7 +304,7 @@ mod tests {
     fn add_provide_attrs_no_code_when_disabled() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(&mut attrs, &config, "MyError", None, false, false);
+        add_provide_attrs(&mut attrs, &config, "MyError", None, false, false, false);
         assert_eq!(attrs.len(), 0);
     }
 
@@ -278,7 +312,7 @@ mod tests {
     fn add_provide_attrs_adds_code_when_enabled() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(&mut attrs, &config, "MyError", None, true, false);
+        add_provide_attrs(&mut attrs, &config, "MyError", None, true, false, false);
         assert_eq!(attrs.len(), 1);
     }
 
@@ -286,7 +320,23 @@ mod tests {
     fn add_provide_attrs_skips_code_when_user_code_present() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(&mut attrs, &config, "MyError", None, true, true);
+        add_provide_attrs(&mut attrs, &config, "MyError", None, true, true, false);
+        assert_eq!(attrs.len(), 0);
+    }
+
+    #[test]
+    fn add_provide_attrs_skips_code_when_transparent() {
+        let mut attrs: Vec<syn::Attribute> = vec![];
+        let config = test_config();
+        add_provide_attrs(
+            &mut attrs,
+            &config,
+            "MyError",
+            Some("Variant"),
+            true,
+            false,
+            true,
+        );
         assert_eq!(attrs.len(), 0);
     }
 
@@ -294,7 +344,15 @@ mod tests {
     fn add_provide_attrs_with_variant_name() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(&mut attrs, &config, "MyError", Some("Variant"), true, false);
+        add_provide_attrs(
+            &mut attrs,
+            &config,
+            "MyError",
+            Some("Variant"),
+            true,
+            false,
+            false,
+        );
         assert_eq!(attrs.len(), 1);
         let attr_str = quote! { #(#attrs)* }.to_string();
         insta::assert_snapshot!(attr_str);
@@ -318,6 +376,26 @@ mod tests {
     fn has_oopsie_name_value_ident_without_equals() {
         let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(code)] };
         assert!(!has_oopsie_name_value(&attrs, "code"));
+    }
+
+    // ── has_oopsie_flag ──────────────────────────────────────────────
+
+    #[test]
+    fn has_oopsie_flag_finds_bare_flag() {
+        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(display("x"), transparent)] };
+        assert!(has_oopsie_flag(&attrs, "transparent"));
+    }
+
+    #[test]
+    fn has_oopsie_flag_ignores_name_value() {
+        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(code = "my::error")] };
+        assert!(!has_oopsie_flag(&attrs, "code"));
+    }
+
+    #[test]
+    fn has_oopsie_flag_ignores_call_form() {
+        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(display("x"))] };
+        assert!(!has_oopsie_flag(&attrs, "display"));
     }
 
     #[test]

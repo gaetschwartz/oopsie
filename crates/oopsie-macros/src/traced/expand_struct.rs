@@ -7,7 +7,7 @@ use syn::parse_quote;
 use super::args::TracedArgs;
 use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{
-    add_provide_attrs, check_existing_fields, has_oopsie_name_value, inject_fields,
+    add_provide_attrs, check_existing_fields, has_oopsie_flag, has_oopsie_name_value, inject_fields,
 };
 
 pub fn expand_struct(
@@ -48,6 +48,7 @@ pub fn expand_struct(
 
     // Check if user specified `code = "..."` in #[oopsie(...)] to suppress auto-code
     let has_user_code = has_oopsie_name_value(&input.attrs, "code");
+    let is_transparent = has_oopsie_flag(&input.attrs, "transparent");
 
     // Add struct-level provide attrs
     add_provide_attrs(
@@ -57,6 +58,7 @@ pub fn expand_struct(
         None,
         args.code.is_enabled(),
         has_user_code,
+        is_transparent,
     );
 
     Ok(quote! { #input })

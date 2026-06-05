@@ -435,3 +435,45 @@ mod traced_transparent {
         );
     }
 }
+
+// ─── Regression: `traced` auto-code must not shadow transparent forwarding ───
+//
+// On a `#[oopsie::oopsie(traced)]` enum the per-variant auto-code injection is
+// suppressed for `transparent` variants, so the source's real code forwards
+// through instead of the wrapper's `Enum::Variant` auto-code. This surfaces in
+// the stable `oopsie_error_code()` accessor, so the test is not feature-gated.
+mod traced_transparent_code {
+    use oopsie::Diagnostic as _;
+
+    #[oopsie::oopsie(traced)]
+    pub enum Leaf {
+        #[oopsie("leaf boom")]
+        #[oopsie(code = "leaf::real_code")]
+        Boom,
+    }
+
+    #[oopsie::oopsie(traced)]
+    pub enum Wrapper {
+        #[oopsie(transparent)]
+        Around { source: Leaf },
+    }
+
+    #[test]
+    fn traced_transparent_forwards_source_code_not_autocode() {
+        use leaf_oopsies::Boom;
+
+        let leaf = Boom.build();
+        let outer: Wrapper = Wrapper::from(leaf);
+
+        assert_eq!(
+            outer
+                .oopsie_error_code()
+                .expect("transparent forwards the leaf's code")
+                .as_str(),
+            "leaf::real_code",
+            "transparent must forward the source's code, not the traced wrapper's auto-code"
+        );
+        // Display still delegates to the source.
+        assert_eq!(outer.to_string(), "leaf boom");
+    }
+}
