@@ -29,9 +29,9 @@ impl RustBacktrace {
 
         static ENABLED: AtomicU8 = AtomicU8::new(NOT_SET);
         if let Some(cached) = match ENABLED.load(Relaxed) {
-            1 => Some(Some(RustBacktrace::Disabled)),
-            2 => Some(Some(RustBacktrace::Enabled)),
-            3 => Some(Some(RustBacktrace::Full)),
+            1 => Some(Some(Self::Disabled)),
+            2 => Some(Some(Self::Enabled)),
+            3 => Some(Some(Self::Full)),
             NONE => Some(None),
             NOT_SET => None,
             _ => unreachable!(),
@@ -228,6 +228,7 @@ const CRATE_SRC_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/");
 
 /// Check if a frame name matches backtrace capture code.
 #[inline]
+#[must_use]
 pub fn is_backtrace_capture_code(name: &str, filename: Option<&path::Path>) -> bool {
     if BACKTRACE_CAPTURE_PREFIXES
         .iter()
@@ -260,11 +261,10 @@ pub fn is_post_panic_code(name: &str, _filename: Option<&path::Path>) -> bool {
         .strip_prefix("std[")
         .or_else(|| name.strip_prefix("core["))
         .or_else(|| name.strip_prefix("__rustc["))
+        && let Some((_, tail)) = rest.split_once("]::")
     {
-        if let Some((_, tail)) = rest.split_once("]::") {
-            let tail = tail.strip_prefix("sys::backtrace::").unwrap_or(tail);
-            return is_post_panic_tail(tail);
-        }
+        let tail = tail.strip_prefix("sys::backtrace::").unwrap_or(tail);
+        return is_post_panic_tail(tail);
     }
 
     false
@@ -272,6 +272,7 @@ pub fn is_post_panic_code(name: &str, _filename: Option<&path::Path>) -> bool {
 
 /// Check if a frame name matches runtime initialization code.
 #[inline]
+#[must_use]
 pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
     if RUNTIME_INIT_PREFIXES
         .iter()
@@ -283,14 +284,12 @@ pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool 
     if let Some(name) = name
         .strip_prefix("std[")
         .or_else(|| name.strip_prefix("test["))
+        && let Some((_, mut name)) = name.split_once("]::")
     {
-        if let Some((_, mut name)) = name.split_once("]::") {
-            name = name.strip_prefix("sys::backtrace::").unwrap_or(name);
-            let val = RUNTIME_INIT_PREFIXES
-                .iter()
-                .any(|prefix| name.starts_with(prefix));
-            return val;
-        };
+        name = name.strip_prefix("sys::backtrace::").unwrap_or(name);
+        return RUNTIME_INIT_PREFIXES
+            .iter()
+            .any(|prefix| name.starts_with(prefix));
     }
 
     false

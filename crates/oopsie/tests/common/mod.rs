@@ -70,7 +70,7 @@ pub static RUSTC_SYSROOT: LazyLock<String> = LazyLock::new(|| {
     )
     .expect("invalid UTF-8 in rustc sysroot")
     .trim()
-    .to_string()
+    .to_owned()
 });
 pub static WORKSPACE_ROOT: LazyLock<String> = LazyLock::new(|| {
     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

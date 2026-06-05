@@ -52,6 +52,30 @@ impl SpanTrace {
     }
 }
 
+// Span fields carry no stable identity, so only debug builds keep them around to
+// tighten equality; release builds drop them and compare callsites alone.
+#[cfg(debug_assertions)]
+#[inline]
+fn capture_fields(fields: &str) -> String {
+    fields.to_owned()
+}
+
+#[cfg(not(debug_assertions))]
+#[inline]
+fn capture_fields(_fields: &str) {}
+
+#[cfg(debug_assertions)]
+#[inline]
+fn fields_eq(stored: &str, current: &str) -> bool {
+    stored == current
+}
+
+#[cfg(not(debug_assertions))]
+#[inline]
+fn fields_eq(_stored: &(), _current: &str) -> bool {
+    true
+}
+
 impl PartialEq for SpanTrace {
     fn eq(&self, other: &Self) -> bool {
         let a = &self.inner;
@@ -59,24 +83,14 @@ impl PartialEq for SpanTrace {
 
         let mut a_frames = VecDeque::with_capacity(2);
         a.with_spans(|a_md, a_fields| {
-            a_frames.push_back((
-                a_md.callsite(),
-                cfg_select! {
-                    debug_assertions => a_fields.to_owned(),
-                    _ => (),
-                },
-            ));
+            a_frames.push_back((a_md.callsite(), capture_fields(a_fields)));
             true
         });
         let mut equal = true;
         b.with_spans(|b_md, b_fields| {
             equal = match a_frames.pop_front() {
                 Some((a_callsite, a_fields)) => {
-                    a_callsite == b_md.callsite()
-                        && cfg_select! {
-                            debug_assertions => a_fields == b_fields,
-                            _ => true,
-                        }
+                    a_callsite == b_md.callsite() && fields_eq(&a_fields, b_fields)
                 }
                 None => false,
             };
@@ -409,7 +423,7 @@ mod tests {
         assert_eq!(c, d);
 
         // Debug builds compare recorded field values; release builds compare
-        // callsites only (see the `cfg_select!` in `eq`).
+        // callsites only (see `capture_fields`/`fields_eq`).
         #[cfg(debug_assertions)]
         assert_ne!(a, b, "debug builds must distinguish differing field values");
         #[cfg(not(debug_assertions))]

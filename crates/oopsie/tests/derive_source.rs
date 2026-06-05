@@ -4,8 +4,16 @@
 )]
 // The parenthesized-trait-object regression test deliberately writes
 // `Box<(dyn Error + ...)>`; the derive re-emits that type in generated code,
-// so the lint must be relaxed crate-wide for this fixture.
-#![expect(
+// so `unused_parens` must be relaxed crate-wide for this fixture. The lint is
+// version-dependent (it doesn't fire on the MSRV), so `#[expect]` would be
+// unfulfilled there — `#[allow]` tolerates both. The companion allow opts this
+// fixture out of the workspace's allow-over-expect restriction for the same
+// reason: expect can't be used for a lint that only fires on some toolchains.
+#![allow(
+    clippy::allow_attributes,
+    reason = "unused_parens is version-dependent, so expect would be unfulfilled on the MSRV"
+)]
+#![allow(
     unused_parens,
     reason = "parenthesized trait object is the regression under test"
 )]

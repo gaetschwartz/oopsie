@@ -8,6 +8,13 @@ check:
     cargo +stable check -p oopsie --no-default-features --lib
     cargo +stable check -p oopsie-core --no-default-features --lib
 
+# Run clippy exactly as CI's Lints job does: deny every warning across the
+# whole workspace and all targets, for the default-features and
+# unstable-features builds. Uses the pinned toolchain, same as CI.
+clippy:
+    cargo clippy --workspace --all-targets -- -D warnings
+    cargo clippy --workspace --all-targets --features unstable -- -D warnings
+
 # Run doctests for all workspace crates.
 doctest:
     cargo +stable test --doc --workspace
