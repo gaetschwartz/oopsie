@@ -14,22 +14,41 @@ use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr, StructAttrs, Var
 /// `unstable-error-generic-member-access` feature `source_trace` yields `None`,
 /// so the body degrades to the own field. Returns `None` when the layer has
 /// neither a source nor an own trace.
+///
+/// `probe` is the stable `DiagProbe` forwarding expression, supplied only for
+/// `transparent` layers. It sits between the (nightly-only) provider path and
+/// the own field, so a transparent wrapper forwards its source's trace on
+/// stable too — degrading to the own field when the source carries none.
 fn trace_accessor_body(
     own: Option<TokenStream2>,
     source_access: Option<TokenStream2>,
+    probe: Option<TokenStream2>,
     trace_ty: &TokenStream2,
     oopsie_path: &syn::Path,
 ) -> Option<TokenStream2> {
     match (own, source_access) {
-        (Some(own), Some(src)) => Some(quote! {
-            #oopsie_path::__private::source_trace::<#trace_ty>(#src)
-                .or(::core::option::Option::Some(#own))
-        }),
+        (Some(own), Some(src)) => {
+            let head = provider_then_probe(&src, probe, trace_ty, oopsie_path);
+            Some(quote! { #head.or(::core::option::Option::Some(#own)) })
+        }
         (Some(own), None) => Some(quote! { ::core::option::Option::Some(#own) }),
-        (None, Some(src)) => Some(quote! {
-            #oopsie_path::__private::source_trace::<#trace_ty>(#src)
-        }),
+        (None, Some(src)) => Some(provider_then_probe(&src, probe, trace_ty, oopsie_path)),
         (None, None) => None,
+    }
+}
+
+/// The provider-API trace lookup, with the (transparent-only) stable `DiagProbe`
+/// forwarder OR-ed in after it when present.
+fn provider_then_probe(
+    src: &TokenStream2,
+    probe: Option<TokenStream2>,
+    trace_ty: &TokenStream2,
+    oopsie_path: &syn::Path,
+) -> TokenStream2 {
+    let base = quote! { #oopsie_path::__private::source_trace::<#trace_ty>(#src) };
+    match probe {
+        Some(probe) => quote! { #base.or(#probe) },
+        None => base,
     }
 }
 
@@ -47,6 +66,25 @@ fn accessor_pattern_binds(
         binds.push(source.clone());
     }
     binds
+}
+
+/// Build a `DiagProbe` forwarding call for a transparent layer: forward one
+/// `Diagnostic` accessor (`method`) to the source if it implements `Diagnostic`,
+/// else `None`. `target` is the `&Source` reference to probe (a by-ref binding
+/// in enum arms, `&self.field` in structs). Mirrors the autoref dispatch used by
+/// `CaptureProbe` in `gen_selectors`.
+fn gen_diag_forward(
+    target: impl quote::ToTokens,
+    method: &str,
+    oopsie_path: &syn::Path,
+) -> TokenStream2 {
+    let method = format_ident!("{method}");
+    quote! {
+        {
+            use #oopsie_path::__private::{DiagForwardExt as _, DiagForwardFallback as _};
+            (&#oopsie_path::__private::DiagProbe(#target)).#method()
+        }
+    }
 }
 
 /// Generate `std::error::Error` impl for an enum.
@@ -182,6 +220,14 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
 
         let source_ident = categorized.source.as_ref().map(|s| &s.ident);
         let src_access = source_ident.map(|s| quote! { #s.as_error_source() });
+        // Transparent layers forward the source's trace on stable via `DiagProbe`
+        // (the provider path is nightly-only). `#s` is bound by ref in the arm.
+        let bt_probe = source_ident
+            .filter(|_| variant_attrs.transparent)
+            .map(|s| gen_diag_forward(s, "fwd_backtrace", oopsie_path));
+        let st_probe = source_ident
+            .filter(|_| variant_attrs.transparent)
+            .map(|s| gen_diag_forward(s, "fwd_spantrace", oopsie_path));
         let bt_ty = quote! { #oopsie_path::Backtrace };
         let st_ty = quote! { #oopsie_path::SpanTrace };
 
@@ -198,7 +244,9 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         } else {
             (None, None)
         };
-        if let Some(body) = trace_accessor_body(bt_own, src_access.clone(), &bt_ty, oopsie_path) {
+        if let Some(body) =
+            trace_accessor_body(bt_own, src_access.clone(), bt_probe, &bt_ty, oopsie_path)
+        {
             let binds = accessor_pattern_binds(bt_bind, source_ident);
             bt_arms.push(quote! {
                 #(#cfg_attrs)*
@@ -220,7 +268,9 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         } else {
             (None, None)
         };
-        if let Some(body) = trace_accessor_body(st_own, src_access.clone(), &st_ty, oopsie_path) {
+        if let Some(body) =
+            trace_accessor_body(st_own, src_access.clone(), st_probe, &st_ty, oopsie_path)
+        {
             let binds = accessor_pattern_binds(st_bind, source_ident);
             st_arms.push(quote! {
                 #(#cfg_attrs)*
@@ -229,27 +279,35 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             accessor_uses_source |= source_ident.is_some();
         }
 
-        // Error code: check for user-specified code first, then auto-generated from provide attrs
+        // Error code: user-specified, then auto-generated from provide attrs,
+        // then (for `transparent`) forwarded from the source.
         if let Some(code) = &variant_attrs.code {
             code_arms.push(quote! {
                 #(#cfg_attrs)*
                 Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#code)),
             });
-        } else {
-            // Check for auto-generated code from trace-injection provide attrs
-            for provide_attr in &variant_attrs.provides {
-                if is_error_code_provide(provide_attr) {
-                    let expr = &provide_attr.expr;
-                    code_arms.push(quote! {
-                        #(#cfg_attrs)*
-                        Self::#variant_ident { .. } => ::core::option::Option::Some(#expr),
-                    });
-                    break;
-                }
-            }
+        } else if let Some(expr) = variant_attrs
+            .provides
+            .iter()
+            .find(|p| is_error_code_provide(p))
+            .map(|p| &p.expr)
+        {
+            code_arms.push(quote! {
+                #(#cfg_attrs)*
+                Self::#variant_ident { .. } => ::core::option::Option::Some(#expr),
+            });
+        } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
+        {
+            let source_ident = &source_field.ident;
+            let fwd = gen_diag_forward(source_ident, "fwd_code", oopsie_path);
+            code_arms.push(quote! {
+                #(#cfg_attrs)*
+                Self::#variant_ident { #source_ident, .. } => #fwd,
+            });
         }
 
-        // Help text: dynamic field takes precedence over static attribute
+        // Help text: dynamic field, then static attribute, then (for
+        // `transparent`) forwarded from the source.
         if let Some(help_field) = &categorized.help_field {
             help_arms.push(quote! {
                 #(#cfg_attrs)*
@@ -283,6 +341,14 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                     #help_pattern => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*))),
                 });
             }
+        } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
+        {
+            let source_ident = &source_field.ident;
+            let fwd = gen_diag_forward(source_ident, "fwd_help", oopsie_path);
+            help_arms.push(quote! {
+                #(#cfg_attrs)*
+                Self::#variant_ident { #source_ident, .. } => #fwd,
+            });
         }
     }
 
@@ -506,6 +572,13 @@ pub fn gen_struct_error(
     } else {
         quote! {}
     };
+    // Transparent structs forward the source's trace on stable via `DiagProbe`.
+    let bt_probe = struct_source
+        .filter(|_| variant_attrs.transparent)
+        .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_backtrace", oopsie_path));
+    let st_probe = struct_source
+        .filter(|_| variant_attrs.transparent)
+        .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_spantrace", oopsie_path));
     let bt_ty = quote! { #oopsie_path::Backtrace };
     let st_ty = quote! { #oopsie_path::SpanTrace };
 
@@ -518,16 +591,21 @@ pub fn gen_struct_error(
             }
         })
     };
-    let bt_method =
-        match trace_accessor_body(bt_own, struct_src_access.clone(), &bt_ty, oopsie_path) {
-            Some(body) => quote! {
-                fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
-                    #struct_use_aes
-                    #body
-                }
-            },
-            None => quote! {},
-        };
+    let bt_method = match trace_accessor_body(
+        bt_own,
+        struct_src_access.clone(),
+        bt_probe,
+        &bt_ty,
+        oopsie_path,
+    ) {
+        Some(body) => quote! {
+            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
+                #struct_use_aes
+                #body
+            }
+        },
+        None => quote! {},
+    };
 
     let st_own = if let Some(tf) = &categorized.traces_field {
         Some(quote! { &self.#tf.1 })
@@ -538,15 +616,16 @@ pub fn gen_struct_error(
             }
         })
     };
-    let st_method = match trace_accessor_body(st_own, struct_src_access, &st_ty, oopsie_path) {
-        Some(body) => quote! {
-            fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
-                #struct_use_aes
-                #body
-            }
-        },
-        None => quote! {},
-    };
+    let st_method =
+        match trace_accessor_body(st_own, struct_src_access, st_probe, &st_ty, oopsie_path) {
+            Some(body) => quote! {
+                fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
+                    #struct_use_aes
+                    #body
+                }
+            },
+            None => quote! {},
+        };
 
     let code_method = if let Some(code) = &variant_attrs.code {
         quote! {
@@ -567,6 +646,13 @@ pub fn gen_struct_error(
             quote! {
                 fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
                     ::core::option::Option::Some(#expr)
+                }
+            }
+        } else if let (true, Some(s)) = (variant_attrs.transparent, struct_source) {
+            let fwd = gen_diag_forward(quote! { &self.#s }, "fwd_code", oopsie_path);
+            quote! {
+                fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
+                    #fwd
                 }
             }
         } else {
@@ -595,6 +681,13 @@ pub fn gen_struct_error(
                 fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
                     ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*)))
                 }
+            }
+        }
+    } else if let (true, Some(s)) = (variant_attrs.transparent, struct_source) {
+        let fwd = gen_diag_forward(quote! { &self.#s }, "fwd_help", oopsie_path);
+        quote! {
+            fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
+                #fwd
             }
         }
     } else {

@@ -69,6 +69,67 @@ pub mod __private {
         }
     }
 
+    /// Accessor-time autoref probe for forwarding a transparent wrapper's
+    /// `Diagnostic` accessors to its source.
+    ///
+    /// Unlike [`CaptureProbe`] (which runs at construction to decide
+    /// extract-vs-capture), this runs when `oopsie_*` is called: a transparent
+    /// variant delegates each accessor to its source's concrete type. When that
+    /// type implements `Diagnostic` the high-priority [`DiagForwardExt`] impl
+    /// forwards the call; otherwise the [`DiagForwardFallback`] impl (selected
+    /// via autoref) yields `None`. Works on stable, where the Provider-API
+    /// [`source_trace`] path would yield `None`.
+    pub struct DiagProbe<'a, T: ?Sized>(pub &'a T);
+
+    /// High-priority: source implements `Diagnostic` → forward the accessor.
+    pub trait DiagForwardExt<'a> {
+        fn fwd_code(&self) -> Option<crate::ErrorCode>;
+        fn fwd_help(&self) -> Option<crate::HelpText>;
+        fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace>;
+        fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace>;
+    }
+
+    impl<'a, T: crate::Diagnostic + ?Sized> DiagForwardExt<'a> for DiagProbe<'a, T> {
+        #[inline]
+        fn fwd_code(&self) -> Option<crate::ErrorCode> {
+            self.0.oopsie_error_code()
+        }
+        #[inline]
+        fn fwd_help(&self) -> Option<crate::HelpText> {
+            self.0.oopsie_help_text()
+        }
+        #[inline]
+        fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace> {
+            self.0.oopsie_backtrace()
+        }
+        #[inline]
+        fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace> {
+            self.0.oopsie_spantrace()
+        }
+    }
+
+    /// Low-priority: source doesn't implement `Diagnostic` → nothing to forward.
+    pub trait DiagForwardFallback<'a> {
+        #[inline]
+        fn fwd_code(&self) -> Option<crate::ErrorCode> {
+            None
+        }
+        #[inline]
+        fn fwd_help(&self) -> Option<crate::HelpText> {
+            None
+        }
+        #[inline]
+        fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace> {
+            None
+        }
+        #[inline]
+        fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace> {
+            None
+        }
+    }
+
+    impl<'a, T: ?Sized> DiagForwardFallback<'a> for &DiagProbe<'a, T> {}
+
     /// Pull the deepest `T` reachable from a source error via the Provider API.
     ///
     /// The generated `provide()` forwards to the source before providing its

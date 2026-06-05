@@ -132,7 +132,7 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
     check_no_generics(input)?;
     let path = attrs.container.oopsie_path();
     let selector = gen_struct_selector(input, attrs, &path)?;
-    let display = gen_struct_display(input, attrs);
+    let display = gen_struct_display(input, attrs)?;
     let error = gen_struct_error(input, attrs, &path)?;
 
     let size_assert = attrs

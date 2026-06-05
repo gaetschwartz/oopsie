@@ -297,6 +297,89 @@ fn transparent_struct_with_auto_field() {
     );
 }
 
+// ─── Bare transparent (no display attr): Display + Diagnostic forwarding ───
+//
+// A `transparent` variant/struct with NO display attr now delegates `Display` to
+// its source (thiserror parity) and forwards the source's `code`/`help` via the
+// stable `DiagProbe` (miette `#[diagnostic(transparent)]` parity). A
+// non-`Diagnostic` source still delegates `Display` but forwards nothing.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum DiagLeaf {
+    #[oopsie(
+        display("leaf failed: {what}"),
+        code = "leaf::failed",
+        help = "turn it off and on again"
+    )]
+    Failed { what: String },
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum BareWrapper {
+    #[oopsie(transparent)]
+    Leaf { source: DiagLeaf },
+}
+
+#[test]
+fn bare_transparent_delegates_display_and_forwards_diagnostic() {
+    let leaf = Failed { what: "disk" }.build();
+    let wrapped: BareWrapper = BareWrapper::from(leaf);
+
+    // Display delegates to the source instead of rendering "Leaf".
+    assert_eq!(wrapped.to_string(), "leaf failed: disk");
+    // code/help forward from the leaf through the bare transparent wrapper.
+    assert_eq!(
+        wrapped.oopsie_error_code().expect("code forwards").as_str(),
+        "leaf::failed"
+    );
+    assert_eq!(
+        wrapped.oopsie_help_text().expect("help forwards").as_str(),
+        "turn it off and on again"
+    );
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+#[oopsie(transparent)]
+struct BareStruct {
+    source: DiagLeaf,
+}
+
+#[test]
+fn bare_transparent_struct_delegates_and_forwards() {
+    let leaf = Failed { what: "net" }.build();
+    let wrapped: BareStruct = BareStruct::from(leaf);
+    assert_eq!(wrapped.to_string(), "leaf failed: net");
+    assert_eq!(
+        wrapped.oopsie_error_code().expect("code forwards").as_str(),
+        "leaf::failed"
+    );
+    assert_eq!(
+        wrapped.oopsie_help_text().expect("help forwards").as_str(),
+        "turn it off and on again"
+    );
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum BareIoWrapper {
+    #[oopsie(transparent)]
+    Io { source: io::Error },
+}
+
+#[test]
+fn bare_transparent_non_diagnostic_source_forwards_none() {
+    let io_err = io::Error::new(io::ErrorKind::NotFound, "missing file");
+    let wrapped: BareIoWrapper = BareIoWrapper::from(io_err);
+    // Display still delegates to the (non-Diagnostic) source.
+    assert_eq!(wrapped.to_string(), "missing file");
+    // io::Error isn't Diagnostic → forwarding falls back to None.
+    assert!(wrapped.oopsie_error_code().is_none());
+    assert!(wrapped.oopsie_help_text().is_none());
+}
+
 // ─── Provider-API parity for a transparent traced wrapper (nightly only) ───
 //
 // Real-macro coverage for the stable diagnostic accessors on a transparent,

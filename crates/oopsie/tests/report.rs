@@ -666,3 +666,52 @@ fn test_report_from_residual_question_mark() {
     assert!(ok_report.error().is_none());
     assert!(ok_report.to_string().is_empty());
 }
+
+// ─── transparent wrapper surfaces a leaf's forwarded code + help ───
+//
+// Kept at the end of the file: the colored-report snapshots above capture
+// unredacted source line numbers, so inserting fixtures earlier would shift
+// them.
+
+#[derive(Debug, oopsie::Oopsie)]
+#[oopsie(module(false))]
+#[oopsie(
+    display("leaf failed: {what}"),
+    code = "leaf::failed",
+    help = "turn it off and on again"
+)]
+pub struct LeafError {
+    what: String,
+}
+
+#[derive(Debug, oopsie::Oopsie)]
+#[oopsie(module(false))]
+#[oopsie(transparent)]
+pub struct TransparentRootError {
+    source: LeafError,
+}
+
+#[test]
+fn test_report_transparent_forwards_code_and_help() {
+    // A transparent root forwards the leaf's code + help to the top level, so
+    // `Report` (which reads only the top error) now renders them. The leaf has
+    // no backtrace, so the output is deterministic across stable/nightly.
+    //
+    // Per the no-renderer-change decision, the delegated headline equals the
+    // immediate source's message, so it shows both as the headline and as the
+    // first `╰─▶` chain entry.
+    let leaf = LeafOopsie { what: "disk" }.build();
+    let root: TransparentRootError = TransparentRootError::from(leaf);
+    let report = Report::from_std(root).no_colors();
+    let rendered = strip_ansi(&report.to_string());
+
+    assert_eq!(
+        rendered,
+        "\
+Error[leaf::failed]: leaf failed: disk
+  ╰─▶ leaf failed: disk
+
+  help: turn it off and on again
+"
+    );
+}
