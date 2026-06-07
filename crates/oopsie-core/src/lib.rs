@@ -15,6 +15,8 @@
 mod backtrace;
 mod diagnostic;
 pub mod spantrace;
+#[cfg(feature = "test-utils")]
+pub mod test_utils;
 mod traits;
 mod welp;
 

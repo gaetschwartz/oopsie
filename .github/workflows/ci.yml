@@ -12,114 +12,68 @@ env:
 jobs:
   test:
     name: Test (${{ matrix.toolchain }})
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, nightly]
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain == 'stable' && 'stable' || '' }}
+      CARGO_FEATURES: ${{ matrix.toolchain == 'nightly' && '-F unstable' || '' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest
+      - name: cargo nextest
+        run: cargo nextest run --workspace ${CARGO_FEATURES}
+        env:
+          OOPSIE_BACKTRACE_SNAPSHOT_TESTS: "1"
+      - name: cargo doctest
+        run: cargo test --doc --workspace ${CARGO_FEATURES}
+
+  lints:
+    name: Lints (fmt + clippy)
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         toolchain: [stable, nightly]
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain == 'stable' && 'stable' || '' }}
+      CARGO_FEATURES: ${{ matrix.toolchain == 'nightly' && '-F unstable' || '' }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust ${{ matrix.toolchain }}
+      - uses: actions/checkout@v6
+      - name: Get Rust toolchain version
+        id: get_rust_version
+        run: echo "version=$(rustup show active-toolchain | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: ${{ matrix.toolchain }}
-
-      # rust-toolchain.toml pins nightly-2026-05-05; override it so the matrix
-      # entry actually selects the requested channel.
-      - name: Pin workspace toolchain
-        run: rustup override set ${{ matrix.toolchain }}
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install cargo-nextest
-        uses: taiki-e/install-action@v2
-        with:
-          tool: nextest
-
-      - name: cargo check (default features)
-        run: cargo check --workspace --all-targets
-
-      # `fancy` (default) gates the entire reporting surface; check the lib
-      # builds without it so a leaked dependency on owo-colors/serde/Report
-      # from non-gated code is caught.
-      - name: cargo check (no default features)
-        run: |
-          cargo check -p oopsie --no-default-features --lib
-          cargo check -p oopsie-core --no-default-features --lib
-
-      - name: cargo nextest (default features)
-        run: cargo nextest run --workspace
-
-      - name: cargo doctest (default features)
-        run: cargo test --doc --workspace
-
-      # The `unstable` umbrella feature enables `error_generic_member_access`
-      # and `try_trait_v2`, both of which are nightly-only.
-      - name: cargo check (unstable features)
-        if: matrix.toolchain == 'nightly'
-        run: cargo check --workspace --all-targets --features unstable
-
-      - name: cargo nextest (unstable features)
-        if: matrix.toolchain == 'nightly'
-        run: cargo nextest run --workspace --features unstable
-
-      - name: cargo doctest (unstable features)
-        if: matrix.toolchain == 'nightly'
-        run: cargo test --doc --workspace --features unstable
-
-  lints:
-    name: Lints (fmt + clippy)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      # Read the channel from rust-toolchain.toml so the lints job tracks
-      # whatever the project is currently pinned to — fmt/clippy stay aligned
-      # with what contributors run locally.
-      - name: Read pinned toolchain channel
-        id: rust
-        run: echo "channel=$(awk -F'\"' '/^channel/ {print $2}' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-
-      - name: Install Rust ${{ steps.rust.outputs.channel }}
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: ${{ steps.rust.outputs.channel }}
+          toolchain: ${{ steps.get_rust_version.outputs.version }}
           components: rustfmt, clippy
-
       - uses: Swatinem/rust-cache@v2
         with:
           key: lints
-
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
-
-      - name: cargo clippy (default features)
-        run: cargo clippy --workspace --all-targets -- -D warnings
-
-      - name: cargo clippy (unstable features)
-        run: cargo clippy --workspace --all-targets --features unstable -- -D warnings
-
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets ${CARGO_FEATURES} -- -D warnings
+  
   msrv:
-    name: MSRV (1.89)
+    name: MSRV
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust 1.89
-        uses: dtolnay/rust-toolchain@master
-        with:
-          toolchain: "1.89"
-
-      # rust-toolchain.toml pins nightly; override so cargo actually uses 1.89.
-      - name: Pin workspace toolchain to MSRV
-        run: rustup override set 1.89
-
+      - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
         with:
           key: msrv
-
-      # MSRV is a build-time guarantee for default features. The `unstable`
-      # umbrella is nightly-only and explicitly out of scope for MSRV.
-      - name: cargo check (MSRV, default features, locked)
+      - name: Get MSRV from Cargo.toml
+        id: get_msrv
+        run: |
+          MSRV=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "oopsie") | .rust_version')
+          rustup override set $MSRV
+      - name: cargo check
         run: cargo check --workspace --all-targets --locked

@@ -22,8 +22,8 @@ doctest:
 
 # Run tests for both stable and nightly toolchains.
 nextest *ARGS:
-    cargo +stable nextest run {{ ARGS }}
-    cargo nextest run --features unstable {{ ARGS }}
+    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run {{ ARGS }}
+    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo nextest run --features unstable {{ ARGS }}
 
 test *ARGS: (nextest ARGS) doctest
 
@@ -31,5 +31,5 @@ test *ARGS: (nextest ARGS) doctest
 # since nightly diagnostics use wider span underlines that don't match
 # stable's renderer) and insta snapshots.
 test-bless *ARGS:
-    INSTA_UPDATE=always TRYBUILD=overwrite cargo +stable nextest run --no-fail-fast {{ ARGS }} || true
-    INSTA_UPDATE=always cargo nextest run --features unstable --no-fail-fast {{ ARGS }} || true
+    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 INSTA_UPDATE=always TRYBUILD=overwrite cargo +stable nextest run --no-fail-fast {{ ARGS }} || true
+    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 INSTA_UPDATE=always cargo nextest run --features unstable --no-fail-fast {{ ARGS }} || true

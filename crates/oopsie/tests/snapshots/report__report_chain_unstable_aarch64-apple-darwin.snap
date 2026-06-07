@@ -1,18 +1,19 @@
 ---
 source: crates/oopsie/tests/report.rs
-expression: report.to_string()
+expression: report
 ---
-Error[report::TestError]: Test error: something failed
+Error[report::OuterError]: Outer error
+  ╰─▶ Test error: root cause
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 8 frames hidden ...
   1: build<&str>
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  2: test_report_basic
+  2: test_report_chain
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
   3: {closure#0}
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  4: call_once<report::test_report_basic::{closure_env#0}, ()>
+  4: call_once<report::test_report_chain::{closure_env#0}, ()>
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
   5: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]

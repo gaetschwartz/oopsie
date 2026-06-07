@@ -10,8 +10,10 @@ all-features = true
 
 [features]
 default = []
-unstable-error-generic-member-access = []
-unstable = ["unstable-error-generic-member-access"]
+unstable-error-generic-member-access = [
+  "oopsie-core/unstable-error-generic-member-access",
+]
+unstable = ["unstable-error-generic-member-access", "oopsie-core/unstable"]
 
 [dependencies]
 backtrace = "0.3.76"
@@ -24,9 +26,9 @@ tracing = "0.1"
 [dev-dependencies]
 criterion = "0.8.2"
 insta = { version = "1.46.3", features = ["filters", "json", "redactions"] }
-konst = { version = "0.4.3", features = ["alloc"] }
 oopsie = { workspace = true }
-regex = "1.12.3"
+oopsie-core = { workspace = true, features = ["test-utils"] }
+test-with = { version = "0.16.1", default-features = false }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 

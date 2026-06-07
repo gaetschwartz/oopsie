@@ -2,6 +2,7 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
+
 //! Cost of erasing an error into the serializable representation and emitting JSON.
 
 use std::hint::black_box;

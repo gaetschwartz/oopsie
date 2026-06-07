@@ -14,6 +14,7 @@ use std::process::Termination as _;
 
 use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter, TraceTheme};
 use oopsie::{Contextual as _, Report, RustBacktrace, oopsie, rust_backtrace};
+use oopsie_core::{redact, snap_name};
 
 #[oopsie(traced)]
 #[oopsie("Test error: {message}")]
@@ -33,6 +34,7 @@ fn strip_ansi(s: &str) -> String {
 }
 
 #[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_basic() {
     common::force_backtrace();
     assert_eq!(
@@ -52,6 +54,7 @@ fn test_report_basic() {
 }
 
 #[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_chain() {
     common::force_backtrace();
     let inner = TestOopsie {
@@ -67,6 +70,7 @@ fn test_report_chain() {
 }
 
 #[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_colored() {
     common::force_backtrace();
     let error = TestOopsie {
@@ -127,6 +131,7 @@ pub struct ErrorWithHelp {
 }
 
 #[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_help() {
     common::force_backtrace();
     let error = ErrorWithHelpOopsie {
@@ -141,6 +146,7 @@ fn test_report_with_help() {
 }
 
 #[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_spantrace() {
     let error = common::make_error();
     let report = Report::from_std(error).no_colors();
@@ -151,6 +157,7 @@ fn test_report_with_spantrace() {
 }
 
 #[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_spantrace_debug() {
     let error = common::make_error();
 

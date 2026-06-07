@@ -42,9 +42,11 @@ criterion = "0.8.2"
 eyre = "0.6.12"
 insta = { version = "1.46.3", features = ["filters", "json", "redactions"] }
 miette = { version = "7.6.0", features = ["fancy"] }
+oopsie-core = { workspace = true, features = ["test-utils"] }
 rustversion = "1.0.22"
 snafu = { version = "0.9.1", features = ["backtrace"] }
 strip-ansi-escapes = "0.2.1"
+test-with = { version = "0.16.1", default-features = false }
 thiserror = "2.0.18"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }

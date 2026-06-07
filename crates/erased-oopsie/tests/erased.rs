@@ -13,6 +13,7 @@ use erased_oopsie::{
     ErasedBacktrace, ErasedError, ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel,
 };
 use oopsie::oopsie;
+use oopsie_core::{redact, snap_name};
 
 #[oopsie(traced)]
 #[oopsie("Something went wrong: {message}")]
@@ -28,6 +29,7 @@ pub struct ErrorWithCodeOnly {
 }
 
 #[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_erased_error_display() {
     let error = ErasedError::from_error(common::make_error());
     redact!(backtrace, {
@@ -36,9 +38,10 @@ fn test_erased_error_display() {
 }
 
 #[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_erased_error_json() {
     let error = ErasedError::from_error(common::make_error());
-    redact!(json, {
+    redact!(backtrace, {
         insta::assert_json_snapshot!(snap_name!("erased_error_json"), error);
     });
 }

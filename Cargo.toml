@@ -125,6 +125,7 @@ unit_bindings = "warn"
 unnameable_types = "warn"
 unused_macro_rules = "warn"
 meta_variable_misuse = "warn"
+unused_features = "allow" # Mutes some false positives in the presence of `cfg`-gated code, and the fact that some features are only used in doctests.
 
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "warn"
@@ -133,6 +134,7 @@ unescaped_backticks = "warn"
 
 [profile.dev.package]
 insta.opt-level = 3
+similar.opt-level = 3
 
 [profile.samply]
 inherits = "release"
