@@ -39,97 +39,97 @@ expression: error
   "backtrace": {
     "frames": [
       {
-        "name": "trace",
+        "name": "backtrace[[HASH]]::backtrace::libunwind::trace",
         "filename": "[CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "trace_unsynchronized<backtrace::capture::{impl#4}::create::{closure_env#0}>",
+        "name": "backtrace[[HASH]]::backtrace::trace_unsynchronized::<<backtrace[[HASH]]::capture::Backtrace>::create::{closure#0}>",
         "filename": "[CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "trace<backtrace::capture::{impl#4}::create::{closure_env#0}>",
+        "name": "backtrace[[HASH]]::backtrace::trace::<<backtrace[[HASH]]::capture::Backtrace>::create::{closure#0}>",
         "filename": "[CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "create",
+        "name": "<backtrace[[HASH]]::capture::Backtrace>::create",
         "filename": "[CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "new_unresolved",
+        "name": "<backtrace[[HASH]]::capture::Backtrace>::new_unresolved",
         "filename": "[CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "capture",
+        "name": "<oopsie_core[[HASH]]::backtrace::Backtrace as oopsie_core[[HASH]]::traits::Capturable>::capture",
         "filename": "[WORKSPACE]/crates/oopsie-core/src/backtrace.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "capture<oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace>",
+        "name": "<(oopsie_core[[HASH]]::backtrace::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace) as oopsie_core[[HASH]]::traits::Capturable>::capture",
         "filename": "[WORKSPACE]/crates/oopsie-core/src/traits.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "capture<(oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace)>",
+        "name": "<alloc[[HASH]]::boxed::Box<(oopsie_core[[HASH]]::backtrace::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace)> as oopsie_core[[HASH]]::traits::Capturable>::capture",
         "filename": "[WORKSPACE]/crates/oopsie-core/src/traits.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "build<alloc::string::String>",
+        "name": "<erased[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::build",
         "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "fail<alloc::string::String, ()>",
+        "name": "<erased[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::fail::<()>",
         "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "inner_function",
+        "name": "erased[[HASH]]::common::make_error::inner_function",
         "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "outer_function",
+        "name": "erased[[HASH]]::common::make_error::outer_function",
         "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "make_error",
+        "name": "erased[[HASH]]::common::make_error",
         "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "test_erased_error_json",
+        "name": "erased[[HASH]]::test_erased_error_json",
         "filename": "[WORKSPACE]/crates/erased-oopsie/tests/erased.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "{closure#0}",
+        "name": "erased[[HASH]]::test_erased_error_json::{closure#0}",
         "filename": "[WORKSPACE]/crates/erased-oopsie/tests/erased.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "call_once<erased::test_erased_error_json::{closure_env#0}, ()>",
+        "name": "<erased[[HASH]]::test_erased_error_json::{closure#0} as core[[HASH]]::ops::function::FnOnce<()>>::call_once",
         "filename": "[STDLIB]/library/core/src/ops/function.rs",
         "line": 42,
         "column": 69

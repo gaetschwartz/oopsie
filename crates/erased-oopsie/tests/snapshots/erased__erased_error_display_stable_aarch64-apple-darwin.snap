@@ -15,37 +15,37 @@ Error:
            with {"foo":true,"name":"Alice"}
              at crates/erased-oopsie/tests/common/mod.rs:[LOC]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1: trace
+  1: backtrace::backtrace::libunwind::trace::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
-  2: trace_unsynchronized<backtrace::capture::{impl#4}::create::{closure_env#0}>
+  2: backtrace::backtrace::trace_unsynchronized::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-  3: trace<backtrace::capture::{impl#4}::create::{closure_env#0}>
+  3: backtrace::backtrace::trace::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-  4: create
+  4: backtrace::capture::Backtrace::create::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-  5: new_unresolved
+  5: backtrace::capture::Backtrace::new_unresolved::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-  6: capture
+  6: <oopsie_core::backtrace::Backtrace as oopsie_core::traits::Capturable>::capture::h[HASH]
            at [WORKSPACE]/crates/oopsie-core/src/backtrace.rs:[LOC]
-  7: capture<oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace>
+  7: <(A,B) as oopsie_core::traits::Capturable>::capture::h[HASH]
            at [WORKSPACE]/crates/oopsie-core/src/traits.rs:[LOC]
-  8: capture<(oopsie_core::backtrace::Backtrace, oopsie_core::spantrace::SpanTrace)>
+  8: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture::h[HASH]
            at [WORKSPACE]/crates/oopsie-core/src/traits.rs:[LOC]
-  9: build<alloc::string::String>
+  9: erased::common::MyErrorInnerOopsie<__T0>::build::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 10: fail<alloc::string::String, ()>
+ 10: erased::common::MyErrorInnerOopsie<__T0>::fail::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 11: inner_function
+ 11: erased::common::make_error::inner_function::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 12: outer_function
+ 12: erased::common::make_error::outer_function::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 13: make_error
+ 13: erased::common::make_error::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 14: test_erased_error_display
+ 14: erased::test_erased_error_display::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/erased.rs:[LOC]
- 15: {closure#0}
+ 15: erased::test_erased_error_display::{{closure}}::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/erased.rs:[LOC]
- 16: call_once<erased::test_erased_error_display::{closure_env#0}, ()>
+ 16: core::ops::function::FnOnce::call_once::h[HASH]
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
  17: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]

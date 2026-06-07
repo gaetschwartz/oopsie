@@ -14,21 +14,21 @@ Error[report::common::MyError::Inner]: Inner error happened
              at crates/oopsie/tests/common/mod.rs:[LOC]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 8 frames hidden ...
-  1: build<alloc::string::String>
+  1: <report[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::build
            at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
-  2: fail<alloc::string::String, ()>
+  2: <report[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::fail::<()>
            at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
-  3: inner_function
+  3: report[[HASH]]::common::make_error::inner_function
            at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
-  4: outer_function
+  4: report[[HASH]]::common::make_error::outer_function
            at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
-  5: make_error
+  5: report[[HASH]]::common::make_error
            at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
-  6: test_report_with_spantrace
+  6: report[[HASH]]::test_report_with_spantrace
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  7: {closure#0}
+  7: report[[HASH]]::test_report_with_spantrace::{closure#0}
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  8: call_once<report::test_report_with_spantrace::{closure_env#0}, ()>
+  8: <report[[HASH]]::test_report_with_spantrace::{closure#0} as core[[HASH]]::ops::function::FnOnce<()>>::call_once
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
   9: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]

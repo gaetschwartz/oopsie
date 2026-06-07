@@ -8,13 +8,13 @@ Error[report::ErrorWithHelp]: Something went wrong: connection refused
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 8 frames hidden ...
-  1: build<&str>
+  1: <report[[HASH]]::ErrorWithHelpOopsie<&str>>::build
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  2: test_report_with_help
+  2: report[[HASH]]::test_report_with_help
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  3: {closure#0}
+  3: report[[HASH]]::test_report_with_help::{closure#0}
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  4: call_once<report::test_report_with_help::{closure_env#0}, ()>
+  4: <report[[HASH]]::test_report_with_help::{closure#0} as core[[HASH]]::ops::function::FnOnce<()>>::call_once
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
   5: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
