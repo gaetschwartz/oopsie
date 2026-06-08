@@ -155,11 +155,6 @@ pub trait ResultExt<T, E> {
         C: Contextual<E>;
 
     /// Wrap the error with a lazily-evaluated context selector.
-    ///
-    /// The closure receives a shared reference to the source error, which is
-    /// useful for inspecting the source (e.g. reading an error code or field
-    /// value) to construct the context selector. The source error is still
-    /// moved into the new error afterwards.
     fn with_context<F, C>(self, context: F) -> Result<T, C::Destination>
     where
         F: FnOnce(&E) -> C,
