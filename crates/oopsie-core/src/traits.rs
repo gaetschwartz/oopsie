@@ -483,4 +483,167 @@ mod tests {
         is_capture_ext::<Box<(crate::Backtrace, crate::SpanTrace)>>();
         is_capture_ext::<(crate::Backtrace, crate::SpanTrace)>();
     };
+
+    // Destination error whose source is a type-erased boxed error, exercising
+    // the `result.boxed().context(...)` chaining ergonomic. The `Send + Sync`
+    // bound on the field is what `boxed` (vs `boxed_local`) makes possible.
+    #[derive(Debug)]
+    struct BoxedChainError {
+        message: String,
+        source: Box<dyn StdError + Send + Sync + 'static>,
+    }
+
+    impl fmt::Display for BoxedChainError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{}", self.message)
+        }
+    }
+
+    impl StdError for BoxedChainError {
+        fn source(&self) -> Option<&(dyn StdError + 'static)> {
+            Some(&*self.source)
+        }
+    }
+
+    struct BoxedSelector;
+
+    impl Contextual<Box<dyn StdError + Send + Sync + 'static>> for BoxedSelector {
+        type Destination = BoxedChainError;
+
+        fn build_error(self, source: Box<dyn StdError + Send + Sync + 'static>) -> BoxedChainError {
+            BoxedChainError {
+                message: "boxed chain error".to_owned(),
+                source,
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    struct BoxedLocalChainError {
+        source: Box<dyn StdError + 'static>,
+    }
+
+    impl fmt::Display for BoxedLocalChainError {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "boxed local chain error")
+        }
+    }
+
+    impl StdError for BoxedLocalChainError {
+        fn source(&self) -> Option<&(dyn StdError + 'static)> {
+            Some(&*self.source)
+        }
+    }
+
+    struct BoxedLocalSelector;
+
+    impl Contextual<Box<dyn StdError + 'static>> for BoxedLocalSelector {
+        type Destination = BoxedLocalChainError;
+
+        fn build_error(self, source: Box<dyn StdError + 'static>) -> BoxedLocalChainError {
+            BoxedLocalChainError { source }
+        }
+    }
+
+    #[test]
+    fn boxed_passes_through_ok() {
+        let result: Result<i32, SourceError> = Ok(7);
+        assert_eq!(result.boxed().unwrap(), 7);
+    }
+
+    #[test]
+    fn boxed_erases_err_but_preserves_display_and_concrete_type() {
+        let result: Result<i32, SourceError> = Err(SourceError {
+            message: "boom".to_owned(),
+        });
+        let err = result.boxed().unwrap_err();
+        assert_eq!(err.to_string(), "boom");
+        // Erasure is reversible: the concrete type is still recoverable.
+        assert!(err.downcast_ref::<SourceError>().is_some());
+    }
+
+    #[test]
+    fn boxed_local_erases_err_but_preserves_display_and_concrete_type() {
+        let result: Result<i32, SourceError> = Err(SourceError {
+            message: "boom".to_owned(),
+        });
+        let err = result.boxed_local().unwrap_err();
+        assert_eq!(err.to_string(), "boom");
+        assert!(err.downcast_ref::<SourceError>().is_some());
+    }
+
+    #[test]
+    fn boxed_then_context_chains_erased_source() {
+        let result: Result<i32, SourceError> = Err(SourceError {
+            message: "io broke".to_owned(),
+        });
+        let chained: Result<i32, BoxedChainError> = result.boxed().context(BoxedSelector);
+        let err = chained.unwrap_err();
+        assert_eq!(err.message, "boxed chain error");
+        assert_eq!(StdError::source(&err).unwrap().to_string(), "io broke");
+    }
+
+    #[test]
+    fn boxed_then_context_passes_through_ok() {
+        let result: Result<i32, SourceError> = Ok(42);
+        let chained: Result<i32, BoxedChainError> = result.boxed().context(BoxedSelector);
+        assert_eq!(chained.unwrap(), 42);
+    }
+
+    #[test]
+    fn boxed_then_with_context_chains_erased_source() {
+        let result: Result<i32, SourceError> = Err(SourceError {
+            message: "io broke".to_owned(),
+        });
+        let chained: Result<i32, BoxedChainError> = result.boxed().with_context(|source| {
+            // The closure sees the already-erased boxed error.
+            assert_eq!(source.to_string(), "io broke");
+            BoxedSelector
+        });
+        assert_eq!(
+            StdError::source(&chained.unwrap_err()).unwrap().to_string(),
+            "io broke"
+        );
+    }
+
+    #[test]
+    fn boxed_local_then_context_chains_erased_source() {
+        let result: Result<i32, SourceError> = Err(SourceError {
+            message: "io broke".to_owned(),
+        });
+        let chained: Result<i32, BoxedLocalChainError> =
+            result.boxed_local().context(BoxedLocalSelector);
+        assert_eq!(
+            StdError::source(&chained.unwrap_err()).unwrap().to_string(),
+            "io broke"
+        );
+    }
+
+    #[test]
+    fn boxed_unifies_heterogeneous_error_types() {
+        // `boxed()?` collapses distinct concrete error types to one boxed type,
+        // letting a single function signature absorb either.
+        fn run(fail_with_source: bool) -> Result<(), Box<dyn StdError + Send + Sync + 'static>> {
+            if fail_with_source {
+                Err(SourceError {
+                    message: "source".to_owned(),
+                })
+                .boxed()?;
+            } else {
+                Err(SimpleError {
+                    message: "simple".to_owned(),
+                })
+                .boxed()?;
+            }
+            Ok(())
+        }
+        assert_eq!(run(true).unwrap_err().to_string(), "source");
+        assert_eq!(run(false).unwrap_err().to_string(), "simple");
+    }
+
+    const _: () = {
+        // `boxed` yields a thread-portable error; `boxed_local` does not.
+        const fn is_send_sync<T: Send + Sync>() {}
+        is_send_sync::<Box<dyn StdError + Send + Sync + 'static>>();
+    };
 }
