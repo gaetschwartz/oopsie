@@ -159,6 +159,16 @@ pub trait ResultExt<T, E> {
     where
         F: FnOnce(&E) -> C,
         C: Contextual<E>;
+
+    /// Convert the error into a boxed trait object (`Box<dyn Error + Send + Sync>`).
+    fn boxed(self) -> Result<T, Box<dyn error::Error + Send + Sync + 'static>>
+    where
+        E: error::Error + Send + Sync + 'static;
+
+    /// Convert the error into a boxed trait object (no `Send`/`Sync` bounds).
+    fn boxed_local(self) -> Result<T, Box<dyn error::Error + 'static>>
+    where
+        E: error::Error + 'static;
 }
 
 impl<T, E> ResultExt<T, E> for Result<T, E> {
@@ -179,6 +189,22 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
         C: Contextual<E>,
     {
         self.map_err(|error| context(&error).build_error(error))
+    }
+
+    #[inline]
+    fn boxed(self) -> Result<T, Box<dyn error::Error + Send + Sync + 'static>>
+    where
+        E: error::Error + Send + Sync + 'static,
+    {
+        self.map_err(|error| Box::new(error) as Box<dyn error::Error + Send + Sync + 'static>)
+    }
+
+    #[inline]
+    fn boxed_local(self) -> Result<T, Box<dyn error::Error + 'static>>
+    where
+        E: error::Error + 'static,
+    {
+        self.map_err(|error| Box::new(error) as Box<dyn error::Error + 'static>)
     }
 }
 
