@@ -2,11 +2,50 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{DeriveInput, Ident};
+use syn::{DeriveInput, Ident, Visibility};
 
 use super::parse::{
-    CategorizedFields, EnumContainerAttrs, SourceKind, StructAttrs, SuffixSetting, VariantAttrs,
+    CategorizedFields, EnumContainerAttrs, ModuleSetting, SourceKind, StructAttrs, SuffixSetting,
+    VariantAttrs,
 };
+
+/// Default selector visibility when no explicit `vis(...)` is given.
+///
+/// A selector's `Contextual::Destination` is the error type, so the selector
+/// may never be more visible than the error — exposing a narrower error through
+/// a wider selector's public associated type fails the private-in-public check.
+/// The selector therefore mirrors the error's visibility, capping `pub` at the
+/// crate (a `pub(crate)` selector is reachable crate-wide yet never exceeds the
+/// destination). When selectors are wrapped in a generated child module, a
+/// module-relative visibility gains one `super` so it still reaches the error's
+/// own scope.
+fn default_selector_vis(error_vis: &Visibility, wrapped_in_module: bool) -> Visibility {
+    if matches!(error_vis, Visibility::Public(_)) {
+        return syn::parse_quote! { pub(crate) };
+    }
+    if wrapped_in_module {
+        lift_into_child_module(error_vis)
+    } else {
+        error_vis.clone()
+    }
+}
+
+/// Re-express a restricted visibility one module level deeper, as seen from a
+/// generated child module that holds the selectors. Crate-absolute paths are
+/// position-independent; module-relative ones gain a `super`.
+fn lift_into_child_module(vis: &Visibility) -> Visibility {
+    let Visibility::Restricted(restricted) = vis else {
+        return syn::parse_quote! { pub(super) };
+    };
+    let path = &restricted.path;
+    match path.segments.first() {
+        Some(seg) if seg.ident == "crate" => vis.clone(),
+        Some(seg) if seg.ident == "self" && path.segments.len() == 1 => {
+            syn::parse_quote! { pub(super) }
+        }
+        _ => syn::parse_quote! { pub(in super::#path) },
+    }
+}
 
 /// Generate context selectors for all variants of an enum.
 pub fn gen_enum_selectors(
@@ -16,10 +55,11 @@ pub fn gen_enum_selectors(
 ) -> syn::Result<Vec<TokenStream2>> {
     let enum_ident = &input.ident;
     let (_, ty_generics, _) = input.generics.split_for_impl();
+    let wrapped_in_module = matches!(container.effective_module(true), ModuleSetting::On(_));
     let vis = container
         .visibility()
         .cloned()
-        .unwrap_or_else(|| syn::parse_quote! { pub(crate) });
+        .unwrap_or_else(|| default_selector_vis(&input.vis, wrapped_in_module));
 
     let syn::Data::Enum(data) = &input.data else {
         unreachable!()
@@ -191,7 +231,7 @@ pub fn gen_struct_selector(
     let vis = attrs
         .visibility()
         .cloned()
-        .unwrap_or_else(|| syn::parse_quote! { pub(crate) });
+        .unwrap_or_else(|| default_selector_vis(&input.vis, false));
     // Variant-level fields are inlined on `StructAttrs` (darling allows only
     // one flatten per derive); aliasing makes downstream field access read
     // naturally as `variant_attrs.transparent` etc.
@@ -402,13 +442,13 @@ fn gen_build_error(
     };
 
     quote! {
-        impl #generic_params #oopsie_path::Contextual<#enum_ident> for #selector_ident #generic_params
+        impl #generic_params #oopsie_path::Contextual<#source_type> for #selector_ident #generic_params
         #where_clauses
         {
-            type Source = #source_type;
+            type Destination = #enum_ident;
 
             #[track_caller]
-            fn build_error(self, source: Self::Source) -> #enum_ident {
+            fn build_error(self, source: #source_type) -> #enum_ident {
                 // Capture probes borrow `&source`, so they must run before
                 // `source_assign` moves `source` into the (possibly renamed)
                 // field. They also see the pre-transform value, preserving the
@@ -448,13 +488,13 @@ fn gen_build_fail(
 
     // Also implement Contextual with NoSource for OptionExt support
     let none_error_impl = quote! {
-        impl #generic_params #oopsie_path::Contextual<#enum_ident> for #selector_ident #generic_params
+        impl #generic_params #oopsie_path::Contextual<#oopsie_path::NoSource> for #selector_ident #generic_params
         #where_clauses
         {
-            type Source = #oopsie_path::NoSource;
+            type Destination = #enum_ident;
 
             #[track_caller]
-            fn build_error(self, _: Self::Source) -> #enum_ident {
+            fn build_error(self, _: #oopsie_path::NoSource) -> #enum_ident {
                 self.build()
             }
         }
@@ -526,13 +566,13 @@ fn gen_build_error_struct(
     };
 
     quote! {
-        impl #generic_params #oopsie_path::Contextual<#struct_ident> for #selector_ident #generic_params
+        impl #generic_params #oopsie_path::Contextual<#source_type> for #selector_ident #generic_params
         #where_clauses
         {
-            type Source = #source_type;
+            type Destination = #struct_ident;
 
             #[track_caller]
-            fn build_error(self, source: Self::Source) -> #struct_ident {
+            fn build_error(self, source: #source_type) -> #struct_ident {
                 // Capture probes borrow `&source` before `source_assign` moves
                 // it (see the enum path).
                 #(#auto_inits)*
@@ -568,13 +608,13 @@ fn gen_build_fail_struct(
         .collect();
 
     let none_error_impl = quote! {
-        impl #generic_params #oopsie_path::Contextual<#struct_ident> for #selector_ident #generic_params
+        impl #generic_params #oopsie_path::Contextual<#oopsie_path::NoSource> for #selector_ident #generic_params
         #where_clauses
         {
-            type Source = #oopsie_path::NoSource;
+            type Destination = #struct_ident;
 
             #[track_caller]
-            fn build_error(self, _: Self::Source) -> #struct_ident {
+            fn build_error(self, _: #oopsie_path::NoSource) -> #struct_ident {
                 self.build()
             }
         }

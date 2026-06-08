@@ -183,7 +183,7 @@ fn error_suffix_stripped_with_oopsie_suffix() {
 
 #[test]
 fn leaf_selector_build_error_no_source() {
-    // Leaf selectors implement Contextual<E, Source=NoSource> for OptionExt support.
+    // Leaf selectors implement Contextual<NoSource> for OptionExt support.
     let err: AppError = NotFound { path: "x" }.build_error(NoSource);
     assert!(matches!(err, AppError::NotFound { path } if path == "x"));
 }
