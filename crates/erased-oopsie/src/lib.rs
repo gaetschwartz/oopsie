@@ -17,8 +17,8 @@ use serde::{Deserialize, Serialize};
 
 use oopsie_core::{ErrorCode, HelpText};
 
-/// Upper bound on the source chain length collected by `from_error_ref`, to
-/// keep a cyclic or pathologically deep `Error::source()` chain from hanging.
+/// Upper bound on real source entries stored by `from_error_ref`; a sentinel
+/// entry is appended when the walk would exceed this limit.
 const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 
 /// A serializable, cloneable error representation that preserves the full
@@ -35,7 +35,8 @@ pub struct ErasedError {
     #[serde(default)]
     pub source_chain: Vec<Box<str>>,
 
-    /// Diagnostic metadata (code, severity, help, url, labels).
+    /// Diagnostic metadata (code, help).
+    #[serde(default)]
     pub diagnostics: Diagnostics,
 
     /// Serialized span trace.
@@ -101,11 +102,15 @@ impl ErasedError {
         // `self` or an ancestor); the std contract does not forbid it. Cap the
         // eager walk so a foreign cyclic chain can't hang or OOM this
         // serialization entry point.
-        let source_chain = std::iter::successors(err.source(), |e| e.source())
-            .take(MAX_SOURCE_CHAIN_DEPTH)
+        let mut source_chain: Vec<Box<str>> = std::iter::successors(err.source(), |e| e.source())
+            .take(MAX_SOURCE_CHAIN_DEPTH + 1)
             .map(ToString::to_string)
             .map(Box::from)
             .collect();
+        if source_chain.len() > MAX_SOURCE_CHAIN_DEPTH {
+            source_chain.truncate(MAX_SOURCE_CHAIN_DEPTH);
+            source_chain.push("\u{2026} source chain truncated".into());
+        }
 
         let diagnostics = Diagnostics {
             code: err.oopsie_error_code(),
@@ -633,5 +638,74 @@ mod tests {
             erased.diagnostics.code().is_none(),
             "plain error should have no error code"
         );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Serde tolerance: missing optional fields deserialize without error.
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn serde_message_only_payload_deserializes() {
+        let erased: ErasedError = serde_json::from_str(r#"{"message":"x"}"#)
+            .expect("missing optional fields must not fail");
+        assert_eq!(&*erased.message, "x");
+        assert!(erased.source_chain.is_empty());
+        assert!(erased.diagnostics.is_none());
+        assert!(erased.spantrace.is_none());
+        assert!(erased.backtrace.is_none());
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Truncation marker: cyclic source yields MAX+1 entries, last is the
+    // sentinel.
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn from_error_ref_appends_truncation_sentinel_on_cyclic_source() {
+        #[derive(Debug)]
+        struct Cyclic;
+        impl fmt::Display for Cyclic {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("cyclic")
+            }
+        }
+        impl std::error::Error for Cyclic {
+            fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+                Some(self)
+            }
+        }
+        impl oopsie_core::Diagnostic for Cyclic {}
+
+        let erased = ErasedError::from_error_ref(&Cyclic);
+        assert_eq!(
+            erased.source_chain.len(),
+            MAX_SOURCE_CHAIN_DEPTH + 1,
+            "cyclic chain must produce exactly MAX+1 entries (MAX real + sentinel)"
+        );
+        assert_eq!(
+            &*erased.source_chain[MAX_SOURCE_CHAIN_DEPTH], "\u{2026} source chain truncated",
+            "last entry must be the truncation sentinel"
+        );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Lossy filename: ErasedFrame.filename is now Box<str>, not Box<Path>.
+    // Smoke-test that a real backtrace produces str filenames.
+    // ─────────────────────────────────────────────────────────────────────
+
+    #[test]
+    fn erased_frame_filename_is_str() {
+        oopsie_core::set_rust_backtrace_override(oopsie_core::RustBacktrace::Enabled);
+        let bt = <oopsie_core::Backtrace as oopsie_core::Capturable>::capture();
+        oopsie_core::clear_rust_backtrace_override();
+
+        let erased = crate::backtrace::ErasedBacktrace::from_backtrace(&bt);
+        // filename is already Box<str> — this compiles only if the type is correct.
+        // Verify at least one frame has a non-empty filename string.
+        let has_filename = erased
+            .frames()
+            .iter()
+            .any(|fr| fr.filename.as_deref().is_some_and(|s| !s.is_empty()));
+        assert!(has_filename, "at least one frame should have a filename");
     }
 }

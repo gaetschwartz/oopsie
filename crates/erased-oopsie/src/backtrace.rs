@@ -1,7 +1,6 @@
 //! Serializable backtrace representation.
 
 use std::fmt;
-use std::path;
 
 use serde::{Deserialize, Serialize};
 
@@ -15,7 +14,7 @@ pub struct ErasedBacktrace {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ErasedFrame {
     pub name: Option<Box<str>>,
-    pub filename: Option<Box<path::Path>>,
+    pub filename: Option<Box<str>>,
     pub line: Option<u32>,
     pub column: Option<u32>,
 }
@@ -38,7 +37,7 @@ impl ErasedBacktrace {
             .flat_map(|frame| frame.symbols().iter())
             .map(|sym| ErasedFrame {
                 name: sym.name().map(|n| n.to_string().into_boxed_str()),
-                filename: sym.filename().map(Box::from),
+                filename: sym.filename().map(|p| p.to_string_lossy().into()),
                 line: sym.lineno(),
                 column: sym.colno(),
             })
@@ -77,7 +76,7 @@ impl fmt::Display for ErasedBacktrace {
                 writeln!(f, "<unknown>")?;
             }
             if let Some(filename) = &frame.filename {
-                write!(f, "           at {}", filename.display())?;
+                write!(f, "           at {filename}")?;
                 if let Some(line) = frame.line {
                     write!(f, ":{line}")?;
                     if let Some(col) = frame.column {
@@ -103,7 +102,7 @@ mod tests {
     ) -> ErasedFrame {
         ErasedFrame {
             name: name.map(|s| s.to_owned().into_boxed_str()),
-            filename: filename.map(|s| std::path::Path::new(s).into()),
+            filename: filename.map(Into::into),
             line,
             column,
         }
@@ -156,7 +155,7 @@ mod tests {
             erased.frames().iter().any(|fr| {
                 oopsie_core::__private::is_internal_frame(
                     fr.name.as_deref(),
-                    fr.filename.as_deref(),
+                    fr.filename.as_deref().map(std::path::Path::new),
                 )
             }),
             "from_backtrace should retain raw internal frames, not strip them at capture"
