@@ -229,11 +229,6 @@ impl ErasedError {
         let _ = writeln!(out);
         out
     }
-
-    /// Write the error in HTML format.
-    pub fn write_html<W: io::Write>(&self, f: &mut W) -> io::Result<()> {
-        self.write_text(f)
-    }
 }
 
 impl fmt::Display for ErasedError {
@@ -518,30 +513,6 @@ mod tests {
         let last_count = short.matches("\u{2570}\u{2500}\u{25b6}").count();
         assert_eq!(middle_count, 2, "first two causes should use middle-arrow");
         assert_eq!(last_count, 1, "only last cause should use last-arrow");
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Test for write_html
-    // ─────────────────────────────────────────────────────────────────────
-
-    #[test]
-    fn test_write_html_produces_output() {
-        let erased = ErasedError {
-            message: "html error".into(),
-            source_chain: vec![],
-            diagnostics: Diagnostics::default(),
-            spantrace: None,
-            backtrace: None,
-        };
-
-        let mut buf = Vec::new();
-        erased.write_html(&mut buf).unwrap();
-        assert!(!buf.is_empty(), "write_html must produce output");
-        let output = String::from_utf8(buf).unwrap();
-        assert!(
-            output.contains("html error"),
-            "write_html output should contain the error message"
-        );
     }
 
     // ─────────────────────────────────────────────────────────────────────
