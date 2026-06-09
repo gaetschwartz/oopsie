@@ -740,3 +740,30 @@ Error[leaf::failed]: leaf failed: disk
 "
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cyclic source-chain safety
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[derive(Debug)]
+struct Cyclic;
+
+impl std::fmt::Display for Cyclic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("cyclic")
+    }
+}
+
+impl std::error::Error for Cyclic {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self)
+    }
+}
+
+impl oopsie::Diagnostic for Cyclic {}
+
+#[test]
+fn cyclic_source_chain_terminates_with_truncation_note() {
+    let rendered = oopsie::Report::from_std(Cyclic).no_colors().to_string();
+    assert!(rendered.contains("source chain truncated"), "{rendered}");
+}

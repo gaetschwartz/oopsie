@@ -139,6 +139,10 @@ impl<E: Diagnostic> Report<E> {
 
     /// Format the error chain.
     fn write_error_chain(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        /// Matches erased-oopsie's MAX_SOURCE_CHAIN_DEPTH: Error::source is
+        /// user-implemented and the std contract does not forbid cycles.
+        const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
+
         let colors_enabled = self.color_config.should_colorize();
         let Err(err) = &self.res else { return Ok(()) };
 
@@ -169,7 +173,16 @@ impl<E: Diagnostic> Report<E> {
 
         // Write error chain
         let mut source = err.source();
+        let mut depth = 0_usize;
         while let Some(err) = source {
+            if depth == MAX_SOURCE_CHAIN_DEPTH {
+                if colors_enabled {
+                    writeln!(f, "  {} (source chain truncated)", "╰─▶".yellow())?;
+                } else {
+                    writeln!(f, "  ╰─▶ (source chain truncated)")?;
+                }
+                break;
+            }
             let next_source = err.source();
             let arrow = if next_source.is_some() {
                 "├─▶"
@@ -182,6 +195,7 @@ impl<E: Diagnostic> Report<E> {
                 writeln!(f, "  {arrow} {err}")?;
             }
             source = next_source;
+            depth += 1;
         }
 
         // Write help text if present
