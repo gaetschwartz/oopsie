@@ -65,11 +65,18 @@ impl ColorConfig {
     }
 
     /// Determine if colors should be used based on this configuration.
+    ///
+    /// `Auto` resolves through the global mode set by [`set_color_mode`] first,
+    /// then environment/terminal detection when the global is also `Auto`.
     #[must_use]
     #[inline]
     pub fn should_colorize(self) -> bool {
         match self {
-            Self::Auto => *ENV_SUPPORTS_COLOR.get_or_init(detect_env_color_support),
+            Self::Auto => match get_color_mode() {
+                Self::Always => true,
+                Self::Never => false,
+                Self::Auto => *ENV_SUPPORTS_COLOR.get_or_init(detect_env_color_support),
+            },
             Self::Always => true,
             Self::Never => false,
         }
@@ -133,6 +140,16 @@ mod tests {
         set_color_mode(ColorConfig::Auto);
         assert_eq!(get_color_mode(), ColorConfig::Auto);
 
+        set_color_mode(original);
+    }
+
+    #[test]
+    fn global_never_disables_auto_colorize() {
+        let original = get_color_mode();
+        set_color_mode(ColorConfig::Never);
+        assert!(!ColorConfig::Auto.should_colorize());
+        set_color_mode(ColorConfig::Always);
+        assert!(ColorConfig::Auto.should_colorize());
         set_color_mode(original);
     }
 }
