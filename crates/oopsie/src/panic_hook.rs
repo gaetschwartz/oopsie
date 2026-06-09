@@ -25,9 +25,9 @@ const HINT_STYLE: Style = Style::new().dimmed();
 ///
 /// Replaces any previously installed hook through `std::panic::set_hook`, so
 /// call it once early in `main`, before spawning threads. Backtrace capture
-/// follows the `RUST_BACKTRACE` / `RUST_LIB_BACKTRACE` convention (see
-/// [`rust_backtrace`](oopsie_core::rust_backtrace)); with capture disabled, only
-/// the message and location are shown plus a hint to enable it.
+/// follows std's panic semantics: `RUST_BACKTRACE` only. `RUST_LIB_BACKTRACE`
+/// intentionally has no effect on panic output. With capture disabled, only the
+/// message and location are shown plus a hint to enable it.
 #[expect(
     clippy::print_stderr,
     reason = "a panic hook renders the crash report to stderr, like std's default hook"
@@ -44,19 +44,27 @@ pub fn install_panic_hook() {
 struct PanicReport<'a> {
     info: &'a PanicHookInfo<'a>,
     backtrace: Backtrace,
+    /// Resolved once from the panic-path env semantics (`RUST_BACKTRACE`
+    /// only) and forced as the capture setting, so library-level backtrace
+    /// settings never affect panic capture.
+    backtrace_setting: oopsie_core::RustBacktrace,
     span_trace: Option<SpanTrace>,
     color_config: ColorConfig,
 }
 
 impl<'a> PanicReport<'a> {
     fn new(info: &'a PanicHookInfo<'a>) -> Self {
+        let backtrace_setting = oopsie_core::rust_panic_backtrace();
+        let backtrace =
+            oopsie_core::with_rust_backtrace_override(backtrace_setting, || Backtrace::capture());
         let span_trace = {
             let captured = SpanTrace::capture();
             captured.is_captured().then_some(captured)
         };
         Self {
             info,
-            backtrace: Backtrace::capture(),
+            backtrace,
+            backtrace_setting,
             span_trace,
             color_config: ColorConfig::auto(),
         }
@@ -115,10 +123,9 @@ impl<'a> PanicReport<'a> {
     fn write_backtrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f)?;
 
-        // Capture honors `RUST_BACKTRACE` / `RUST_LIB_BACKTRACE`; when disabled
-        // there are no frames to render, so point the user at the env var
-        // instead — mirroring std's default panic message.
-        if !oopsie_core::rust_backtrace().is_enabled() {
+        // When disabled there are no frames to render, so point the user at
+        // the env var instead — mirroring std's default panic message.
+        if !self.backtrace_setting.is_enabled() {
             let hint = "note: run with `RUST_BACKTRACE=1` to display a backtrace";
             if self.color_config.should_colorize() {
                 writeln!(f, "{}", hint.style(HINT_STYLE))?;
@@ -131,7 +138,7 @@ impl<'a> PanicReport<'a> {
         // `full` means "show everything"; otherwise apply the panic-aware filter
         // that trims the panic plumbing above the call site and the runtime tail
         // below `main`.
-        let mut printer = if oopsie_core::rust_backtrace().is_full() {
+        let mut printer = if self.backtrace_setting.is_full() {
             TracePrinter::unfiltered()
         } else {
             TracePrinter::with_filter_and_theme(panic_frame_filter, TraceTheme::DEFAULT)
