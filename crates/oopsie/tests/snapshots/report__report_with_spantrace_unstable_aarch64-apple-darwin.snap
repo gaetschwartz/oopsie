@@ -6,12 +6,13 @@ Error[report::common::MyError::Inner]: Inner error happened
   ╰─▶ Error: Inner function failed (foo=true, name=Alice)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   0: sys::inner_function
+  1: sys::inner_function
            with {"foo":true,"id":42,"name":"Alice"}
-             at crates/oopsie/tests/common/mod.rs:[LOC]
-   1: controller::outer_function
+           at crates/oopsie/tests/common/mod.rs:[LOC]
+  2: controller::outer_function
            with {"foo":true,"name":"Alice"}
-             at crates/oopsie/tests/common/mod.rs:[LOC]
+           at crates/oopsie/tests/common/mod.rs:[LOC]
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 8 frames hidden ...
   1: <report[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::build

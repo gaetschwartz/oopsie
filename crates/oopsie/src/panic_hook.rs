@@ -104,12 +104,11 @@ impl<'a> PanicReport<'a> {
         };
 
         writeln!(f)?;
-        if self.color_config.should_colorize() {
-            TracePrinter::new().write_spantrace(f, span_trace)?;
-        } else {
-            writeln!(f, "{:━^80}", " SPANTRACE ")?;
-            write!(f, "{span_trace}")?;
+        let mut printer = TracePrinter::new();
+        if !self.color_config.should_colorize() {
+            printer = printer.plain();
         }
+        printer.write_spantrace(f, span_trace)?;
         Ok(())
     }
 
