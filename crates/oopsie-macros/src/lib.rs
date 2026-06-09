@@ -13,18 +13,17 @@ pub(crate) mod utils;
 ///
 /// This is the low-level building block. For the batteries-included experience
 /// (automatic `Debug` generation, optional tracing/diagnostics), prefer
-/// [`#[oopsie]`](macro@oopsie_attr) instead.
+/// [`#[oopsie]`](macro@oopsie) instead.
 ///
 /// # What gets generated
 ///
 /// For each variant or struct, the derive produces a **context selector** — a struct
-/// holding all fields except the source error and `#[oopsie(capture)]` fields. Each
-/// selector has three methods:
+/// holding all fields except the source error and `#[oopsie(capture)]` fields.
 ///
-/// - **`.build()`** — constructs the error directly; only available for leaf errors
-///   (no source field).
-/// - **`.build_error(source)`** — constructs the error with a chained source.
-/// - **`.fail()`** — shorthand for `Err(self.build())`.
+/// - **Leaf** selectors (no source field) expose `.build()` and `.fail()`
+///   (shorthand for `Err(self.build())`).
+/// - **Source** selectors instead expose `.build_error(source)` via the
+///   `Contextual` trait — they have no `.build()`.
 ///
 /// All fields accept `Into<T>`, so `"str"` is accepted for `String` fields.
 ///
@@ -98,11 +97,12 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// |-----------|--------|
 /// | *(bare)* | No diagnostics; equivalent to `#[derive(Debug, Oopsie)]` |
 /// | `traced` | Inject backtrace + spantrace |
-/// | `traced(spantrace(false))` | Inject backtrace only |
-/// | `traced(backtrace(false))` | Inject spantrace only |
-/// | `traced(timestamp)` | Also inject a timestamp |
+/// | `traced(timestamp)` | …plus an auto-captured timestamp |
+/// | `traced(backtrace(false))` | Disable one part (any of `backtrace`/`spantrace`/`timestamp`) |
+/// | `traced(timestamp(chrono = true))` | `chrono::DateTime<Local>` timestamps (needs the `chrono` feature) |
+/// | `traced(packed = false, boxed = false)` | Trace field layout tuning |
 /// | `code = false` | Disable error-code injection |
-/// | `path = "my_crate::oopsie"` | Custom path to the `oopsie` crate |
+/// | `path = "my_crate::oopsie"` | Custom path to the `oopsie` crate (all generated impls) |
 ///
 /// Container-level `#[oopsie(...)]` attributes (`module`, `vis`, `size`, etc.)
 /// are placed on the type itself, not in the attribute macro's argument list.

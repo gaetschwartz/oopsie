@@ -71,34 +71,37 @@
 //!
 //! For each variant or struct, `#[oopsie]` generates a **context selector** — a struct
 //! containing all the fields *except* the source error and any `#[oopsie(capture)]` fields.
-//! Every selector exposes three methods:
 //!
-//! | Method | Use when |
-//! |--------|----------|
-//! | `.build()` | Leaf error — no source to wrap |
-//! | `.build_error(source)` | Wrapping error — takes the source value |
-//! | `.fail()` | Shorthand for `Err(self.build())` |
+//! Selectors for **leaf** variants (no source) expose `.build()` and `.fail()`
+//! (plus `Contextual<NoSource>` for `Option::context`). Selectors for variants
+//! **with a source** expose `.build_error(source)` via the [`Contextual`] trait.
+//! The methods are mutually exclusive — a source selector has no `.build()`.
 //!
 //! All selector fields accept `Into<T>`, so you can pass `"str"` for a `String` field.
 //!
-//! `.context(selector)` on `Result` / `Option` calls `build_error` / `build` for you —
+//! `.context(selector)` on `Result` / `Option` builds the error for you —
 //! you only need to call these methods directly when constructing errors manually.
 //!
 //! # Selector naming
 //!
 //! The selector name is the **variant name** (for enums) or **struct name** (for structs),
-//! with a trailing `"Error"` suffix stripped:
+//! with a trailing `"Error"` suffix stripped.
+//!
+//! Structs additionally get an `"Oopsie"` suffix by default — `struct QueryError`
+//! → selector `QueryOopsie`. Disable with `#[oopsie(suffix(false))]` or set a
+//! custom one with `#[oopsie(suffix = "X")]`.
 //!
 //! | Variant / struct | Selector name |
 //! |------------------|---------------|
-//! | `Connect` | `Connect` |
-//! | `ConnectionError` | `Connection` |
-//! | `NotFound` | `NotFound` |
+//! | `Connect` (variant) | `Connect` |
+//! | `ConnectionError` (variant) | `Connection` |
+//! | `QueryError` (struct) | `QueryOopsie` |
 //!
 //! ## Module wrapping
 //!
-//! For enums, selectors are placed in a generated module. The module name is derived from
-//! the enum type name: strip trailing `"Error"`, convert to `snake_case`, append `_oopsies`:
+//! Selectors can be placed in a generated module — the default for enums; structs
+//! default to no module. The auto-generated module name is derived from the error
+//! type name: strip trailing `"Error"`, convert to `snake_case`, append `_oopsies`:
 //!
 //! | Error type | Module |
 //! |------------|--------|
@@ -112,7 +115,7 @@
 //!
 //! Display strings follow `format!` semantics with named or positional interpolation:
 //! - `#[oopsie("Failed to read {path}")]` — named field
-//! - `#[oopsie("Got {} errors", count)]` — positional (long form only)
+//! - `#[oopsie("Got {} errors", count)]` — positional
 //!
 //! If no display attribute is given, the variant or struct name is used verbatim as the message.
 //!
@@ -121,13 +124,14 @@
 //! ## Container (`enum` / `struct`)
 //! | Attribute | Effect |
 //! |-----------|--------|
-//! | `#[oopsie("msg")]` | Display message (short form) |
-//! | `#[oopsie(module)]` | Wrap selectors in auto-named module |
+//! | `#[oopsie("msg")]` | Display message (short form; structs only — on enums it goes on each variant) |
+//! | `#[oopsie(module)]` | Wrap selectors in auto-named module (enum default) |
 //! | `#[oopsie(module(name))]` | Wrap selectors in module named `name` |
-//! | `#[oopsie(module(false))]` | Disable module wrapping |
-//! | `#[oopsie(vis(pub))]` | Override default selector visibility |
-//! | `#[oopsie(suffix)]` | Append `"Oopsie"` suffix to selector names |
+//! | `#[oopsie(module(false))]` | Disable module wrapping (struct default) |
+//! | `#[oopsie(vis(pub))]` | Override selector visibility (default: the error type's own visibility) |
+//! | `#[oopsie(suffix)]` | Append `"Oopsie"` suffix to selector names (struct default) |
 //! | `#[oopsie(suffix = "X")]` | Append custom suffix to selector names |
+//! | `#[oopsie(suffix(false))]` | No selector suffix (enum default) |
 //! | `#[oopsie(size(N))]` | Assert error type is exactly `N` bytes at compile time |
 //! | `#[oopsie(size(N..=M))]` | Assert error type size is within range at compile time |
 //!
@@ -137,16 +141,22 @@
 //! | `#[oopsie("msg {field}")]` | Short-form display message |
 //! | `#[oopsie(display("msg"), ...)]` | Long-form display (combine with other attrs) |
 //! | `#[oopsie(transparent)]` | Generate `From` impl instead of a selector struct |
-//! | `#[oopsie(help = "...")]` | Help text surfaced via the `Provider` API |
-//! | `#[oopsie(code = "...")]` | Error code surfaced via the `Provider` API |
+//! | `#[oopsie(help = "...")]` | Help text, surfaced via [`Diagnostic::oopsie_help_text`] and consumed by `Report` |
+//! | `#[oopsie(code = "...")]` | Error code, surfaced via [`Diagnostic::oopsie_error_code`] and consumed by `Report` |
+//!
+//! With the `unstable` feature, help and code are additionally surfaced through the
+//! nightly `Provider` API.
 //!
 //! ## Field
 //! | Attribute | Effect |
 //! |-----------|--------|
 //! | *(named `source`)* | Auto-detected as the chained source error |
 //! | `#[oopsie(from)]` | Mark as source (for non-`source`-named fields) |
+//! | `#[oopsie(from(false))]` | Opt a field named `source` out of source detection |
 //! | `#[oopsie(from(Type, transform))]` | Source with type transformation |
+//! | *(type `Box<T>`, source)* | Auto-unboxed: the selector accepts `T` and boxes it (trait objects exempt) |
 //! | `#[oopsie(capture)]` | Auto-filled via [`Capturable`]; excluded from selector |
+//! | `#[oopsie(help)]` | Dynamic help text from this field's `Display` |
 
 // Re-export the proc-macro attribute and derive.
 pub use oopsie_macros::Oopsie;
