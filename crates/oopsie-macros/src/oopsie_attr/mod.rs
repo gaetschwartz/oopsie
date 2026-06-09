@@ -31,6 +31,18 @@ const NESTED_ONLY_KEYS: &[&str] = &["backtrace", "spantrace", "timestamp", "pack
 pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStream2> {
     let meta = NestedMeta::parse_meta_list(attrs)?;
 
+    if let Some(lit) = meta.iter().find_map(|m| match m {
+        NestedMeta::Lit(lit @ syn::Lit::Str(_)) => Some(lit),
+        NestedMeta::Lit(_) | NestedMeta::Meta(_) => None,
+    }) {
+        return Err(syn::Error::new_spanned(
+            lit,
+            "display strings don't go in the macro arguments; put them in a \
+             separate `#[oopsie(\"...\")]` attribute on the struct, or on each \
+             enum variant",
+        ));
+    }
+
     for m in &meta {
         let NestedMeta::Meta(inner) = m else { continue };
         let Some(ident) = inner.path().get_ident() else {
@@ -422,6 +434,26 @@ mod tests {
             !output.contains("oopsie :: Oopsie"),
             "qualified Oopsie derive should be stripped:\n{output}"
         );
+    }
+
+    #[test]
+    fn display_string_in_macro_args_gets_targeted_error() {
+        let err = expand(
+            quote! { "upstream failed: {service}" },
+            quote! { pub struct UpstreamError { service: String } },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("separate"), "{err}");
+    }
+
+    #[test]
+    fn display_string_in_non_first_position_gets_targeted_error() {
+        let err = expand(
+            quote! { traced, "msg" },
+            quote! { pub struct UpstreamError { service: String } },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("separate"), "{err}");
     }
 
     #[test]
