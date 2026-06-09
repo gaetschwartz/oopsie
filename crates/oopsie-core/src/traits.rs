@@ -493,7 +493,10 @@ mod tests {
 
     #[test]
     fn tuple_capture_ext_extracts_both_from_source() {
-        use crate::{Backtrace, CaptureExt, Diagnostic, SpanTrace};
+        use crate::{
+            Backtrace, CaptureExt, Diagnostic, RustBacktrace, SpanTrace,
+            with_rust_backtrace_override,
+        };
         use std::fmt;
 
         #[derive(Debug)]
@@ -516,14 +519,21 @@ mod tests {
             }
         }
 
-        let src = Src {
-            backtrace: Backtrace::capture(),
-            spantrace: SpanTrace::capture(),
-        };
-        let extracted = <(Backtrace, SpanTrace) as CaptureExt>::capture_or_extract(&src);
-        // The extracted backtrace must reuse the source's frame count, proving
-        // extraction (not a fresh capture).
-        assert_eq!(extracted.0.frames().len(), src.backtrace.frames().len());
+        with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            let src = Src {
+                backtrace: Backtrace::capture(),
+                spantrace: SpanTrace::capture(),
+            };
+            let source_frames = src.backtrace.frames().len();
+            assert!(
+                source_frames > 0,
+                "backtrace must be enabled for this test to be probative"
+            );
+            let extracted = <(Backtrace, SpanTrace) as CaptureExt>::capture_or_extract(&src);
+            // The extracted backtrace must reuse the source's frame count, proving
+            // extraction (not a fresh capture).
+            assert_eq!(extracted.0.frames().len(), source_frames);
+        });
     }
 
     const _: () = {
