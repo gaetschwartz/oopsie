@@ -2,28 +2,26 @@
 
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::parse_quote;
 
-use super::args::TracedArgs;
+use super::args::{CodeSettings, TracedArgs};
 use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{
     add_provide_attrs, check_existing_fields, has_oopsie_flag, has_oopsie_name_value, inject_fields,
 };
+use crate::utils::FieldSetting;
 
 pub fn expand_struct(
     args: &TracedArgs,
+    code: &FieldSetting<true, CodeSettings>,
+    oopsie_path: &syn::Path,
     args_span: Span,
     mut input: syn::ItemStruct,
 ) -> syn::Result<TokenStream2> {
     let struct_name = input.ident.to_string();
-    let oopsie_path = args
-        .path
-        .clone()
-        .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     let resolved = args.resolve();
     resolved.validate(args_span)?;
-    let config = FieldInjectorConfig::new(args, &resolved, &oopsie_path);
+    let config = FieldInjectorConfig::new(&resolved, code, oopsie_path);
 
     let existence = check_existing_fields(&input.fields, &config.timestamp_type);
 
@@ -56,7 +54,7 @@ pub fn expand_struct(
         &config,
         &struct_name,
         None,
-        args.code.is_enabled(),
+        code.is_enabled(),
         has_user_code,
         is_transparent,
     );

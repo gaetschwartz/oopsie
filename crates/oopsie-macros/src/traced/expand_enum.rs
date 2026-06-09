@@ -2,28 +2,26 @@
 
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::parse_quote;
 
-use super::args::TracedArgs;
+use super::args::{CodeSettings, TracedArgs};
 use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{
     add_provide_attrs, check_existing_fields, has_oopsie_flag, has_oopsie_name_value, inject_fields,
 };
+use crate::utils::FieldSetting;
 
 pub fn expand_enum(
     args: &TracedArgs,
+    code: &FieldSetting<true, CodeSettings>,
+    oopsie_path: &syn::Path,
     args_span: Span,
     mut input: syn::ItemEnum,
 ) -> syn::Result<TokenStream2> {
     let enum_name = input.ident.to_string();
-    let oopsie_path = args
-        .path
-        .clone()
-        .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     let resolved = args.resolve();
     resolved.validate(args_span)?;
-    let config = FieldInjectorConfig::new(args, &resolved, &oopsie_path);
+    let config = FieldInjectorConfig::new(&resolved, code, oopsie_path);
 
     // Process variants
     for variant in &mut input.variants {
@@ -55,7 +53,7 @@ pub fn expand_enum(
             &config,
             &enum_name,
             Some(&variant_name),
-            args.code.is_enabled(),
+            code.is_enabled(),
             has_user_code,
             is_transparent,
         );

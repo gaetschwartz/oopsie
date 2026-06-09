@@ -42,11 +42,11 @@ struct MietteErr {
 }
 
 // Backtrace-carrying error types for the `render_traced*` groups. oopsie uses
-// `backtrace` — the `traced` machinery without the spantrace. anyhow and eyre
-// capture from the forced env. snafu only renders a backtrace under its
+// the `traced` machinery without the spantrace. anyhow and eyre capture from
+// the forced env. snafu only renders a backtrace under its
 // `unstable-provider-api` feature, which oopsie's `unstable-error-generic-member-access`
 // feature pulls in, so the snafu entry is gated on it.
-#[oopsie(backtrace)]
+#[oopsie(traced(spantrace(false)))]
 #[oopsie("wrap failed: {ctx}")]
 struct TracedError {
     ctx: &'static str,
@@ -223,7 +223,7 @@ fn bench_colored(c: &mut Criterion) {
 }
 
 /// Plain full-chain rendering of errors that carry a backtrace, across crates.
-/// oopsie's backtrace comes from `#[oopsie(backtrace)]` + the override; the
+/// oopsie's backtrace comes from `#[oopsie(traced(spantrace(false)))]` + the override; the
 /// others rely on the forced `RUST_BACKTRACE` env (see module docs).
 fn bench_traced(c: &mut Criterion) {
     enable_env_backtraces();

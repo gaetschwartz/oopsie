@@ -98,9 +98,9 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// |-----------|--------|
 /// | *(bare)* | No diagnostics; equivalent to `#[derive(Debug, Oopsie)]` |
 /// | `traced` | Inject backtrace + spantrace |
-/// | `backtrace` | Inject backtrace only |
-/// | `spantrace` | Inject spantrace only |
-/// | `timestamp` | Inject timestamp |
+/// | `traced(spantrace(false))` | Inject backtrace only |
+/// | `traced(backtrace(false))` | Inject spantrace only |
+/// | `traced(timestamp)` | Also inject a timestamp |
 /// | `code = false` | Disable error-code injection |
 /// | `path = "my_crate::oopsie"` | Custom path to the `oopsie` crate |
 ///

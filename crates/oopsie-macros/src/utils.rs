@@ -7,7 +7,7 @@ use std::ops::Deref;
 use darling::FromMeta;
 use syn::MetaNameValue;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum FieldSetting<const DEFAULT: bool, T: FromMeta> {
     Settings(Settings<T>),
     Flag(bool),
@@ -41,23 +41,25 @@ impl<const DEFAULT: bool, T: FromMeta + Default + Clone> FieldSetting<DEFAULT, T
 
 impl<const DEFAULT: bool, T: FromMeta> FromMeta for FieldSetting<DEFAULT, T> {
     fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
-        if let syn::Meta::Path(_) = item {
-            Ok(Self::Flag(true))
-        } else if let syn::Meta::NameValue(nv) = item {
-            // Handle `field = true` / `field = false`
-            if let syn::Expr::Lit(syn::ExprLit {
-                lit: syn::Lit::Bool(b),
+        match item {
+            syn::Meta::Path(_) => Ok(Self::Flag(true)),
+            // `field = true` / `field = false`
+            syn::Meta::NameValue(syn::MetaNameValue {
+                value:
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Bool(b),
+                        ..
+                    }),
                 ..
-            }) = &nv.value
-            {
-                Ok(Self::Flag(b.value))
-            } else {
-                let settings = Settings::<T>::from_meta(item)?;
-                Ok(Self::Settings(settings))
+            }) => Ok(Self::Flag(b.value)),
+            // `field(true)` / `field(false)`
+            syn::Meta::List(list) => {
+                if let Ok(b) = syn::parse2::<syn::LitBool>(list.tokens.clone()) {
+                    return Ok(Self::Flag(b.value));
+                }
+                Settings::<T>::from_meta(item).map(Self::Settings)
             }
-        } else {
-            let settings = Settings::<T>::from_meta(item)?;
-            Ok(Self::Settings(settings))
+            syn::Meta::NameValue(_) => Settings::<T>::from_meta(item).map(Self::Settings),
         }
     }
 
@@ -70,7 +72,7 @@ impl<const DEFAULT: bool, T: FromMeta> FromMeta for FieldSetting<DEFAULT, T> {
     }
 }
 
-#[derive(Debug, darling::FromMeta)]
+#[derive(Clone, Debug, darling::FromMeta)]
 pub struct Settings<T> {
     enabled: Option<bool>,
     #[darling(flatten)]

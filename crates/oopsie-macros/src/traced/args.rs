@@ -2,94 +2,78 @@
 
 use crate::utils::{BetterFlag, FieldSetting};
 
-/// Raw parsed arguments — trace args are `Option` so we can detect explicit specification.
-#[derive(Debug, darling::FromMeta)]
+/// Inner arguments of `traced(...)`. Every part starts from its default
+/// (backtrace + spantrace on, timestamp off) and is individually tunable:
+/// mentioning one part never disables the others.
+#[derive(Clone, Debug, darling::FromMeta)]
 pub struct TracedArgs {
-    #[darling(default)]
-    pub backtrace: Option<FieldSetting<true, TraceSettings>>,
-    #[darling(default)]
-    pub spantrace: Option<FieldSetting<true, TraceSettings>>,
-    #[darling(default)]
-    pub timestamp: Option<FieldSetting<true, TimestampSettings>>,
-    #[darling(default)]
+    pub backtrace: FieldSetting<true, TraceSettings>,
+    pub spantrace: FieldSetting<true, TraceSettings>,
+    pub timestamp: FieldSetting<false, TimestampSettings>,
     pub packed: BetterFlag<true>,
-    #[darling(default)]
     pub boxed: BetterFlag<true>,
-    pub code: FieldSetting<true, CodeSettings>,
-    pub path: Option<syn::Path>,
 }
 
-impl TracedArgs {
-    /// Per-trace boxing: the trace's own `boxed` override if present, else the
-    /// pair-level `boxed`.
-    fn trace_boxed(&self, settings: Option<&FieldSetting<true, TraceSettings>>) -> bool {
-        settings
-            .and_then(super::super::utils::FieldSetting::opt_settings)
-            .map_or_else(|| self.boxed.is_enabled(), |s| s.boxed.is_enabled())
-    }
-
-    /// Resolve the explicit override model:
-    /// - Bare `#[oopsie(traced)]` or no explicit trace args specified
-    ///   → backtrace + spantrace enabled, timestamp disabled
-    /// - Any trace arg specified → you get exactly what's listed
-    pub fn resolve(&self) -> ResolvedTraceArgs<'_> {
-        let any_trace_specified =
-            self.backtrace.is_some() || self.spantrace.is_some() || self.timestamp.is_some();
-
-        if any_trace_specified {
-            // Explicit mode: each trace is enabled only if explicitly listed and enabled
-            ResolvedTraceArgs {
-                backtrace: self
-                    .backtrace
-                    .as_ref()
-                    .is_some_and(super::super::utils::FieldSetting::is_enabled),
-                backtrace_settings: self.backtrace.as_ref(),
-                spantrace: self
-                    .spantrace
-                    .as_ref()
-                    .is_some_and(super::super::utils::FieldSetting::is_enabled),
-                spantrace_settings: self.spantrace.as_ref(),
-                timestamp: self
-                    .timestamp
-                    .as_ref()
-                    .is_some_and(super::super::utils::FieldSetting::is_enabled),
-                timestamp_settings: self.timestamp.as_ref(),
-                packed: self.packed.is_enabled(),
-                backtrace_boxed: self.trace_boxed(self.backtrace.as_ref()),
-                spantrace_boxed: self.trace_boxed(self.spantrace.as_ref()),
-            }
-        } else {
-            // Default mode: backtrace + spantrace enabled, timestamp disabled
-            ResolvedTraceArgs {
-                backtrace: true,
-                backtrace_settings: None,
-                spantrace: true,
-                spantrace_settings: None,
-                timestamp: false,
-                timestamp_settings: None,
-                packed: self.packed.is_enabled(),
-                backtrace_boxed: self.boxed.is_enabled(),
-                spantrace_boxed: self.boxed.is_enabled(),
-            }
+impl Default for TracedArgs {
+    fn default() -> Self {
+        Self {
+            backtrace: FieldSetting::Flag(true),
+            spantrace: FieldSetting::Flag(true),
+            timestamp: FieldSetting::Flag(false),
+            packed: BetterFlag::Default,
+            boxed: BetterFlag::Default,
         }
     }
 }
 
-/// Resolved trace settings after applying the explicit override model.
+impl TracedArgs {
+    /// Per-trace boxing: the trace's own `boxed` override if a settings block
+    /// exists, else the pair-level `boxed`.
+    fn trace_boxed(&self, trace: &FieldSetting<true, TraceSettings>) -> bool {
+        trace
+            .opt_settings()
+            .map_or_else(|| self.boxed.is_enabled(), |s| s.boxed.is_enabled())
+    }
+
+    pub fn resolve(&self) -> ResolvedTraceArgs<'_> {
+        ResolvedTraceArgs {
+            backtrace: self.backtrace.is_enabled(),
+            spantrace: self.spantrace.is_enabled(),
+            timestamp: self.timestamp.is_enabled(),
+            packed: self.packed.is_enabled(),
+            backtrace_boxed: self.trace_boxed(&self.backtrace),
+            spantrace_boxed: self.trace_boxed(&self.spantrace),
+            backtrace_type: self.backtrace.r#type(),
+            spantrace_type: self.spantrace.r#type(),
+            timestamp_chrono: self
+                .timestamp
+                .opt_settings()
+                .is_some_and(|s| s.chrono.is_enabled()),
+            timestamp_provide: self
+                .timestamp
+                .opt_settings()
+                .is_some_and(|s| s.provide.is_enabled()),
+        }
+    }
+}
+
+/// Flat view of [`TracedArgs`] after folding flags, per-trace overrides, and
+/// type overrides.
 #[expect(
     clippy::struct_excessive_bools,
     reason = "resolved enable/box flags, one per trace dimension"
 )]
 pub struct ResolvedTraceArgs<'a> {
     pub backtrace: bool,
-    pub backtrace_settings: Option<&'a FieldSetting<true, TraceSettings>>,
     pub spantrace: bool,
-    pub spantrace_settings: Option<&'a FieldSetting<true, TraceSettings>>,
     pub timestamp: bool,
-    pub timestamp_settings: Option<&'a FieldSetting<true, TimestampSettings>>,
     pub packed: bool,
     pub backtrace_boxed: bool,
     pub spantrace_boxed: bool,
+    pub backtrace_type: Option<&'a syn::Path>,
+    pub spantrace_type: Option<&'a syn::Path>,
+    pub timestamp_chrono: bool,
+    pub timestamp_provide: bool,
 }
 
 impl ResolvedTraceArgs<'_> {
@@ -112,42 +96,16 @@ impl ResolvedTraceArgs<'_> {
         }
         Ok(())
     }
-
-    #[inline]
-    pub fn backtrace_type(&self) -> Option<&syn::Path> {
-        let s = self.backtrace_settings?;
-        s.r#type()
-    }
-
-    #[inline]
-    pub fn spantrace_type(&self) -> Option<&syn::Path> {
-        let s = self.spantrace_settings?;
-        s.r#type()
-    }
-
-    #[inline]
-    pub fn timestamp_chrono(&self) -> bool {
-        self.timestamp_settings
-            .and_then(|s| s.opt_settings())
-            .is_some_and(|s| s.chrono.is_enabled())
-    }
-
-    #[inline]
-    pub fn timestamp_provide(&self) -> bool {
-        self.timestamp_settings
-            .and_then(|s| s.opt_settings())
-            .is_some_and(|s| s.provide.is_enabled())
-    }
 }
 
-#[derive(Debug, darling::FromMeta)]
+#[derive(Clone, Debug, darling::FromMeta)]
 pub struct TraceSettings {
     pub r#type: Option<syn::Path>,
     #[darling(default)]
     pub boxed: BetterFlag<true>,
 }
 
-#[derive(Debug, darling::FromMeta)]
+#[derive(Clone, Debug, darling::FromMeta)]
 pub struct TimestampSettings {
     // Opt-in: an omitted flag inside a `timestamp(...)` block stays disabled, so
     // `timestamp(chrono = true)` does not silently also enable `provide`.
@@ -155,7 +113,7 @@ pub struct TimestampSettings {
     pub provide: BetterFlag<false>,
 }
 
-#[derive(Debug, darling::FromMeta)]
+#[derive(Clone, Debug, darling::FromMeta)]
 pub struct CodeSettings {
     pub r#type: Option<syn::Path>,
 }
@@ -186,13 +144,14 @@ mod tests {
     }
 
     #[test]
-    fn default_is_packed_and_boxed() {
+    fn default_is_packed_and_boxed_with_both_traces() {
         let a = args_list(parse_quote!(traced()));
         let r = a.resolve();
         assert!(r.packed);
         assert!(r.backtrace_boxed);
         assert!(r.spantrace_boxed);
         assert!(r.backtrace && r.spantrace);
+        assert!(!r.timestamp);
     }
 
     #[test]
@@ -212,11 +171,37 @@ mod tests {
     }
 
     #[test]
+    fn backtrace_false_keeps_spantrace_and_enables_timestamp() {
+        let a = args(&parse_quote!(traced(backtrace(false), timestamp)));
+        let r = a.resolve();
+        assert!(!r.backtrace);
+        assert!(r.spantrace);
+        assert!(r.timestamp);
+    }
+
+    #[test]
+    fn spantrace_false_keeps_backtrace_only() {
+        let a = args(&parse_quote!(traced(spantrace(false))));
+        let r = a.resolve();
+        assert!(r.backtrace);
+        assert!(!r.spantrace);
+        assert!(!r.timestamp);
+    }
+
+    #[test]
+    fn mentioning_one_trace_does_not_disable_others() {
+        // `spantrace(boxed = false)` tunes spantrace; backtrace stays enabled.
+        let a = args(&parse_quote!(traced(spantrace(boxed = false))));
+        let r = a.resolve();
+        assert!(r.backtrace && r.spantrace);
+        assert!(r.backtrace_boxed);
+        assert!(!r.spantrace_boxed);
+    }
+
+    #[test]
     fn per_trace_boxed_override_when_unpacked() {
-        // Both traces listed (explicit mode keeps both enabled); spantrace inline.
         let a = args(&parse_quote!(traced(
             packed = false,
-            backtrace,
             spantrace(boxed = false)
         )));
         let r = a.resolve();
@@ -227,18 +212,8 @@ mod tests {
     }
 
     #[test]
-    fn naming_one_trace_block_disables_the_other() {
-        // Explicit-override model: mentioning only spantrace turns backtrace OFF.
-        // This is why the mixed case must list both traces.
-        let a = args(&parse_quote!(traced(spantrace(boxed = false))));
-        let r = a.resolve();
-        assert!(r.spantrace);
-        assert!(!r.backtrace);
-    }
-
-    #[test]
     fn validate_rejects_packed_incoherent_boxing() {
-        // Both traces enabled (explicit), packed default, boxing disagrees.
+        // Both traces enabled, packed default, boxing disagrees.
         let a = args(&parse_quote!(traced(backtrace, spantrace(boxed = false))));
         let r = a.resolve();
         assert!(r.backtrace && r.spantrace);
@@ -257,22 +232,11 @@ mod tests {
     // ── timestamp parsing & flag resolution ──────────
 
     #[test]
-    fn default_mode_disables_timestamp() {
-        // Bare `traced()` enables backtrace+spantrace but NOT timestamp.
-        let a = args_list(parse_quote!(traced()));
-        let r = a.resolve();
-        assert!(!r.timestamp);
-        assert!(r.backtrace && r.spantrace);
-    }
-
-    #[test]
-    fn bare_timestamp_enables_only_timestamp() {
-        // Explicit-override model: naming timestamp turns the traces OFF.
+    fn bare_timestamp_keeps_both_traces() {
         let a = args(&parse_quote!(traced(timestamp)));
         let r = a.resolve();
         assert!(r.timestamp);
-        assert!(!r.backtrace);
-        assert!(!r.spantrace);
+        assert!(r.backtrace && r.spantrace);
     }
 
     #[test]
@@ -283,7 +247,7 @@ mod tests {
         ))));
         let r = a.resolve();
         assert!(r.timestamp);
-        assert!(r.timestamp_chrono());
+        assert!(r.timestamp_chrono);
     }
 
     #[test]
@@ -293,8 +257,17 @@ mod tests {
         let a = args(&parse_quote!(traced(timestamp)));
         let r = a.resolve();
         assert!(r.timestamp);
-        assert!(!r.timestamp_chrono());
-        assert!(!r.timestamp_provide());
+        assert!(!r.timestamp_chrono);
+        assert!(!r.timestamp_provide);
+    }
+
+    #[test]
+    fn timestamp_settings_block_enables_timestamp() {
+        // A `timestamp(...)` settings block without `enabled` counts as on,
+        // despite the field's off-by-default.
+        let a = args(&parse_quote!(traced(timestamp(provide = true))));
+        let r = a.resolve();
+        assert!(r.timestamp);
     }
 
     #[test]
@@ -303,15 +276,15 @@ mod tests {
         // `timestamp(provide = true)` alone keeps the `SystemTime` field type.
         let a = args(&parse_quote!(traced(timestamp(provide = true))));
         let r = a.resolve();
-        assert!(!r.timestamp_chrono());
-        assert!(r.timestamp_provide());
+        assert!(!r.timestamp_chrono);
+        assert!(r.timestamp_provide);
     }
 
     #[test]
     fn timestamp_chrono_false_inside_settings_block() {
         let a = args(&parse_quote!(traced(timestamp(chrono = false))));
         let r = a.resolve();
-        assert!(!r.timestamp_chrono());
+        assert!(!r.timestamp_chrono);
     }
 
     #[test]
@@ -320,14 +293,14 @@ mod tests {
         // does not emit a provide attr.
         let a = args(&parse_quote!(traced(timestamp(chrono = true))));
         let r = a.resolve();
-        assert!(!r.timestamp_provide(), "provide is opt-in when omitted");
-        assert!(r.timestamp_chrono());
+        assert!(!r.timestamp_provide, "provide is opt-in when omitted");
+        assert!(r.timestamp_chrono);
     }
 
     #[test]
     fn timestamp_provide_true_resolves_enabled() {
         let a = args(&parse_quote!(traced(timestamp(provide = true))));
         let r = a.resolve();
-        assert!(r.timestamp_provide());
+        assert!(r.timestamp_provide);
     }
 }

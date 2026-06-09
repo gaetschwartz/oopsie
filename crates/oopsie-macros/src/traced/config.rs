@@ -4,7 +4,8 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::parse_quote;
 
-use super::args::{ResolvedTraceArgs, TracedArgs};
+use super::args::{CodeSettings, ResolvedTraceArgs};
+use crate::utils::FieldSetting;
 
 /// Configuration for injecting backtrace, spantrace, and timestamp fields.
 pub(super) struct FieldInjectorConfig {
@@ -29,8 +30,8 @@ pub(super) struct FieldInjectorConfig {
 
 impl FieldInjectorConfig {
     pub fn new(
-        args: &TracedArgs,
         resolved: &ResolvedTraceArgs<'_>,
+        code: &FieldSetting<true, CodeSettings>,
         oopsie_path: &syn::Path,
     ) -> Self {
         let backtrace_ident = format_ident!("__oopsie_backtrace");
@@ -40,10 +41,10 @@ impl FieldInjectorConfig {
 
         // Element types: honor `type =` overrides, else the oopsie defaults.
         let backtrace_elem = resolved
-            .backtrace_type()
+            .backtrace_type
             .map_or_else(|| quote! { #oopsie_path::Backtrace }, |p| quote! { #p });
         let spantrace_elem = resolved
-            .spantrace_type()
+            .spantrace_type
             .map_or_else(|| quote! { #oopsie_path::SpanTrace }, |p| quote! { #p });
 
         let maybe_box = |inner: &TokenStream2, boxed: bool| -> TokenStream2 {
@@ -61,7 +62,7 @@ impl FieldInjectorConfig {
         let tuple = quote! { (#backtrace_elem, #spantrace_elem) };
         let traces_type = maybe_box(&tuple, resolved.backtrace_boxed);
 
-        let timestamp_type: syn::Type = if resolved.timestamp_chrono() {
+        let timestamp_type: syn::Type = if resolved.timestamp_chrono {
             // Leading `::` so the injected field does not depend on `chrono`
             // being nameable (unshadowed, unrenamed) in the caller's scope.
             parse_quote! { ::chrono::DateTime<::chrono::Local> }
@@ -71,14 +72,13 @@ impl FieldInjectorConfig {
         // Surface the injected timestamp through the `Provider` API by value
         // (both `SystemTime` and `chrono::DateTime` are `Copy`). The field is
         // bound by reference in the generated `provide` arm, hence the deref.
-        let timestamp_provide_attr = resolved.timestamp_provide().then(|| {
+        let timestamp_provide_attr = resolved.timestamp_provide.then(|| {
             quote! { #[oopsie(provide(#timestamp_type => *#timestamp_ident))] }
         });
         let backtrace_attrs = quote! { #[oopsie(backtrace)] };
         let spantrace_attrs = quote! { #[oopsie(spantrace)] };
         let traces_attrs = quote! { #[oopsie(traces)] };
-        let code_type = args
-            .code
+        let code_type = code
             .opt_settings()
             .and_then(|s| s.r#type.clone())
             .map_or_else(|| quote! { #oopsie_path::ErrorCode }, |p| quote! { #p });
@@ -138,8 +138,9 @@ mod tests {
     fn config_for(meta: &syn::Meta) -> FieldInjectorConfig {
         let args = TracedArgs::from_meta(meta).unwrap();
         let resolved = args.resolve();
+        let code = FieldSetting::<true, CodeSettings>::Flag(true);
         let path: syn::Path = parse_quote!(::oopsie);
-        FieldInjectorConfig::new(&args, &resolved, &path)
+        FieldInjectorConfig::new(&resolved, &code, &path)
     }
 
     #[test]

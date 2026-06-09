@@ -156,9 +156,9 @@ fn traced_struct_does_not_duplicate_backtrace() {
     assert_eq!(err.msg, "struct bt");
 }
 
-// ---- Test 9: explicit override — backtrace only ----
+// ---- Test 9: opting out of spantrace — backtrace only ----
 
-#[oopsie(backtrace)]
+#[oopsie(traced(spantrace(false)))]
 pub enum BacktraceOnlyError {
     #[oopsie("bt only")]
     BtOnly { msg: String },
@@ -166,24 +166,22 @@ pub enum BacktraceOnlyError {
 
 #[test]
 fn traced_explicit_backtrace_only() {
-    // Bare `#[oopsie(backtrace)]` must behave identically to the nested
-    // `#[oopsie(traced(backtrace))]` form: backtrace injected, spantrace NOT.
     use oopsie::Diagnostic as _;
     let err = backtrace_only_oopsies::BtOnly { msg: "test" }.build();
     assert_eq!(err.to_string(), "bt only");
     assert!(
         err.oopsie_backtrace().is_some(),
-        "bare backtrace form must inject a backtrace"
+        "backtrace stays on when only spantrace is disabled"
     );
     assert!(
         err.oopsie_spantrace().is_none(),
-        "bare backtrace form must NOT inject a spantrace"
+        "`spantrace(false)` must NOT inject a spantrace"
     );
 }
 
-// ---- Test 10: explicit override — spantrace only ----
+// ---- Test 10: opting out of backtrace — spantrace only ----
 
-#[oopsie(spantrace)]
+#[oopsie(traced(backtrace(false)))]
 pub enum SpantraceOnlyError {
     #[oopsie("st only")]
     StOnly { msg: String },
@@ -250,15 +248,15 @@ pub enum SeparateInlineError {
     Boom { info: String },
 }
 
-// mixed: both traces listed (explicit mode keeps both), spantrace inline.
-#[oopsie(traced(packed = false, backtrace, spantrace(boxed = false)))]
+// mixed: backtrace stays on by default, spantrace tuned to inline.
+#[oopsie(traced(packed = false, spantrace(boxed = false)))]
 pub enum MixedError {
     #[oopsie("boom: {info}")]
     Boom { info: String },
 }
 
 // Single trace (backtrace only) — packed is a no-op; lone boxed backtrace.
-#[oopsie(traced(backtrace))]
+#[oopsie(traced(spantrace(false)))]
 pub enum SingleBacktraceError {
     #[oopsie("boom: {info}")]
     Boom { info: String },
@@ -355,13 +353,13 @@ fn wrong_typed_backtrace_field_is_ordinary_and_real_backtrace_injected() {
 // Timestamp injection
 //
 // Findings characterized by these tests:
-// * `#[oopsie(traced(timestamp))]` injects a `__oopsie_timestamp` field. Unlike
-//   backtrace/spantrace it is NOT auto-captured — it appears on the context
-//   selector and the caller supplies the value. Default type is
-//   `std::time::SystemTime`.
-// * Bare `#[oopsie(timestamp)]` is the explicit-override form: it injects ONLY
-//   the timestamp; backtrace/spantrace are NOT injected (the diagnostic
-//   accessors return `None`).
+// * `#[oopsie(traced(timestamp))]` injects a `__oopsie_timestamp` field
+//   alongside the default traces. Unlike backtrace/spantrace it is NOT
+//   auto-captured — it appears on the context selector and the caller supplies
+//   the value. Default type is `std::time::SystemTime`.
+// * Timestamp-only errors disable the traces explicitly:
+//   `traced(backtrace(false), spantrace(false), timestamp)` — the diagnostic
+//   accessors return `None`.
 // * `timestamp(chrono = true)` swaps the field type to
 //   `::chrono::DateTime<::chrono::Local>` — this requires `chrono` to be a
 //   dependency of the consuming crate (here: a dev-dependency of `oopsie`).
@@ -395,15 +393,15 @@ fn timestamp_nested_injects_systemtime_field() {
     assert_eq!(*stored, now);
 }
 
-// bare `#[oopsie(timestamp)]` — explicit-override form, timestamp ONLY.
-#[oopsie(timestamp)]
+// timestamp ONLY: both traces disabled explicitly inside `traced(...)`.
+#[oopsie(traced(backtrace(false), spantrace(false), timestamp))]
 pub enum BareTimestampError {
     #[oopsie("bare ts")]
     Boom { info: String },
 }
 
 #[test]
-fn timestamp_bare_form_injects_only_timestamp() {
+fn timestamp_only_form_injects_only_timestamp() {
     use oopsie::Diagnostic as _;
     let now = std::time::SystemTime::now();
     let e = bare_timestamp_oopsies::Boom {
@@ -415,14 +413,13 @@ fn timestamp_bare_form_injects_only_timestamp() {
         __oopsie_timestamp, ..
     } = &e;
     let _: &std::time::SystemTime = __oopsie_timestamp;
-    // Explicit-override model: naming timestamp disables the default traces.
     assert!(
         e.oopsie_backtrace().is_none(),
-        "bare timestamp must not inject a backtrace"
+        "backtrace(false) must not inject a backtrace"
     );
     assert!(
         e.oopsie_spantrace().is_none(),
-        "bare timestamp must not inject a spantrace"
+        "spantrace(false) must not inject a spantrace"
     );
 }
 

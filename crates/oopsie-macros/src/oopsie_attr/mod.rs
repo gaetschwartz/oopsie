@@ -9,45 +9,51 @@ use darling::FromMeta as _;
 use darling::ast::NestedMeta;
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use syn::parse_quote;
 use syn::spanned::Spanned as _;
 
 use crate::derive;
-use crate::traced::args::TracedArgs;
+use crate::traced::args::{CodeSettings, TracedArgs};
+use crate::utils::FieldSetting;
+
+#[derive(Debug, darling::FromMeta)]
+pub struct OopsieAttrArgs {
+    pub traced: Option<FieldSetting<true, TracedArgs>>,
+    pub code: FieldSetting<true, CodeSettings>,
+    pub path: Option<syn::Path>,
+}
+
+/// Trace options that only exist nested inside `traced(...)`; spelled at the
+/// top level they get a targeted error instead of darling's generic
+/// unknown-field one.
+const NESTED_ONLY_KEYS: &[&str] = &["backtrace", "spantrace", "timestamp", "packed", "boxed"];
 
 pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStream2> {
     let meta = NestedMeta::parse_meta_list(attrs)?;
 
-    // Separate the `traced` shorthand flag from the rest of the args.
-    // `traced` is not in `TracedArgs` — it's a convenience alias for default
-    // backtrace+spantrace. The remaining args are forwarded directly to `TracedArgs`.
-    let mut traced_flag = false;
-    let mut remaining: Vec<NestedMeta> = Vec::new();
-    for m in meta {
-        match &m {
-            NestedMeta::Meta(syn::Meta::Path(p)) if p.is_ident("traced") => {
-                traced_flag = true;
-            }
-            NestedMeta::Meta(syn::Meta::List(list)) if list.path.is_ident("traced") => {
-                // `traced(arg, arg, ...)`: the flag plus inner args forwarded to
-                // `TracedArgs`, which has no `traced` key of its own.
-                traced_flag = true;
-                let inner = NestedMeta::parse_meta_list(list.tokens.clone())?;
-                remaining.extend(inner);
-            }
-            _ => remaining.push(m),
+    for m in &meta {
+        let NestedMeta::Meta(inner) = m else { continue };
+        let Some(ident) = inner.path().get_ident() else {
+            continue;
+        };
+        if NESTED_ONLY_KEYS.iter().any(|k| ident == k) {
+            let suggestion = quote::quote!(#inner).to_string();
+            return Err(syn::Error::new_spanned(
+                inner.path(),
+                format!(
+                    "`{ident}` must be nested inside `traced(...)`, \
+                     e.g. `#[oopsie::oopsie(traced({suggestion}))]`"
+                ),
+            ));
         }
     }
 
-    let trace_args = TracedArgs::from_list(&remaining)?;
-
-    let needs_tracing = traced_flag
-        || trace_args.backtrace.is_some()
-        || trace_args.spantrace.is_some()
-        || trace_args.timestamp.is_some();
+    let args = OopsieAttrArgs::from_list(&meta)?;
+    let needs_tracing = args.traced.as_ref().is_some_and(FieldSetting::is_enabled);
 
     match syn::parse2::<syn::Item>(input)? {
-        syn::Item::Enum(item_enum) => expand_enum(&trace_args, needs_tracing, item_enum),
-        syn::Item::Struct(item_struct) => expand_struct(&trace_args, needs_tracing, item_struct),
+        syn::Item::Enum(item_enum) => expand_enum(&args, needs_tracing, item_enum),
+        syn::Item::Struct(item_struct) => expand_struct(&args, needs_tracing, item_struct),
         other => Err(syn::Error::new_spanned(
             other,
             "`#[oopsie]` can only be applied to enums or structs",
@@ -56,22 +62,36 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
 }
 
 fn expand_enum(
-    trace_args: &TracedArgs,
+    args: &OopsieAttrArgs,
     needs_tracing: bool,
     item: syn::ItemEnum,
 ) -> syn::Result<TokenStream2> {
     let span = item.span();
+    let oopsie_path: syn::Path = args
+        .path
+        .clone()
+        .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     // Step 1: inject diagnostic fields if requested.
     let injected_ts = if needs_tracing {
-        crate::traced::expand_enum::expand_enum(trace_args, span, item)?
+        let traced = args
+            .traced
+            .as_ref()
+            .expect("needs_tracing implies traced is present")
+            .settings();
+        crate::traced::expand_enum::expand_enum(&traced, &args.code, &oopsie_path, span, item)?
     } else {
         quote! { #item }
     };
 
     // Step 2: generate Oopsie impls from the (possibly modified) item.
     let derive_input: syn::DeriveInput = syn::parse2(injected_ts.clone())?;
-    let container_attrs = derive::parse::EnumContainerAttrs::from_attrs(&derive_input.attrs)?;
+    let mut container_attrs = derive::parse::EnumContainerAttrs::from_attrs(&derive_input.attrs)?;
+    // The macro-level `path` governs every generated impl; an explicit
+    // container-attr `path` still wins.
+    if container_attrs.inner.path.is_none() {
+        container_attrs.inner.path.clone_from(&args.path);
+    }
     let impls = derive::expand_enum(&derive_input, &container_attrs)?;
 
     // Step 3: emit the item with Debug added, Oopsie removed from derives,
@@ -93,22 +113,36 @@ fn expand_enum(
 }
 
 fn expand_struct(
-    trace_args: &TracedArgs,
+    args: &OopsieAttrArgs,
     needs_tracing: bool,
     item: syn::ItemStruct,
 ) -> syn::Result<TokenStream2> {
     let span = item.span();
+    let oopsie_path: syn::Path = args
+        .path
+        .clone()
+        .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     // Step 1: inject diagnostic fields if requested.
     let injected_ts = if needs_tracing {
-        crate::traced::expand_struct::expand_struct(trace_args, span, item)?
+        let traced = args
+            .traced
+            .as_ref()
+            .expect("needs_tracing implies traced is present")
+            .settings();
+        crate::traced::expand_struct::expand_struct(&traced, &args.code, &oopsie_path, span, item)?
     } else {
         quote! { #item }
     };
 
     // Step 2: generate Oopsie impls from the (possibly modified) item.
     let derive_input: syn::DeriveInput = syn::parse2(injected_ts.clone())?;
-    let container_attrs = derive::parse::StructAttrs::from_attrs(&derive_input.attrs)?;
+    let mut container_attrs = derive::parse::StructAttrs::from_attrs(&derive_input.attrs)?;
+    // The macro-level `path` governs every generated impl; an explicit
+    // container-attr `path` still wins.
+    if container_attrs.container.path.is_none() {
+        container_attrs.container.path.clone_from(&args.path);
+    }
     let impls = derive::expand_struct(&derive_input, &container_attrs)?;
 
     // Step 3: emit the item with Debug added, Oopsie removed from derives,
@@ -238,7 +272,7 @@ mod tests {
     #[test]
     fn backtrace_only_struct() {
         let result = expand(
-            quote! { backtrace },
+            quote! { traced(spantrace(false)) },
             quote! {
                 pub struct ConnectionFailed {
                     host: String,
@@ -247,6 +281,61 @@ mod tests {
         );
         let output = result.unwrap().to_string();
         insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn top_level_trace_arg_points_at_nested_form() {
+        let err = expand(quote! { backtrace }, quote! { pub struct S { x: u32 } }).unwrap_err();
+        assert!(err.to_string().contains("traced(backtrace)"), "{err}");
+    }
+
+    #[test]
+    fn top_level_packed_points_at_nested_form() {
+        let err = expand(
+            quote! { traced, packed = false },
+            quote! { pub struct S { x: u32 } },
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("traced(packed = false)"), "{err}");
+    }
+
+    #[test]
+    fn traced_false_disables_injection() {
+        let output = expand(
+            quote! { traced = false },
+            quote! { pub struct S { x: u32 } },
+        )
+        .unwrap()
+        .to_string();
+        assert!(!output.contains("__oopsie_traces"), "{output}");
+        assert!(!output.contains("__oopsie_backtrace"), "{output}");
+    }
+
+    #[test]
+    fn path_reaches_derive_impls() {
+        let out = expand(
+            quote! { traced, path = "my_oopsie" },
+            quote! { pub enum E { #[oopsie("boom")] Boom { info: String } } },
+        )
+        .unwrap()
+        .to_string();
+        assert!(out.contains("my_oopsie :: Contextual"), "{out}");
+        assert!(!out.contains(":: oopsie :: Contextual"), "{out}");
+    }
+
+    #[test]
+    fn container_path_attr_wins_over_macro_path() {
+        let out = expand(
+            quote! { path = "macro_oopsie" },
+            quote! {
+                #[oopsie(path = "attr_oopsie")]
+                pub enum E { #[oopsie("boom")] Boom { info: String } }
+            },
+        )
+        .unwrap()
+        .to_string();
+        assert!(out.contains("attr_oopsie :: Contextual"), "{out}");
+        assert!(!out.contains("macro_oopsie :: Contextual"), "{out}");
     }
 
     #[test]

@@ -107,24 +107,24 @@ fn captured_spantrace_status_is_captured_within_span() {
 // frames.
 // ════════════════════════════════════════════════════════════════════════
 
-// NOTE: these use `#[oopsie(traced(backtrace))]` (not bare `#[oopsie(capture)]`)
-// so the backtrace is auto-injected AND exposed via the `oopsie_backtrace()`
-// accessor. A plain `#[oopsie(capture)] bt: Box<Backtrace>` field is captured
-// but is NOT surfaced by the stable Diagnostic accessor (that requires the
-// field to carry `#[oopsie(backtrace)]`, which `traced` adds for us).
-#[oopsie(traced(backtrace))]
+// NOTE: these use `#[oopsie(traced(spantrace(false)))]` (not bare
+// `#[oopsie(capture)]`) so the backtrace is auto-injected AND exposed via the
+// `oopsie_backtrace()` accessor. A plain `#[oopsie(capture)] bt: Box<Backtrace>`
+// field is captured but is NOT surfaced by the stable Diagnostic accessor (that
+// requires the field to carry `#[oopsie(backtrace)]`, which `traced` adds for us).
+#[oopsie(traced(spantrace(false)))]
 enum ExtractSrcError {
     #[oopsie("extract src")]
     Src { info: String },
 }
 
-#[oopsie(traced(backtrace))]
+#[oopsie(traced(spantrace(false)))]
 enum ExtractWrapDiagError {
     #[oopsie("wrap diag source")]
     WrapDiag { source: ExtractSrcError },
 }
 
-#[oopsie(traced(backtrace))]
+#[oopsie(traced(spantrace(false)))]
 enum ExtractWrapIoError {
     #[oopsie("wrap io source")]
     WrapIo { source: io::Error },
