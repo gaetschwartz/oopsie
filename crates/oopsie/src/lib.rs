@@ -160,7 +160,7 @@ pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
     NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace, Welp,
     WelpOptionExt, WelpResultExt, clear_rust_backtrace_override, install, rust_backtrace,
-    set_rust_backtrace_override,
+    rust_panic_backtrace, set_rust_backtrace_override, with_rust_backtrace_override,
 };
 
 // Hidden re-export so macro-generated code can reach the autoref-probe

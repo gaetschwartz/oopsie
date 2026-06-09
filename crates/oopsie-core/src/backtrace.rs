@@ -54,6 +54,35 @@ impl RustBacktrace {
         enabled
     }
 
+    /// Panic-path detection: consults only `RUST_BACKTRACE`, mirroring std's
+    /// panic handler. `RUST_LIB_BACKTRACE` deliberately has no effect here —
+    /// it exists to control library error capture independently of panics.
+    pub fn detect_panic_opt() -> Option<Self> {
+        const NONE: u8 = u8::MAX;
+        const NOT_SET: u8 = 0;
+
+        static ENABLED: AtomicU8 = AtomicU8::new(NOT_SET);
+        if let Some(cached) = match ENABLED.load(Relaxed) {
+            1 => Some(Some(Self::Disabled)),
+            2 => Some(Some(Self::Enabled)),
+            3 => Some(Some(Self::Full)),
+            NONE => Some(None),
+            NOT_SET => None,
+            _ => unreachable!(),
+        } {
+            return cached;
+        }
+
+        let enabled = match env::var("RUST_BACKTRACE").as_deref() {
+            Ok("0") => Some(Self::Disabled),
+            Ok("full") => Some(Self::Full),
+            Ok(_) => Some(Self::Enabled),
+            Err(_) => None,
+        };
+        ENABLED.store(enabled.map_or(NONE, |f| f as u8), Relaxed);
+        enabled
+    }
+
     /// Whether frames should be captured at all.
     #[inline]
     #[must_use]
@@ -107,6 +136,32 @@ pub fn rust_backtrace() -> RustBacktrace {
         return over;
     }
     RustBacktrace::detect_opt().unwrap_or(RustBacktrace::Disabled)
+}
+
+/// The effective *panic* backtrace setting for the current thread: the
+/// thread-local override if present, else `RUST_BACKTRACE` (only).
+#[must_use]
+#[inline]
+pub fn rust_panic_backtrace() -> RustBacktrace {
+    if let Some(over) = OVERRIDE.with(Cell::get) {
+        return over;
+    }
+    RustBacktrace::detect_panic_opt().unwrap_or(RustBacktrace::Disabled)
+}
+
+/// Run `f` with the thread's backtrace setting forced to `value`, restoring
+/// the previous override (or lack of one) afterwards — including on unwind.
+#[inline]
+pub fn with_rust_backtrace_override<R>(value: RustBacktrace, f: impl FnOnce() -> R) -> R {
+    struct Restore(Option<RustBacktrace>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            OVERRIDE.with(|o| o.set(self.0));
+        }
+    }
+    let _restore = Restore(OVERRIDE.with(Cell::get));
+    OVERRIDE.with(|o| o.set(Some(value)));
+    f()
 }
 
 enum Inner {
@@ -685,6 +740,27 @@ mod tests {
                 "/home/u/my-backtrace-experiments/src/lib.rs"
             ))
         ));
+    }
+
+    #[test]
+    fn with_override_scopes_and_restores() {
+        let baseline = rust_backtrace();
+        let panic_baseline = rust_panic_backtrace();
+        let inside = with_rust_backtrace_override(RustBacktrace::Full, rust_backtrace);
+        assert_eq!(inside, RustBacktrace::Full);
+        assert_eq!(rust_backtrace(), baseline);
+        let inside = with_rust_backtrace_override(RustBacktrace::Disabled, rust_panic_backtrace);
+        assert_eq!(inside, RustBacktrace::Disabled);
+        assert_eq!(rust_panic_backtrace(), panic_baseline);
+    }
+
+    #[test]
+    fn with_override_restores_on_unwind() {
+        let baseline = rust_backtrace();
+        let _ = std::panic::catch_unwind(|| {
+            with_rust_backtrace_override(RustBacktrace::Full, || panic!("boom"))
+        });
+        assert_eq!(rust_backtrace(), baseline);
     }
 
     const _: () = {
