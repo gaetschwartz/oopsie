@@ -139,7 +139,10 @@ impl ErasedError {
     /// Write the error in a text format similar to `Report`.
     pub fn write_text<W: io::Write>(&self, f: &mut W) -> io::Result<()> {
         // Write main error header
-        writeln!(f, "Error:")?;
+        match self.diagnostics.code() {
+            Some(code) => writeln!(f, "Error[{code}]:")?,
+            None => writeln!(f, "Error:")?,
+        }
 
         writeln!(f, "\n  \u{2715} {}", self.message)?;
 
@@ -175,6 +178,21 @@ impl ErasedError {
         }
 
         Ok(())
+    }
+
+    /// The full multi-line text report (header, source chain, help, traces)
+    /// as a `String`. `Display` intentionally prints only the message so an
+    /// `ErasedError` embeds cleanly in another error's source chain.
+    #[must_use]
+    #[expect(
+        clippy::missing_panics_doc,
+        reason = "writing to a Vec<u8> cannot fail and write_text emits only UTF-8"
+    )]
+    pub fn to_text(&self) -> String {
+        let mut buf = Vec::new();
+        self.write_text(&mut buf)
+            .expect("Vec<u8> writes are infallible");
+        String::from_utf8(buf).expect("write_text emits UTF-8")
     }
 
     /// Format the error as a short string without backtrace or spantrace.
@@ -218,23 +236,19 @@ impl ErasedError {
     }
 }
 
-struct IoToFmt<W>(W);
-
-impl<W: fmt::Write> io::Write for IoToFmt<W> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        let s = String::from_utf8_lossy(buf);
-        self.0.write_str(&s).map_err(io::Error::other)?;
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
+impl fmt::Display for ErasedError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
     }
 }
 
-impl fmt::Display for ErasedError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.write_text(&mut IoToFmt(f)).map_err(|_err| fmt::Error)
+impl oopsie_core::Diagnostic for ErasedError {
+    fn oopsie_error_code(&self) -> Option<ErrorCode> {
+        self.diagnostics.code.clone()
+    }
+
+    fn oopsie_help_text(&self) -> Option<HelpText> {
+        self.diagnostics.help.clone()
     }
 }
 
@@ -531,61 +545,95 @@ mod tests {
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // Test for IoToFmt::write
+    // Tests for Display impl and to_text
     // ─────────────────────────────────────────────────────────────────────
 
     #[test]
-    fn test_io_to_fmt_write_returns_correct_byte_count() {
-        use std::io::Write as _;
-
-        let mut s = String::new();
-        {
-            let mut adapter = IoToFmt(&mut s);
-            let n = adapter.write(b"hello").unwrap();
-            assert_eq!(n, 5, "IoToFmt::write must return the input byte count");
-        }
-        assert_eq!(s, "hello");
-
-        {
-            let mut adapter = IoToFmt(&mut s);
-            // Test with empty input
-            let n = adapter.write(b"").unwrap();
-            assert_eq!(n, 0, "IoToFmt::write on empty input must return 0");
-
-            // Test with longer input
-            let n = adapter.write(b"world!").unwrap();
-            assert_eq!(n, 6);
-        }
-        assert_eq!(s, "helloworld!");
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Test for Display impl
-    // ─────────────────────────────────────────────────────────────────────
-
-    #[test]
-    fn test_display_for_erased_error_is_non_empty() {
+    fn test_display_is_exactly_the_message() {
         let erased = ErasedError {
             message: "display test".into(),
             source_chain: vec!["cause".into()],
-            diagnostics: Diagnostics::default(),
+            diagnostics: Diagnostics {
+                code: Some("app::code".into()),
+                help: Some("try again".into()),
+            },
             spantrace: None,
             backtrace: None,
         };
 
         let displayed = erased.to_string();
-        assert!(
-            !displayed.is_empty(),
-            "Display must produce non-empty output"
+        assert_eq!(
+            displayed, "display test",
+            "Display must be only the message so an ErasedError embeds \
+             cleanly in another error's source chain"
         );
         assert!(
-            displayed.contains("display test"),
-            "Display output should contain the error message"
+            !displayed.contains('\n'),
+            "Display must be single-line, got {displayed:?}"
+        );
+    }
+
+    #[test]
+    fn test_to_text_contains_full_report() {
+        let erased = ErasedError {
+            message: "top".into(),
+            source_chain: vec!["middle".into(), "root".into()],
+            diagnostics: Diagnostics {
+                code: Some("app::db::timeout".into()),
+                help: Some("retry later".into()),
+            },
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let text = erased.to_text();
+        assert!(text.contains("top"), "to_text must contain the message");
+        assert!(
+            text.contains("\u{251c}\u{2500}\u{25b6} middle"),
+            "to_text must render the source chain"
         );
         assert!(
-            displayed.contains("cause"),
-            "Display output should contain source chain entries"
+            text.contains("\u{2570}\u{2500}\u{25b6} root"),
+            "to_text must render the last cause"
         );
+        assert!(
+            text.contains("help: retry later"),
+            "to_text must render the help text"
+        );
+    }
+
+    #[test]
+    fn test_write_text_renders_code_in_header() {
+        let erased = ErasedError {
+            message: "query timed out".into(),
+            source_chain: vec![],
+            diagnostics: Diagnostics {
+                code: Some("app::db::timeout".into()),
+                help: None,
+            },
+            spantrace: None,
+            backtrace: None,
+        };
+
+        let text = erased.to_text();
+        assert_eq!(
+            text.lines().next(),
+            Some("Error[app::db::timeout]:"),
+            "header must carry the error code"
+        );
+    }
+
+    #[test]
+    fn test_write_text_header_without_code() {
+        let erased = ErasedError {
+            message: "plain".into(),
+            source_chain: vec![],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+
+        assert_eq!(erased.to_text().lines().next(), Some("Error:"));
     }
 
     #[test]

@@ -30,10 +30,10 @@ pub struct ErrorWithCodeOnly {
 
 #[test]
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
-fn test_erased_error_display() {
+fn test_erased_error_text() {
     let error = ErasedError::from_error(common::make_error());
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("erased_error_display"), error);
+        insta::assert_snapshot!(snap_name!("erased_error_text"), error.to_text());
     });
 }
 
@@ -354,6 +354,56 @@ fn test_tracing_level_bidirectional_conversion() {
         let roundtrip = TracingLevel::from(&tracing::Level::from(erased));
         assert_eq!(roundtrip, erased, "TracingLevel roundtrip must be identity");
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Round trip: oopsie error → ErasedError → JSON → ErasedError → Report.
+// ErasedError implements Diagnostic, so a deserialized error can be rendered
+// through `Report` on the receiving side with code and help intact.
+// ─────────────────────────────────────────────────────────────────────────────
+
+#[test]
+fn test_round_trip_through_json_renders_in_report() {
+    let error = ErrorWithHelpOopsie {
+        message: "connection refused",
+    }
+    .build();
+    let erased = ErasedError::from_error(error);
+    let code = erased
+        .diagnostics
+        .code()
+        .expect("oopsie errors carry a code")
+        .to_owned();
+
+    let json = serde_json::to_string(&erased).expect("ErasedError serializes");
+    let roundtripped: ErasedError = serde_json::from_str(&json).expect("ErasedError deserializes");
+
+    let report = oopsie::Report::from_std(roundtripped);
+    let rendered = report.to_string();
+
+    assert!(
+        rendered.contains(&format!("[{code}]")),
+        "Report must render the transported error code, got:\n{rendered}"
+    );
+    assert!(
+        rendered.contains("Something went wrong: connection refused"),
+        "Report must render the transported message, got:\n{rendered}"
+    );
+    assert!(
+        rendered.contains("Try restarting the service"),
+        "Report must render the transported help text, got:\n{rendered}"
+    );
+}
+
+// Display is intentionally just the message: chain renderers print each
+// source on a single `├─▶` line, so a multi-line Display would corrupt the
+// embedding error's report.
+#[test]
+fn test_display_stays_single_line_after_round_trip() {
+    let error = ErrorWithHelpOopsie { message: "boom" }.build();
+    let erased = ErasedError::from_error(error);
+    let displayed = erased.to_string();
+    assert_eq!(displayed, "Something went wrong: boom");
 }
 
 // Regression: `from_error_ref` eagerly walks `Error::source()`

@@ -1,8 +1,8 @@
 ---
 source: crates/erased-oopsie/tests/erased.rs
-expression: error
+expression: error.to_text()
 ---
-Error:
+Error[erased::common::MyError::Inner]:
 
   ✕ Inner error happened
   ╰─▶ Error: Inner function failed (foo=true, name=Alice)
@@ -15,37 +15,37 @@ Error:
            with {"foo":true,"name":"Alice"}
              at crates/erased-oopsie/tests/common/mod.rs:[LOC]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1: backtrace[[HASH]]::backtrace::libunwind::trace
+  1: backtrace::backtrace::libunwind::trace::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
-  2: backtrace[[HASH]]::backtrace::trace_unsynchronized::<<backtrace[[HASH]]::capture::Backtrace>::create::{closure#0}>
+  2: backtrace::backtrace::trace_unsynchronized::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-  3: backtrace[[HASH]]::backtrace::trace::<<backtrace[[HASH]]::capture::Backtrace>::create::{closure#0}>
+  3: backtrace::backtrace::trace::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
-  4: <backtrace[[HASH]]::capture::Backtrace>::create
+  4: backtrace::capture::Backtrace::create::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-  5: <backtrace[[HASH]]::capture::Backtrace>::new_unresolved
+  5: backtrace::capture::Backtrace::new_unresolved::h[HASH]
            at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
-  6: <oopsie_core[[HASH]]::backtrace::Backtrace as oopsie_core[[HASH]]::traits::Capturable>::capture
+  6: <oopsie_core::backtrace::Backtrace as oopsie_core::traits::Capturable>::capture::h[HASH]
            at [WORKSPACE]/crates/oopsie-core/src/backtrace.rs:[LOC]
-  7: <(oopsie_core[[HASH]]::backtrace::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace) as oopsie_core[[HASH]]::traits::Capturable>::capture
+  7: <(A,B) as oopsie_core::traits::Capturable>::capture::h[HASH]
            at [WORKSPACE]/crates/oopsie-core/src/traits.rs:[LOC]
-  8: <alloc[[HASH]]::boxed::Box<(oopsie_core[[HASH]]::backtrace::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace)> as oopsie_core[[HASH]]::traits::Capturable>::capture
+  8: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture::h[HASH]
            at [WORKSPACE]/crates/oopsie-core/src/traits.rs:[LOC]
-  9: <erased[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::build
+  9: erased::common::MyErrorInnerOopsie<__T0>::build::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 10: <erased[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::fail::<()>
+ 10: erased::common::MyErrorInnerOopsie<__T0>::fail::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 11: erased[[HASH]]::common::make_error::inner_function
+ 11: erased::common::make_error::inner_function::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 12: erased[[HASH]]::common::make_error::outer_function
+ 12: erased::common::make_error::outer_function::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 13: erased[[HASH]]::common::make_error
+ 13: erased::common::make_error::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
- 14: erased[[HASH]]::test_erased_error_display
+ 14: erased::test_erased_error_text::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/erased.rs:[LOC]
- 15: erased[[HASH]]::test_erased_error_display::{closure#0}
+ 15: erased::test_erased_error_text::{{closure}}::h[HASH]
            at [WORKSPACE]/crates/erased-oopsie/tests/erased.rs:[LOC]
- 16: <erased[[HASH]]::test_erased_error_display::{closure#0} as core[[HASH]]::ops::function::FnOnce<()>>::call_once
+ 16: core::ops::function::FnOnce::call_once::h[HASH]
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
  17: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
