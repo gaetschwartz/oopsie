@@ -18,10 +18,6 @@ chrono = ["dep:chrono"]
 [dependencies]
 backtrace = { version = "0.3.76", features = ["coresymbolication"] }
 chrono = { version = "0.4.45", default-features = false, features = ["clock"], optional = true }
-color-backtrace = { version = "0.7.2", features = [
-    "use-backtrace-crate",
-    "use-btparse-crate",
-] }
 insta = { version = "1.47.2", features = [
     "filters",
     "json",

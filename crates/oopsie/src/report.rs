@@ -64,18 +64,27 @@ impl<E: Diagnostic> Report<E> {
 
     /// Runs the given function and returns a `Report` with the result.
     ///
-    /// The colorized panic hook is installed only for the duration of `func`
-    /// and the previously installed hook is restored afterwards. A thread that
-    /// outlives `func` and panics later reverts to the prior hook.
+    /// The library's [`install_panic_hook`](crate::install_panic_hook) hook is
+    /// installed only for the duration of `func` and the previously installed
+    /// hook is restored afterwards — including when `func` panics and the panic
+    /// is caught by a caller further up.
     #[must_use]
     pub fn run<F>(func: F) -> Self
     where
         F: FnOnce() -> Result<(), E>,
     {
-        let hook = std::panic::take_hook();
-        oopsie_core::install();
-        let result = func();
-        std::panic::set_hook(hook);
+        let prior = std::panic::take_hook();
+        crate::panic_hook::install_panic_hook();
+        // `set_hook` panics on a panicking thread, so restoring from a `Drop`
+        // guard would abort during unwind. Catch the unwind instead: the hook
+        // has already rendered the panic by then, and `resume_unwind` doesn't
+        // re-run it.
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(func));
+        std::panic::set_hook(prior);
+        let result = match result {
+            Ok(result) => result,
+            Err(payload) => std::panic::resume_unwind(payload),
+        };
         Self {
             backtrace: Self::resolve_backtrace(&result),
             res: result,

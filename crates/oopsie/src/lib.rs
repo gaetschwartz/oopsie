@@ -159,7 +159,7 @@ pub use oopsie_macros::oopsie;
 pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
     NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace, Welp,
-    WelpOptionExt, WelpResultExt, clear_rust_backtrace_override, install, rust_backtrace,
+    WelpOptionExt, WelpResultExt, clear_rust_backtrace_override, rust_backtrace,
     rust_panic_backtrace, set_rust_backtrace_override, with_rust_backtrace_override,
 };
 

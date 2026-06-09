@@ -293,6 +293,24 @@ fn test_report_run_err() {
     assert!(report.to_string().contains("run failed"));
 }
 
+#[test]
+fn run_restores_prior_hook_even_on_unwind() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static PRIOR_HOOK_FIRED: AtomicBool = AtomicBool::new(false);
+
+    std::panic::set_hook(Box::new(|_| {
+        PRIOR_HOOK_FIRED.store(true, Ordering::SeqCst);
+    }));
+
+    let _ = std::panic::catch_unwind(|| {
+        let _report: Report<TestError> = Report::run(|| panic!("boom"));
+    });
+
+    PRIOR_HOOK_FIRED.store(false, Ordering::SeqCst);
+    let _ = std::panic::catch_unwind(|| panic!("again"));
+    assert!(PRIOR_HOOK_FIRED.load(Ordering::SeqCst));
+}
+
 // --- Report::with_colors() test ---
 
 #[test]

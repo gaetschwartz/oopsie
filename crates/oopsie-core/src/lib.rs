@@ -21,14 +21,12 @@ mod traits;
 mod welp;
 
 use std::borrow::Cow;
-use std::io;
 use std::ops::Deref;
 
 pub use backtrace::{
     Backtrace, RustBacktrace, clear_rust_backtrace_override, rust_backtrace, rust_panic_backtrace,
     set_rust_backtrace_override, with_rust_backtrace_override,
 };
-use color_backtrace::termcolor;
 pub use diagnostic::Diagnostic;
 
 /// Private helpers used by macro-generated code. Not part of the public API.
@@ -167,16 +165,6 @@ use tracing_subscriber::registry::LookupSpan;
 pub use traits::*;
 pub use welp::{Welp, WelpOptionExt, WelpResultExt};
 
-/// Install the color backtrace printer.
-///
-/// Replaces the process-global panic hook via `std::panic::set_hook`, so this
-/// is intended to be called once, early in `main`. Callers needing to preserve
-/// a previously installed hook must save (`take_hook`) and restore it
-/// themselves, as `oopsie::Report::run` does.
-pub fn install() {
-    color_backtrace::BacktracePrinter::new().install(color_backtrace::default_output_stream());
-}
-
 #[derive(
     Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
@@ -310,98 +298,4 @@ where
     S: tracing::Subscriber + for<'span> LookupSpan<'span>,
 {
     ErrorLayer::new(JsonFields::default())
-}
-
-#[expect(
-    dead_code,
-    reason = "color helper trait kept complete; not all methods are wired up yet"
-)]
-pub(crate) trait WriteColorExt {
-    fn black(&mut self) -> io::Result<&mut Self>;
-    fn blue(&mut self) -> io::Result<&mut Self>;
-    fn green(&mut self) -> io::Result<&mut Self>;
-    fn red(&mut self) -> io::Result<&mut Self>;
-    fn cyan(&mut self) -> io::Result<&mut Self>;
-    fn magenta(&mut self) -> io::Result<&mut Self>;
-    fn yellow(&mut self) -> io::Result<&mut Self>;
-    fn white(&mut self) -> io::Result<&mut Self>;
-    fn rgb(&mut self, r: u8, g: u8, b: u8) -> io::Result<&mut Self>;
-    fn ansi256(&mut self, code: u8) -> io::Result<&mut Self>;
-    fn bold(&mut self) -> io::Result<&mut Self>;
-    fn italic(&mut self) -> io::Result<&mut Self>;
-    fn underline(&mut self) -> io::Result<&mut Self>;
-    fn strike(&mut self) -> io::Result<&mut Self>;
-}
-
-impl<W: termcolor::WriteColor> WriteColorExt for W {
-    #[inline]
-    fn black(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Black)))?;
-        Ok(self)
-    }
-    #[inline]
-    fn blue(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Blue)))?;
-        Ok(self)
-    }
-    #[inline]
-    fn green(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Green)))?;
-        Ok(self)
-    }
-    #[inline]
-    fn red(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Red)))?;
-        Ok(self)
-    }
-    #[inline]
-    fn cyan(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Cyan)))?;
-        Ok(self)
-    }
-    #[inline]
-    fn magenta(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Magenta)))?;
-        Ok(self)
-    }
-    #[inline]
-    fn yellow(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Yellow)))?;
-        Ok(self)
-    }
-    #[inline]
-    fn white(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::White)))?;
-        Ok(self)
-    }
-    #[inline]
-    fn rgb(&mut self, r: u8, g: u8, b: u8) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Rgb(r, g, b))))?;
-        Ok(self)
-    }
-    #[inline]
-    fn ansi256(&mut self, code: u8) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_fg(Some(termcolor::Color::Ansi256(code))))?;
-        Ok(self)
-    }
-    #[inline]
-    fn bold(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_bold(true))?;
-        Ok(self)
-    }
-    #[inline]
-    fn italic(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_italic(true))?;
-        Ok(self)
-    }
-    #[inline]
-    fn underline(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_underline(true))?;
-        Ok(self)
-    }
-    #[inline]
-    fn strike(&mut self) -> io::Result<&mut Self> {
-        self.set_color(termcolor::ColorSpec::new().set_strikethrough(true))?;
-        Ok(self)
-    }
 }
