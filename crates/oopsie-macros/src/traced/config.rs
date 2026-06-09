@@ -19,7 +19,7 @@ pub(super) struct FieldInjectorConfig {
 
     pub timestamp_ident: syn::Ident,
     pub timestamp_type: syn::Type,
-    pub timestamp_provide_attr: Option<TokenStream2>,
+    pub timestamp_attrs: TokenStream2,
 
     pub traces_ident: syn::Ident,
     pub traces_type: TokenStream2,
@@ -75,6 +75,9 @@ impl FieldInjectorConfig {
         let timestamp_provide_attr = resolved.timestamp_provide.then(|| {
             quote! { #[oopsie(provide(#timestamp_type => *#timestamp_ident))] }
         });
+        // `capture` keeps the injected field off the context selectors: the
+        // derive auto-fills it via `Capturable` at build time.
+        let timestamp_attrs = quote! { #timestamp_provide_attr #[oopsie(capture)] };
         let backtrace_attrs = quote! { #[oopsie(backtrace)] };
         let spantrace_attrs = quote! { #[oopsie(spantrace)] };
         let traces_attrs = quote! { #[oopsie(traces)] };
@@ -92,7 +95,7 @@ impl FieldInjectorConfig {
             spantrace_attrs,
             timestamp_ident,
             timestamp_type,
-            timestamp_provide_attr,
+            timestamp_attrs,
             traces_ident,
             traces_type,
             traces_attrs,
@@ -182,7 +185,7 @@ mod tests {
         assert!(s.contains("SpanTrace"), "{s}");
     }
 
-    // ── timestamp field type & provide attr codegen ──
+    // ── timestamp field type & attrs codegen ──
 
     #[test]
     fn timestamp_default_type_is_system_time() {
@@ -191,7 +194,9 @@ mod tests {
         let s = cfg.timestamp_type.to_token_stream().to_string();
         assert!(s.contains("SystemTime"), "{s}");
         assert!(!s.contains("DateTime"), "{s}");
-        assert!(cfg.timestamp_provide_attr.is_none());
+        let attrs = cfg.timestamp_attrs.to_string();
+        assert!(attrs.contains("capture"), "{attrs}");
+        assert!(!attrs.contains("provide"), "provide is opt-in: {attrs}");
     }
 
     #[test]
@@ -203,16 +208,24 @@ mod tests {
         assert!(s.contains("chrono"), "{s}");
         assert!(s.contains("DateTime"), "{s}");
         assert!(s.contains("Local"), "{s}");
-        assert!(
-            cfg.timestamp_provide_attr.is_none(),
-            "provide is opt-in: {s}"
-        );
+        let attrs = cfg.timestamp_attrs.to_string();
+        assert!(attrs.contains("capture"), "{attrs}");
+        assert!(!attrs.contains("provide"), "provide is opt-in: {attrs}");
     }
 
     #[test]
-    fn timestamp_provide_omitted_emits_no_attr() {
-        let cfg = config_for(&parse_quote!(traced(timestamp(chrono = true))));
-        assert!(cfg.timestamp_provide_attr.is_none());
+    fn timestamp_attrs_always_mark_capture() {
+        // The injected field must auto-fill at build time and never surface on
+        // the context selector — `capture` is unconditional.
+        for meta in [
+            parse_quote!(traced(timestamp)),
+            parse_quote!(traced(timestamp(chrono = true))),
+            parse_quote!(traced(timestamp(provide = true))),
+        ] {
+            let cfg = config_for(&meta);
+            let attrs = cfg.timestamp_attrs.to_string();
+            assert!(attrs.contains("capture"), "{attrs}");
+        }
     }
 
     #[test]
@@ -220,10 +233,7 @@ mod tests {
         // `provide = true` emits a real `provide(Type => expr)` attr — NOT a bare
         // `#[oopsie(provide)]`, which the provide parser rejects.
         let cfg = config_for(&parse_quote!(traced(timestamp(provide = true))));
-        let attr = cfg
-            .timestamp_provide_attr
-            .expect("provide = true emits an attr");
-        let s = attr.to_token_stream().to_string();
+        let s = cfg.timestamp_attrs.to_string();
         assert!(s.contains("oopsie") && s.contains("provide"), "{s}");
         assert!(
             s.contains("=>"),
@@ -237,5 +247,6 @@ mod tests {
             s.contains("__oopsie_timestamp"),
             "references the field: {s}"
         );
+        assert!(s.contains("capture"), "{s}");
     }
 }

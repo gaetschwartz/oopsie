@@ -354,16 +354,16 @@ fn wrong_typed_backtrace_field_is_ordinary_and_real_backtrace_injected() {
 //
 // Findings characterized by these tests:
 // * `#[oopsie(traced(timestamp))]` injects a `__oopsie_timestamp` field
-//   alongside the default traces. Unlike backtrace/spantrace it is NOT
-//   auto-captured — it appears on the context selector and the caller supplies
-//   the value. Default type is `std::time::SystemTime`.
+//   alongside the default traces. Like backtrace/spantrace it is auto-captured
+//   at build time — it never appears on the context selector. Default type is
+//   `std::time::SystemTime`.
 // * Timestamp-only errors disable the traces explicitly:
 //   `traced(backtrace(false), spantrace(false), timestamp)` — the diagnostic
 //   accessors return `None`.
 // * `timestamp(chrono = true)` swaps the field type to
-//   `::chrono::DateTime<::chrono::Local>` — this requires `chrono` to be a
-//   dependency of the consuming crate (here: a dev-dependency of `oopsie`).
-//   The leading `::` means the field references the crate-root `chrono`.
+//   `::chrono::DateTime<::chrono::Local>` — auto-capture then requires the
+//   `chrono` feature of `oopsie`, so that test is feature-gated. The leading
+//   `::` means the field references the crate-root `chrono`.
 // * `chrono` and `provide` are opt-in: an omitted flag inside a `timestamp(...)`
 //   block stays disabled. `timestamp(provide = true)` surfaces the timestamp
 //   through the `Provider` API (queryable via `request_value::<SystemTime>()`).
@@ -378,19 +378,19 @@ pub enum TimestampError {
 
 #[test]
 fn timestamp_nested_injects_systemtime_field() {
-    let now = std::time::SystemTime::now();
+    let before = std::time::SystemTime::now();
+    // Selector takes only the user field — no `__oopsie_timestamp`.
     let e = timestamp_oopsies::Boom {
         info: "x".to_owned(),
-        __oopsie_timestamp: now,
     }
     .build();
     assert_eq!(e.to_string(), "ts: x");
     let TimestampError::Boom {
         __oopsie_timestamp, ..
     } = &e;
-    // Field is concretely `SystemTime` and round-trips the supplied value.
+    // Field is concretely `SystemTime` and auto-captured at build time.
     let stored: &std::time::SystemTime = __oopsie_timestamp;
-    assert_eq!(*stored, now);
+    assert!(*stored >= before);
 }
 
 // timestamp ONLY: both traces disabled explicitly inside `traced(...)`.
@@ -401,18 +401,17 @@ pub enum BareTimestampError {
 }
 
 #[test]
-fn timestamp_only_form_injects_only_timestamp() {
+fn timestamp_is_auto_captured_and_absent_from_selector() {
     use oopsie::Diagnostic as _;
-    let now = std::time::SystemTime::now();
+    let before = std::time::SystemTime::now();
     let e = bare_timestamp_oopsies::Boom {
         info: "x".to_owned(),
-        __oopsie_timestamp: now,
     }
     .build();
     let BareTimestampError::Boom {
         __oopsie_timestamp, ..
     } = &e;
-    let _: &std::time::SystemTime = __oopsie_timestamp;
+    assert!(*__oopsie_timestamp >= before);
     assert!(
         e.oopsie_backtrace().is_none(),
         "backtrace(false) must not inject a backtrace"
@@ -423,30 +422,61 @@ fn timestamp_only_form_injects_only_timestamp() {
     );
 }
 
-// `timestamp(chrono = true)` swaps the field type to chrono's
-// DateTime<Local>. `provide` stays off (opt-in), so no extra deps are required.
-#[oopsie(traced(timestamp(chrono = true)))]
-pub enum ChronoTimestampError {
-    #[oopsie("chrono ts")]
-    Boom { info: String },
+// Auto-capture must also satisfy `transparent` variants: the generated `From`
+// impl fills the timestamp itself (no `Default` bound on the field type).
+#[oopsie]
+pub enum TransparentInnerError {
+    #[oopsie("inner")]
+    Inner,
+}
+
+#[oopsie(traced(timestamp))]
+pub enum TransparentTimestampError {
+    #[oopsie(transparent)]
+    Wrapped { source: TransparentInnerError },
 }
 
 #[test]
-fn timestamp_chrono_flag_swaps_field_type_to_datetime_local() {
-    let dt = chrono::Local::now();
-    let e = chrono_timestamp_oopsies::Boom {
-        info: "x".to_owned(),
-        __oopsie_timestamp: dt,
-    }
-    .build();
-    assert_eq!(e.to_string(), "chrono ts");
-    let ChronoTimestampError::Boom {
+fn timestamp_composes_with_transparent() {
+    let before = std::time::SystemTime::now();
+    let outer: TransparentTimestampError = transparent_inner_oopsies::Inner.build().into();
+    let TransparentTimestampError::Wrapped {
         __oopsie_timestamp, ..
-    } = &e;
-    // The field type is concretely `chrono::DateTime<chrono::Local>`; assigning
-    // it to that binding fails to compile if the macro chose any other type.
-    let stored: &chrono::DateTime<chrono::Local> = __oopsie_timestamp;
-    assert_eq!(*stored, dt);
+    } = &outer;
+    let _: &std::time::SystemTime = __oopsie_timestamp;
+    assert!(*__oopsie_timestamp >= before);
+}
+
+// `timestamp(chrono = true)` swaps the field type to chrono's
+// DateTime<Local>. Auto-capture needs the `Capturable` impl behind the
+// `chrono` feature of `oopsie`, hence the gate.
+#[cfg(feature = "chrono")]
+mod chrono_timestamp {
+    use oopsie::oopsie;
+
+    #[oopsie(traced(timestamp(chrono = true)))]
+    pub enum ChronoTimestampError {
+        #[oopsie("chrono ts")]
+        Boom { info: String },
+    }
+
+    #[test]
+    fn timestamp_chrono_flag_swaps_field_type_to_datetime_local() {
+        let before = chrono::Local::now();
+        let e = chrono_timestamp_oopsies::Boom {
+            info: "x".to_owned(),
+        }
+        .build();
+        assert_eq!(e.to_string(), "chrono ts");
+        let ChronoTimestampError::Boom {
+            __oopsie_timestamp, ..
+        } = &e;
+        // The field type is concretely `chrono::DateTime<chrono::Local>`;
+        // assigning it to that binding fails to compile if the macro chose any
+        // other type.
+        let stored: &chrono::DateTime<chrono::Local> = __oopsie_timestamp;
+        assert!(*stored >= before);
+    }
 }
 
 // `timestamp(provide = true)` surfaces the injected timestamp through
@@ -460,18 +490,14 @@ pub enum ProvidedTimestampError {
 #[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn timestamp_provide_surfaces_via_provider_api() {
-    let now = std::time::SystemTime::now();
+    let before = std::time::SystemTime::now();
     let e = provided_timestamp_oopsies::Boom {
         info: "x".to_owned(),
-        __oopsie_timestamp: now,
     }
     .build();
     let got = core::error::request_value::<std::time::SystemTime>(&e);
-    assert_eq!(
-        got,
-        Some(now),
-        "timestamp must be queryable via the provider API"
-    );
+    let ts = got.expect("timestamp must be queryable via the provider API");
+    assert!(ts >= before);
 }
 
 // ════════════════════════════════════════════════════════════════════════

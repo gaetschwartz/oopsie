@@ -87,7 +87,7 @@ fn inject_into_named(
         spantrace_attrs,
         timestamp_ident,
         timestamp_type,
-        timestamp_provide_attr,
+        timestamp_attrs,
         traces_ident,
         traces_type,
         traces_attrs,
@@ -112,7 +112,7 @@ fn inject_into_named(
     if to_inject.timestamp {
         fields
             .named
-            .push(parse_quote! { #timestamp_provide_attr #timestamp_ident: #timestamp_type });
+            .push(parse_quote! { #timestamp_attrs #timestamp_ident: #timestamp_type });
     }
 }
 
@@ -223,7 +223,7 @@ mod tests {
             spantrace_attrs: quote! { #[oopsie(spantrace)] },
             timestamp_ident: format_ident!("__oopsie_timestamp"),
             timestamp_type: parse_quote! { std::time::SystemTime },
-            timestamp_provide_attr: None,
+            timestamp_attrs: quote! { #[oopsie(capture)] },
             traces_ident: format_ident!("__oopsie_traces"),
             traces_type: quote! { ::std::boxed::Box<(Backtrace, SpanTrace)> },
             traces_attrs: quote! { #[oopsie(traces)] },
