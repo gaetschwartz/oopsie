@@ -1301,6 +1301,12 @@ impl CategorizedFields {
                 traces_field = Some(ident.clone());
             }
             if attrs.help {
+                if help_field.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        field,
+                        "at most one `#[oopsie(help)]` field per variant/struct",
+                    ));
+                }
                 help_field = Some(ident.clone());
             }
 

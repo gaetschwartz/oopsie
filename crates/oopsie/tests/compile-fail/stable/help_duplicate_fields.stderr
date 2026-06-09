@@ -1,0 +1,6 @@
+error: at most one `#[oopsie(help)]` field per variant/struct
+ --> tests/compile-fail/stable/help_duplicate_fields.rs:7:9
+  |
+7 | /         #[oopsie(help)]
+8 | |         second: String,
+  | |______________________^

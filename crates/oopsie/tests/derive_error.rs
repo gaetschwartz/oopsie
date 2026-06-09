@@ -478,6 +478,19 @@ fn dynamic_help_field_returns_value() {
     assert_eq!(&*help.unwrap(), "try a shorter name");
 }
 
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn dynamic_help_field_provider_matches_accessor() {
+    use oopsie::Diagnostic as _;
+    let err = WithDynamicHelp {
+        suggestion: "try a shorter name",
+    }
+    .build();
+    let provided = core::error::request_value::<oopsie::HelpText>(&err);
+    assert!(provided.is_some(), "provide() should yield dynamic help");
+    assert_eq!(provided, err.oopsie_help_text());
+}
+
 #[test]
 fn no_help_field_returns_none() {
     use oopsie::Diagnostic as _;
@@ -486,6 +499,29 @@ fn no_help_field_returns_none() {
         err.oopsie_help_text().is_none(),
         "variant without help should return None"
     );
+}
+
+// Struct parity: a struct with only a `#[oopsie(help)]` field must agree
+// between `oopsie_help_text()` and `request_value::<HelpText>`.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(suffix)]
+struct StructDynamicHelp {
+    #[oopsie(help)]
+    suggestion: String,
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn struct_dynamic_help_field_provider_matches_accessor() {
+    use oopsie::Diagnostic as _;
+    let err = StructDynamicHelpOopsie {
+        suggestion: "try a shorter name".to_owned(),
+    }
+    .build();
+    let provided = core::error::request_value::<oopsie::HelpText>(&err);
+    assert!(provided.is_some(), "provide() should yield dynamic help");
+    assert_eq!(provided, err.oopsie_help_text());
 }
 
 // ---- help() format-string interpolation referencing variant fields ----

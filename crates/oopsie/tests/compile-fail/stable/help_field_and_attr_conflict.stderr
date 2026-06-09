@@ -1,0 +1,5 @@
+error: ambiguous help: this `#[oopsie(help)]` field conflicts with the `help = ...` attribute; remove one
+ --> tests/compile-fail/stable/help_field_and_attr_conflict.rs:6:9
+  |
+6 |         suggestion: String,
+  |         ^^^^^^^^^^

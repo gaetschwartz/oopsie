@@ -115,6 +115,13 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         let variant_ident = &variant.ident;
         let categorized = CategorizedFields::from_fields(&variant.fields)?;
         let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
+        if let (Some(help_field), Some(_)) = (&categorized.help_field, &variant_attrs.help) {
+            return Err(syn::Error::new_spanned(
+                help_field,
+                "ambiguous help: this `#[oopsie(help)]` field conflicts with the \
+                 `help = ...` attribute; remove one",
+            ));
+        }
         let cfg_attrs: Vec<&syn::Attribute> = variant
             .attrs
             .iter()
@@ -184,8 +191,14 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             provide_stmts.push(gen_provide_call(provide_attr, &req));
         }
 
-        // Provide from help/code in VariantAttrs
-        if let Some(help) = &variant_attrs.help {
+        // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
+        if let Some(help_field) = &categorized.help_field {
+            provide_stmts.push(quote! {
+                #req.provide_value_with::<#oopsie_path::HelpText>(
+                    || #oopsie_path::HelpText::from(#help_field.to_string())
+                );
+            });
+        } else if let Some(help) = &variant_attrs.help {
             provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
         }
         if let Some(code) = &variant_attrs.code {
@@ -494,6 +507,13 @@ pub fn gen_struct_error(
 
     let categorized = CategorizedFields::from_fields(&data.fields)?;
     let variant_attrs = attrs;
+    if let (Some(help_field), Some(_)) = (&categorized.help_field, &variant_attrs.help) {
+        return Err(syn::Error::new_spanned(
+            help_field,
+            "ambiguous help: this `#[oopsie(help)]` field conflicts with the \
+             `help = ...` attribute; remove one",
+        ));
+    }
 
     // Mangled `provide` parameter (see `gen_enum_error`): the destructure binds
     // every field name, which would shadow a parameter named `request`.
@@ -557,8 +577,14 @@ pub fn gen_struct_error(
         provide_stmts.push(gen_provide_call(provide_attr, &req));
     }
 
-    // Help/code from VariantAttrs (user-specified via #[oopsie(help = "...", code = "...")])
-    if let Some(help) = &variant_attrs.help {
+    // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
+    if let Some(help_field) = &categorized.help_field {
+        provide_stmts.push(quote! {
+            #req.provide_value_with::<#oopsie_path::HelpText>(
+                || #oopsie_path::HelpText::from(#help_field.to_string())
+            );
+        });
+    } else if let Some(help) = &variant_attrs.help {
         provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
     }
     if let Some(code) = &variant_attrs.code {
