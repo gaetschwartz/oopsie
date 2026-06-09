@@ -80,25 +80,6 @@ fn transparent_with_auto_fields() {
     // what this test guarantees; accessor delegation is covered by `traced_transparent`.
 }
 
-// ─── transparent variant with a user (non-source, non-auto) field ───
-
-#[derive(Debug, Oopsie)]
-#[oopsie(module(false))]
-enum UserFieldError {
-    #[oopsie(display("wrapped with user field"), transparent)]
-    WithUserField { source: io::Error, msg: String },
-}
-
-#[test]
-fn transparent_variant_with_user_field_defaults() {
-    let io_err = io::Error::new(io::ErrorKind::NotFound, "missing");
-    // The From impl defaults the user field via `Default::default()`.
-    let err: UserFieldError = UserFieldError::from(io_err);
-    let UserFieldError::WithUserField { msg, .. } = &err;
-    assert_eq!(msg, "", "transparent From defaults user fields to Default");
-    assert_eq!(err.to_string(), "wrapped with user field");
-}
-
 // ─── transparent variant + from(Type, transform) ───
 
 #[derive(Debug, Oopsie)]
@@ -194,35 +175,6 @@ fn mixed_transparent_and_regular() {
     let err = Custom { msg: "bad thing" }.build();
     assert!(matches!(err, MixedError::Custom { .. }));
     assert_eq!(err.to_string(), "custom: bad thing");
-}
-
-// ─── transparent variant WITHOUT a source field ───
-//
-// When `transparent` is set but the variant/struct has no `source` field, the
-// macro generates an EMPTY token stream for that variant: no `From` impl, no
-// selector. The enum still compiles and the variant is constructible by hand,
-// but there is no generated conversion. This is NOT a compile error.
-
-#[derive(Debug, Oopsie)]
-#[oopsie(module(false))]
-enum NoSourceTransparent {
-    #[oopsie(display("no source"), transparent)]
-    NoOp,
-
-    #[oopsie("real: {msg}")]
-    Real { msg: String },
-}
-
-#[test]
-fn transparent_without_source_generates_nothing() {
-    // The variant is constructible directly (no selector/From was generated).
-    let err = NoSourceTransparent::NoOp;
-    assert_eq!(err.to_string(), "no source");
-    // No `source` is exposed.
-    assert!(err.source().is_none());
-    // The sibling non-transparent variant still works normally.
-    let err = Real { msg: "x" }.build();
-    assert_eq!(err.to_string(), "real: x");
 }
 
 // ─── STRUCT cases ───

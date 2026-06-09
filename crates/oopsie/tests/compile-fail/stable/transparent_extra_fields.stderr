@@ -1,0 +1,5 @@
+error: `transparent` allows no fields besides the source and auto-captured trace fields; remove this field or drop `transparent`
+ --> tests/compile-fail/stable/transparent_extra_fields.rs:4:39
+  |
+4 |     Wrapped { source: std::io::Error, ctx: String },
+  |                                       ^^^

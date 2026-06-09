@@ -1,0 +1,5 @@
+error: `transparent` requires a source field (a field named `source` or marked `#[oopsie(from)]`)
+ --> tests/compile-fail/stable/transparent_without_source.rs:4:5
+  |
+4 |     NoSource { what: String },
+  |     ^^^^^^^^

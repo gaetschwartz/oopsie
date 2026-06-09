@@ -77,50 +77,59 @@ pub fn gen_enum_selectors(
             .collect();
 
         if variant_attrs.transparent {
-            // Generate From impl instead of selector
-            if let Some(source) = &categorized.source {
-                // When the source field uses `from(T, transform)` (or auto-box
-                // detected `Box<T>`), the generated `From` impl accepts the
-                // pre-transform type `T` and applies the transform internally,
-                // matching snafu's `#[snafu(context(false))]` semantics.
-                let source_ident = &source.ident;
-                let (param_ty, body_assign) = match &source.kind {
-                    super::parse::SourceKind::Transformed {
-                        source_type,
-                        transform,
-                    } => (
-                        quote! { #source_type },
-                        quote! { let #source_ident = (#transform)(source); },
-                    ),
-                    super::parse::SourceKind::Yes => {
-                        let ty = &source.ty;
-                        (quote! { #ty }, quote! { let #source_ident = source; })
-                    }
-                    super::parse::SourceKind::No => {
-                        unreachable!("categorized.source set but kind is SourceKind::No")
-                    }
-                };
-                let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
-                let auto_names = gen_auto_field_names(&categorized);
-                let user_inits = gen_user_default_inits(&categorized);
-                selectors.push(quote! {
-                    #(#cfg_attrs)*
-                    impl #ty_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics {
-                        #[track_caller]
-                        fn from(source: #param_ty) -> Self {
-                            // Capture probes borrow `&source` before
-                            // `body_assign` moves it into the renamed field.
-                            #(#auto_inits)*
-                            #body_assign
-                            #enum_ident::#variant_ident {
-                                #source_ident,
-                                #(#user_inits)*
-                                #(#auto_names,)*
-                            }
+            let Some(source) = &categorized.source else {
+                return Err(syn::Error::new_spanned(
+                    &variant.ident,
+                    "`transparent` requires a source field (a field named `source` \
+                     or marked `#[oopsie(from)]`)",
+                ));
+            };
+            if let Some(extra) = categorized.user_fields.first() {
+                return Err(syn::Error::new_spanned(
+                    &extra.ident,
+                    "`transparent` allows no fields besides the source and \
+                     auto-captured trace fields; remove this field or drop `transparent`",
+                ));
+            }
+            // When the source field uses `from(T, transform)` (or auto-box
+            // detected `Box<T>`), the generated `From` impl accepts the
+            // pre-transform type `T` and applies the transform internally,
+            // matching snafu's `#[snafu(context(false))]` semantics.
+            let source_ident = &source.ident;
+            let (param_ty, body_assign) = match &source.kind {
+                super::parse::SourceKind::Transformed {
+                    source_type,
+                    transform,
+                } => (
+                    quote! { #source_type },
+                    quote! { let #source_ident = (#transform)(source); },
+                ),
+                super::parse::SourceKind::Yes => {
+                    let ty = &source.ty;
+                    (quote! { #ty }, quote! { let #source_ident = source; })
+                }
+                super::parse::SourceKind::No => {
+                    unreachable!("categorized.source set but kind is SourceKind::No")
+                }
+            };
+            let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
+            let auto_names = gen_auto_field_names(&categorized);
+            selectors.push(quote! {
+                #(#cfg_attrs)*
+                impl #ty_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics {
+                    #[track_caller]
+                    fn from(source: #param_ty) -> Self {
+                        // Capture probes borrow `&source` before
+                        // `body_assign` moves it into the renamed field.
+                        #(#auto_inits)*
+                        #body_assign
+                        #enum_ident::#variant_ident {
+                            #source_ident,
+                            #(#auto_names,)*
                         }
                     }
-                });
-            }
+                }
+            });
             continue;
         }
 
@@ -241,41 +250,51 @@ pub fn gen_struct_selector(
     let categorized = CategorizedFields::from_fields(&data.fields)?;
 
     if variant_attrs.transparent {
-        // Generate From impl for transparent structs
-        if let Some(source) = &categorized.source {
-            let source_ident = &source.ident;
-            let (param_ty, body_assign) = match &source.kind {
-                super::parse::SourceKind::Transformed {
-                    source_type,
-                    transform,
-                } => (
-                    quote! { #source_type },
-                    quote! { let #source_ident = (#transform)(source); },
-                ),
-                super::parse::SourceKind::Yes => {
-                    let ty = &source.ty;
-                    (quote! { #ty }, quote! { let #source_ident = source; })
-                }
-                super::parse::SourceKind::No => {
-                    unreachable!("categorized.source set but kind is SourceKind::No")
-                }
-            };
-            let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
-            let auto_names = gen_auto_field_names(&categorized);
-            return Ok(quote! {
-                impl ::core::convert::From<#param_ty> for #struct_ident {
-                    #[track_caller]
-                    fn from(source: #param_ty) -> Self {
-                        // Capture probes borrow `&source` before `body_assign`
-                        // moves it into the renamed field.
-                        #(#auto_inits)*
-                        #body_assign
-                        Self { #source_ident, #(#auto_names,)* }
-                    }
-                }
-            });
+        let Some(source) = &categorized.source else {
+            return Err(syn::Error::new_spanned(
+                &input.ident,
+                "`transparent` requires a source field (a field named `source` \
+                 or marked `#[oopsie(from)]`)",
+            ));
+        };
+        if let Some(extra) = categorized.user_fields.first() {
+            return Err(syn::Error::new_spanned(
+                &extra.ident,
+                "`transparent` allows no fields besides the source and \
+                 auto-captured trace fields; remove this field or drop `transparent`",
+            ));
         }
-        return Ok(TokenStream2::new());
+        let source_ident = &source.ident;
+        let (param_ty, body_assign) = match &source.kind {
+            super::parse::SourceKind::Transformed {
+                source_type,
+                transform,
+            } => (
+                quote! { #source_type },
+                quote! { let #source_ident = (#transform)(source); },
+            ),
+            super::parse::SourceKind::Yes => {
+                let ty = &source.ty;
+                (quote! { #ty }, quote! { let #source_ident = source; })
+            }
+            super::parse::SourceKind::No => {
+                unreachable!("categorized.source set but kind is SourceKind::No")
+            }
+        };
+        let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
+        let auto_names = gen_auto_field_names(&categorized);
+        return Ok(quote! {
+            impl ::core::convert::From<#param_ty> for #struct_ident {
+                #[track_caller]
+                fn from(source: #param_ty) -> Self {
+                    // Capture probes borrow `&source` before `body_assign`
+                    // moves it into the renamed field.
+                    #(#auto_inits)*
+                    #body_assign
+                    Self { #source_ident, #(#auto_names,)* }
+                }
+            }
+        });
     }
 
     let selector_ident = selector_name(struct_ident, &attrs.container.effective_suffix(false));
@@ -377,17 +396,6 @@ fn gen_auto_inits(
             } else {
                 quote! { let #ident = <#ty as #oopsie_path::Capturable>::capture(); }
             }
-        })
-        .collect()
-}
-
-fn gen_user_default_inits(categorized: &CategorizedFields) -> Vec<TokenStream2> {
-    categorized
-        .user_fields
-        .iter()
-        .map(|uf| {
-            let ident = &uf.ident;
-            quote! { #ident: ::core::default::Default::default(), }
         })
         .collect()
 }
