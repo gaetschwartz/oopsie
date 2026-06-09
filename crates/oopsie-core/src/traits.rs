@@ -71,6 +71,42 @@ impl<A: CaptureExt, B: CaptureExt> CaptureExt for (A, B) {
     }
 }
 
+impl Capturable for std::time::SystemTime {
+    #[track_caller]
+    #[inline]
+    fn capture() -> Self {
+        Self::now()
+    }
+}
+
+impl CaptureExt for std::time::SystemTime {
+    // A timestamp records when *this* layer was built; never inherit the
+    // source's construction time.
+    #[track_caller]
+    #[inline]
+    fn capture_or_extract(_source: &dyn crate::Diagnostic) -> Self {
+        Self::now()
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl Capturable for chrono::DateTime<chrono::Local> {
+    #[track_caller]
+    #[inline]
+    fn capture() -> Self {
+        chrono::Local::now()
+    }
+}
+
+#[cfg(feature = "chrono")]
+impl CaptureExt for chrono::DateTime<chrono::Local> {
+    #[track_caller]
+    #[inline]
+    fn capture_or_extract(_source: &dyn crate::Diagnostic) -> Self {
+        chrono::Local::now()
+    }
+}
+
 /// Unit source type used by [`OptionExt`] context selectors and leaf errors.
 ///
 /// Leaf errors (those with no chained source) take this as the `source`
@@ -269,6 +305,18 @@ mod tests {
     use super::*;
     use std::error::Error as StdError;
     use std::fmt;
+
+    #[derive(Debug)]
+    struct DiagOnly;
+
+    impl fmt::Display for DiagOnly {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("diag only")
+        }
+    }
+
+    impl std::error::Error for DiagOnly {}
+    impl crate::Diagnostic for DiagOnly {}
 
     // Test error types for trait implementations
     #[derive(Debug)]
@@ -646,4 +694,13 @@ mod tests {
         const fn is_send_sync<T: Send + Sync>() {}
         is_send_sync::<Box<dyn StdError + Send + Sync + 'static>>();
     };
+
+    #[test]
+    fn system_time_captures_now_and_never_extracts() {
+        let before = std::time::SystemTime::now();
+        let captured = <std::time::SystemTime as Capturable>::capture();
+        assert!(captured >= before);
+        let extracted = <std::time::SystemTime as CaptureExt>::capture_or_extract(&DiagOnly);
+        assert!(extracted >= before);
+    }
 }

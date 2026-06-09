@@ -22,6 +22,7 @@ unstable = [
     "oopsie-core/unstable",
 ]
 fancy = ["dep:owo-colors", "dep:serde", "dep:serde_json"]
+chrono = ["oopsie-core/chrono"]
 
 [dependencies]
 backtrace = "0.3.76"
