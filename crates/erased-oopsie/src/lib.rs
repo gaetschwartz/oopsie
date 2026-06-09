@@ -129,7 +129,10 @@ impl ErasedError {
     }
 
     pub fn write_json<W: io::Write>(&self, f: &mut W) -> Result<(), serde_json::Error> {
-        serde_json::to_writer_pretty(io::BufWriter::new(f), self)?;
+        use io::Write as _;
+        let mut buf = io::BufWriter::new(f);
+        serde_json::to_writer_pretty(&mut buf, self)?;
+        buf.flush().map_err(serde_json::Error::io)?;
         Ok(())
     }
 
@@ -342,6 +345,29 @@ mod tests {
         let json: serde_json::Value = serde_json::from_slice(&buf).unwrap();
         assert_eq!(json["message"], "something broke");
         assert_eq!(json["source_chain"][0], "inner cause");
+    }
+
+    struct FailingWriter;
+    impl io::Write for FailingWriter {
+        fn write(&mut self, _: &[u8]) -> io::Result<usize> {
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, "peer gone"))
+        }
+        fn flush(&mut self) -> io::Result<()> {
+            Err(io::Error::new(io::ErrorKind::BrokenPipe, "peer gone"))
+        }
+    }
+
+    #[test]
+    fn write_json_surfaces_io_errors() {
+        let erased = ErasedError {
+            message: "x".into(),
+            source_chain: vec![],
+            diagnostics: Diagnostics::default(),
+            spantrace: None,
+            backtrace: None,
+        };
+        let err = erased.write_json(&mut FailingWriter).unwrap_err();
+        assert!(err.is_io(), "{err}");
     }
 
     // ─────────────────────────────────────────────────────────────────────
