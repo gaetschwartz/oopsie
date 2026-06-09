@@ -286,15 +286,31 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                 #(#cfg_attrs)*
                 Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#code)),
             });
-        } else if let Some(expr) = variant_attrs
+        } else if let Some(provide_attr) = variant_attrs
             .provides
             .iter()
             .find(|p| is_error_code_provide(p))
-            .map(|p| &p.expr)
         {
+            let expr = &provide_attr.expr;
+            // The provide expr may reference fields (it gets the same bindings
+            // inside the generated `provide()`), so bind them here too.
+            let binds = collect_provide_field_names(&categorized);
+            let code_pattern = if binds.is_empty() {
+                quote! { Self::#variant_ident { .. } }
+            } else {
+                quote! { Self::#variant_ident { #(#binds),*, .. } }
+            };
+            // A ref-form provide evaluates to `&ErrorCode`; the accessor
+            // returns it by value.
+            let value = if provide_attr.is_ref() {
+                quote! { ::core::option::Option::Some(::core::clone::Clone::clone(#expr)) }
+            } else {
+                quote! { ::core::option::Option::Some(#expr) }
+            };
             code_arms.push(quote! {
                 #(#cfg_attrs)*
-                Self::#variant_ident { .. } => ::core::option::Option::Some(#expr),
+                #[allow(unused_variables)]
+                #code_pattern => #value,
             });
         } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
         {
@@ -637,17 +653,28 @@ pub fn gen_struct_error(
         }
     } else {
         // Check for auto-generated code from trace-injection provide attrs
-        let mut code_expr = None;
-        for provide_attr in &attrs.provides {
-            if is_error_code_provide(provide_attr) {
-                code_expr = Some(&provide_attr.expr);
-                break;
-            }
-        }
-        if let Some(expr) = code_expr {
+        let code_provide = attrs.provides.iter().find(|p| is_error_code_provide(p));
+        if let Some(provide_attr) = code_provide {
+            let expr = &provide_attr.expr;
+            // The provide expr may reference fields (it gets the same bindings
+            // inside the generated `provide()`), so destructure them here too.
+            let field_names = collect_provide_field_names(&categorized);
+            let code_destructure = if field_names.is_empty() {
+                quote! {}
+            } else {
+                quote! { #[allow(unused_variables)] let Self { #(#field_names),*, .. } = self; }
+            };
+            // A ref-form provide evaluates to `&ErrorCode`; the accessor
+            // returns it by value.
+            let value = if provide_attr.is_ref() {
+                quote! { ::core::option::Option::Some(::core::clone::Clone::clone(#expr)) }
+            } else {
+                quote! { ::core::option::Option::Some(#expr) }
+            };
             quote! {
                 fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
-                    ::core::option::Option::Some(#expr)
+                    #code_destructure
+                    #value
                 }
             }
         } else if let (true, Some(s)) = (variant_attrs.transparent, struct_source) {

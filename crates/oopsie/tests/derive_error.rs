@@ -755,3 +755,77 @@ fn error_code_dynamic_accessor_and_provider_agree() {
     assert_eq!(via_accessor.as_str(), "dyn::code");
     assert_eq!(via_accessor.as_str(), via_provider.as_str());
 }
+
+// ---- provide(ErrorCode => ...) exprs that reference fields / ref-form ----
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum FieldCodeError {
+    #[oopsie("boom")]
+    #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from(format!("app::{kind}"))))]
+    FieldCode { kind: String },
+
+    #[oopsie("ref boom")]
+    #[oopsie(provide(ref, ::oopsie::ErrorCode => code))]
+    RefCode { code: oopsie::ErrorCode },
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(suffix)]
+#[oopsie("struct boom")]
+#[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from(format!("app::{kind}"))))]
+struct StructFieldCode {
+    kind: String,
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(suffix)]
+#[oopsie("struct ref boom")]
+#[oopsie(provide(ref, ::oopsie::ErrorCode => code))]
+struct StructRefCode {
+    code: oopsie::ErrorCode,
+}
+
+#[test]
+fn error_code_provide_can_reference_fields() {
+    use oopsie::Diagnostic as _;
+    let err = FieldCode {
+        kind: "db".to_owned(),
+    }
+    .build();
+    let code = err.oopsie_error_code().expect("accessor yields code");
+    assert_eq!(code.as_str(), "app::db");
+}
+
+#[test]
+fn error_code_ref_provide_returns_owned_clone() {
+    use oopsie::Diagnostic as _;
+    let err = RefCode {
+        code: oopsie::ErrorCode::from("ref::code"),
+    }
+    .build();
+    let code = err.oopsie_error_code().expect("accessor yields code");
+    assert_eq!(code.as_str(), "ref::code");
+}
+
+#[test]
+fn struct_error_code_provide_can_reference_fields() {
+    use oopsie::Diagnostic as _;
+    let err = StructFieldCodeOopsie {
+        kind: "fs".to_owned(),
+    }
+    .build();
+    let code = err.oopsie_error_code().expect("accessor yields code");
+    assert_eq!(code.as_str(), "app::fs");
+}
+
+#[test]
+fn struct_error_code_ref_provide_returns_owned_clone() {
+    use oopsie::Diagnostic as _;
+    let err = StructRefCodeOopsie {
+        code: oopsie::ErrorCode::from("ref::struct"),
+    }
+    .build();
+    let code = err.oopsie_error_code().expect("accessor yields code");
+    assert_eq!(code.as_str(), "ref::struct");
+}
