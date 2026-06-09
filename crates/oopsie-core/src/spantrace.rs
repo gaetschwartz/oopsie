@@ -118,10 +118,13 @@ impl crate::Capturable for SpanTrace {
 impl crate::CaptureExt for SpanTrace {
     #[inline]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
-        source
-            .oopsie_spantrace()
-            .cloned()
-            .unwrap_or_else(Self::capture)
+        match source.oopsie_spantrace() {
+            // Keep the source's trace only if capture actually succeeded; an
+            // EMPTY/UNSUPPORTED trace carries nothing worth preserving over a
+            // fresh capture at the wrap site.
+            Some(trace) if trace.is_captured() => trace.clone(),
+            _ => Self::capture(),
+        }
     }
 }
 
@@ -478,5 +481,30 @@ mod tests {
         assert!(!src.0.is_captured(), "precondition: source trace is empty");
         let opt = <OptionalSpanTrace as crate::CaptureExt>::capture_or_extract(&src);
         assert!(opt.is_none());
+    }
+
+    #[test]
+    fn span_trace_capture_or_extract_recaptures_over_empty_source_trace() {
+        // Source captured with no subscriber → empty trace.
+        let src = DiagSourceWithEmptyTrace(SpanTrace::capture());
+        assert!(!src.0.is_captured(), "precondition: source trace is empty");
+        // Wrap site has a live subscriber inside an active span → fresh capture
+        // must win over the source's empty trace.
+        let extracted = with_error_subscriber(|| {
+            let _g = tracing::info_span!("wrap_site").entered();
+            <SpanTrace as crate::CaptureExt>::capture_or_extract(&src)
+        });
+        assert!(extracted.is_captured());
+    }
+
+    #[test]
+    fn span_trace_capture_or_extract_keeps_captured_source_trace() {
+        let (src_trace, extracted) = with_error_subscriber(|| {
+            let src = DiagSourceWithEmptyTrace(leaf());
+            let t = <SpanTrace as crate::CaptureExt>::capture_or_extract(&src);
+            (src.0, t)
+        });
+        assert!(extracted.is_captured());
+        assert_eq!(extracted, src_trace);
     }
 }
