@@ -234,10 +234,14 @@ pub fn gen_struct_selector(
     oopsie_path: &syn::Path,
 ) -> syn::Result<TokenStream2> {
     let struct_ident = &input.ident;
+    let wrapped_in_module = matches!(
+        attrs.container.effective_module(false),
+        ModuleSetting::On(_)
+    );
     let vis = attrs
         .visibility()
         .cloned()
-        .unwrap_or_else(|| default_selector_vis(&input.vis, false));
+        .unwrap_or_else(|| default_selector_vis(&input.vis, wrapped_in_module));
     // Variant-level fields are inlined on `StructAttrs` (darling allows only
     // one flatten per derive); aliasing makes downstream field access read
     // naturally as `variant_attrs.transparent` etc.

@@ -141,9 +141,19 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
         .as_ref()
         .map(|c| gen_size_assertion(&input.ident, c));
 
-    // No module wrapping for structs
+    let effective_module = attrs.container.effective_module(false);
+    let wrapped_selector = if attrs.transparent {
+        selector
+    } else {
+        wrap_in_module(
+            &effective_module,
+            &input.ident,
+            std::slice::from_ref(&selector),
+        )
+    };
+
     Ok(quote! {
-        #selector
+        #wrapped_selector
         #display
         #error
         #size_assert

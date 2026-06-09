@@ -134,7 +134,69 @@ fn enum_named_error_module_is_oopsies() {
     assert_eq!(err.to_string(), "specific: boom");
 }
 
-// Test 6: Module wrapping combined with a variant-level `vis(...)` override.
+// Test 6: struct with explicit custom module name.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(query_oopsies))]
+#[oopsie("query failed: {what}")]
+pub struct QueryError {
+    what: String,
+}
+
+#[test]
+fn struct_module_wraps_selector() {
+    let err = query_oopsies::QueryOopsie { what: "join" }.build();
+    assert_eq!(err.to_string(), "query failed: join");
+}
+
+// Test 7: struct with auto-named module (module keyword alone).
+// ParseError → strip "Error" → "Parse" → snake_case → "parse" → "parse_oopsies"
+#[derive(Debug, Oopsie)]
+#[oopsie(module)]
+#[oopsie("parse failed")]
+pub struct ParseError;
+
+#[test]
+fn struct_auto_module_name() {
+    let err = parse_oopsies::ParseOopsie.build();
+    assert_eq!(err.to_string(), "parse failed");
+}
+
+// Test 8: struct default (no module attr) still works at top level.
+// This guards the unchanged default behavior: selectors at same scope.
+#[derive(Debug, Oopsie)]
+#[oopsie("flat struct error")]
+pub struct FlatStructError;
+
+#[test]
+fn struct_default_no_module() {
+    // FlatStructOopsie is directly accessible, no module prefix.
+    let err = FlatStructOopsie.build();
+    assert_eq!(err.to_string(), "flat struct error");
+}
+
+// Test 9: struct with pub(crate) visibility + module(...) exercises the
+// lift_into_child_module path for structs. pub(crate) is crate-absolute, so
+// the selector inside the generated child module stays reachable crate-wide.
+mod crate_vis {
+    #[expect(
+        clippy::redundant_pub_crate,
+        reason = "pub(crate) is the point: it exercises the restricted-visibility lift path"
+    )]
+    #[derive(Debug, oopsie::Oopsie)]
+    #[oopsie(module(scoped_oopsies))]
+    #[oopsie("scoped: {what}")]
+    pub(crate) struct ScopedError {
+        pub(crate) what: String,
+    }
+}
+
+#[test]
+fn restricted_vis_struct_module_selector_reachable_crate_wide() {
+    let err = crate_vis::scoped_oopsies::ScopedOopsie { what: "x" }.build();
+    assert_eq!(err.to_string(), "scoped: x");
+}
+
+// Test 10: Module wrapping combined with a variant-level `vis(...)` override.
 // Both selectors default to `pub` (mirroring the `pub enum`). `PublicVariant`
 // additionally carries an explicit `vis(pub)` override. Both live inside the
 // `test_oopsies` module; the re-export below verifies `pub use` works for the
