@@ -214,6 +214,17 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
+    #[test]
+    fn pub_enum_selector_defaults_to_pub() {
+        let out = expand(quote! {
+            #[oopsie(module(false))]
+            pub enum PubError { #[oopsie("x")] X { f: String } }
+        })
+        .unwrap()
+        .to_string();
+        assert!(out.contains("pub struct X"), "{out}");
+    }
+
     // Locks derive codegen for a transparent variant as a user actually writes
     // it. Trace surfacing through a transparent, trace-injected wrapper runs the
     // full inject→derive pipeline and is covered by the `traced_transparent`

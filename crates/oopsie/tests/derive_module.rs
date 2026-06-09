@@ -135,10 +135,10 @@ fn enum_named_error_module_is_oopsies() {
 }
 
 // Test 6: Module wrapping combined with a variant-level `vis(...)` override.
-// The container default visibility is `pub(crate)`; only `PublicVariant`
-// overrides to `pub`. Both selectors live inside the `test_oopsies` module, so
-// the module wrapping still applies. `pub use` of the `pub` selector compiles
-// (it's genuinely `pub`); re-exporting a `pub(crate)` selector would be E0365.
+// Both selectors default to `pub` (mirroring the `pub enum`). `PublicVariant`
+// additionally carries an explicit `vis(pub)` override. Both live inside the
+// `test_oopsies` module; the re-export below verifies `pub use` works for the
+// explicitly-annotated selector.
 #[derive(Debug, Oopsie)]
 #[oopsie(module(test_oopsies))]
 pub enum MixedModuleVisError {

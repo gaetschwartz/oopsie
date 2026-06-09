@@ -90,9 +90,10 @@ fn container_vis_pub_makes_selector_reexportable() {
 
 // ---- Test 5: variant-level vis(pub) overrides the container default ----
 //
-// The container default is `pub(crate)`; only `Loud` overrides to `pub`, so only
-// `LoudOopsie` is re-exportable. `QuietOopsie` keeps the default and would hit
-// E0365 if re-exported — confirming the override is per-variant, not global.
+// Both selectors default to `pub` (mirroring the `pub enum`). This test
+// verifies that a per-variant `vis(pub)` override still compiles and produces
+// the expected output — confirming the override mechanism works regardless of
+// the default.
 
 mod variant_vis {
     use oopsie::Oopsie;
@@ -145,7 +146,29 @@ fn variant_named_error_keeps_name_without_suffix() {
     assert!(matches!(err, NestedSuffixError::Error { detail } if detail == "kaboom"));
 }
 
-// ---- Test 7: variant named `Error` with a custom suffix appended ----
+// ---- Test 7: pub error yields pub selectors by default ----
+//
+// Without an explicit `vis(...)`, the derive mirrors the error type's own
+// visibility. A `pub enum` therefore gets `pub` selectors, which downstream
+// crates can name. (True cross-crate verification isn't possible in a single
+// crate; the token-level unit test in oopsie-macros locks the `pub struct`
+// output.)
+
+mod lib_side {
+    #[oopsie::oopsie]
+    pub enum LibError {
+        #[oopsie("nope")]
+        Nope { what: String },
+    }
+}
+
+#[test]
+fn pub_error_selectors_default_to_pub() {
+    let err = lib_side::lib_oopsies::Nope { what: "x" }.build();
+    assert_eq!(err.to_string(), "nope");
+}
+
+// ---- Test 8: variant named `Error` with a custom suffix appended ----
 //
 // Same base preservation as above, but with a suffix the selector becomes
 // base + suffix = `Error` + `Oopsie` = `ErrorOopsie` (the "Error" is not

@@ -9,24 +9,21 @@ use super::parse::{
     VariantAttrs,
 };
 
-/// Default selector visibility when no explicit `vis(...)` is given.
-///
-/// A selector's `Contextual::Destination` is the error type, so the selector
-/// may never be more visible than the error — exposing a narrower error through
-/// a wider selector's public associated type fails the private-in-public check.
-/// The selector therefore mirrors the error's visibility, capping `pub` at the
-/// crate (a `pub(crate)` selector is reachable crate-wide yet never exceeds the
-/// destination). When selectors are wrapped in a generated child module, a
-/// module-relative visibility gains one `super` so it still reaches the error's
-/// own scope.
+/// Default selector visibility when no explicit `vis(...)` is given: mirror
+/// the error type's own visibility, so a library's `pub` error yields
+/// selectors its downstream users can name (snafu parity). Restricted
+/// visibilities gain one `super` when the selectors live in a generated child
+/// module, so they still reach the error's own scope.
 fn default_selector_vis(error_vis: &Visibility, wrapped_in_module: bool) -> Visibility {
-    if matches!(error_vis, Visibility::Public(_)) {
-        return syn::parse_quote! { pub(crate) };
-    }
-    if wrapped_in_module {
-        lift_into_child_module(error_vis)
-    } else {
-        error_vis.clone()
+    match error_vis {
+        Visibility::Public(_) => error_vis.clone(),
+        Visibility::Restricted(_) | Visibility::Inherited => {
+            if wrapped_in_module {
+                lift_into_child_module(error_vis)
+            } else {
+                error_vis.clone()
+            }
+        }
     }
 }
 
