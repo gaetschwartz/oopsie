@@ -197,11 +197,17 @@ pub trait ResultExt<T, E> {
         C: Contextual<E>;
 
     /// Convert the error into a boxed trait object (`Box<dyn Error + Send + Sync>`).
+    ///
+    /// If `E` is itself a `Box<C>`, the result nests boxes: downcasting must
+    /// target `Box<C>`, not `C`.
     fn boxed(self) -> Result<T, Box<dyn error::Error + Send + Sync + 'static>>
     where
         E: error::Error + Send + Sync + 'static;
 
     /// Convert the error into a boxed trait object (no `Send`/`Sync` bounds).
+    ///
+    /// If `E` is itself a `Box<C>`, the result nests boxes: downcasting must
+    /// target `Box<C>`, not `C`.
     fn boxed_local(self) -> Result<T, Box<dyn error::Error + 'static>>
     where
         E: error::Error + 'static;
@@ -697,6 +703,16 @@ mod tests {
         }
         assert_eq!(run(true).unwrap_err().to_string(), "source");
         assert_eq!(run(false).unwrap_err().to_string(), "simple");
+    }
+
+    #[test]
+    fn boxed_on_boxed_error_downcasts_to_the_box() {
+        let result: Result<(), Box<SourceError>> = Err(Box::new(SourceError {
+            message: "boom".to_owned(),
+        }));
+        let err = result.boxed().unwrap_err();
+        assert!(err.downcast_ref::<SourceError>().is_none());
+        assert!(err.downcast_ref::<Box<SourceError>>().is_some());
     }
 
     const _: () = {
