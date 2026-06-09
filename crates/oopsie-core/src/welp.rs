@@ -27,17 +27,14 @@
 //!
 //! # Layout
 //!
-//! `Welp` is a small enum — `Sourced` carries `Box<str>` + `Box<dyn Error>`,
-//! `Traced` carries `Box<str>` + `Box<(Backtrace, SpanTrace)>`. The two
-//! variants are mutually exclusive: a `Sourced` `Welp` captures no traces of
-//! its own; a `Traced` `Welp` captures fresh traces at construction.
+//! `Welp` is a small enum — both variants carry `Box<str>` +
+//! `Box<(Backtrace, SpanTrace)>` captured at construction; `Sourced`
+//! additionally carries the wrapped `Box<dyn Error>`.
 //!
-//! A `Sourced` `Welp` still surfaces its source's traces when the
-//! `unstable-error-generic-member-access` feature is enabled: its [`Diagnostic`]
-//! accessors and `Error::provide` forward to the boxed source via the Provider
-//! API, so an oopsie-aware source's backtrace/span-trace flows through. Without
-//! that feature there is no portable way to reach into the source, so the
-//! accessors return `None`.
+//! A `Sourced` `Welp`'s [`Diagnostic`] accessors prefer the source's traces
+//! (reached via the Provider API under the
+//! `unstable-error-generic-member-access` feature) and fall back to the
+//! wrap-site ones, so the deepest available trace surfaces.
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -58,6 +55,7 @@ enum WelpRepr {
     Sourced {
         message: Box<str>,
         source: BoxError,
+        traces: Box<(Backtrace, SpanTrace)>,
     },
     Traced {
         message: Box<str>,
@@ -83,10 +81,11 @@ impl Welp {
         })
     }
 
-    /// Wrap an existing error with a string message. `Welp::wrap` captures no
-    /// traces of its own. With the `unstable-error-generic-member-access`
-    /// feature it forwards traces the source provides through its [`Diagnostic`]
-    /// accessors; otherwise those accessors return `None`.
+    /// Wrap an existing error with a string message. Captures backtrace and
+    /// span-trace at the wrap site; when the source provides its own (via the
+    /// Provider API under the `unstable-error-generic-member-access` feature)
+    /// the [`Diagnostic`] accessors surface those instead, so the origin-most
+    /// trace wins.
     ///
     /// ```
     /// use oopsie_core::Welp;
@@ -104,6 +103,7 @@ impl Welp {
         Self(WelpRepr::Sourced {
             message: message.into().into_boxed_str(),
             source: Box::new(source),
+            traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
         })
     }
 
@@ -128,6 +128,7 @@ impl Welp {
         Self(WelpRepr::Sourced {
             message: message.into().into_boxed_str(),
             source,
+            traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
         })
     }
 
@@ -173,7 +174,14 @@ impl StdError for Welp {
     #[cfg(feature = "unstable-error-generic-member-access")]
     fn provide<'a>(&'a self, request: &mut core::error::Request<'a>) {
         match &self.0 {
-            WelpRepr::Sourced { source, .. } => source.provide(request),
+            WelpRepr::Sourced { source, traces, .. } => {
+                // `Request` is first-wins: forwarding the source first keeps
+                // its deeper trace ahead of the wrap-site one.
+                source.provide(request);
+                request
+                    .provide_ref::<Backtrace>(&traces.0)
+                    .provide_ref::<SpanTrace>(&traces.1);
+            }
             WelpRepr::Traced { traces, .. } => {
                 request
                     .provide_ref::<Backtrace>(&traces.0)
@@ -186,24 +194,26 @@ impl StdError for Welp {
 impl Diagnostic for Welp {
     fn oopsie_backtrace(&self) -> Option<&Backtrace> {
         match &self.0 {
-            WelpRepr::Sourced { source, .. } => source_request_ref::<Backtrace>(source),
+            WelpRepr::Sourced { source, traces, .. } => {
+                source_request_ref::<Backtrace>(source).or(Some(&traces.0))
+            }
             WelpRepr::Traced { traces, .. } => Some(&traces.0),
         }
     }
 
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         match &self.0 {
-            WelpRepr::Sourced { source, .. } => source_request_ref::<SpanTrace>(source),
+            WelpRepr::Sourced { source, traces, .. } => {
+                source_request_ref::<SpanTrace>(source).or(Some(&traces.1))
+            }
             WelpRepr::Traced { traces, .. } => Some(&traces.1),
         }
     }
 }
 
-/// Pull a `T` reference out of a boxed source error via the Provider API. A
-/// `Sourced` `Welp` carries no traces of its own, so the only way to surface a
-/// source's backtrace/span-trace is to query what the source itself provides.
-/// Without the unstable Provider API there is no portable way to do this, so
-/// the trace is genuinely unavailable and we return `None`.
+/// Pull a `T` reference out of a boxed source error via the Provider API —
+/// the only portable way to reach into a type-erased source. Returns `None`
+/// on stable (without the unstable Provider API).
 fn source_request_ref<T: 'static>(source: &BoxError) -> Option<&T> {
     crate::__private::source_trace::<T>(&**source)
 }
@@ -357,10 +367,10 @@ mod tests {
     }
 
     #[test]
-    fn wrap_does_not_capture_traces() {
+    fn wrap_captures_traces_at_wrap_site() {
         let err = Welp::wrap(std::io::Error::other("x"), "msg");
-        assert!(err.oopsie_backtrace().is_none());
-        assert!(err.oopsie_spantrace().is_none());
+        assert!(err.oopsie_backtrace().is_some());
+        assert!(err.oopsie_spantrace().is_some());
     }
 
     #[test]
@@ -463,12 +473,40 @@ mod tests {
         assert!(core::error::request_ref::<SpanTrace>(&err).is_some());
     }
 
-    #[cfg(feature = "unstable-error-generic-member-access")]
     #[test]
     fn sourced_recovers_traces_from_diagnostic_source() {
-        let outer = Welp::wrap(Welp::new("inner"), "outer");
-        assert!(outer.oopsie_backtrace().is_some());
-        assert!(outer.oopsie_spantrace().is_some());
+        let inner = Welp::new("inner");
+        let outer = Welp::wrap(inner, "outer");
+        let bt = outer.oopsie_backtrace().expect("backtrace");
+        let st = outer.oopsie_spantrace().expect("spantrace");
+        // On nightly the Provider API is available, so the source's own
+        // (deeper) trace must win over the wrap-site capture.
+        #[cfg(feature = "unstable-error-generic-member-access")]
+        {
+            let source = StdError::source(&outer)
+                .and_then(|s| s.downcast_ref::<Welp>())
+                .expect("source is the inner Welp");
+            let inner_bt = source.oopsie_backtrace().expect("inner backtrace");
+            let inner_st = source.oopsie_spantrace().expect("inner spantrace");
+            assert!(
+                std::ptr::eq(
+                    std::ptr::from_ref::<Backtrace>(bt),
+                    std::ptr::from_ref::<Backtrace>(inner_bt)
+                ),
+                "outer should surface the source's backtrace, not the wrap-site one"
+            );
+            assert!(
+                std::ptr::eq(
+                    std::ptr::from_ref::<SpanTrace>(st),
+                    std::ptr::from_ref::<SpanTrace>(inner_st)
+                ),
+                "outer should surface the source's spantrace, not the wrap-site one"
+            );
+        }
+        #[cfg(not(feature = "unstable-error-generic-member-access"))]
+        {
+            let _ = (bt, st);
+        }
     }
 
     #[cfg(feature = "unstable-error-generic-member-access")]
@@ -479,12 +517,11 @@ mod tests {
         assert!(core::error::request_ref::<SpanTrace>(&outer).is_some());
     }
 
-    #[cfg(feature = "unstable-error-generic-member-access")]
     #[test]
-    fn sourced_recovers_nothing_from_foreign_source() {
+    fn sourced_falls_back_to_own_traces_for_foreign_source() {
         let outer = Welp::wrap(std::io::Error::other("x"), "outer");
-        assert!(outer.oopsie_backtrace().is_none());
-        assert!(outer.oopsie_spantrace().is_none());
+        assert!(outer.oopsie_backtrace().is_some());
+        assert!(outer.oopsie_spantrace().is_some());
     }
 
     // Compile-time guarantees about `Welp`'s shape.
