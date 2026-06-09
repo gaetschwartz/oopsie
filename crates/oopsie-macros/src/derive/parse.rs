@@ -518,9 +518,12 @@ pub struct FieldAttrs {
 
 #[derive(Debug, Default)]
 pub enum SourceKind {
-    /// Not a source field.
+    /// Not a source field (nothing specified).
     #[default]
     No,
+    /// Explicit opt-out (`#[oopsie(from(false))]`): never a source, even when
+    /// the field is named `source`.
+    Disabled,
     /// Marked as source (auto-detected or `#[oopsie(from)]`).
     Yes,
     /// Source with type transformation: `#[oopsie(from(Type, transform))]`.
@@ -552,6 +555,9 @@ impl darling::FromMeta for SourceKind {
         match item {
             syn::Meta::Path(_) => Ok(Self::Yes),
             syn::Meta::List(list) => {
+                if let Ok(b) = syn::parse2::<syn::LitBool>(list.tokens.clone()) {
+                    return Ok(if b.value { Self::Yes } else { Self::Disabled });
+                }
                 let parsed: SourceKindTransform = syn::parse2(list.tokens.clone())
                     .map_err(|e| darling::Error::custom(e).with_span(&list.tokens))?;
                 Ok(Self::Transformed {
@@ -560,7 +566,7 @@ impl darling::FromMeta for SourceKind {
                 })
             }
             syn::Meta::NameValue(nv) => Err(darling::Error::custom(
-                "`from` does not accept a `= value` form; use `from(Type, transform)`",
+                "`from` does not accept a `= value` form; use `from(false)` to opt out or `from(Type, transform)` for a custom source type",
             )
             .with_span(&nv.value)),
         }
@@ -674,7 +680,10 @@ impl FieldAttrs {
     }
 
     pub const fn is_source(&self) -> bool {
-        !matches!(self.from, SourceKind::No)
+        match self.from {
+            SourceKind::No | SourceKind::Disabled => false,
+            SourceKind::Yes | SourceKind::Transformed { .. } => true,
+        }
     }
 }
 
@@ -958,6 +967,24 @@ mod tests {
     #[test]
     fn source_kind_from_none_is_no() {
         assert!(matches!(SourceKind::from_none().unwrap(), SourceKind::No));
+    }
+
+    #[test]
+    fn source_kind_from_false_is_disabled() {
+        let meta: syn::Meta = parse_quote!(from(false));
+        assert!(matches!(
+            SourceKind::from_meta(&meta).unwrap(),
+            SourceKind::Disabled
+        ));
+    }
+
+    #[test]
+    fn source_kind_from_true_is_yes() {
+        let meta: syn::Meta = parse_quote!(from(true));
+        assert!(matches!(
+            SourceKind::from_meta(&meta).unwrap(),
+            SourceKind::Yes
+        ));
     }
 
     // ── ProvideAttr ─────────────────────────────────────────────────

@@ -108,8 +108,8 @@ pub fn gen_enum_selectors(
                     let ty = &source.ty;
                     (quote! { #ty }, quote! { let #source_ident = source; })
                 }
-                super::parse::SourceKind::No => {
-                    unreachable!("categorized.source set but kind is SourceKind::No")
+                super::parse::SourceKind::No | super::parse::SourceKind::Disabled => {
+                    unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
                 }
             };
             let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
@@ -277,8 +277,8 @@ pub fn gen_struct_selector(
                 let ty = &source.ty;
                 (quote! { #ty }, quote! { let #source_ident = source; })
             }
-            super::parse::SourceKind::No => {
-                unreachable!("categorized.source set but kind is SourceKind::No")
+            super::parse::SourceKind::No | super::parse::SourceKind::Disabled => {
+                unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
             }
         };
         let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
@@ -418,7 +418,9 @@ fn gen_build_error(
     let source_ident = &source_field.ident;
 
     let (source_type, source_transform) = match &source_field.kind {
-        SourceKind::No => unreachable!(),
+        SourceKind::No | SourceKind::Disabled => {
+            unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
+        }
         SourceKind::Yes => {
             let ty = &source_field.ty;
             (quote! { #ty }, None)
@@ -542,7 +544,9 @@ fn gen_build_error_struct(
     let source_ident = &source_field.ident;
 
     let (source_type, source_transform) = match &source_field.kind {
-        SourceKind::No => unreachable!(),
+        SourceKind::No | SourceKind::Disabled => {
+            unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
+        }
         SourceKind::Yes => {
             let ty = &source_field.ty;
             (quote! { #ty }, None)

@@ -182,3 +182,24 @@ fn struct_auto_box_source() {
     let src = err.source().expect("should have a source");
     assert_eq!(src.to_string(), "denied");
 }
+
+// ---- from(false) opts a field named "source" out of source detection ----
+
+#[derive(Debug, Oopsie)]
+enum DataError {
+    #[oopsie("data from {source}")]
+    Data {
+        #[oopsie(from(false))]
+        source: String,
+    },
+}
+
+#[test]
+fn from_false_opts_a_source_named_field_out() {
+    let err = data_oopsies::Data {
+        source: "sensor-3".to_owned(),
+    }
+    .build();
+    assert_eq!(err.to_string(), "data from sensor-3");
+    assert!(std::error::Error::source(&err).is_none());
+}
