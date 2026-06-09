@@ -747,9 +747,11 @@ fn parse_short_display_body(input: ParseStream) -> syn::Result<DisplayAttr> {
                 "transparent" | "capture" | "backtrace" | "spantrace" | "traces" => true,
                 "module" | "suffix" | "from" => true,
                 "display" | "provide" | "size" => ahead.peek(syn::token::Paren),
-                "help" | "code" | "vis" | "path" => {
-                    ahead.peek(Token![=]) && !ahead.peek(Token![==])
+                "help" | "code" | "vis" => {
+                    ahead.peek(syn::token::Paren)
+                        || (ahead.peek(Token![=]) && !ahead.peek(Token![==]))
                 }
+                "path" => ahead.peek(Token![=]) && !ahead.peek(Token![==]),
                 _ => false,
             };
             if is_keyword {
@@ -1011,6 +1013,25 @@ mod tests {
             #[oopsie("fmt {}", help = "X")]
         };
         extract_short_display(&attrs).unwrap_err();
+    }
+
+    #[test]
+    fn short_display_rejects_list_form_keyword_tail() {
+        let attrs: Vec<syn::Attribute> = parse_quote! {
+            #[oopsie("fmt {x}", help("try {x}"))]
+        };
+        let err = extract_short_display(&attrs).unwrap_err();
+        assert!(err.to_string().contains("cannot be combined"), "{err}");
+    }
+
+    #[test]
+    fn short_display_allows_non_keyword_call_arg() {
+        let attrs: Vec<syn::Attribute> = parse_quote! {
+            #[oopsie("fmt {}", helper(x))]
+        };
+        let (display, _kept) = extract_short_display(&attrs).unwrap();
+        let d = display.expect("expected a display attr");
+        assert_eq!(d.args.len(), 1);
     }
 
     #[test]
