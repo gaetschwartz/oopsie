@@ -64,12 +64,16 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
         });
     }
 
+    let body = if arms.is_empty() {
+        quote! { match *self {} }
+    } else {
+        quote! { match self { #(#arms)* } }
+    };
+
     Ok(quote! {
         impl #impl_generics ::core::fmt::Display for #enum_ident #ty_generics #where_clause {
             fn fmt(&self, #fmtr: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-                match self {
-                    #(#arms)*
-                }
+                #body
             }
         }
     })

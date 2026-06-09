@@ -447,16 +447,24 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         }
     };
 
+    let source_body = if source_arms.is_empty() {
+        quote! { match *self {} }
+    } else {
+        quote! {
+            // Bring `as_error_source` into scope so method-call autoderef
+            // can pick the `dyn Error + Send + Sync + 'static` impl for
+            // `Box<dyn Error + …>` fields.
+            use #oopsie_path::AsErrorSource as _;
+            match self {
+                #(#source_arms)*
+            }
+        }
+    };
+
     Ok(quote! {
         impl #impl_generics ::core::error::Error for #enum_ident #ty_generics #where_clause {
             fn source(&self) -> ::core::option::Option<&(dyn ::core::error::Error + 'static)> {
-                // Bring `as_error_source` into scope so method-call autoderef
-                // can pick the `dyn Error + Send + Sync + 'static` impl for
-                // `Box<dyn Error + …>` fields.
-                use #oopsie_path::AsErrorSource as _;
-                match self {
-                    #(#source_arms)*
-                }
+                #source_body
             }
 
             #provide_method

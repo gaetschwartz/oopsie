@@ -183,6 +183,18 @@ fn tuple_capture_field_initializes_both_elements() {
     let _ = traces.1.status();
 }
 
+// ---- Test: empty (never) enum derives ----
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum NeverError {}
+
+#[test]
+fn empty_enum_derives() {
+    fn assert_error<E: std::error::Error>() {}
+    assert_error::<NeverError>();
+}
+
 // (3) a user-defined Capturable type used as a capture field.
 #[derive(Debug, Default)]
 struct Marker {
