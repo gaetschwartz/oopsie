@@ -492,9 +492,9 @@ fn no_help_field_returns_none() {
 //
 // `help("fmt {}", expr)` parses as a DisplayAttr and renders through `::std::format!`,
 // exactly like `display(...)`. The generated `oopsie_help_text()` accessor binds the
-// variant's fields (mirroring the display arm), so the positional args may reference
-// them. (As with `display`, prefer `{}` + arg over inline `{field}` capture, which
-// would make the explicit arg redundant. `code = "..."` stays a plain string.)
+// variant's fields (mirroring the display arm), so positional args may reference them.
+// (Inline `{field}` capture without an explicit arg is covered separately below.
+// `code = "..."` stays a plain string.)
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -548,6 +548,103 @@ fn help_field_interpolation_via_provider() {
         "provider path should yield interpolated help"
     );
     assert_eq!(&*help.unwrap(), "Retry connecting to db.local");
+}
+
+// ---- help inline-capture interpolation (`{field}` with no explicit arg) ----
+//
+// `help = "{field}"` / `help("{field}")` carry no trailing args, but the format
+// string references a field by inline capture (like `format!("{x}")`). The macro
+// must detect the placeholder and render through `format!`, binding the fields —
+// not store the literal verbatim via `from_static`. A brace-free or escaped-only
+// string still takes the cheap static path.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(suffix, help = "fix the file at {path}")]
+struct StructInlineHelp {
+    path: String,
+}
+
+#[test]
+fn struct_inline_capture_help_renders_field() {
+    use oopsie::Diagnostic as _;
+    let err = StructInlineHelpOopsie {
+        path: "/etc/hosts".to_owned(),
+    }
+    .build();
+    let help = err.oopsie_help_text();
+    assert!(help.is_some(), "inline-capture help should render");
+    assert_eq!(&*help.unwrap(), "fix the file at /etc/hosts");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum HelpInlineError {
+    // List form, inline capture, no explicit arg.
+    #[oopsie("connect failed")]
+    #[oopsie(help("retry connecting to {host}"))]
+    ListForm { host: String },
+
+    // Name-value form, inline capture, no explicit arg.
+    #[oopsie("restart needed")]
+    #[oopsie(help = "restart {service}")]
+    NameValueForm { service: String },
+
+    // Escaped braces only, no real placeholder: stays on the static path but
+    // must unescape `{{`/`}}` to match format-string semantics.
+    #[oopsie("templating")]
+    #[oopsie(help = "wrap names in {{braces}}")]
+    EscapedOnly { unused: String },
+}
+
+#[test]
+fn enum_inline_capture_help_list_form_renders_field() {
+    use oopsie::Diagnostic as _;
+    let err = ListForm {
+        host: "db.local".to_owned(),
+    }
+    .build();
+    let help = err.oopsie_help_text();
+    assert!(help.is_some(), "inline-capture help should render");
+    assert_eq!(&*help.unwrap(), "retry connecting to db.local");
+}
+
+#[test]
+fn enum_inline_capture_help_name_value_form_renders_field() {
+    use oopsie::Diagnostic as _;
+    let err = NameValueForm {
+        service: "nginx".to_owned(),
+    }
+    .build();
+    let help = err.oopsie_help_text();
+    assert!(help.is_some(), "inline-capture help should render");
+    assert_eq!(&*help.unwrap(), "restart nginx");
+}
+
+#[test]
+fn help_escaped_braces_unescape_on_static_path() {
+    use oopsie::Diagnostic as _;
+    let err = EscapedOnly {
+        unused: "x".to_owned(),
+    }
+    .build();
+    let help = err.oopsie_help_text();
+    assert!(help.is_some(), "escaped-brace help should render");
+    assert_eq!(&*help.unwrap(), "wrap names in {braces}");
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn help_inline_capture_via_provider() {
+    let err = ListForm {
+        host: "db.local".to_owned(),
+    }
+    .build();
+    let help = core::error::request_value::<oopsie::HelpText>(&err);
+    assert!(
+        help.is_some(),
+        "provider path should render interpolated help"
+    );
+    assert_eq!(&*help.unwrap(), "retry connecting to db.local");
 }
 
 // ---- oopsie_error_code() stable accessor (static + dynamic code) ----

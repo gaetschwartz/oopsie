@@ -1,0 +1,5 @@
+error: unmatched `}` at byte 9 in format string; write `}}` for a literal `}`
+ --> tests/compile-fail/help_unmatched_close_brace.rs:9:21
+  |
+9 |     #[oopsie(help = "close it }")]
+  |                     ^^^^^^^^^^^^

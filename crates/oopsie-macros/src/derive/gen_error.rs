@@ -186,7 +186,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
 
         // Provide from help/code in VariantAttrs
         if let Some(help) = &variant_attrs.help {
-            provide_stmts.push(gen_help_provide(help, oopsie_path, &req));
+            provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
         }
         if let Some(code) = &variant_attrs.code {
             provide_stmts.push(quote! {
@@ -314,16 +314,18 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                 Self::#variant_ident { #help_field, .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(#help_field.to_string())),
             });
         } else if let Some(help) = &variant_attrs.help {
-            let fmt = &help.format_str;
-            let args = &help.args;
-            if args.is_empty() {
+            if help.is_static() {
+                let lit = help.static_lit()?;
                 help_arms.push(quote! {
                     #(#cfg_attrs)*
-                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from_static(#fmt)),
+                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from_static(#lit)),
                 });
             } else {
-                // The format args may reference variant fields by name, so bind
-                // them in the pattern (mirroring the `display` arm).
+                let fmt = &help.format_str;
+                let args = &help.args;
+                // The format string may reference variant fields — positional
+                // args or inline `{field}` capture — so bind them in the
+                // pattern (mirroring the `display` arm).
                 let help_field_names: Vec<&syn::Ident> = match &variant.fields {
                     syn::Fields::Named(f) => {
                         f.named.iter().filter_map(|f| f.ident.as_ref()).collect()
@@ -338,7 +340,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                 help_arms.push(quote! {
                     #(#cfg_attrs)*
                     #[allow(unused_variables)]
-                    #help_pattern => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*))),
+                    #help_pattern => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*))),
                 });
             }
         } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
@@ -533,7 +535,7 @@ pub fn gen_struct_error(
 
     // Help/code from VariantAttrs (user-specified via #[oopsie(help = "...", code = "...")])
     if let Some(help) = &variant_attrs.help {
-        provide_stmts.push(gen_help_provide(help, oopsie_path, &req));
+        provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
     }
     if let Some(code) = &variant_attrs.code {
         provide_stmts.push(quote! {
@@ -668,18 +670,32 @@ pub fn gen_struct_error(
             }
         }
     } else if let Some(help) = &variant_attrs.help {
-        let fmt = &help.format_str;
-        let args = &help.args;
-        if args.is_empty() {
+        if help.is_static() {
+            let lit = help.static_lit()?;
             quote! {
                 fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
-                    ::core::option::Option::Some(#oopsie_path::HelpText::from_static(#fmt))
+                    ::core::option::Option::Some(#oopsie_path::HelpText::from_static(#lit))
                 }
             }
         } else {
+            let fmt = &help.format_str;
+            let args = &help.args;
+            // The format string may reference fields via inline `{field}`
+            // capture, so destructure them into locals (mirroring the `Display`
+            // impl). `#[allow(unused_variables)]` covers fields no arg uses.
+            let field_names: Vec<&syn::Ident> = match &data.fields {
+                syn::Fields::Named(f) => f.named.iter().filter_map(|f| f.ident.as_ref()).collect(),
+                syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
+            };
+            let destructure = if field_names.is_empty() {
+                quote! {}
+            } else {
+                quote! { #[allow(unused_variables)] let Self { #(#field_names),*, .. } = self; }
+            };
             quote! {
                 fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
-                    ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*)))
+                    #destructure
+                    ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*)))
                 }
             }
         }
@@ -712,17 +728,24 @@ pub fn gen_struct_error(
     })
 }
 
-fn gen_help_provide(help: &DisplayAttr, oopsie_path: &syn::Path, req: &syn::Ident) -> TokenStream2 {
-    let fmt = &help.format_str;
-    let args = &help.args;
-    if args.is_empty() {
-        quote! {
-            #req.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from_static(#fmt));
-        }
+fn gen_help_provide(
+    help: &DisplayAttr,
+    oopsie_path: &syn::Path,
+    req: &syn::Ident,
+) -> syn::Result<TokenStream2> {
+    if help.is_static() {
+        let lit = help.static_lit()?;
+        Ok(quote! {
+            #req.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from_static(#lit));
+        })
     } else {
-        quote! {
-            #req.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from(::std::format!(#fmt, #(#args),*)));
-        }
+        let fmt = &help.format_str;
+        let args = &help.args;
+        // The enclosing `provide` method already destructures every field, so
+        // an inline `{field}` capture in the format string resolves here.
+        Ok(quote! {
+            #req.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*)));
+        })
     }
 }
 

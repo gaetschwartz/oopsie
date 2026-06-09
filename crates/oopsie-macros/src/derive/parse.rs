@@ -274,6 +274,117 @@ impl darling::FromMeta for DisplayAttr {
     }
 }
 
+impl DisplayAttr {
+    /// Whether this renders to a `&'static str` literal rather than a `format!`.
+    ///
+    /// True iff there are no explicit args *and* the format string has no
+    /// `{…}` placeholder: a placeholder-free string is byte-identical whether
+    /// stored as a literal or run through `format!`, so the cheap const path is
+    /// equivalent. An inline-capture placeholder like `{field}` makes this
+    /// false even with zero trailing args, so it routes through `format!`.
+    pub fn is_static(&self) -> bool {
+        self.args.is_empty() && !format_str_has_placeholder(&self.format_str.value())
+    }
+
+    /// The literal to emit on the static path (`is_static()` true): the format
+    /// string with `{{`/`}}` escapes collapsed, so a `from_static` render
+    /// matches what `format!` would have produced.
+    ///
+    /// Errors on an unmatched `}`: with no placeholder to close, a lone `}` is
+    /// malformed (rustc rejects it in real format strings), so the static path
+    /// rejects it too rather than emitting it verbatim — keeping help at parity
+    /// with `display`, which routes through `write!`.
+    pub fn static_lit(&self) -> syn::Result<LitStr> {
+        let mut value = self.format_str.value();
+        if let Some(pos) = unmatched_close_brace(&value) {
+            return Err(syn::Error::new_spanned(
+                &self.format_str,
+                format!(
+                    "unmatched `}}` at byte {pos} in format string; \
+                     write `}}}}` for a literal `}}`"
+                ),
+            ));
+        }
+        unescape_format_braces(&mut value);
+        Ok(LitStr::new(&value, self.format_str.span()))
+    }
+}
+
+/// Whether a format string contains a real `{…}` placeholder, treating `{{` as
+/// an escape. Mirrors rustc's format parser (`rustc_parse_format`): a
+/// placeholder is opened *only* by an unescaped `{`, so that is all we scan
+/// for — `}`/`}}` never open one.
+fn format_str_has_placeholder(s: &str) -> bool {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'{' {
+            if b.get(i + 1) == Some(&b'{') {
+                i += 2;
+            } else {
+                return true;
+            }
+        } else {
+            i += 1;
+        }
+    }
+    false
+}
+
+/// Byte position of the first unmatched `}` (a `}` not part of a `}}` escape),
+/// or `None` if every `}` is escaped. Used only on the static path, where there
+/// is no placeholder for a `}` to close — so any lone `}` is malformed, exactly
+/// as rustc's parser reports.
+fn unmatched_close_brace(s: &str) -> Option<usize> {
+    let b = s.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'}' {
+            if b.get(i + 1) == Some(&b'}') {
+                i += 2;
+            } else {
+                return Some(i);
+            }
+        } else {
+            i += 1;
+        }
+    }
+    None
+}
+
+/// Collapse `{{`→`{` and `}}`→`}` in place, mirroring the `Piece::Lit` arms of
+/// rustc's format parser. `String::retain` compacts the buffer it already owns
+/// (from `LitStr::value()`) without a second allocation; the captured flags
+/// carry the "just saw the first brace of a pair" state across chars.
+fn unescape_format_braces(s: &mut String) {
+    let (mut after_open, mut after_close) = (false, false);
+    s.retain(|c| match c {
+        '{' if after_open => {
+            after_open = false;
+            false
+        }
+        '{' => {
+            after_open = true;
+            after_close = false;
+            true
+        }
+        '}' if after_close => {
+            after_close = false;
+            false
+        }
+        '}' => {
+            after_close = true;
+            after_open = false;
+            true
+        }
+        _ => {
+            after_open = false;
+            after_close = false;
+            true
+        }
+    });
+}
+
 /// Outer attribute container for enum variants. Flattens `VariantAttrsInner`
 /// plus `vis`.
 #[derive(Debug, Default, darling::FromAttributes)]
@@ -746,6 +857,62 @@ mod tests {
         let d = DisplayAttr::from_meta(&meta).unwrap();
         assert_eq!(d.format_str.value(), "plain");
         assert!(d.args.is_empty());
+    }
+
+    // ── format-string helpers ───────────────────────────────────────
+
+    #[test]
+    fn placeholder_detection_matches_rustc_escapes() {
+        assert!(!format_str_has_placeholder("plain text"));
+        assert!(!format_str_has_placeholder("escaped {{ and }}"));
+        assert!(!format_str_has_placeholder("a }} lone } close"));
+        assert!(format_str_has_placeholder("{field}"));
+        assert!(format_str_has_placeholder("positional {}"));
+        assert!(format_str_has_placeholder("a {{b}} then {c}"));
+        // A lone trailing `{` opens an (ill-formed) placeholder — same as rustc.
+        assert!(format_str_has_placeholder("trailing {"));
+    }
+
+    #[test]
+    fn unescape_collapses_double_braces_in_place() {
+        let mut s = "wrap {{names}} and {{{{nested}}}}".to_owned();
+        unescape_format_braces(&mut s);
+        assert_eq!(s, "wrap {names} and {{nested}}");
+
+        let mut plain = "no braces here".to_owned();
+        unescape_format_braces(&mut plain);
+        assert_eq!(plain, "no braces here");
+    }
+
+    #[test]
+    fn is_static_distinguishes_literal_from_interpolated() {
+        let plain: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(help = "plain")).unwrap();
+        assert!(plain.is_static());
+
+        let escaped: DisplayAttr =
+            DisplayAttr::from_meta(&parse_quote!(help = "use {{x}}")).unwrap();
+        assert!(escaped.is_static());
+        assert_eq!(escaped.static_lit().unwrap().value(), "use {x}");
+
+        let inline: DisplayAttr =
+            DisplayAttr::from_meta(&parse_quote!(help = "fix {path}")).unwrap();
+        assert!(!inline.is_static());
+
+        let positional: DisplayAttr =
+            DisplayAttr::from_meta(&parse_quote!(help("hi {}", name))).unwrap();
+        assert!(!positional.is_static());
+    }
+
+    #[test]
+    fn static_lit_rejects_unmatched_close_brace() {
+        // A lone `}` is malformed in a format string (rustc errors on it); the
+        // static path must reject it rather than render it literally.
+        let stray: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(help = "oops }")).unwrap();
+        stray.static_lit().unwrap_err();
+
+        // `}}` is a valid escape and unescapes to a single `}`.
+        let escaped: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(help = "ok }}")).unwrap();
+        assert_eq!(escaped.static_lit().unwrap().value(), "ok }");
     }
 
     // ── SourceKind ──────────────────────────────────────────────────
