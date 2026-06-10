@@ -18,7 +18,7 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
     // Mangled formatter binding: the destructure binds every field name (so the
     // format string can interpolate `{field}`), which would shadow a `Formatter`
     // parameter named `f` if a user field is also named `f`.
-    let fmtr = format_ident!("__oopsie_f");
+    let fmtr = formatter(&input.data);
 
     let mut arms = Vec::new();
     for variant in &data.variants {
@@ -100,7 +100,7 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
 
     // See `gen_enum_display`: the field destructure would shadow a `Formatter`
     // parameter named `f` when a user field is also named `f`.
-    let fmtr = format_ident!("__oopsie_f");
+    let fmtr = formatter(&input.data);
 
     let write_call = if let Some(display) = &variant_attrs.display {
         gen_write_call(display, &fmtr)
@@ -127,4 +127,32 @@ fn gen_write_call(display: &DisplayAttr, fmtr: &syn::Ident) -> TokenStream2 {
     let fmt = &display.format_str;
     let args = &display.args;
     quote! { ::core::write!(#fmtr, #fmt #(, #args)*) }
+}
+
+fn formatter(data: &syn::Data) -> syn::Ident {
+    let field_names = match data {
+        syn::Data::Struct(ds) => ds
+            .fields
+            .iter()
+            .filter_map(|f| f.ident.as_ref())
+            .collect::<Vec<_>>(),
+        syn::Data::Enum(de) => de
+            .variants
+            .iter()
+            .flat_map(|v| match &v.fields {
+                syn::Fields::Named(f) => Some(f.named.iter().filter_map(|f| f.ident.as_ref())),
+                _ => None,
+            })
+            .flatten()
+            .collect::<Vec<_>>(),
+        syn::Data::Union(_) => unreachable!(),
+    };
+
+    let mut candidate = format_ident!("__oopsie_fmt");
+    let mut n = 0u32;
+    while field_names.iter().any(|id| *id == &candidate) {
+        candidate = format_ident!("__oopsie_fmt_{n}");
+        n += 1;
+    }
+    candidate
 }
