@@ -207,6 +207,7 @@ impl<E: Diagnostic> Report<E> {
     }
 
     /// Format the span trace if available.
+    #[cfg(feature = "tracing")]
     fn write_span_trace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Some(span_trace) = self.error().and_then(|e| e.oopsie_spantrace()) else {
             return Ok(());
@@ -298,6 +299,7 @@ impl<T, E: Diagnostic> core::ops::FromResidual<Result<T, E>> for Report<E> {
 impl<E: Diagnostic> fmt::Display for Report<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_error_chain(f)?;
+        #[cfg(feature = "tracing")]
         self.write_span_trace(f)?;
         self.write_backtrace(f)?;
         Ok(())
