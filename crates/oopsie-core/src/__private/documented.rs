@@ -16,26 +16,24 @@
 
 #![allow(
     clippy::needless_pass_by_value,
-    reason = "placeholder params exist only to shape the by-value signature shown on hover; &T/Copy would distort it"
+    clippy::missing_const_for_fn,
+    reason = "placeholder fns exist only to shape the signature shown on hover; by-value params and non-const are intentional"
 )]
 
 /// Placeholder types shown in the hover signatures of value-taking keywords.
 /// Each stands for the shape of value the keyword accepts.
 pub mod params {
     /// A bare identifier, e.g. `my_module`.
-    pub struct Name;
+    pub struct IdentiferOrFalse;
 
     /// A string literal, e.g. `"..."`.
-    pub struct Text;
-
-    /// `true` or `false`.
-    pub struct Bool;
+    pub struct StringOrFalse;
 
     /// An exact size or a range, e.g. `64`, `..=64`, `16..`, `16..=64`.
     pub struct IntOrRange;
 
     /// A path to the `oopsie` crate, as a string: `"my_crate::oopsie"`.
-    pub struct CratePath;
+    pub struct Path;
 
     /// A visibility, e.g. `pub`, `pub(crate)`.
     pub struct Vis;
@@ -44,7 +42,7 @@ pub mod params {
     pub struct FormatString;
 
     /// Optional trailing `format!` arguments.
-    pub struct FmtArgs;
+    pub struct FmtArg;
 
     /// `Type => expr`, optionally `ref, Type => expr`.
     pub struct TypeArrowExpr;
@@ -57,43 +55,50 @@ pub mod params {
 
     /// A nested settings list, e.g. `key(option = value, ...)`.
     pub struct Settings;
+
+    /// Argument for `#[oopsie(...)]`.
+    pub struct OopsieArg;
 }
 
 /// The `oopsie` helper-attribute name itself, read by `#[derive(Oopsie)]` and
-/// the `#[oopsie::oopsie]` macro. The full overview lives on the [`oopsie`] fn,
+/// the `#[oopsie::oopsie]` macro. The full overview lives on the `oopsie` fn,
 /// which is what hover surfaces.
 pub mod helper {
-    /// The `oopsie` configuration attribute, read by `#[derive(Oopsie)]` and
-    /// the `#[oopsie::oopsie]` macro. Which keywords it accepts depends on
-    /// where it sits — on the error type, on a variant/struct, or on a field.
-    /// Hover a keyword inside the parentheses for its specific meaning.
-    pub const fn oopsie() {}
+    use super::params::OopsieArg;
+
+    /// The `oopsie` configuration attribute, read by `#[derive(Oopsie)]` and the
+    /// `#[oopsie::oopsie]` macro. Which keywords it accepts depends on where it
+    /// sits — on the error type, on a variant/struct, or on a field. Hover a
+    /// keyword inside the parentheses for its specific meaning.
+    pub fn oopsie(args: Vec<OopsieArg>) {
+        _ = args;
+    }
 }
 
 /// Keywords accepted in `#[oopsie(...)]` on the error type itself.
 pub mod container {
-    use super::params::{CratePath, IntOrRange, Name, Text, Vis};
+    use super::params::{IdentiferOrFalse, IntOrRange, Path, StringOrFalse, Vis};
 
     /// Wraps the generated context selectors in a module
     /// (enum default: on, auto-named; struct default: off).
     ///
     /// Forms: `module`, `module(name)`, `module(false)`.
-    pub const fn module(name: Name) {
+    pub fn module(name: IdentiferOrFalse) {
         _ = name;
     }
 
     /// Appends a suffix to generated selector names
     /// (enum default: none; struct default: `"Oopsie"`).
     ///
-    /// Forms: `suffix`, `suffix = "X"`, `suffix(false)`.
-    pub const fn suffix(text: Text) {
+    /// Forms: `suffix`, `suffix("X")`, `suffix(false)`.
+    pub fn suffix(text: StringOrFalse) {
         _ = text;
     }
 
     /// Asserts the size of the error type at compile time.
     ///
     /// Forms: `size(N)`, `size(..=N)`, `size(N..)`, `size(N..=M)`.
-    pub const fn size(size: IntOrRange) {
+    pub fn size(size: IntOrRange) {
         _ = size;
     }
 
@@ -101,7 +106,7 @@ pub mod container {
     /// (default: `::oopsie`).
     ///
     /// Form: `path = "some::path"`.
-    pub const fn path(path: CratePath) {
+    pub fn path(path: Path) {
         _ = path;
     }
 
@@ -109,7 +114,7 @@ pub mod container {
     /// (default: the error type's own visibility).
     ///
     /// Forms: `vis(pub)`, `vis(pub(crate))`, ...
-    pub const fn vis(vis: Vis) {
+    pub fn vis(vis: Vis) {
         _ = vis;
     }
 }
@@ -117,26 +122,26 @@ pub mod container {
 /// Keywords accepted in `#[oopsie(...)]` on an enum variant (or on a struct,
 /// which plays both container and variant roles).
 pub mod variant {
-    use super::params::{FmtArgs, FormatString, TypeArrowExpr, Vis};
+    use super::params::{FmtArg, FormatString, TypeArrowExpr, Vis};
 
     /// Sets the `Display` message, with `format!` semantics (named or
     /// positional interpolation).
     ///
     /// Forms: `display("msg {field}")`, `display("msg {}", expr)`.
-    pub const fn display(fmt: FormatString, args: FmtArgs) {
+    pub fn display(fmt: FormatString, args: Vec<FmtArg>) {
         _ = fmt;
         _ = args;
     }
 
     /// Delegates `Display` and `source` to the inner source field, and
     /// generates a `From` impl instead of a context selector.
-    pub const fn transparent() {}
+    pub fn transparent() {}
 
     /// Attaches help text, surfaced via `Diagnostic::oopsie_help_text` and
     /// shown by `Report`.
     ///
     /// Forms: `help = "..."`, `help("fmt {}", args)`.
-    pub const fn help(text: FormatString, args: FmtArgs) {
+    pub fn help(text: FormatString, args: Vec<FmtArg>) {
         _ = text;
         _ = args;
     }
@@ -144,7 +149,7 @@ pub mod variant {
     /// Attaches an error code, surfaced via `Diagnostic::oopsie_error_code`.
     ///
     /// Forms: `code = "..."`, `code("fmt {}", args)`.
-    pub const fn code(code: FormatString, args: FmtArgs) {
+    pub fn code(code: FormatString, args: Vec<FmtArg>) {
         _ = code;
         _ = args;
     }
@@ -153,14 +158,14 @@ pub mod variant {
     /// provider API (with the `unstable` feature).
     ///
     /// Forms: `provide(Type => expr)`, `provide(ref, Type => expr)`.
-    pub const fn provide(spec: TypeArrowExpr) {
+    pub fn provide(spec: TypeArrowExpr) {
         _ = spec;
     }
 
     /// Overrides this variant's selector visibility.
     ///
     /// Forms: `vis(pub)`, `vis(pub(crate))`, ...
-    pub const fn vis(vis: Vis) {
+    pub fn vis(vis: Vis) {
         _ = vis;
     }
 }
@@ -174,48 +179,48 @@ pub mod field {
     ///
     /// Forms: `from`, `from(false)` (opt a `source`-named field out),
     /// `from(Type, transform)` (accept `Type`, store `transform(value)`).
-    pub const fn from(spec: TypeAndTransform) {
+    pub fn from(spec: TypeAndTransform) {
         _ = spec;
     }
 
     /// Auto-fills this field via `Capturable` when the error is constructed;
     /// the field is excluded from the context selector.
-    pub const fn capture() {}
+    pub fn capture() {}
 
     /// Provides a value or reference through the `std::error::Request`
     /// provider API (with the `unstable` feature).
     ///
     /// Forms: `provide(Type => expr)`, `provide(ref, Type => expr)`.
-    pub const fn provide(spec: TypeArrowExpr) {
+    pub fn provide(spec: TypeArrowExpr) {
         _ = spec;
     }
 
     /// Marks this field as the captured backtrace. The field type's last
     /// path segment must be `Backtrace`.
-    pub const fn backtrace() {}
+    pub fn backtrace() {}
 
     /// Marks this field as the captured span trace. The field type's last
     /// path segment must be `SpanTrace`.
-    pub const fn spantrace() {}
+    pub fn spantrace() {}
 
     /// Marks this field as the packed `(Backtrace, SpanTrace)` pair.
-    pub const fn traces() {}
+    pub fn traces() {}
 
     /// Uses this field's `Display` output as the error's dynamic help text.
-    pub const fn help() {}
+    pub fn help() {}
 }
 
 /// Keywords accepted at the top level of the `#[oopsie::oopsie(...)]`
 /// attribute macro's argument list.
 pub mod attr {
-    use super::params::{CratePath, Settings};
+    use super::params::{Path, Settings};
 
     /// Injects trace-capture fields (backtrace + spantrace, both on by
     /// default) into every variant / the struct.
     ///
     /// Forms: `traced`, `traced(false)`,
     /// `traced(backtrace(...), spantrace(...), timestamp(...), packed = ..., boxed = ...)`.
-    pub const fn traced(settings: Settings) {
+    pub fn traced(settings: Settings) {
         _ = settings;
     }
 
@@ -225,7 +230,7 @@ pub mod attr {
     ///
     /// Forms: `code = false`, `code(r#type = Path)`
     /// (code type default: `ErrorCode`).
-    pub const fn code(settings: Settings) {
+    pub fn code(settings: Settings) {
         _ = settings;
     }
 
@@ -234,7 +239,7 @@ pub mod attr {
     /// the type itself wins over this.
     ///
     /// Form: `path = "some::path"`.
-    pub const fn path(path: CratePath) {
+    pub fn path(path: Path) {
         _ = path;
     }
 }
@@ -242,14 +247,14 @@ pub mod attr {
 /// Keywords accepted nested inside the `#[oopsie::oopsie(...)]` attribute
 /// macro's argument list.
 pub mod traced {
-    use super::params::{Bool, Settings, TypePath};
+    use super::params::{Settings, TypePath};
 
     /// Enables and tunes capture of the backtrace (default: on). Mentioning
     /// one part never disables the others.
     ///
     /// Forms: `backtrace`, `backtrace(false)`,
     /// `backtrace(r#type = Path, boxed = ..., enabled = ...)`.
-    pub const fn backtrace(settings: Settings) {
+    pub fn backtrace(settings: Settings) {
         _ = settings;
     }
 
@@ -258,14 +263,14 @@ pub mod traced {
     ///
     /// Forms: `spantrace`, `spantrace(false)`,
     /// `spantrace(r#type = Path, boxed = ..., enabled = ...)`.
-    pub const fn spantrace(settings: Settings) {
+    pub fn spantrace(settings: Settings) {
         _ = settings;
     }
 
     /// Injects an auto-captured timestamp field (default: off).
     ///
     /// Forms: `timestamp`, `timestamp(chrono = ..., provide = ...)`.
-    pub const fn timestamp(settings: Settings) {
+    pub fn timestamp(settings: Settings) {
         _ = settings;
     }
 
@@ -274,7 +279,7 @@ pub mod traced {
     /// requires backtrace and spantrace to share one boxing mode.
     ///
     /// Forms: `packed`, `packed = false`.
-    pub const fn packed(enabled: Bool) {
+    pub fn packed(enabled: bool) {
         _ = enabled;
     }
 
@@ -283,7 +288,7 @@ pub mod traced {
     /// `backtrace(...)`/`spantrace(...)`.
     ///
     /// Forms: `boxed`, `boxed = false`.
-    pub const fn boxed(enabled: Bool) {
+    pub fn boxed(enabled: bool) {
         _ = enabled;
     }
 
@@ -292,7 +297,7 @@ pub mod traced {
     /// default: off).
     ///
     /// Form: `chrono = true`.
-    pub const fn chrono(enabled: Bool) {
+    pub fn chrono(enabled: bool) {
         _ = enabled;
     }
 
@@ -300,7 +305,7 @@ pub mod traced {
     /// `std::error::Request` provider API (default: off).
     ///
     /// Form: `provide = true`.
-    pub const fn provide(enabled: Bool) {
+    pub fn provide(enabled: bool) {
         _ = enabled;
     }
 
@@ -309,7 +314,7 @@ pub mod traced {
     /// `code(...)`.
     ///
     /// Form: `r#type = some::Path`.
-    pub const fn r#type(r#type: TypePath) {
+    pub fn r#type(r#type: TypePath) {
         _ = r#type;
     }
 
@@ -318,7 +323,7 @@ pub mod traced {
     /// it counts as enabled.
     ///
     /// Forms: `enabled = true`, `enabled = false`.
-    pub const fn enabled(enabled: Bool) {
+    pub fn enabled(enabled: bool) {
         _ = enabled;
     }
 }

@@ -99,7 +99,7 @@ struct StructSinkError {
 
 #[oopsie::oopsie(
     traced(
-        backtrace(r#type = ::oopsie::Backtrace, boxed = true, enabled = true),
+        backtrace(r#type = "::oopsie::Backtrace", boxed = true, enabled = true),
         spantrace(enabled = true),
         timestamp(chrono = false, provide = true),
         packed = false,
