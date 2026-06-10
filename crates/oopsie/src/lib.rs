@@ -83,24 +83,29 @@
 //! panics are rendered in the same style:
 //!
 //! ```
+//! # #[cfg(feature = "fancy")]
 //! use oopsie::Report;
 //! use oopsie::prelude::*;
 //!
+//! # #[cfg(feature = "fancy")]
 //! #[oopsie::oopsie(traced)]
 //! pub enum AppError {
 //!     #[oopsie("Key not found: {key}")]
 //!     MissingKey { key: String },
 //! }
 //!
+//! # #[cfg(feature = "fancy")]
 //! fn run() -> Result<(), AppError> {
 //!     let config: Option<&str> = Some("42");
 //!     let _value = config.context(app_oopsies::MissingKey { key: "answer" })?;
 //!     Ok(())
 //! }
 //!
+//! # #[cfg(feature = "fancy")]
 //! fn main() -> Report<AppError> {
 //!     Report::run(run)
 //! }
+//! # #[cfg(not(feature = "fancy"))] fn main() {}
 //! ```
 //!
 //! When `run` returns an error, the report is printed to stderr and the
