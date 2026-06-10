@@ -101,12 +101,10 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | Parameter | Effect |
 /// |-----------|--------|
 /// | `traced` | Inject backtrace + spantrace fields, plus an auto error code |
-/// | `code` | Tune (or disable) the auto error code |
 /// | `path` | Path to the `oopsie` crate in generated impls |
 /// | `debug` | Skip the automatic `Debug` derive |
 ///
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/traced.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/code.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/path.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/debug.md")]
 ///
@@ -123,6 +121,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | `timestamp` | Inject an auto-captured timestamp field (default off) |
 /// | `packed` | Store both traces as one `(Backtrace, SpanTrace)` field |
 /// | `boxed` | Box the injected trace field(s) |
+/// | `code` | Tune (or disable) the auto error code |
 /// | `chrono` | Use `chrono::DateTime<Local>` timestamps |
 /// | `provide` | Expose the timestamp via the provider API |
 /// | `r#type` | Override the injected type for this part |
@@ -133,6 +132,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/timestamp.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/packed.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/boxed.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/code.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/chrono.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/provide.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/type.md")]

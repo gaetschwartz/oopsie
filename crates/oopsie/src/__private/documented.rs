@@ -182,11 +182,6 @@ pub mod attr {
         _ = settings;
     }
 
-    #[doc = include_str!("keyword_docs/attr/code.md")]
-    pub fn code(settings: Settings) {
-        _ = settings;
-    }
-
     #[doc = include_str!("keyword_docs/attr/path.md")]
     pub fn path(path: Path) {
         _ = path;
@@ -221,6 +216,11 @@ pub mod traced {
     #[doc = include_str!("keyword_docs/traced/packed.md")]
     pub fn packed(enabled: bool) {
         _ = enabled;
+    }
+
+    #[doc = include_str!("keyword_docs/traced/code.md")]
+    pub fn code(settings: Settings) {
+        _ = settings;
     }
 
     #[doc = include_str!("keyword_docs/traced/boxed.md")]

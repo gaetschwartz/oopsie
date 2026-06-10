@@ -12,6 +12,7 @@ pub struct TracedArgs {
     pub timestamp: FieldSetting<false, TimestampSettings>,
     pub packed: BetterFlag<true>,
     pub boxed: BetterFlag<true>,
+    pub code: FieldSetting<true, CodeSettings>,
 }
 
 impl Default for TracedArgs {
@@ -22,6 +23,7 @@ impl Default for TracedArgs {
             timestamp: FieldSetting::Flag(false),
             packed: BetterFlag::Default,
             boxed: BetterFlag::Default,
+            code: FieldSetting::Flag(true),
         }
     }
 }

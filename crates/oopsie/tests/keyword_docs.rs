@@ -93,19 +93,19 @@ struct StructSinkError {
     cause: Box<io::Error>,
 }
 
-// ---- Attribute macro: every top-level argument (traced, code, path) and
-// ---- every nested key (backtrace, spantrace, timestamp, packed, boxed,
+// ---- Attribute macro: every top-level argument (traced, path) and every
+// ---- nested key (backtrace, spantrace, timestamp, packed, boxed, code,
 // ---- chrono, provide, r#type, enabled) in their settings-list forms.
 
 #[oopsie::oopsie(
     traced(
         backtrace(r#type = "::oopsie::Backtrace", boxed = true, enabled = true),
         spantrace(enabled = true),
-        timestamp(chrono = false, provide = true),
+        timestamp(chrono = false, provide = true, enabled = true),
         packed = false,
-        boxed = true
+        boxed = true,
+        code(r#type = ::oopsie::ErrorCode)
     ),
-    code(r#type = ::oopsie::ErrorCode),
     path = "::oopsie"
 )]
 enum AttrSinkError {
@@ -116,7 +116,7 @@ enum AttrSinkError {
 // ---- Attribute macro: the bool forms of the top-level arguments
 // ---- (`debug = false` exercises the `attr::debug` doc target).
 
-#[oopsie::oopsie(traced, code = false, debug = false)]
+#[oopsie::oopsie(traced(code = false), debug = false)]
 #[derive(Debug)]
 enum AttrFlagError {
     #[oopsie("flag form")]

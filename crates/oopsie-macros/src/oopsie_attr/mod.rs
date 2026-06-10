@@ -13,13 +13,12 @@ use syn::parse_quote;
 use syn::spanned::Spanned as _;
 
 use crate::derive;
-use crate::traced::args::{CodeSettings, TracedArgs};
+use crate::traced::args::TracedArgs;
 use crate::utils::FieldSetting;
 
 #[derive(Debug, darling::FromMeta)]
 pub struct OopsieAttrArgs {
     pub traced: Option<FieldSetting<true, TracedArgs>>,
-    pub code: FieldSetting<true, CodeSettings>,
     pub debug: crate::utils::BetterFlag<true>,
     pub path: Option<syn::Path>,
 }
@@ -27,7 +26,14 @@ pub struct OopsieAttrArgs {
 /// Trace options that only exist nested inside `traced(...)`; spelled at the
 /// top level they get a targeted error instead of darling's generic
 /// unknown-field one.
-const NESTED_ONLY_KEYS: &[&str] = &["backtrace", "spantrace", "timestamp", "packed", "boxed"];
+const NESTED_ONLY_KEYS: &[&str] = &[
+    "backtrace",
+    "spantrace",
+    "timestamp",
+    "packed",
+    "boxed",
+    "code",
+];
 
 pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStream2> {
     let meta = NestedMeta::parse_meta_list(attrs)?;
@@ -96,7 +102,7 @@ fn expand_enum(
             .as_ref()
             .expect("needs_tracing implies traced is present")
             .settings();
-        crate::traced::expand_enum::expand_enum(&traced, &args.code, &oopsie_path, span, item)?
+        crate::traced::expand_enum::expand_enum(&traced, &traced.code, &oopsie_path, span, item)?
     } else {
         quote! { #item }
     };
@@ -155,7 +161,13 @@ fn expand_struct(
             .as_ref()
             .expect("needs_tracing implies traced is present")
             .settings();
-        crate::traced::expand_struct::expand_struct(&traced, &args.code, &oopsie_path, span, item)?
+        crate::traced::expand_struct::expand_struct(
+            &traced,
+            &traced.code,
+            &oopsie_path,
+            span,
+            item,
+        )?
     } else {
         quote! { #item }
     };
@@ -355,6 +367,12 @@ mod tests {
         )
         .unwrap_err();
         assert!(err.to_string().contains("traced(packed = false)"), "{err}");
+    }
+
+    #[test]
+    fn top_level_code_points_at_nested_form() {
+        let err = expand(quote! { code = false }, quote! { pub struct S { x: u32 } }).unwrap_err();
+        assert!(err.to_string().contains("traced(code = false)"), "{err}");
     }
 
     #[test]

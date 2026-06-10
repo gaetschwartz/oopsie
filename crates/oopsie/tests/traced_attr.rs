@@ -195,7 +195,7 @@ fn traced_explicit_spantrace_only() {
 
 // ---- Test 11: code = false disables auto error code ----
 
-#[oopsie(traced, code = false)]
+#[oopsie(traced(code = false))]
 pub enum NoCodeError {
     #[oopsie("no code")]
     NoCode { msg: String },
