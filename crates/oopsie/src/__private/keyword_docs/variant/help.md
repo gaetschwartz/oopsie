@@ -3,7 +3,7 @@ Attaches static help text to the variant or struct, surfaced via
 semantics, so it can interpolate the item's fields. For help derived from a
 field's runtime `Display`, use the field-level `#[oopsie(help)]` instead.
 
-Forms: `help = "..."`, `help("fmt {}", args)`.
+Forms: `help = "..."`, `help("...")`, `help("... {}", expr)`.
 
 ### Example
 ```

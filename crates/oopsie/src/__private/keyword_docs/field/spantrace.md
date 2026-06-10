@@ -3,7 +3,7 @@ Marks this field as the captured span trace, surfaced via
 last path segment; it is auto-captured (and excluded from the selector). Marking
 a field is only needed when its type isn't recognized automatically.
 
-Forms: `spantrace`.
+Forms: `spantrace`, `spantrace = true`, `spantrace = false`.
 
 ### Example
 ```

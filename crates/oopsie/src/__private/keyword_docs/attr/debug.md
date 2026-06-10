@@ -3,7 +3,7 @@ impl is required by `std::error::Error`). Set `debug = false` to skip that
 injection when you supply a hand-written `impl Debug` instead. An existing
 `Debug` derive on the type is always respected and never duplicated.
 
-Forms: `debug`, `debug = false`.
+Forms: `debug`, `debug = true`, `debug = false`, `debug(true)`, `debug(false)`.
 
 ### Example
 ```

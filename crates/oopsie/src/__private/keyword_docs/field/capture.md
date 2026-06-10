@@ -3,7 +3,7 @@ so it is excluded from the context selector instead of being caller-supplied.
 Trace-typed fields (`Backtrace`, `SpanTrace`, packed traces) get this
 automatically; `capture(false)` opts such a field back onto the selector.
 
-Forms: `capture`, `capture(false)`.
+Forms: `capture`, `capture = true`, `capture = false`, `capture(true)`, `capture(false)`.
 
 ### Example
 ```

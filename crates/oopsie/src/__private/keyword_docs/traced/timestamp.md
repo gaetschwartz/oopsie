@@ -2,7 +2,9 @@ Inside `traced(...)`: injects an auto-captured timestamp field (default: off). A
 bare `timestamp` records a `SystemTime`; a settings block opts into the `chrono`
 type or the provider exposure.
 
-Forms: `timestamp`, `timestamp(chrono = ..., provide = ...)`.
+Forms: `timestamp`, `timestamp = true`, `timestamp = false`,
+`timestamp(true)`, `timestamp(false)`,
+`timestamp(chrono = ..., provide = ..., enabled = ...)`.
 
 ### Example
 ```

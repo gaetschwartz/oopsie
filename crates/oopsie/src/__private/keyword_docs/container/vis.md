@@ -2,7 +2,7 @@ Overrides the visibility of the generated selectors (and their module, if any).
 Defaults to the error type's own visibility. A variant-level `vis(...)` overrides
 this for that one variant's selector.
 
-Forms: `vis(pub)`, `vis(pub(crate))`, ...
+Forms: `vis(pub)`, `vis(pub(crate))`, `vis = "pub(crate)"`.
 
 ### Example
 ```

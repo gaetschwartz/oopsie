@@ -3,7 +3,7 @@ Controls the suffix appended to generated selector names. Structs default to a
 no suffix. The selector base name is always the variant or struct name with a
 trailing `Error` stripped first.
 
-Forms: `suffix`, `suffix("X")`, `suffix(false)`.
+Forms: `suffix`, `suffix(true)`, `suffix(false)`, `suffix("X")`, `suffix = "X"`.
 
 ### Example
 ```

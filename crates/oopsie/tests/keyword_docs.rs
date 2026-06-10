@@ -116,7 +116,7 @@ enum AttrSinkError {
 // ---- Attribute macro: the bool forms of the top-level arguments
 // ---- (`debug = false` exercises the `attr::debug` doc target).
 
-#[oopsie::oopsie(traced(code = false), debug = false)]
+#[oopsie::oopsie(traced(code), debug = false)]
 #[derive(Debug)]
 enum AttrFlagError {
     #[oopsie("flag form")]

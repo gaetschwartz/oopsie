@@ -3,7 +3,7 @@ surfaced via `Diagnostic::oopsie_help_text`. Unlike the variant-level
 `help = "..."`, the text comes from the field value at runtime rather than a
 fixed string. At most one `help` field per variant or struct.
 
-Forms: `help`.
+Forms: `help`, `help = true`, `help = false`.
 
 ### Example
 ```

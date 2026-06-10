@@ -3,7 +3,8 @@ the error type small. At the pair level it applies to both traces; placed inside
 `backtrace(...)` or `spantrace(...)` it tunes that one trace. `boxed = false`
 stores the trace(s) inline.
 
-Forms: `boxed`, `boxed = false`.
+Forms: `boxed`, `boxed = true`, `boxed = false`, `boxed(true)`,
+`boxed(false)`.
 
 ### Example
 ```

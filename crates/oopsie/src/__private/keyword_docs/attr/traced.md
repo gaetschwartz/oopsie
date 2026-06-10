@@ -4,8 +4,9 @@ mentioning one never disables the others — and `traced(false)` opts the type o
 entirely. With `traced` active, an auto-generated error code is also attached to
 each variant unless [`code`](traced::code) is disabled.
 
-Forms: `traced`, `traced(false)`,
-`traced(backtrace(...), spantrace(...), timestamp(...), packed = ..., boxed = ...)`.
+Forms: `traced`, `traced = true`, `traced = false`, `traced(true)`, `traced(false)`,
+`traced(enabled = ...)`,
+`traced(backtrace(...), spantrace(...), timestamp(...), packed = ..., boxed = ..., code(...))`.
 
 ### Example
 ```

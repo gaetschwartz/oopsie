@@ -1,8 +1,9 @@
 Attaches an error code to the variant or struct, surfaced via
 `Diagnostic::oopsie_error_code` and shown by `Report`. The code follows
-`format!` semantics, so it can interpolate the item's fields.
+`format!` semantics, so it can interpolate the item's fields. On a `traced`
+type it replaces the auto-generated code for this item.
 
-Forms: `code = "..."`, `code("fmt {}", expr)`.
+Forms: `code = "..."`, `code("...")`, `code("... {}", expr)`.
 
 ### Example
 ```

@@ -3,7 +3,7 @@ surrounding namespace. Enabled by default for enums (auto-named by stripping a
 trailing `Error`, converting to `snake_case`, and appending `_oopsies`);
 disabled by default for structs.
 
-Forms: `module`, `module(name)`, `module(false)`.
+Forms: `module`, `module(true)`, `module(false)`, `module(name)`, `module = "name"`.
 
 ### Example
 ```

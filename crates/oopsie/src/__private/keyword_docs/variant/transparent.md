@@ -3,7 +3,7 @@ Delegates `Display` and the error `source` to the wrapped error, and generates a
 directly with `?`. A `transparent` variant or struct must have exactly one field:
 the source.
 
-Forms: `transparent`.
+Forms: `transparent`, `transparent = true`, `transparent = false`.
 
 ### Example
 ```

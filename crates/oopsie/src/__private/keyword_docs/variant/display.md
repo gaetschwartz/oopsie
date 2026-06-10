@@ -4,7 +4,7 @@ This is the long form of the short `#[oopsie("msg")]`; use it when combining
 display with other keywords in the same attribute. Without any display, the
 variant or struct name is used verbatim.
 
-Forms: `display("msg {field}")`, `display("msg {}", expr)`.
+Forms: `display = "..."`, `display("...")`, `display("... {}", expr)`.
 
 ### Example
 ```

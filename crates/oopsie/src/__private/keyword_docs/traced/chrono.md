@@ -2,7 +2,8 @@ Inside `timestamp(...)`: uses `chrono::DateTime<Local>` instead of `SystemTime`
 as the injected timestamp type (default: off). Opt-in, and needs oopsie's
 `chrono` feature enabled.
 
-Form: `chrono = true`.
+Forms: `chrono`, `chrono = true`, `chrono = false`, `chrono(true)`,
+`chrono(false)`.
 
 ### Example
 ```ignore

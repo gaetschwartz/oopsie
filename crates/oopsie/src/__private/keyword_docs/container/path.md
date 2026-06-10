@@ -1,8 +1,8 @@
-Overrides the path to the `oopsie` crate used in the generated code, given as a
-string. Needed when `oopsie` is re-exported under a different path or renamed in
-`Cargo.toml`. Defaults to `::oopsie`.
+Overrides the path to the `oopsie` crate used in the generated code. Needed when
+`oopsie` is re-exported under a different path or renamed in `Cargo.toml`.
+Defaults to `::oopsie`.
 
-Form: `path = "some::path"`.
+Forms: `path = "some::path"`, `path = some::path`.
 
 ### Example
 ```ignore

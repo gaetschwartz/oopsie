@@ -4,7 +4,7 @@ type must be `(Backtrace, SpanTrace)` (optionally boxed); it is auto-captured an
 excluded from the selector. A packed `traces` field cannot coexist with separate
 `backtrace`/`spantrace` fields.
 
-Forms: `traces`.
+Forms: `traces`, `traces = true`, `traces = false`.
 
 ### Example
 ```

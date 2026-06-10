@@ -5,7 +5,7 @@ mark a differently-named field. `from(false)` opts a `source`-named field out.
 `from(Type, transform)` accepts a `Type` and stores `transform(value)`; a
 `Box<T>` source is auto-unboxed so the selector takes `T` directly.
 
-Forms: `from`, `from(false)`, `from(Type, transform)`.
+Forms: `from`, `from(true)`, `from(false)`, `from(Type, transform)`.
 
 ### Example
 ```

@@ -3,7 +3,7 @@ Marks this field as the captured backtrace, surfaced via
 last path segment; it is auto-captured (and excluded from the selector). Marking
 a field is only needed when its type isn't recognized automatically.
 
-Forms: `backtrace`.
+Forms: `backtrace`, `backtrace = true`, `backtrace = false`.
 
 ### Example
 ```

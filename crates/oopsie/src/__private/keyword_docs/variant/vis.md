@@ -2,7 +2,7 @@ Overrides the visibility of this one variant's selector, taking precedence over
 any container-level `vis(...)`. Useful for exposing a single selector from an
 otherwise crate-private error.
 
-Forms: `vis(pub)`, `vis(pub(crate))`, ...
+Forms: `vis(pub)`, `vis(pub(crate))`, `vis = "pub(crate)"`.
 
 ### Example
 ```

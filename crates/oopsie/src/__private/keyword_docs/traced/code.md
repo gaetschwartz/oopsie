@@ -5,7 +5,9 @@ struct) that has no explicit `#[oopsie(code = "...")]`, surfaced via
 `traced(code = false)` turns the auto code off, and `traced(code(r#type = Path))`
 overrides the error-code type (default `ErrorCode`).
 
-Forms: `traced(code = false)`, `traced(code(r#type = Path))`.
+Forms: `traced(code)`, `traced(code = true)`, `traced(code = false)`,
+`traced(code(true))`, `traced(code(false))`,
+`traced(code(r#type = Path, enabled = ...))`.
 
 ### Example
 ```

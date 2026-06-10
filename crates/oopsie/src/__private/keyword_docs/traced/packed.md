@@ -3,7 +3,8 @@ Inside `traced(...)`: stores the backtrace and span trace as one packed
 separate fields, which also allows boxing each independently. Packing requires
 backtrace and spantrace to share one boxing mode.
 
-Forms: `packed`, `packed = false`.
+Forms: `packed`, `packed = true`, `packed = false`, `packed(true)`,
+`packed(false)`.
 
 ### Example
 ```

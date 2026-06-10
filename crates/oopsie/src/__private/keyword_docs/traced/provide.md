@@ -2,7 +2,8 @@ Inside `timestamp(...)`: also exposes the captured timestamp through the
 `std::error::Request` provider API (active with the `unstable` feature), so
 callers can retrieve it with `Error::request_value` (default: off). Opt-in.
 
-Form: `provide = true`.
+Forms: `provide`, `provide = true`, `provide = false`, `provide(true)`,
+`provide(false)`.
 
 ### Example
 ```

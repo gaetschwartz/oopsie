@@ -3,7 +3,7 @@ An explicit on/off switch accepted in any settings block, e.g.
 settings and state whether the part is active; a settings block without it counts
 as enabled.
 
-Forms: `enabled = true`, `enabled = false`.
+Forms: `enabled`, `enabled = true`, `enabled = false`.
 
 ### Example
 ```
