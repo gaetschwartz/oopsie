@@ -8,10 +8,10 @@ use serde::{Deserialize, Serialize};
 // TracingLevel
 // ─────────────────────────────────────────────────────────────────────────────
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, strum::EnumString, strum::Display, Serialize, Deserialize,
-)]
-#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
+/// Unrecognized or unparseable level strings deserialize as
+/// [`UNKNOWN`](Self::UNKNOWN) instead of rejecting the payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString, strum::Display, Serialize)]
+#[strum(serialize_all = "SCREAMING_SNAKE_CASE", ascii_case_insensitive)]
 #[repr(u8)]
 pub enum TracingLevel {
     TRACE = 0,
@@ -19,13 +19,26 @@ pub enum TracingLevel {
     INFO = 2,
     WARN = 3,
     ERROR = 4,
+    UNKNOWN = 5,
+}
+
+impl<'de> Deserialize<'de> for TracingLevel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // A level is cosmetic metadata; a transport for error reports must
+        // degrade on a bad value rather than drop the whole error.
+        let s = std::borrow::Cow::<str>::deserialize(deserializer)?;
+        Ok(s.parse().unwrap_or(Self::UNKNOWN))
+    }
 }
 
 impl From<TracingLevel> for tracing::Level {
     #[inline]
     fn from(level: TracingLevel) -> Self {
         match level {
-            TracingLevel::ERROR => Self::ERROR,
+            TracingLevel::ERROR | TracingLevel::UNKNOWN => Self::ERROR,
             TracingLevel::WARN => Self::WARN,
             TracingLevel::INFO => Self::INFO,
             TracingLevel::DEBUG => Self::DEBUG,
@@ -144,6 +157,13 @@ impl ErasedSpanTrace {
         Self { spans }
     }
 
+    /// Returns `true` when the trace contains no spans.
+    #[must_use]
+    #[inline]
+    pub const fn is_empty(&self) -> bool {
+        self.spans.is_empty()
+    }
+
     /// Iterate over spans with their metadata and fields.
     pub fn with_spans<F>(&self, mut f: F)
     where
@@ -216,6 +236,31 @@ impl fmt::Display for ErasedSpanTrace {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_tracing_level_tolerant_deserialization() {
+        let level: TracingLevel = serde_json::from_value(serde_json::json!("info")).unwrap();
+        assert_eq!(level, TracingLevel::INFO, "case-insensitive known level");
+
+        let level: TracingLevel = serde_json::from_value(serde_json::json!("FATAL")).unwrap();
+        assert_eq!(
+            level,
+            TracingLevel::UNKNOWN,
+            "unknown level degrades to UNKNOWN"
+        );
+
+        // Canonical uppercase still round-trips byte-stably.
+        let json = serde_json::to_string(&TracingLevel::WARN).unwrap();
+        assert_eq!(json, r#""WARN""#);
+        let back: TracingLevel = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, TracingLevel::WARN);
+
+        // UNKNOWN itself round-trips.
+        let json = serde_json::to_string(&TracingLevel::UNKNOWN).unwrap();
+        assert_eq!(json, r#""UNKNOWN""#);
+        let back: TracingLevel = serde_json::from_str(&json).unwrap();
+        assert_eq!(back, TracingLevel::UNKNOWN);
+    }
 
     #[test]
     fn test_erased_spantrace_deserialization() {

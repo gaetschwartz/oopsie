@@ -31,18 +31,29 @@ impl ErasedBacktrace {
         // Resolve the backtrace to get symbol information.
         bt.resolve();
 
-        let frames = bt
-            .frames()
-            .iter()
-            .flat_map(|frame| frame.symbols().iter())
-            .map(|sym| ErasedFrame {
+        let mut frames = Vec::new();
+        for frame in bt.frames() {
+            let symbols = frame.symbols();
+            // A frame that failed to resolve has no symbols; keep a placeholder
+            // so the stack shape survives erasure.
+            if symbols.is_empty() {
+                frames.push(ErasedFrame {
+                    name: None,
+                    filename: None,
+                    line: None,
+                    column: None,
+                });
+            }
+            frames.extend(symbols.iter().map(|sym| ErasedFrame {
                 name: sym.name().map(|n| n.to_string().into_boxed_str()),
                 filename: sym.filename().map(|p| p.to_string_lossy().into()),
                 line: sym.lineno(),
                 column: sym.colno(),
-            })
-            .collect();
-        Self { frames }
+            }));
+        }
+        Self {
+            frames: frames.into(),
+        }
     }
 
     /// Returns a slice of all frames.
@@ -159,6 +170,22 @@ mod tests {
                 )
             }),
             "from_backtrace should retain raw internal frames, not strip them at capture"
+        );
+    }
+
+    #[test]
+    fn from_backtrace_keeps_at_least_one_erased_frame_per_source_frame() {
+        oopsie_core::set_rust_backtrace_override(oopsie_core::RustBacktrace::Enabled);
+        let bt = <oopsie_core::Backtrace as oopsie_core::Capturable>::capture();
+        oopsie_core::clear_rust_backtrace_override();
+
+        let erased = ErasedBacktrace::from_backtrace(&bt);
+        assert!(
+            erased.frames().len() >= bt.frames().len(),
+            "every source frame must survive erasure (unresolved ones as placeholders): \
+             {} erased < {} source",
+            erased.frames().len(),
+            bt.frames().len()
         );
     }
 }

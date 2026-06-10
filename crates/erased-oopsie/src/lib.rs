@@ -12,6 +12,7 @@ pub use spantrace::{ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel};
 
 use std::fmt;
 use std::io;
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -44,9 +45,54 @@ pub struct ErasedError {
 
     /// Serialized backtrace.
     pub backtrace: Option<ErasedBacktrace>,
+
+    /// Snapshot of `source_chain` taken on the first `Error::source()` call;
+    /// later mutations of the pub field are not reflected here.
+    #[serde(skip)]
+    source: OnceLock<Option<Box<ChainNode>>>,
 }
 
-impl std::error::Error for ErasedError {}
+impl std::error::Error for ErasedError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source
+            .get_or_init(|| ChainNode::build(&self.source_chain))
+            .as_deref()
+            .map(|node| node as &(dyn std::error::Error + 'static))
+    }
+}
+
+/// One transported cause, re-materialized as a real error value so generic
+/// `Error::source()` walkers see the chain instead of bare data.
+#[derive(Clone, Debug)]
+struct ChainNode {
+    message: Box<str>,
+    source: Option<Box<Self>>,
+}
+
+impl ChainNode {
+    fn build(messages: &[Box<str>]) -> Option<Box<Self>> {
+        messages.iter().rev().fold(None, |source, message| {
+            Some(Box::new(Self {
+                message: message.clone(),
+                source,
+            }))
+        })
+    }
+}
+
+impl fmt::Display for ChainNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ChainNode {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        self.source
+            .as_deref()
+            .map(|node| node as &(dyn std::error::Error + 'static))
+    }
+}
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Diagnostics {
@@ -124,9 +170,8 @@ impl ErasedError {
             .map(ErasedSpanTrace::from);
         let backtrace = err
             .oopsie_backtrace()
-            .filter(|bt| !bt.frames().is_empty())
-            .cloned()
-            .map(ErasedBacktrace::from);
+            .map(ErasedBacktrace::from_backtrace)
+            .filter(|bt| !bt.frames().is_empty());
 
         Self {
             message,
@@ -134,6 +179,7 @@ impl ErasedError {
             diagnostics,
             spantrace,
             backtrace,
+            source: OnceLock::new(),
         }
     }
 
@@ -153,7 +199,7 @@ impl ErasedError {
             None => writeln!(f, "Error:")?,
         }
 
-        writeln!(f, "\n  \u{2715} {}", self.message)?;
+        writeln!(f, "\n  \u{00d7} {}", self.message)?;
 
         // Write source chain with box-drawing characters
         let chain_len = self.source_chain.len();
@@ -173,15 +219,20 @@ impl ErasedError {
             writeln!(f, "{help}")?;
         }
 
-        // Write spantrace if present
-        if let Some(spantrace) = &self.spantrace {
+        // An empty trace renders as a lone banner with no body; empty traces
+        // are reachable directly from the wire format, so gate here too.
+        if let Some(spantrace) = &self.spantrace
+            && !spantrace.is_empty()
+        {
             writeln!(f)?;
             writeln!(f, "{:━^80}", " SPANTRACE ")?;
             writeln!(f, "{spantrace}")?;
         }
 
-        // Write backtrace if present
-        if let Some(backtrace) = &self.backtrace {
+        if let Some(backtrace) = &self.backtrace
+            && !backtrace.frames().is_empty()
+        {
+            writeln!(f)?;
             writeln!(f, "{:━^80}", " BACKTRACE ")?;
             write!(f, "{backtrace}")?;
         }
@@ -354,6 +405,7 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let mut buf = Vec::new();
@@ -383,6 +435,7 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
         let err = erased.write_json(&mut FailingWriter).unwrap_err();
         assert!(err.is_io(), "{err}");
@@ -400,6 +453,7 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let mut buf = Vec::new();
@@ -424,6 +478,7 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let mut buf = Vec::new();
@@ -448,6 +503,7 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let mut buf = Vec::new();
@@ -473,6 +529,7 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let short = erased.format_short();
@@ -494,6 +551,7 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let short = erased.format_short();
@@ -515,6 +573,7 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let short = erased.format_short();
@@ -539,6 +598,7 @@ mod tests {
             },
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let displayed = erased.to_string();
@@ -564,6 +624,7 @@ mod tests {
             },
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let text = erased.to_text();
@@ -593,6 +654,7 @@ mod tests {
             },
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         let text = erased.to_text();
@@ -611,9 +673,60 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
 
         assert_eq!(erased.to_text().lines().next(), Some("Error:"));
+    }
+
+    #[test]
+    fn source_walk_yields_transported_chain_in_order() {
+        let erased: ErasedError =
+            serde_json::from_str(r#"{"message":"outer","source_chain":["middle","root"]}"#)
+                .unwrap();
+
+        let mut walked = Vec::new();
+        let mut src = std::error::Error::source(&erased);
+        while let Some(e) = src {
+            walked.push(e.to_string());
+            src = e.source();
+        }
+        assert_eq!(walked, ["middle", "root"]);
+
+        let empty: ErasedError = serde_json::from_str(r#"{"message":"x"}"#).unwrap();
+        assert!(std::error::Error::source(&empty).is_none());
+    }
+
+    #[test]
+    fn write_text_suppresses_banners_for_empty_traces() {
+        let erased: ErasedError = serde_json::from_str(
+            r#"{"message":"transported","spantrace":{"spans":[]},"backtrace":{"frames":[]}}"#,
+        )
+        .unwrap();
+
+        let text = erased.to_text();
+        assert!(
+            !text.contains("SPANTRACE"),
+            "empty spantrace must not banner:\n{text}"
+        );
+        assert!(
+            !text.contains("BACKTRACE"),
+            "empty backtrace must not banner:\n{text}"
+        );
+    }
+
+    #[test]
+    fn write_text_backtrace_only_gets_blank_line_before_banner() {
+        let erased: ErasedError = serde_json::from_str(
+            r#"{"message":"m","source_chain":["c"],"spantrace":null,
+                "backtrace":{"frames":[{"name":"f","filename":null,"line":null,"column":null}]}}"#,
+        )
+        .unwrap();
+        let text = erased.to_text();
+        assert!(
+            text.contains("c\n\n━"),
+            "blank line must separate the chain from the BACKTRACE banner:\n{text}"
+        );
     }
 
     #[test]
@@ -637,6 +750,7 @@ mod tests {
             diagnostics: Diagnostics::default(),
             spantrace: None,
             backtrace: None,
+            source: OnceLock::new(),
         };
         assert!(
             erased.diagnostics.code().is_none(),

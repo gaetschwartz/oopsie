@@ -395,6 +395,38 @@ fn test_round_trip_through_json_renders_in_report() {
     );
 }
 
+#[test]
+fn test_unknown_span_level_does_not_reject_payload() {
+    let erased: ErasedError = serde_json::from_str(
+        r#"{"message":"m","spantrace":{"spans":[{"metadata":{"name":"s","target":"t","level":"FATAL"},"fields":""}]},"backtrace":null}"#,
+    )
+    .expect("one unknown span level must not drop the whole error");
+    assert!(erased.spantrace.is_some());
+}
+
+#[test]
+fn test_round_trip_source_chain_survives_report_and_reerasure() {
+    let erased = ErasedError::from_error(common::make_error());
+    assert!(!erased.source_chain.is_empty(), "fixture must have a cause");
+
+    let json = serde_json::to_string(&erased).unwrap();
+    let roundtripped: ErasedError = serde_json::from_str(&json).unwrap();
+
+    // Wire format unchanged by the cache field.
+    assert_eq!(serde_json::to_string(&roundtripped).unwrap(), json);
+
+    // Re-erasure reproduces the transported chain.
+    let reerased = ErasedError::from_error_ref(&roundtripped);
+    assert_eq!(reerased.source_chain, roundtripped.source_chain);
+
+    // Report's source walk renders the cause line.
+    let rendered = oopsie::Report::from_std(roundtripped).to_string();
+    assert!(
+        rendered.contains(&format!("╰─▶ {}", erased.source_chain[0])),
+        "Report must render the transported cause, got:\n{rendered}"
+    );
+}
+
 // Display is intentionally just the message: chain renderers print each
 // source on a single `├─▶` line, so a multi-line Display would corrupt the
 // embedding error's report.
