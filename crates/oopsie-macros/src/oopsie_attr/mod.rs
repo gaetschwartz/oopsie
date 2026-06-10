@@ -318,7 +318,10 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
-    #[cfg(not(feature = "unstable-error-generic-member-access"))]
+    #[cfg(all(
+        feature = "tracing",
+        not(feature = "unstable-error-generic-member-access")
+    ))]
     #[test]
     fn traced_enum() {
         let result = expand(
@@ -332,6 +335,24 @@ mod tests {
         );
         let output = result.unwrap().to_string();
         insta::assert_snapshot!(output);
+    }
+
+    #[cfg(all(
+        not(feature = "tracing"),
+        not(feature = "unstable-error-generic-member-access")
+    ))]
+    #[test]
+    fn traced_enum_no_tracing() {
+        let result = expand(
+            quote! { traced },
+            quote! {
+                pub enum AppError {
+                    #[oopsie("Connection failed")]
+                    Connect,
+                }
+            },
+        );
+        insta::assert_snapshot!(result.unwrap().to_string());
     }
 
     #[cfg(all(
