@@ -124,6 +124,7 @@ fn traced_does_not_duplicate_backtrace() {
 
 // ---- Test 7: does not duplicate pre-existing spantrace field ----
 
+#[cfg(feature = "tracing")]
 #[oopsie(traced)]
 pub enum PreExistingStError {
     #[oopsie("has spantrace")]
@@ -135,6 +136,7 @@ pub enum PreExistingStError {
     },
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn traced_does_not_duplicate_spantrace() {
     let err = pre_existing_st_oopsies::HasSt { msg: "test" }.build();
@@ -158,12 +160,14 @@ fn traced_struct_does_not_duplicate_backtrace() {
 
 // ---- Test 9: opting out of spantrace — backtrace only ----
 
+#[cfg(feature = "tracing")]
 #[oopsie(traced(spantrace(false)))]
 pub enum BacktraceOnlyError {
     #[oopsie("bt only")]
     BtOnly { msg: String },
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn traced_explicit_backtrace_only() {
     use oopsie::Diagnostic as _;
@@ -249,6 +253,7 @@ pub enum SeparateInlineError {
 }
 
 // mixed: backtrace stays on by default, spantrace tuned to inline.
+#[cfg(feature = "tracing")]
 #[oopsie(traced(packed = false, spantrace(boxed = false)))]
 pub enum MixedError {
     #[oopsie("boom: {info}")]
@@ -256,47 +261,55 @@ pub enum MixedError {
 }
 
 // Single trace (backtrace only) — packed is a no-op; lone boxed backtrace.
+#[cfg(feature = "tracing")]
 #[oopsie(traced(spantrace(false)))]
 pub enum SingleBacktraceError {
     #[oopsie("boom: {info}")]
     Boom { info: String },
 }
 
+#[cfg(feature = "tracing")]
 fn assert_both_traces<E: oopsie::Diagnostic>(e: &E) {
     assert!(e.oopsie_backtrace().is_some(), "backtrace accessor missing");
     assert!(e.oopsie_spantrace().is_some(), "spantrace accessor missing");
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn layout_default_packed_exposes_both_traces() {
     let e = default_packed_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn layout_packed_inline_exposes_both_traces() {
     let e = packed_inline_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn layout_separate_boxed_exposes_both_traces() {
     let e = separate_boxed_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn layout_separate_inline_exposes_both_traces() {
     let e = separate_inline_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn layout_mixed_exposes_both_traces() {
     let e = mixed_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn layout_single_trace_fallback_backtrace_only() {
     let e = single_backtrace_oopsies::Boom { info: "x" }.build();
@@ -316,12 +329,14 @@ pub struct InlineStructError {
     info: String,
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn layout_struct_default_packed_exposes_both_traces() {
     let e = PackedStructOopsie { info: "x" }.build();
     assert_both_traces(&e);
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn layout_struct_separate_inline_exposes_both_traces() {
     let e = InlineStructOopsie { info: "x" }.build();
@@ -336,6 +351,7 @@ pub struct WrongTypedBacktraceError {
     info: String,
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn wrong_typed_backtrace_field_is_ordinary_and_real_backtrace_injected() {
     let e = WrongTypedBacktraceOopsie {
@@ -394,12 +410,14 @@ fn timestamp_nested_injects_systemtime_field() {
 }
 
 // timestamp ONLY: both traces disabled explicitly inside `traced(...)`.
+#[cfg(feature = "tracing")]
 #[oopsie(traced(backtrace(false), spantrace(false), timestamp))]
 pub enum BareTimestampError {
     #[oopsie("bare ts")]
     Boom { info: String },
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn timestamp_is_auto_captured_and_absent_from_selector() {
     use oopsie::Diagnostic as _;
@@ -514,6 +532,7 @@ fn timestamp_provide_surfaces_via_provider_api() {
 //   `Custom`, not to `oopsie::Backtrace`, so a boxed custom type won't compile.
 // ════════════════════════════════════════════════════════════════════════
 
+#[cfg(feature = "tracing")]
 mod custom_trace {
     use std::borrow::Borrow;
 
@@ -543,6 +562,7 @@ mod custom_trace {
     }
 }
 
+#[cfg(feature = "tracing")]
 #[oopsie(traced(
     packed = false,
     backtrace(r#type = custom_trace::Backtrace, boxed = false),
@@ -553,6 +573,7 @@ pub enum CustomBacktraceError {
     Boom { info: String },
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn custom_backtrace_type_is_injected_and_captured() {
     use oopsie::Diagnostic as _;

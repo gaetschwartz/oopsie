@@ -76,10 +76,12 @@ harness = false
 [[bench]]
 name = "render"
 harness = false
+required-features = ["fancy"]
 
 [[bench]]
 name = "vs_ecosystem"
 harness = false
+required-features = ["fancy", "tracing"]
 
 [[bench]]
 name = "erased"
@@ -89,3 +91,19 @@ required-features = ["serde"]
 [[example]]
 name = "erased_json"
 required-features = ["serde"]
+
+[[example]]
+name = "traced"
+required-features = ["fancy"]
+
+[[example]]
+name = "report_main"
+required-features = ["fancy"]
+
+[[example]]
+name = "panic_hook"
+required-features = ["fancy", "tracing"]
+
+[[example]]
+name = "spantrace"
+required-features = ["fancy", "tracing"]

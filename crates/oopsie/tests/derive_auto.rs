@@ -72,6 +72,7 @@ fn auto_with_source() {
 
 // ---- Test 4: multiple auto fields (backtrace + spantrace) ----
 
+#[cfg(feature = "tracing")]
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
 enum MultiAutoError {
@@ -85,6 +86,7 @@ enum MultiAutoError {
     },
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn multiple_auto_fields() {
     let err = Multi { label: "test" }.build();
@@ -103,6 +105,7 @@ enum InnerDiagError {
     Inner,
 }
 
+#[cfg(feature = "tracing")]
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
 enum OptionalCaptureError {
@@ -114,6 +117,7 @@ enum OptionalCaptureError {
     },
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn optional_span_trace_capture_with_diagnostic_source() {
     let err: OptionalCaptureError = Wrap.build_error(InnerDiagError::Inner);
@@ -130,6 +134,7 @@ fn optional_span_trace_capture_with_diagnostic_source() {
 // ════════════════════════════════════════════════════════════════════════
 
 // (1) three capture fields of three different Capturable types in one variant.
+#[cfg(feature = "tracing")]
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
 enum TripleCaptureError {
@@ -145,6 +150,7 @@ enum TripleCaptureError {
     },
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn three_heterogeneous_capture_fields_all_initialize() {
     oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
@@ -160,6 +166,7 @@ fn three_heterogeneous_capture_fields_all_initialize() {
 }
 
 // (2) a single capture field whose type is a `(A, B)` tuple Capturable.
+#[cfg(feature = "tracing")]
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
 enum TupleCaptureError {
@@ -170,6 +177,7 @@ enum TupleCaptureError {
     },
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn tuple_capture_field_initializes_both_elements() {
     oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
