@@ -38,9 +38,9 @@ impl TracedArgs {
     pub fn resolve(&self) -> ResolvedTraceArgs<'_> {
         ResolvedTraceArgs {
             backtrace: self.backtrace.is_enabled(),
-            spantrace: self.spantrace.is_enabled(),
+            spantrace: self.spantrace.is_enabled() && cfg!(feature = "tracing"),
             timestamp: self.timestamp.is_enabled(),
-            packed: self.packed.is_enabled(),
+            packed: self.packed.is_enabled() && cfg!(feature = "tracing"),
             backtrace_boxed: self.trace_boxed(&self.backtrace),
             spantrace_boxed: self.trace_boxed(&self.spantrace),
             backtrace_type: self.backtrace.r#type(),
@@ -143,6 +143,7 @@ mod tests {
         TracedArgs::from_list(&nested).expect("parse traced args list")
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn default_is_packed_and_boxed_with_both_traces() {
         let a = args_list(parse_quote!(traced()));
@@ -152,6 +153,16 @@ mod tests {
         assert!(r.spantrace_boxed);
         assert!(r.backtrace && r.spantrace);
         assert!(!r.timestamp);
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn default_is_backtrace_only_without_tracing() {
+        let a = args_list(parse_quote!(traced()));
+        let r = a.resolve();
+        assert!(r.backtrace);
+        assert!(!r.spantrace);
+        assert!(!r.packed);
     }
 
     #[test]
