@@ -5,7 +5,6 @@ members = [
     "crates/oopsie",
     "crates/oopsie-core",
     "crates/oopsie-macros",
-    "crates/erased-oopsie",
 ]
 
 [workspace.package]

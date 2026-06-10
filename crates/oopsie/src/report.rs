@@ -148,8 +148,7 @@ impl<E: Diagnostic> Report<E> {
 
     /// Format the error chain.
     fn write_error_chain(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        /// Matches erased-oopsie's MAX_SOURCE_CHAIN_DEPTH: Error::source is
-        /// user-implemented and the std contract does not forbid cycles.
+        /// Error::source is user-implemented and the std contract does not forbid cycles.
         const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 
         let c = self.color_config.should_colorize();
