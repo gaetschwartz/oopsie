@@ -311,6 +311,63 @@ fn run_restores_prior_hook_even_on_unwind() {
     assert!(PRIOR_HOOK_FIRED.load(Ordering::SeqCst));
 }
 
+#[test]
+fn run_concurrent_overlap_restores_prior_hook_after_last_exit() {
+    use std::sync::Barrier;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static PRIOR_HOOK_FIRED: AtomicBool = AtomicBool::new(false);
+
+    std::panic::set_hook(Box::new(|_| {
+        PRIOR_HOOK_FIRED.store(true, Ordering::SeqCst);
+    }));
+
+    // Both threads inside run() simultaneously, then staggered exits:
+    // thread A leaves run() fully before thread B's closure returns.
+    let both_inside = Barrier::new(2);
+    let a_exited = Barrier::new(2);
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            let _report: Report<TestError> = Report::run(|| {
+                both_inside.wait();
+                Ok(())
+            });
+            a_exited.wait();
+        });
+        s.spawn(|| {
+            let _report: Report<TestError> = Report::run(|| {
+                both_inside.wait();
+                a_exited.wait();
+                Ok(())
+            });
+        });
+    });
+
+    let _ = std::panic::catch_unwind(|| panic!("probe"));
+    assert!(
+        PRIOR_HOOK_FIRED.load(Ordering::SeqCst),
+        "prior hook must be restored after the last overlapping run exits"
+    );
+}
+
+#[test]
+fn run_nested_restores_prior_hook() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    static PRIOR_HOOK_FIRED: AtomicBool = AtomicBool::new(false);
+
+    std::panic::set_hook(Box::new(|_| {
+        PRIOR_HOOK_FIRED.store(true, Ordering::SeqCst);
+    }));
+
+    let _outer: Report<TestError> = Report::run(|| {
+        let inner: Report<TestError> = Report::run(|| Ok(()));
+        assert!(inner.error().is_none());
+        Ok(())
+    });
+
+    let _ = std::panic::catch_unwind(|| panic!("probe"));
+    assert!(PRIOR_HOOK_FIRED.load(Ordering::SeqCst));
+}
+
 // --- Report::with_colors() test ---
 
 #[test]
@@ -766,4 +823,40 @@ impl oopsie::Diagnostic for Cyclic {}
 fn cyclic_source_chain_terminates_with_truncation_note() {
     let rendered = oopsie::Report::from_std(Cyclic).no_colors().to_string();
     assert!(rendered.contains("source chain truncated"), "{rendered}");
+}
+
+#[derive(Debug)]
+struct PlainWrapper(TestError);
+
+impl fmt::Display for PlainWrapper {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("plain wrapper")
+    }
+}
+
+impl std::error::Error for PlainWrapper {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
+    }
+}
+
+impl oopsie::Diagnostic for PlainWrapper {}
+
+/// A hand-written wrapper with no `Diagnostic` accessors over a traced source:
+/// per the `Report` docs, no BACKTRACE/SPANTRACE section may render even though
+/// the source carries a trace.
+#[test]
+fn report_does_not_search_chain_for_traces() {
+    common::force_backtrace();
+
+    let traced = TestOopsie { message: "root" }.build();
+    let rendered = Report::from_std(PlainWrapper(traced))
+        .no_colors()
+        .to_string();
+
+    assert!(rendered.contains("╰─▶"), "chain messages still render");
+    assert!(
+        !rendered.contains("BACKTRACE"),
+        "no chain search for traces:\n{rendered}"
+    );
 }

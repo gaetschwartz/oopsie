@@ -2,7 +2,8 @@
 //!
 //! This module provides utilities for controlling colorized output in error
 //! reporting. It follows the [`NO_COLOR`](https://no-color.org/) standard and
-//! also respects `FORCE_COLOR` for explicit enablement.
+//! [`FORCE_COLOR`](https://force-color.org/) for explicit enablement (with
+//! `FORCE_COLOR=0`/`false` as an explicit disable).
 
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -15,17 +16,21 @@ static ENV_SUPPORTS_COLOR: OnceLock<bool> = OnceLock::new();
 
 /// Detect if colors should be used based on environment variables.
 fn detect_env_color_support() -> bool {
-    // Check NO_COLOR first (https://no-color.org/)
-    if std::env::var_os("NO_COLOR").is_some() {
+    // no-color.org: NO_COLOR disables only "when present and not an empty
+    // string"; an empty value must be ignored, not treated as set.
+    if std::env::var_os("NO_COLOR").is_some_and(|v| !v.is_empty()) {
         return false;
     }
 
-    // Check FORCE_COLOR
-    if std::env::var_os("FORCE_COLOR").is_some() {
-        return true;
+    // FORCE_COLOR follows the same present-and-non-empty rule, except that
+    // `0`/`false` is the conventional explicit *disable* (force-color.org /
+    // Node semantics), not a force-enable.
+    if let Some(force) = std::env::var_os("FORCE_COLOR")
+        && !force.is_empty()
+    {
+        return force != "0" && !force.eq_ignore_ascii_case("false");
     }
 
-    // Check if stderr is a terminal
     std::io::IsTerminal::is_terminal(&std::io::stderr())
 }
 

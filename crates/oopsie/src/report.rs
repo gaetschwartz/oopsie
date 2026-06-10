@@ -16,8 +16,15 @@ use crate::trace_printer::TracePrinter;
 
 /// A wrapper around an error that provides rich, colorized output.
 ///
-/// `Report` extracts backtraces and span traces from the error chain
-/// (when available via the Provider API) and formats them with colors.
+/// The error-chain section renders the message of every `source()` in the
+/// chain. The backtrace and span trace are read from the top-level error's
+/// [`Diagnostic`] accessors only — `Report` does not walk the chain looking for
+/// traces. `#[oopsie]`-generated and transparent errors still surface the
+/// origin-most trace at the top level: their accessors recursively forward to
+/// the source's own accessors, so the deepest captured trace bubbles up to the
+/// top error without `Report` reaching for it. A hand-written top-level error
+/// that does not forward [`Diagnostic`] renders without a deep trace, even if a
+/// source deeper in its chain carries one.
 pub struct Report<E> {
     res: Result<(), E>,
     color_config: ColorConfig,
@@ -67,20 +74,23 @@ impl<E: Diagnostic> Report<E> {
     /// The library's [`install_panic_hook`](crate::install_panic_hook) hook is
     /// installed only for the duration of `func` and the previously installed
     /// hook is restored afterwards — including when `func` panics and the panic
-    /// is caught by a caller further up.
+    /// is caught by a caller further up. Overlapping calls (concurrent threads
+    /// or nested on one thread) share a single installation: the hook present
+    /// before the first call is restored when the last one finishes. A hook
+    /// installed by other means *while* a `run` is in flight is overwritten by
+    /// that restore.
     #[must_use]
     pub fn run<F>(func: F) -> Self
     where
         F: FnOnce() -> Result<(), E>,
     {
-        let prior = std::panic::take_hook();
-        crate::panic_hook::install_panic_hook();
+        crate::panic_hook::acquire_hook();
         // `set_hook` panics on a panicking thread, so restoring from a `Drop`
         // guard would abort during unwind. Catch the unwind instead: the hook
         // has already rendered the panic by then, and `resume_unwind` doesn't
         // re-run it.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(func));
-        std::panic::set_hook(prior);
+        crate::panic_hook::release_hook();
         let result = match result {
             Ok(result) => result,
             Err(payload) => std::panic::resume_unwind(payload),

@@ -6,6 +6,7 @@
 
 use std::fmt;
 use std::panic::PanicHookInfo;
+use std::sync::{Mutex, PoisonError};
 
 use owo_colors::{OwoColorize as _, Style};
 
@@ -36,6 +37,44 @@ pub fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
         eprint!("{}", PanicReport::new(info));
     }));
+}
+
+type PriorHook = Box<dyn Fn(&PanicHookInfo<'_>) + Sync + Send + 'static>;
+
+/// The panic hook is process-global, so overlapping `Report::run` scopes
+/// (across threads or nested on one thread) must refcount the swap: only the
+/// outermost acquire saves the prior hook and installs ours, and only the
+/// matching last release restores it. Unbalanced take/set pairs would either
+/// leak our hook or drop the user's.
+struct HookGuard {
+    depth: usize,
+    prior: Option<PriorHook>,
+}
+
+static HOOK_GUARD: Mutex<HookGuard> = Mutex::new(HookGuard {
+    depth: 0,
+    prior: None,
+});
+
+pub fn acquire_hook() {
+    let mut guard = HOOK_GUARD.lock().unwrap_or_else(PoisonError::into_inner);
+    if guard.depth == 0 {
+        guard.prior = Some(std::panic::take_hook());
+        install_panic_hook();
+    }
+    guard.depth += 1;
+}
+
+/// Must only be called on a non-panicking thread: `set_hook` aborts during
+/// unwind, so callers restore after `catch_unwind`, never from `Drop`.
+pub fn release_hook() {
+    let mut guard = HOOK_GUARD.lock().unwrap_or_else(PoisonError::into_inner);
+    guard.depth -= 1;
+    if guard.depth == 0
+        && let Some(prior) = guard.prior.take()
+    {
+        std::panic::set_hook(prior);
+    }
 }
 
 /// A renderable view over a single panic. Captures the backtrace and span trace
