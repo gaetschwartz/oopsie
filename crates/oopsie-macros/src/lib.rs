@@ -29,7 +29,7 @@ pub(crate) mod utils;
 ///
 /// # Usage
 ///
-/// ```
+/// ```ignore
 /// use oopsie::ResultExt as _;
 ///
 /// #[derive(Debug, oopsie::Oopsie)]
@@ -62,7 +62,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 ///
 /// # Usage
 ///
-/// ```
+/// ```ignore
 /// use oopsie::ResultExt as _;
 ///
 /// #[oopsie::oopsie]
@@ -82,7 +82,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 ///
 /// Pass `traced` to automatically inject backtrace and spantrace fields:
 ///
-/// ```
+/// ```ignore
 /// #[oopsie::oopsie(traced)]
 /// pub enum MyError {
 ///     #[oopsie("Connection failed")]

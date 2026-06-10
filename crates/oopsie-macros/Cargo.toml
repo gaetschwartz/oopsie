@@ -36,4 +36,4 @@ workspace = true
 
 [dev-dependencies]
 insta = "1.46.3"
-oopsie = { workspace = true, features = ["tracing"] }
+oopsie = { workspace = true }
