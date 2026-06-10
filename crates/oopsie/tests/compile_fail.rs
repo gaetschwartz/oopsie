@@ -27,14 +27,23 @@ fn run_channel_specific(t: &trybuild::TestCases) {
 }
 
 #[rustversion::not(any(stable, nightly))]
-fn run_channel_specific(_t: &trybuild::TestCases) {
+const fn run_channel_specific(_t: &trybuild::TestCases) {
     // Beta / dev / custom channels: skip; their diagnostics may match
     // neither stored form.
 }
+
+#[cfg(not(feature = "tracing"))]
+fn run_tracing_off(t: &trybuild::TestCases) {
+    t.compile_fail("tests/compile-fail/no-tracing/*.rs");
+}
+
+#[cfg(feature = "tracing")]
+const fn run_tracing_off(_t: &trybuild::TestCases) {}
 
 #[test]
 fn compile_fail_tests() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/compile-fail/*.rs");
     run_channel_specific(&t);
+    run_tracing_off(&t);
 }
