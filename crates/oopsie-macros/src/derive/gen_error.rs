@@ -217,9 +217,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
         }
         if let Some(code) = &variant_attrs.code {
-            provide_stmts.push(quote! {
-                #req.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#code));
-            });
+            provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
         }
 
         // Collect all field names needed for pattern
@@ -310,10 +308,32 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         // Error code: user-specified, then auto-generated from provide attrs,
         // then (for `transparent`) forwarded from the source.
         if let Some(code) = &variant_attrs.code {
-            code_arms.push(quote! {
-                #(#cfg_attrs)*
-                Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#code)),
-            });
+            if code.is_static() {
+                let lit = code.static_lit()?;
+                code_arms.push(quote! {
+                    #(#cfg_attrs)*
+                    Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#lit)),
+                });
+            } else {
+                let fmt = &code.format_str;
+                let args = &code.args;
+                let code_field_names: Vec<&syn::Ident> = match &variant.fields {
+                    syn::Fields::Named(f) => {
+                        f.named.iter().filter_map(|f| f.ident.as_ref()).collect()
+                    }
+                    syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
+                };
+                let code_pattern = if code_field_names.is_empty() {
+                    quote! { Self::#variant_ident { .. } }
+                } else {
+                    quote! { Self::#variant_ident { #(#code_field_names),*, .. } }
+                };
+                code_arms.push(quote! {
+                    #(#cfg_attrs)*
+                    #[allow(unused_variables)]
+                    #code_pattern => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*))),
+                });
+            }
         } else if let Some(provide_attr) = variant_attrs
             .provides
             .iter()
@@ -615,9 +635,7 @@ pub fn gen_struct_error(
         provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
     }
     if let Some(code) = &variant_attrs.code {
-        provide_stmts.push(quote! {
-            #req.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#code));
-        });
+        provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
     }
 
     // Destructure self to bring field names into scope (same pattern as enum match arms)
@@ -707,9 +725,30 @@ pub fn gen_struct_error(
         };
 
     let code_method = if let Some(code) = &variant_attrs.code {
-        quote! {
-            fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
-                ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#code))
+        if code.is_static() {
+            let lit = code.static_lit()?;
+            quote! {
+                fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
+                    ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#lit))
+                }
+            }
+        } else {
+            let fmt = &code.format_str;
+            let args = &code.args;
+            let field_names: Vec<&syn::Ident> = match &data.fields {
+                syn::Fields::Named(f) => f.named.iter().filter_map(|f| f.ident.as_ref()).collect(),
+                syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
+            };
+            let destructure = if field_names.is_empty() {
+                quote! {}
+            } else {
+                quote! { #[allow(unused_variables)] let Self { #(#field_names),*, .. } = self; }
+            };
+            quote! {
+                fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
+                    #destructure
+                    ::core::option::Option::Some(#oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*)))
+                }
             }
         }
     } else {
@@ -833,6 +872,27 @@ fn gen_help_provide(
         // an inline `{field}` capture in the format string resolves here.
         Ok(quote! {
             #req.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*)));
+        })
+    }
+}
+
+fn gen_code_provide(
+    code: &DisplayAttr,
+    oopsie_path: &syn::Path,
+    req: &syn::Ident,
+) -> syn::Result<TokenStream2> {
+    if code.is_static() {
+        let lit = code.static_lit()?;
+        Ok(quote! {
+            #req.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#lit));
+        })
+    } else {
+        let fmt = &code.format_str;
+        let args = &code.args;
+        // The enclosing `provide` method already destructures every field, so
+        // an inline `{field}` capture in the format string resolves here.
+        Ok(quote! {
+            #req.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*)));
         })
     }
 }

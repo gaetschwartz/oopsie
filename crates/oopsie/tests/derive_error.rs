@@ -545,7 +545,7 @@ fn struct_dynamic_help_field_provider_matches_accessor() {
 // exactly like `display(...)`. The generated `oopsie_help_text()` accessor binds the
 // variant's fields (mirroring the display arm), so positional args may reference them.
 // (Inline `{field}` capture without an explicit arg is covered separately below.
-// `code = "..."` stays a plain string.)
+// `code(...)` / `code = "..."` support the same format-string syntax as `help`.)
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
@@ -805,6 +805,101 @@ fn error_code_dynamic_accessor_and_provider_agree() {
         core::error::request_value::<oopsie::ErrorCode>(&err).expect("provider yields code");
     assert_eq!(via_accessor.as_str(), "dyn::code");
     assert_eq!(via_accessor.as_str(), via_provider.as_str());
+}
+
+// ---- code() format-string interpolation referencing variant/struct fields ----
+//
+// `code("fmt {}", expr)` and `code = "{field}"` (inline capture) mirror the
+// same syntax as `help`. The generated `oopsie_error_code()` accessor and
+// the Provider path must both render the interpolated value.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum CodeInterpError {
+    // Positional arg form.
+    #[oopsie("connect failed")]
+    #[oopsie(code("app::{}", kind))]
+    Positional { kind: String },
+
+    // Inline-capture form (no explicit arg).
+    #[oopsie("ingest failed")]
+    #[oopsie(code = "svc::{module}")]
+    InlineCapture { module: String },
+}
+
+#[test]
+fn code_positional_arg_interpolation_renders_value() {
+    use oopsie::Diagnostic as _;
+    let err = Positional {
+        kind: "db".to_owned(),
+    }
+    .build();
+    let code = err.oopsie_error_code();
+    assert!(code.is_some(), "should render interpolated code");
+    assert_eq!(code.unwrap().as_str(), "app::db");
+}
+
+#[test]
+fn code_inline_capture_interpolation_renders_value() {
+    use oopsie::Diagnostic as _;
+    let err = InlineCapture {
+        module: "ingest".to_owned(),
+    }
+    .build();
+    let code = err.oopsie_error_code();
+    assert!(code.is_some(), "should render interpolated code");
+    assert_eq!(code.unwrap().as_str(), "svc::ingest");
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn code_interpolation_accessor_and_provider_agree() {
+    use oopsie::Diagnostic as _;
+    let err = Positional {
+        kind: "net".to_owned(),
+    }
+    .build();
+    let via_accessor = err.oopsie_error_code().expect("accessor yields code");
+    let via_provider =
+        core::error::request_value::<oopsie::ErrorCode>(&err).expect("provider yields code");
+    assert_eq!(via_accessor.as_str(), via_provider.as_str());
+    assert_eq!(via_accessor.as_str(), "app::net");
+}
+
+// Struct parity: `code = "{field}"` inline capture on a struct.
+#[derive(Debug, Oopsie)]
+#[oopsie(suffix)]
+#[oopsie("struct failed")]
+#[oopsie(code = "svc::{kind}")]
+struct StructCodeInterp {
+    kind: String,
+}
+
+#[test]
+fn struct_code_inline_capture_renders_value() {
+    use oopsie::Diagnostic as _;
+    let err = StructCodeInterpOopsie {
+        kind: "fs".to_owned(),
+    }
+    .build();
+    let code = err.oopsie_error_code();
+    assert!(code.is_some(), "should render interpolated code");
+    assert_eq!(code.unwrap().as_str(), "svc::fs");
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn struct_code_inline_capture_accessor_and_provider_agree() {
+    use oopsie::Diagnostic as _;
+    let err = StructCodeInterpOopsie {
+        kind: "mem".to_owned(),
+    }
+    .build();
+    let via_accessor = err.oopsie_error_code().expect("accessor yields code");
+    let via_provider =
+        core::error::request_value::<oopsie::ErrorCode>(&err).expect("provider yields code");
+    assert_eq!(via_accessor.as_str(), via_provider.as_str());
+    assert_eq!(via_accessor.as_str(), "svc::mem");
 }
 
 // ---- provide(ErrorCode => ...) exprs that reference fields / ref-form ----

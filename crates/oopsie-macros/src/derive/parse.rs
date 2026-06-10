@@ -238,7 +238,7 @@ pub struct VariantAttrsInner {
     #[darling(default)]
     pub help: Option<DisplayAttr>,
     #[darling(default)]
-    pub code: Option<String>,
+    pub code: Option<DisplayAttr>,
     #[darling(default, multiple, rename = "provide")]
     pub provides: Vec<ProvideAttr>,
 }
@@ -464,7 +464,7 @@ pub struct StructAttrs {
     #[darling(default)]
     pub help: Option<DisplayAttr>,
     #[darling(default)]
-    pub code: Option<String>,
+    pub code: Option<DisplayAttr>,
     /// See `VariantAttrsInner::provides` for the rationale (struct-level
     /// `#[oopsie(provide(...))]` emitted by trace injection).
     #[darling(default, multiple, rename = "provide")]

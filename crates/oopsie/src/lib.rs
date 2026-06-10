@@ -142,7 +142,7 @@
 //! | `#[oopsie(display("msg"), ...)]` | Long-form display (combine with other attrs) |
 //! | `#[oopsie(transparent)]` | Generate `From` impl instead of a selector struct |
 //! | `#[oopsie(help = "...")]` | Help text, surfaced via [`Diagnostic::oopsie_help_text`] and consumed by `Report` |
-//! | `#[oopsie(code = "...")]` | Error code, surfaced via [`Diagnostic::oopsie_error_code`] and consumed by `Report` |
+//! | `#[oopsie(code = "...")]` / `#[oopsie(code("fmt {}", expr))]` | Error code with optional format-string interpolation, surfaced via [`Diagnostic::oopsie_error_code`] and consumed by `Report` |
 //!
 //! With the `unstable` feature, help and code are additionally surfaced through the
 //! nightly `Provider` API.
