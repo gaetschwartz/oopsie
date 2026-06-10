@@ -317,6 +317,21 @@ fn layout_single_trace_fallback_backtrace_only() {
     assert!(e.oopsie_spantrace().is_none());
 }
 
+// Without the tracing feature the layout types collapse to backtrace-only.
+// Verify the accessor still works — the test is intentionally ungated on tracing
+// so it exercises the no-tracing codepath in every bare combo.
+#[cfg(not(feature = "tracing"))]
+#[test]
+fn layout_default_packed_backtrace_only_without_tracing() {
+    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+    let e = default_packed_oopsies::Boom { info: "x" }.build();
+    assert!(
+        e.oopsie_backtrace().is_some(),
+        "backtrace accessor must work in no-tracing layout"
+    );
+    oopsie::clear_rust_backtrace_override();
+}
+
 // Struct path (symmetric to the enum cases above): default packed + boxed,
 // and the unpacked inline layout that exercises the `Borrow` accessor.
 #[oopsie(traced)]

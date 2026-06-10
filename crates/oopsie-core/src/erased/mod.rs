@@ -809,6 +809,34 @@ mod tests {
     // Smoke-test that a real backtrace produces str filenames.
     // ─────────────────────────────────────────────────────────────────────
 
+    // Constructs an ErasedError without tracing (spantrace: None) and verifies
+    // that Clone preserves message, source chain, and diagnostics.
+    #[test]
+    fn erased_error_clone_without_spantrace() {
+        let original = ErasedError {
+            message: "clone test".into(),
+            source_chain: vec!["cause one".into(), "cause two".into()],
+            diagnostics: Diagnostics {
+                code: Some("app::clone".into()),
+                help: Some("check again".into()),
+            },
+            spantrace: None,
+            backtrace: None,
+            source: OnceLock::new(),
+        };
+
+        let cloned = original.clone();
+
+        assert_eq!(&*cloned.message, &*original.message);
+        assert_eq!(cloned.source_chain.len(), original.source_chain.len());
+        assert_eq!(&*cloned.source_chain[0], &*original.source_chain[0]);
+        assert_eq!(&*cloned.source_chain[1], &*original.source_chain[1]);
+        assert_eq!(cloned.diagnostics.code(), original.diagnostics.code());
+        assert_eq!(cloned.diagnostics.help(), original.diagnostics.help());
+        assert!(cloned.spantrace.is_none());
+        assert!(cloned.backtrace.is_none());
+    }
+
     #[test]
     fn erased_frame_filename_is_str() {
         crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);

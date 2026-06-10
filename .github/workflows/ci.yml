@@ -77,6 +77,30 @@ jobs:
           cargo clippy --workspace --all-targets --no-default-features
           ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
           -- -D warnings
+      - name: cargo clippy (serde)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features serde
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (tracing)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features tracing
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (serde,tracing)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features serde,tracing
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (chrono)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features chrono
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
       - name: cargo clippy (full)
         run: >
           cargo clippy --workspace --all-targets --no-default-features

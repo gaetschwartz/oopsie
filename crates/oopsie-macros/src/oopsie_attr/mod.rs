@@ -314,7 +314,7 @@ mod tests {
     // so the snapshot only matches in the default-features build.
     #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
-    fn bare_enum_no_tracing() {
+    fn bare_enum() {
         let result = expand(
             quote! {},
             quote! {
@@ -329,7 +329,7 @@ mod tests {
     }
 
     #[test]
-    fn bare_struct_no_tracing() {
+    fn bare_struct() {
         let result = expand(
             quote! {},
             quote! {
