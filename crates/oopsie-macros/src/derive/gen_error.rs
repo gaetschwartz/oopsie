@@ -191,9 +191,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                     }
                 });
             }
-            // Even with trace injection off, a user can hand-declare a
-            // `SpanTrace`-typed field; this keeps `provide` from naming
-            // `SpanTrace` when the type doesn't exist.
+            // Guard against naming `SpanTrace` when the feature (and thus the type) is absent.
             if cfg!(feature = "tracing")
                 && let Some(st_field) = &categorized.spantrace_field
             {
@@ -587,9 +585,7 @@ pub fn gen_struct_error(
                 }
             });
         }
-        // Even with trace injection off, a user can hand-declare a
-        // `SpanTrace`-typed field; this keeps `provide` from naming
-        // `SpanTrace` when the type doesn't exist.
+        // Guard against naming `SpanTrace` when the feature (and thus the type) is absent.
         if cfg!(feature = "tracing")
             && let Some(st_field) = &categorized.spantrace_field
         {

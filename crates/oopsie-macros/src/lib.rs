@@ -80,7 +80,8 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 ///
 /// ## Diagnostics
 ///
-/// Pass `traced` to automatically inject backtrace and spantrace fields:
+/// Pass `traced` to automatically inject a backtrace field (and a span-trace when
+/// the `tracing` feature is enabled):
 ///
 /// ```ignore
 /// #[oopsie::oopsie(traced)]
@@ -96,7 +97,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | Parameter | Effect |
 /// |-----------|--------|
 /// | *(bare)* | No diagnostics; equivalent to `#[derive(Debug, Oopsie)]` |
-/// | `traced` | Inject backtrace + spantrace, plus an auto error code (`module_path::Type::Variant`) |
+/// | `traced` | Inject backtrace (and span-trace when the `tracing` feature is enabled), plus an auto error code (`module_path::Type::Variant`) |
 /// | `traced(timestamp)` | …plus an auto-captured timestamp |
 /// | `traced(backtrace(false))` | Disable one part (any of `backtrace`/`spantrace`/`timestamp`) |
 /// | `traced(timestamp(chrono = true))` | `chrono::DateTime<Local>` timestamps (needs oopsie's `chrono` feature) |

@@ -40,7 +40,8 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 ///
 /// # Construction
 ///
-/// - [`Welp::new`] — fresh string error, captures backtrace and span-trace.
+/// - [`Welp::new`] — fresh string error, captures a backtrace (and a span-trace
+///   when the `tracing` feature is enabled).
 /// - [`Welp::wrap`] — wrap an existing error with a string message.
 /// - [`Welp::wrap_boxed`] — same, for an already-boxed `dyn Error`.
 ///
@@ -77,8 +78,8 @@ enum WelpRepr {
 }
 
 impl Welp {
-    /// Build a fresh `Welp` from a string message. Captures backtrace and
-    /// span-trace at the call site.
+    /// Build a fresh `Welp` from a string message. Captures a backtrace (and a
+    /// span-trace when the `tracing` feature is enabled) at the call site.
     ///
     /// ```
     /// use oopsie_core::Welp;
@@ -94,8 +95,9 @@ impl Welp {
         })
     }
 
-    /// Wrap an existing error with a string message. Captures backtrace and
-    /// span-trace at the wrap site; when the source provides its own captured
+    /// Wrap an existing error with a string message. Captures a backtrace (and a
+    /// span-trace when the `tracing` feature is enabled) at the wrap site; when
+    /// the source provides its own captured
     /// traces (via the Provider API under the
     /// `unstable-error-generic-member-access` feature) the [`Diagnostic`]
     /// accessors surface those instead, so the origin-most captured trace

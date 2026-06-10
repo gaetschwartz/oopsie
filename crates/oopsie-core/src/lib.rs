@@ -142,8 +142,8 @@ pub mod __private {
     /// own trace, and std's `Request` is first-wins, so the deepest provider in
     /// the chain fills the slot — this surfaces the origin-most trace rather
     /// than a wrap-site one. Trace accessors go through the typed
-    /// [`source_backtrace`]/[`source_spantrace`] wrappers, which add the
-    /// skip-empty filter on top of this lookup.
+    /// [`source_backtrace`] / `source_spantrace` (requires the `tracing` feature)
+    /// wrappers, which add the skip-empty filter on top of this lookup.
     ///
     /// Returns `None` without `unstable-error-generic-member-access`: descending
     /// into a type-erased `dyn Error` source is not portable there, and the

@@ -28,7 +28,6 @@ impl ErasedBacktrace {
     /// stays raw so a consumer can still render the full stack later.
     #[must_use]
     pub fn from_backtrace(bt: &crate::Backtrace) -> Self {
-        // Resolve the backtrace to get symbol information.
         bt.resolve();
 
         let mut frames = Vec::new();

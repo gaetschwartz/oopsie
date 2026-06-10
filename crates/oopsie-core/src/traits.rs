@@ -18,10 +18,10 @@ pub trait Contextual<E> {
 
 /// A type that can auto-capture diagnostic data at the point of error construction.
 ///
-/// Implemented by [`Backtrace`](crate::Backtrace) and [`SpanTrace`](crate::SpanTrace) so they
-/// can be filled automatically. Mark a field with `#[oopsie(capture)]` to have it populated
-/// via this trait when the error is constructed — the field will not appear in the context
-/// selector and will not need to be supplied by the caller.
+/// Implemented by [`Backtrace`](crate::Backtrace) and `SpanTrace` (when the `tracing` feature
+/// is enabled) so they can be filled automatically. Mark a field with `#[oopsie(capture)]` to
+/// have it populated via this trait when the error is constructed — the field will not appear in
+/// the context selector and will not need to be supplied by the caller.
 pub trait Capturable {
     /// Capture diagnostic data at the current call site.
     #[track_caller]
