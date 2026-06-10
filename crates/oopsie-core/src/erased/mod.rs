@@ -164,8 +164,8 @@ impl ErasedError {
             .map(ErasedSpanTrace::from);
         #[cfg(not(feature = "tracing"))]
         let spantrace: Option<ErasedSpanTrace> = None;
-        // Skip empty/unsupported traces: they carry no frames and would render
-        // as a lone `SPANTRACE`/`BACKTRACE` header with no body.
+        // Omit a captured-but-empty backtrace: with no frames there is nothing
+        // to render, only a bare header.
         let backtrace = err
             .oopsie_backtrace()
             .map(ErasedBacktrace::from_backtrace)
