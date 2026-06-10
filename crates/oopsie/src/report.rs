@@ -54,7 +54,7 @@ impl<E: Diagnostic> Report<E> {
         Self {
             backtrace: Self::resolve_backtrace(&res),
             res,
-            color_config: ColorConfig::auto(),
+            color_config: ColorConfig::Auto,
         }
     }
 
@@ -64,7 +64,7 @@ impl<E: Diagnostic> Report<E> {
     pub const fn ok() -> Self {
         Self {
             res: Ok(()),
-            color_config: ColorConfig::auto(),
+            color_config: ColorConfig::Auto,
             backtrace: None,
         }
     }
@@ -98,7 +98,7 @@ impl<E: Diagnostic> Report<E> {
         Self {
             backtrace: Self::resolve_backtrace(&result),
             res: result,
-            color_config: ColorConfig::auto(),
+            color_config: ColorConfig::Auto,
         }
     }
 

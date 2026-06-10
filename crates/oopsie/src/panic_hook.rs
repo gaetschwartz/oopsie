@@ -105,7 +105,7 @@ impl<'a> PanicReport<'a> {
             backtrace,
             backtrace_setting,
             span_trace,
-            color_config: ColorConfig::auto(),
+            color_config: ColorConfig::Auto,
         }
     }
 
