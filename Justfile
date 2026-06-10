@@ -13,9 +13,8 @@ check:
     cargo +stable check -p oopsie --no-default-features --lib
     cargo +stable check -p oopsie-core --no-default-features --lib
 
-# Run clippy exactly as CI's Lints job does: deny every warning across the
-# whole workspace and all targets, for the default-features and
-# unstable-features builds. Uses the pinned toolchain, same as CI.
+# Run clippy across the same feature combos as CI's Lints job: deny every
+# warning across the whole workspace and all targets. Uses the pinned toolchain.
 clippy:
     cargo +stable clippy --workspace --all-targets --no-default-features -- -D warnings
     cargo +stable clippy --workspace --all-targets --no-default-features --features serde -- -D warnings
