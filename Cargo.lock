@@ -802,7 +802,6 @@ dependencies = [
  "oopsie-macros",
  "owo-colors",
  "rustversion",
- "serde",
  "serde_json",
  "snafu",
  "strip-ansi-escapes",

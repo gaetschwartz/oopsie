@@ -191,11 +191,11 @@ pub mod __private {
 
 #[cfg(feature = "tracing")]
 pub use spantrace::{OptionalSpanTrace, SpanTrace};
-#[cfg(feature = "tracing")]
+#[cfg(all(feature = "tracing", feature = "serde"))]
 use tracing_error::ErrorLayer;
-#[cfg(feature = "tracing")]
+#[cfg(all(feature = "tracing", feature = "serde"))]
 use tracing_subscriber::fmt::format::JsonFields;
-#[cfg(feature = "tracing")]
+#[cfg(all(feature = "tracing", feature = "serde"))]
 use tracing_subscriber::registry::LookupSpan;
 pub use traits::*;
 pub use welp::{Welp, WelpOptionExt, WelpResultExt};
@@ -294,7 +294,7 @@ impl_string_newtypes!(
 ///
 /// Equivalent to `ErrorLayer::new(JsonFields::default())` but doesn't require
 /// the caller to depend on `tracing-subscriber` directly.
-#[cfg(feature = "tracing")]
+#[cfg(all(feature = "tracing", feature = "serde"))]
 #[inline]
 #[must_use]
 pub fn json_error_layer<S>() -> ErrorLayer<S, JsonFields>

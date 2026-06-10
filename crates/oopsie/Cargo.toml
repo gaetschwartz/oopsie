@@ -28,7 +28,7 @@ unstable = [
     "oopsie-core/unstable",
 ]
 fancy = ["dep:owo-colors"]
-serde = ["oopsie-core/serde", "dep:serde", "dep:serde_json"]
+serde = ["oopsie-core/serde", "dep:serde_json"]
 tracing = ["oopsie-core/tracing", "oopsie-macros/tracing"]
 chrono = ["oopsie-core/chrono"]
 
@@ -37,7 +37,6 @@ backtrace = "0.3.76"
 oopsie-core = { workspace = true }
 oopsie-macros = { workspace = true }
 owo-colors = { version = "4", optional = true }
-serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 
 [lints]

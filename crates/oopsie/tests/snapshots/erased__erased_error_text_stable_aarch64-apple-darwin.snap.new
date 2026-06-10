@@ -1,0 +1,92 @@
+---
+source: crates/oopsie/tests/erased.rs
+assertion_line: 38
+expression: error.to_text()
+---
+Error[erased::common::MyError::Inner]:
+
+  × Inner error happened
+  ╰─▶ Error: Inner function failed (foo=true, name=Alice)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1: sys::inner_function
+           with {"foo":true,"id":42,"name":"Alice"}
+             at crates/oopsie/tests/common/mod.rs:[LOC]
+  2: controller::outer_function
+           with {"foo":true,"name":"Alice"}
+             at crates/oopsie/tests/common/mod.rs:[LOC]
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1: backtrace[[HASH]]::backtrace::libunwind::trace
+           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
+  2: backtrace[[HASH]]::backtrace::trace_unsynchronized::<<backtrace[[HASH]]::capture::Backtrace>::create::{closure#0}>
+           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+  3: backtrace[[HASH]]::backtrace::trace::<<backtrace[[HASH]]::capture::Backtrace>::create::{closure#0}>
+           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+  4: <backtrace[[HASH]]::capture::Backtrace>::create
+           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+  5: <backtrace[[HASH]]::capture::Backtrace>::new_unresolved
+           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+  6: <oopsie_core[[HASH]]::backtrace::Backtrace as oopsie_core[[HASH]]::traits::Capturable>::capture
+           at [WORKSPACE]/crates/oopsie-core/src/backtrace.rs:[LOC]
+  7: <(oopsie_core[[HASH]]::backtrace::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace) as oopsie_core[[HASH]]::traits::Capturable>::capture
+           at [WORKSPACE]/crates/oopsie-core/src/traits.rs:[LOC]
+  8: <alloc[[HASH]]::boxed::Box<(oopsie_core[[HASH]]::backtrace::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace)> as oopsie_core[[HASH]]::traits::Capturable>::capture
+           at [WORKSPACE]/crates/oopsie-core/src/traits.rs:[LOC]
+  9: <erased[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::build
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
+ 10: <erased[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::fail::<()>
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
+ 11: erased[[HASH]]::common::make_error::inner_function
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
+ 12: erased[[HASH]]::common::make_error::outer_function
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
+ 13: erased[[HASH]]::common::make_error
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
+ 14: erased[[HASH]]::test_erased_error_text
+           at [WORKSPACE]/crates/oopsie/tests/erased.rs:[LOC]
+ 15: erased[[HASH]]::test_erased_error_text::{closure#0}
+           at [WORKSPACE]/crates/oopsie/tests/erased.rs:[LOC]
+ 16: <erased[[HASH]]::test_erased_error_text::{closure#0} as core[[HASH]]::ops::function::FnOnce<()>>::call_once
+           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
+ 17: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
+           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
+ 18: test[[HASH]]::__rust_begin_short_backtrace::<core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String>, fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String>>
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
+ 19: test[[HASH]]::run_test_in_process::{closure#0}
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
+ 20: <core[[HASH]]::panic::unwind_safe::AssertUnwindSafe<test[[HASH]]::run_test_in_process::{closure#0}> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
+           at [STDLIB]/library/core/src/panic/unwind_safe.rs:[LOC]
+ 21: std[[HASH]]::panicking::catch_unwind::do_call::<core[[HASH]]::panic::unwind_safe::AssertUnwindSafe<test[[HASH]]::run_test_in_process::{closure#0}>, core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String>>
+           at [STDLIB]/library/std/src/panicking.rs:[LOC]
+ 22: std[[HASH]]::panicking::catch_unwind::<core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String>, core[[HASH]]::panic::unwind_safe::AssertUnwindSafe<test[[HASH]]::run_test_in_process::{closure#0}>>
+           at [STDLIB]/library/std/src/panicking.rs:[LOC]
+ 23: std[[HASH]]::panic::catch_unwind::<core[[HASH]]::panic::unwind_safe::AssertUnwindSafe<test[[HASH]]::run_test_in_process::{closure#0}>, core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String>>
+           at [STDLIB]/library/std/src/panic.rs:[LOC]
+ 24: test[[HASH]]::run_test_in_process
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
+ 25: test[[HASH]]::run_test::{closure#0}
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
+ 26: test[[HASH]]::run_test::{closure#1}
+           at [STDLIB]/library/test/src/lib.rs:[LOC]
+ 27: std[[HASH]]::sys::backtrace::__rust_begin_short_backtrace::<test[[HASH]]::run_test::{closure#1}, ()>
+           at [STDLIB]/library/std/src/sys/backtrace.rs:[LOC]
+ 28: std[[HASH]]::thread::lifecycle::spawn_unchecked::<test[[HASH]]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}
+           at [STDLIB]/library/std/src/thread/lifecycle.rs:[LOC]
+ 29: <core[[HASH]]::panic::unwind_safe::AssertUnwindSafe<std[[HASH]]::thread::lifecycle::spawn_unchecked<test[[HASH]]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
+           at [STDLIB]/library/core/src/panic/unwind_safe.rs:[LOC]
+ 30: std[[HASH]]::panicking::catch_unwind::do_call::<core[[HASH]]::panic::unwind_safe::AssertUnwindSafe<std[[HASH]]::thread::lifecycle::spawn_unchecked<test[[HASH]]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
+           at [STDLIB]/library/std/src/panicking.rs:[LOC]
+ 31: std[[HASH]]::panicking::catch_unwind::<(), core[[HASH]]::panic::unwind_safe::AssertUnwindSafe<std[[HASH]]::thread::lifecycle::spawn_unchecked<test[[HASH]]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>>
+           at [STDLIB]/library/std/src/panicking.rs:[LOC]
+ 32: std[[HASH]]::panic::catch_unwind::<core[[HASH]]::panic::unwind_safe::AssertUnwindSafe<std[[HASH]]::thread::lifecycle::spawn_unchecked<test[[HASH]]::run_test::{closure#1}, ()>::{closure#1}::{closure#0}>, ()>
+           at [STDLIB]/library/std/src/panic.rs:[LOC]
+ 33: std[[HASH]]::thread::lifecycle::spawn_unchecked::<test[[HASH]]::run_test::{closure#1}, ()>::{closure#1}
+           at [STDLIB]/library/std/src/thread/lifecycle.rs:[LOC]
+ 34: <std[[HASH]]::thread::lifecycle::spawn_unchecked<test[[HASH]]::run_test::{closure#1}, ()>::{closure#1} as core[[HASH]]::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}
+           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
+ 35: <alloc[[HASH]]::boxed::Box<dyn core[[HASH]]::ops::function::FnOnce<(), Output = ()> + core[[HASH]]::marker::Send> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
+           at [STDLIB]/library/alloc/src/boxed.rs:[LOC]
+ 36: <std[[HASH]]::sys::thread::unix::Thread>::new::thread_start
+           at [STDLIB]/library/std/src/sys/thread/unix.rs:[LOC]
+ 37: __pthread_cond_wait
