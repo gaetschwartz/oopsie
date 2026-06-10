@@ -38,15 +38,21 @@ pub fn gen_use_block(oopsie_path: &syn::Path, scopes: &[(&str, &[Ident])]) -> To
     }
 }
 
-/// Collect the keyword ident of every meta in every `#[oopsie(...)]` attr.
-/// Attributes whose body is not a meta list (the short-display form
-/// `#[oopsie("fmt {}", arg)]`) are skipped: this pre-pass must never error —
-/// validity checking is darling's job.
-fn collect_into(attrs: &[syn::Attribute], out: &mut Vec<Ident>) {
+/// Collect the keyword ident of every meta in every `#[oopsie(...)]` attr into
+/// `out`, and the `oopsie` attribute-name ident of each such attr into
+/// `helpers` (so the attribute name itself becomes a hover target, not only its
+/// contents). Attributes whose body is not a meta list (the short-display form
+/// `#[oopsie("fmt {}", arg)]`) contribute their name but no keywords: this
+/// pre-pass must never error — validity checking is darling's job.
+fn collect_into(attrs: &[syn::Attribute], out: &mut Vec<Ident>, helpers: &mut Vec<Ident>) {
     for attr in attrs {
-        if !attr.path().is_ident("oopsie") {
+        let Some(name) = attr.path().get_ident() else {
+            continue;
+        };
+        if name != "oopsie" {
             continue;
         }
+        helpers.push(name.clone());
         let Ok(metas) = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
         else {
             continue;
@@ -69,7 +75,8 @@ fn is_container_key(ident: &Ident) -> bool {
 /// derive input, scoped to `container` / `variant` / `field`.
 pub fn gen_keyword_docs(input: &syn::DeriveInput, oopsie_path: &syn::Path) -> TokenStream2 {
     let mut collected = Vec::new();
-    collect_into(&input.attrs, &mut collected);
+    let mut helper = Vec::new();
+    collect_into(&input.attrs, &mut collected, &mut helper);
     // A struct's `#[oopsie(...)]` mixes container and variant scopes in one
     // list, so container attrs are routed by key name. The same split is a
     // no-op for enums, whose container attrs hold container keys only.
@@ -80,15 +87,15 @@ pub fn gen_keyword_docs(input: &syn::DeriveInput, oopsie_path: &syn::Path) -> To
     match &input.data {
         syn::Data::Enum(data) => {
             for v in &data.variants {
-                collect_into(&v.attrs, &mut variant);
+                collect_into(&v.attrs, &mut variant, &mut helper);
                 for f in &v.fields {
-                    collect_into(&f.attrs, &mut field);
+                    collect_into(&f.attrs, &mut field, &mut helper);
                 }
             }
         }
         syn::Data::Struct(data) => {
             for f in &data.fields {
-                collect_into(&f.attrs, &mut field);
+                collect_into(&f.attrs, &mut field, &mut helper);
             }
         }
         syn::Data::Union(_) => {}
@@ -97,6 +104,7 @@ pub fn gen_keyword_docs(input: &syn::DeriveInput, oopsie_path: &syn::Path) -> To
     gen_use_block(
         oopsie_path,
         &[
+            ("helper", &helper),
             ("container", &container),
             ("variant", &variant),
             ("field", &field),

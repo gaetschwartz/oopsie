@@ -14,6 +14,11 @@
 //! dominant accepted shape; the `Forms:` doc line stays authoritative for the
 //! alternatives. Pure marker keywords keep zero-arg signatures.
 
+#![allow(
+    clippy::needless_pass_by_value,
+    reason = "placeholder params exist only to shape the by-value signature shown on hover; &T/Copy would distort it"
+)]
+
 /// Placeholder types shown in the hover signatures of value-taking keywords.
 /// Each stands for the shape of value the keyword accepts.
 pub mod params {
@@ -52,6 +57,17 @@ pub mod params {
 
     /// A nested settings list, e.g. `key(option = value, ...)`.
     pub struct Settings;
+}
+
+/// The `oopsie` helper-attribute name itself, read by `#[derive(Oopsie)]` and
+/// the `#[oopsie::oopsie]` macro. The full overview lives on the [`oopsie`] fn,
+/// which is what hover surfaces.
+pub mod helper {
+    /// The `oopsie` configuration attribute, read by `#[derive(Oopsie)]` and
+    /// the `#[oopsie::oopsie]` macro. Which keywords it accepts depends on
+    /// where it sits — on the error type, on a variant/struct, or on a field.
+    /// Hover a keyword inside the parentheses for its specific meaning.
+    pub const fn oopsie() {}
 }
 
 /// Keywords accepted in `#[oopsie(...)]` on the error type itself.
@@ -101,7 +117,7 @@ pub mod container {
 /// Keywords accepted in `#[oopsie(...)]` on an enum variant (or on a struct,
 /// which plays both container and variant roles).
 pub mod variant {
-    use super::params::{FmtArgs, FormatString, Text, TypeArrowExpr, Vis};
+    use super::params::{FmtArgs, FormatString, TypeArrowExpr, Vis};
 
     /// Sets the `Display` message, with `format!` semantics (named or
     /// positional interpolation).
@@ -127,9 +143,10 @@ pub mod variant {
 
     /// Attaches an error code, surfaced via `Diagnostic::oopsie_error_code`.
     ///
-    /// Form: `code = "..."`.
-    pub const fn code(code: Text) {
+    /// Forms: `code = "..."`, `code("fmt {}", args)`.
+    pub const fn code(code: FormatString, args: FmtArgs) {
         _ = code;
+        _ = args;
     }
 
     /// Provides a value or reference through the `std::error::Request`
