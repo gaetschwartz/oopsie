@@ -20,7 +20,7 @@ pub mod test_utils;
 mod traits;
 mod welp;
 
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::ops::Deref;
 
 pub use backtrace::{
@@ -165,126 +165,95 @@ use tracing_subscriber::registry::LookupSpan;
 pub use traits::*;
 pub use welp::{Welp, WelpOptionExt, WelpResultExt};
 
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
-#[serde(transparent)]
-#[repr(transparent)]
-pub struct ErrorCode(Cow<'static, str>);
+macro_rules! impl_string_newtypes {
+    ($($(#[$meta:meta])* $ident:ident,)* $(,)?) => { $(
+        #[derive(
+            Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
+        )]
+        #[serde(transparent)]
+        #[repr(transparent)]
+        $(#[$meta])*
+        pub struct $ident(Cow<'static, str>);
 
-impl ErrorCode {
-    /// Build an `ErrorCode` from a `&'static str` in `const` context.
-    #[must_use]
-    #[inline]
-    pub const fn from_static(s: &'static str) -> Self {
-        Self(Cow::Borrowed(s))
-    }
+        impl $ident {
+            #[doc = concat!("Build a new `", stringify!($ident), "` from a `&'static str`.")]
+            #[must_use]
+            #[inline]
+            pub const fn from_static(s: &'static str) -> Self {
+                Self(Cow::Borrowed(s))
+            }
 
-    /// Borrow the underlying string.
-    #[must_use]
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+            #[doc = concat!("Build a new `", stringify!($ident), "` from a `String`.")]
+            #[must_use]
+            #[inline]
+            pub const fn from_string(s: String) -> Self {
+                Self(Cow::Owned(s))
+            }
 
-    /// Consume the `ErrorCode`, returning the underlying `Cow`.
-    #[must_use]
-    #[inline]
-    pub fn into_inner(self) -> Cow<'static, str> {
-        self.0
-    }
+            /// Borrow the underlying string.
+            #[must_use]
+            #[inline]
+            pub const fn as_str(&self) -> &str {
+                match &self.0 {
+                    Cow::Borrowed(s) => s,
+                    Cow::Owned(s) => s.as_str(),
+                }
+            }
+
+            #[doc = concat!("Consume the `", stringify!($ident), "` and return the underlying `Cow`.")]
+            #[must_use]
+            #[inline]
+            pub fn into_inner(self) -> Cow<'static, str> {
+                self.0
+            }
+        }
+
+        impl Deref for $ident {
+            type Target = str;
+
+            #[inline]
+            fn deref(&self) -> &Self::Target {
+                self.as_str()
+            }
+        }
+
+        impl Borrow<str> for $ident {
+            #[inline]
+            fn borrow(&self) -> &str {
+                self.as_str()
+            }
+        }
+
+        impl From<&'static str> for $ident {
+            #[inline]
+            fn from(s: &'static str) -> Self {
+                Self::from_static(s)
+            }
+        }
+
+        impl From<String> for $ident {
+            #[inline]
+            fn from(s: String) -> Self {
+                Self::from_string(s)
+            }
+        }
+
+        impl std::fmt::Display for $ident {
+            #[inline]
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                self.0.fmt(f)
+            }
+        }
+
+    )* };
 }
 
-impl Deref for ErrorCode {
-    type Target = str;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<&'static str> for ErrorCode {
-    #[inline]
-    fn from(s: &'static str) -> Self {
-        Self(Cow::Borrowed(s))
-    }
-}
-
-impl From<String> for ErrorCode {
-    #[inline]
-    fn from(s: String) -> Self {
-        Self(Cow::Owned(s))
-    }
-}
-
-impl std::fmt::Display for ErrorCode {
-    #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-/// Help text associated with an error, provided via the Provider API.
-#[derive(
-    Clone, Debug, Eq, Hash, PartialEq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-)]
-#[serde(transparent)]
-#[repr(transparent)]
-pub struct HelpText(Cow<'static, str>);
-
-impl HelpText {
-    /// Build a `HelpText` from a `&'static str` in `const` context.
-    #[must_use]
-    #[inline]
-    pub const fn from_static(s: &'static str) -> Self {
-        Self(Cow::Borrowed(s))
-    }
-
-    /// Borrow the underlying string.
-    #[must_use]
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-
-    /// Consume the `HelpText`, returning the underlying `Cow`.
-    #[must_use]
-    #[inline]
-    pub fn into_inner(self) -> Cow<'static, str> {
-        self.0
-    }
-}
-
-impl Deref for HelpText {
-    type Target = str;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl From<&'static str> for HelpText {
-    #[inline]
-    fn from(s: &'static str) -> Self {
-        Self(Cow::Borrowed(s))
-    }
-}
-
-impl From<String> for HelpText {
-    #[inline]
-    fn from(s: String) -> Self {
-        Self(Cow::Owned(s))
-    }
-}
-
-impl std::fmt::Display for HelpText {
-    #[inline]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
+impl_string_newtypes!(
+    /// An opaque error code, used for programmatic handling and matching.
+    ErrorCode,
+    /// User-facing help text, intended to be shown in diagnostics.
+    HelpText,
+);
 
 /// Construct a `tracing_error::ErrorLayer` configured to format span fields
 /// as JSON.
