@@ -125,11 +125,14 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
         .as_ref()
         .map(|c| gen_size_assertion(&input.ident, c));
 
+    let keyword_docs = crate::keyword_docs::gen_keyword_docs(input, &path);
+
     Ok(quote! {
         #wrapped_selectors
         #display
         #error
         #size_assert
+        #keyword_docs
     })
 }
 
@@ -162,11 +165,14 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
         )
     };
 
+    let keyword_docs = crate::keyword_docs::gen_keyword_docs(input, &path);
+
     Ok(quote! {
         #wrapped_selector
         #display
         #error
         #size_assert
+        #keyword_docs
     })
 }
 

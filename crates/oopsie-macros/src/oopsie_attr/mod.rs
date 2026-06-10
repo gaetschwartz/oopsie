@@ -63,10 +63,13 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
 
     let args = OopsieAttrArgs::from_list(&meta)?;
     let needs_tracing = args.traced.as_ref().is_some_and(FieldSetting::is_enabled);
+    let keywords = crate::keyword_docs::collect_attr_keywords(&meta);
 
     match syn::parse2::<syn::Item>(input)? {
-        syn::Item::Enum(item_enum) => expand_enum(&args, needs_tracing, item_enum),
-        syn::Item::Struct(item_struct) => expand_struct(&args, needs_tracing, item_struct),
+        syn::Item::Enum(item_enum) => expand_enum(&args, needs_tracing, &keywords, item_enum),
+        syn::Item::Struct(item_struct) => {
+            expand_struct(&args, needs_tracing, &keywords, item_struct)
+        }
         other => Err(syn::Error::new_spanned(
             other,
             "`#[oopsie]` can only be applied to enums or structs",
@@ -77,6 +80,7 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
 fn expand_enum(
     args: &OopsieAttrArgs,
     needs_tracing: bool,
+    keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
     item: syn::ItemEnum,
 ) -> syn::Result<TokenStream2> {
     let span = item.span();
@@ -107,6 +111,12 @@ fn expand_enum(
     }
     let impls = derive::expand_enum(&derive_input, &container_attrs)?;
 
+    let (attr_kws, traced_kws) = keywords;
+    let keyword_docs = crate::keyword_docs::gen_use_block(
+        &container_attrs.oopsie_path(),
+        &[("attr", attr_kws), ("traced", traced_kws)],
+    );
+
     // Step 3: emit the item with Debug added, Oopsie removed from derives,
     // and all #[oopsie(...)] helper attrs stripped (they've been consumed).
     let mut out_item: syn::ItemEnum = syn::parse2(injected_ts)?;
@@ -122,12 +132,14 @@ fn expand_enum(
     Ok(quote! {
         #out_item
         #impls
+        #keyword_docs
     })
 }
 
 fn expand_struct(
     args: &OopsieAttrArgs,
     needs_tracing: bool,
+    keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
     item: syn::ItemStruct,
 ) -> syn::Result<TokenStream2> {
     let span = item.span();
@@ -158,6 +170,12 @@ fn expand_struct(
     }
     let impls = derive::expand_struct(&derive_input, &container_attrs)?;
 
+    let (attr_kws, traced_kws) = keywords;
+    let keyword_docs = crate::keyword_docs::gen_use_block(
+        &container_attrs.container.oopsie_path(),
+        &[("attr", attr_kws), ("traced", traced_kws)],
+    );
+
     // Step 3: emit the item with Debug added, Oopsie removed from derives,
     // and all #[oopsie(...)] helper attrs stripped (they've been consumed).
     let mut out_item: syn::ItemStruct = syn::parse2(injected_ts)?;
@@ -170,6 +188,7 @@ fn expand_struct(
     Ok(quote! {
         #out_item
         #impls
+        #keyword_docs
     })
 }
 
@@ -375,6 +394,13 @@ mod tests {
         .to_string();
         assert!(out.contains("attr_oopsie :: Contextual"), "{out}");
         assert!(!out.contains("macro_oopsie :: Contextual"), "{out}");
+        // The keyword-doc `use` block must resolve through the same effective
+        // path as the impls, or it becomes an unresolvable import.
+        assert!(
+            out.contains("attr_oopsie :: __private :: documented :: attr :: path"),
+            "{out}"
+        );
+        assert!(!out.contains("macro_oopsie :: __private"), "{out}");
     }
 
     #[test]

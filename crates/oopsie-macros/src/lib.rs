@@ -4,6 +4,7 @@
 )]
 
 pub(crate) mod derive;
+pub(crate) mod keyword_docs;
 mod oopsie_attr;
 pub(crate) mod traced;
 pub(crate) mod utils;
