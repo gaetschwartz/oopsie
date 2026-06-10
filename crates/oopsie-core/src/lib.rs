@@ -87,6 +87,7 @@ pub mod __private {
         fn fwd_code(&self) -> Option<crate::ErrorCode>;
         fn fwd_help(&self) -> Option<crate::HelpText>;
         fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace>;
+        #[cfg(feature = "tracing")]
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace>;
     }
 
@@ -103,6 +104,7 @@ pub mod __private {
         fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace> {
             self.0.oopsie_backtrace()
         }
+        #[cfg(feature = "tracing")]
         #[inline]
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace> {
             self.0.oopsie_spantrace()
@@ -123,6 +125,7 @@ pub mod __private {
         fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace> {
             None
         }
+        #[cfg(feature = "tracing")]
         #[inline]
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace> {
             None
@@ -171,6 +174,7 @@ pub mod __private {
     }
 
     /// [`source_trace`] for `SpanTrace`, treating an empty trace as absent.
+    #[cfg(feature = "tracing")]
     #[inline]
     #[must_use]
     pub fn source_spantrace<'a>(

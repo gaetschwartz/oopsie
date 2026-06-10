@@ -1,6 +1,8 @@
 //! Simple trait for errors that expose diagnostic data.
 
-use crate::{Backtrace, ErrorCode, HelpText, SpanTrace};
+#[cfg(feature = "tracing")]
+use crate::SpanTrace;
+use crate::{Backtrace, ErrorCode, HelpText};
 
 /// Trait for errors that expose diagnostic data.
 ///
@@ -15,6 +17,7 @@ pub trait Diagnostic: std::error::Error {
     }
 
     /// Returns the span trace captured when this error was created.
+    #[cfg(feature = "tracing")]
     #[inline]
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         None
@@ -39,6 +42,7 @@ impl<T: Diagnostic> Diagnostic for Box<T> {
         (**self).oopsie_backtrace()
     }
 
+    #[cfg(feature = "tracing")]
     #[inline]
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         (**self).oopsie_spantrace()
@@ -64,6 +68,7 @@ mod tests {
     #[derive(Debug)]
     struct Src {
         backtrace: Backtrace,
+        #[cfg(feature = "tracing")]
         spantrace: SpanTrace,
     }
 
@@ -80,11 +85,13 @@ mod tests {
             Some(&self.backtrace)
         }
 
+        #[cfg(feature = "tracing")]
         fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
             Some(&self.spantrace)
         }
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn box_delegates_diagnostic_accessors() {
         let src = Src {
@@ -96,6 +103,7 @@ mod tests {
         assert!(boxed.oopsie_spantrace().is_some());
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn box_diagnostic_extraction_reuses_source_frames() {
         use crate::{CaptureExt, RustBacktrace, with_rust_backtrace_override};
