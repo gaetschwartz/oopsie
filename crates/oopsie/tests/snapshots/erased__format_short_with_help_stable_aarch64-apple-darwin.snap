@@ -1,0 +1,8 @@
+---
+source: crates/oopsie/tests/erased.rs
+expression: short
+---
+erased::ErrorWithHelp
+
+  × Something went wrong: connection refused
+  help: Try restarting the service
