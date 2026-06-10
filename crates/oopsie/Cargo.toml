@@ -80,3 +80,12 @@ harness = false
 [[bench]]
 name = "vs_ecosystem"
 harness = false
+
+[[bench]]
+name = "erased"
+harness = false
+required-features = ["serde"]
+
+[[example]]
+name = "erased_json"
+required-features = ["serde"]
