@@ -2,7 +2,7 @@
 source: crates/oopsie/tests/report.rs
 expression: report
 ---
-[1m[31mError[39m[0m[2m[[0m[34m[2mreport::TestError[0m[39m[2m][0m: Test error: colored test
+[31;1mError[0m[2m[[0m[34;2mreport::TestError[0m[2m][0m: Test error: colored test
 
 [31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
 [36m   ... 8 frames hidden ...[0m

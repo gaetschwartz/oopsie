@@ -6,12 +6,11 @@
 use std::fmt;
 use std::process::{ExitCode, Termination};
 
-use owo_colors::OwoColorize as _;
-
 use crate::ColorConfig;
 
 use crate::Diagnostic;
 
+use crate::color::style;
 use crate::trace_printer::TracePrinter;
 
 /// A wrapper around an error that provides rich, colorized output.
@@ -153,31 +152,24 @@ impl<E: Diagnostic> Report<E> {
         /// user-implemented and the std contract does not forbid cycles.
         const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 
-        let colors_enabled = self.color_config.should_colorize();
+        let c = self.color_config.should_colorize();
+
         let Err(err) = &self.res else { return Ok(()) };
 
         let error_code = err.oopsie_error_code();
         let help_text = err.oopsie_help_text();
 
         // Write main error
-        if colors_enabled {
-            write!(f, "{}", "Error".red().bold())?;
-        } else {
-            write!(f, "Error")?;
-        }
+        write!(f, "{}", style!("Error", S.red().bold(), c))?;
 
         if let Some(code) = error_code {
-            if colors_enabled {
-                write!(
-                    f,
-                    "{}{}{}",
-                    "[".dimmed(),
-                    code.dimmed().blue(),
-                    "]".dimmed()
-                )?;
-            } else {
-                write!(f, "[{code}]")?;
-            }
+            write!(
+                f,
+                "{}{}{}",
+                style!("[", S.dimmed(), c),
+                style!(code, S.dimmed().blue(), c),
+                style!("]", S.dimmed(), c)
+            )?;
         }
         writeln!(f, ": {err}")?;
 
@@ -186,11 +178,12 @@ impl<E: Diagnostic> Report<E> {
         let mut depth = 0_usize;
         while let Some(err) = source {
             if depth == MAX_SOURCE_CHAIN_DEPTH {
-                if colors_enabled {
-                    writeln!(f, "  {} (source chain truncated)", "╰─▶".yellow())?;
-                } else {
-                    writeln!(f, "  ╰─▶ (source chain truncated)")?;
-                }
+                writeln!(
+                    f,
+                    "  {} (source chain truncated)",
+                    style!("╰─▶", S.yellow(), c)
+                )?;
+
                 break;
             }
             let next_source = err.source();
@@ -199,23 +192,15 @@ impl<E: Diagnostic> Report<E> {
             } else {
                 "╰─▶"
             };
-            if colors_enabled {
-                writeln!(f, "  {} {err}", arrow.yellow())?;
-            } else {
-                writeln!(f, "  {arrow} {err}")?;
-            }
+            writeln!(f, "  {} {err}", style!(arrow, S.yellow(), c))?;
+
             source = next_source;
             depth += 1;
         }
 
         // Write help text if present
         if let Some(help) = help_text {
-            if colors_enabled {
-                write!(f, "\n  {}: {help}", "help".cyan())?;
-            } else {
-                write!(f, "\n  help: {help}")?;
-            }
-            writeln!(f)?;
+            writeln!(f, "\n  {}: {help}", style!("help", S.cyan(), c))?;
         }
 
         Ok(())

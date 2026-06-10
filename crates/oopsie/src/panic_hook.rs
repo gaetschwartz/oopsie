@@ -8,12 +8,13 @@ use std::fmt;
 use std::panic::PanicHookInfo;
 use std::sync::{Mutex, PoisonError};
 
-use owo_colors::{OwoColorize as _, Style};
+use owo_colors::Style;
 
 use oopsie_core::Capturable as _;
 use oopsie_core::{Backtrace, SpanTrace};
 
 use crate::ColorConfig;
+use crate::color::style;
 use crate::trace_printer::{TracePrinter, TraceTheme, panic_frame_filter};
 
 const HEADER_STYLE: Style = Style::new().red().bold();
@@ -110,34 +111,31 @@ impl<'a> PanicReport<'a> {
     }
 
     fn write_header(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let colorize = self.color_config.should_colorize();
+        let c = self.color_config.should_colorize();
         // `PanicHookInfo::payload_as_str` would be cleaner but postdates the
         // crate's MSRV; downcast manually instead.
         let payload = self.info.payload();
-        let message = payload
-            .downcast_ref::<&str>()
-            .copied()
-            .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
-            .unwrap_or("<non-string panic payload>");
-
-        let header = "The application panicked (crashed).";
-        if colorize {
-            writeln!(f, "{}", header.style(HEADER_STYLE))?;
-            writeln!(f, "Message:  {}", message.style(MESSAGE_STYLE))?;
+        let message = if let Some(s) = payload.downcast_ref::<&str>() {
+            s
+        } else if let Some(s) = payload.downcast_ref::<String>() {
+            s
         } else {
-            writeln!(f, "{header}")?;
-            writeln!(f, "Message:  {message}")?;
-        }
+            "<non-string panic payload>"
+        };
 
-        write!(f, "Location: ")?;
+        write!(
+            f,
+            "{}\n\
+            Message:  {}\n\
+            Location: ",
+            style!("The application panicked (crashed).", HEADER_STYLE, c),
+            style!(message, MESSAGE_STYLE, c)
+        )?;
+
         match self.info.location() {
             Some(loc) => {
                 let location = format_args!("{}:{}:{}", loc.file(), loc.line(), loc.column());
-                if colorize {
-                    writeln!(f, "{}", location.style(LOCATION_STYLE))?;
-                } else {
-                    writeln!(f, "{location}")?;
-                }
+                writeln!(f, "{}", style!(location, LOCATION_STYLE, c))?;
             }
             None => writeln!(f, "<unknown>")?,
         }
@@ -160,17 +158,23 @@ impl<'a> PanicReport<'a> {
     }
 
     fn write_backtrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let c = self.color_config.should_colorize();
+
         writeln!(f)?;
 
         // When disabled there are no frames to render, so point the user at
         // the env var instead — mirroring std's default panic message.
         if !self.backtrace_setting.is_enabled() {
-            let hint = "note: run with `RUST_BACKTRACE=1` to display a backtrace";
-            if self.color_config.should_colorize() {
-                writeln!(f, "{}", hint.style(HINT_STYLE))?;
-            } else {
-                writeln!(f, "{hint}")?;
-            }
+            writeln!(
+                f,
+                "{}",
+                style!(
+                    "note: run with `RUST_BACKTRACE=1` to display a backtrace",
+                    HINT_STYLE,
+                    c
+                )
+            )?;
+
             return Ok(());
         }
 

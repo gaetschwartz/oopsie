@@ -120,6 +120,19 @@ pub fn get_color_mode() -> ColorConfig {
     }
 }
 
+macro_rules! style {
+    ($expr:expr, $style:expr, $colorize:expr) => {{
+        use $crate::color::S;
+        _ = S;
+
+        ::owo_colors::OwoColorize::style(&$expr, if $colorize { $style } else { S })
+    }};
+}
+
+#[doc(hidden)]
+pub const S: owo_colors::Style = owo_colors::Style::new();
+pub(crate) use style;
+
 #[cfg(test)]
 mod tests {
     use super::*;
