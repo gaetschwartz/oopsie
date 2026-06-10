@@ -14,6 +14,8 @@
 
 mod backtrace;
 mod diagnostic;
+#[cfg(feature = "serde")]
+pub mod erased;
 #[cfg(feature = "tracing")]
 mod spantrace;
 #[cfg(feature = "test-utils")]
