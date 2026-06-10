@@ -323,6 +323,7 @@ mod tests {
         assert_eq!(serialized, serialized2);
     }
 
+    #[cfg(feature = "test-utils")]
     #[test]
     fn test_erased_spantrace_display() {
         let json = serde_json::json!({
@@ -358,6 +359,7 @@ mod tests {
         ");
     }
 
+    #[cfg(feature = "test-utils")]
     #[test]
     fn test_erased_spantrace_display_with_fields() {
         let json = serde_json::json!({

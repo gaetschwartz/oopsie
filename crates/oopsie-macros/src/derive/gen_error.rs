@@ -194,17 +194,17 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             // Even with trace injection off, a user can hand-declare a
             // `SpanTrace`-typed field; this keeps `provide` from naming
             // `SpanTrace` when the type doesn't exist.
-            if cfg!(feature = "tracing") {
-                if let Some(st_field) = &categorized.spantrace_field {
-                    provide_stmts.push(quote! {
-                        {
-                            let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
-                            if __st.is_captured() {
-                                #req.provide_ref::<#oopsie_path::SpanTrace>(__st);
-                            }
+            if cfg!(feature = "tracing")
+                && let Some(st_field) = &categorized.spantrace_field
+            {
+                provide_stmts.push(quote! {
+                    {
+                        let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
+                        if __st.is_captured() {
+                            #req.provide_ref::<#oopsie_path::SpanTrace>(__st);
                         }
-                    });
-                }
+                    }
+                });
             }
         }
 
@@ -590,17 +590,17 @@ pub fn gen_struct_error(
         // Even with trace injection off, a user can hand-declare a
         // `SpanTrace`-typed field; this keeps `provide` from naming
         // `SpanTrace` when the type doesn't exist.
-        if cfg!(feature = "tracing") {
-            if let Some(st_field) = &categorized.spantrace_field {
-                provide_stmts.push(quote! {
-                    {
-                        let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
-                        if __st.is_captured() {
-                            #req.provide_ref::<#oopsie_path::SpanTrace>(__st);
-                        }
+        if cfg!(feature = "tracing")
+            && let Some(st_field) = &categorized.spantrace_field
+        {
+            provide_stmts.push(quote! {
+                {
+                    let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
+                    if __st.is_captured() {
+                        #req.provide_ref::<#oopsie_path::SpanTrace>(__st);
                     }
-                });
-            }
+                }
+            });
         }
     }
 

@@ -1,5 +1,5 @@
 error: `packed` requires backtrace and spantrace to share one boxing mode; set both `boxed` the same, or use `packed = false` for per-trace boxing
- --> tests/compile-fail/stable/packed_incoherent_boxing.rs:9:1
+ --> tests/compile-fail/stable/tracing/packed_incoherent_boxing.rs:9:1
   |
 9 | enum Bad {
   | ^^^^

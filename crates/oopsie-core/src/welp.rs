@@ -17,7 +17,7 @@ fn capture_maybe_spantrace() -> MaybeSpanTrace {
     SpanTrace::capture()
 }
 #[cfg(not(feature = "tracing"))]
-fn capture_maybe_spantrace() -> MaybeSpanTrace {}
+const fn capture_maybe_spantrace() -> MaybeSpanTrace {}
 
 /// A boxed `std::error::Error` that's `Send + Sync + 'static`.
 type BoxError = Box<dyn StdError + Send + Sync + 'static>;

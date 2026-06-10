@@ -61,31 +61,36 @@ impl<T: Diagnostic> Diagnostic for Box<T> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "tracing")]
     use super::*;
+    #[cfg(feature = "tracing")]
     use crate::traits::Capturable as _;
+    #[cfg(feature = "tracing")]
     use std::fmt;
 
+    #[cfg(feature = "tracing")]
     #[derive(Debug)]
     struct Src {
         backtrace: Backtrace,
-        #[cfg(feature = "tracing")]
         spantrace: SpanTrace,
     }
 
+    #[cfg(feature = "tracing")]
     impl fmt::Display for Src {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.write_str("src")
         }
     }
 
+    #[cfg(feature = "tracing")]
     impl std::error::Error for Src {}
 
+    #[cfg(feature = "tracing")]
     impl Diagnostic for Src {
         fn oopsie_backtrace(&self) -> Option<&Backtrace> {
             Some(&self.backtrace)
         }
 
-        #[cfg(feature = "tracing")]
         fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
             Some(&self.spantrace)
         }
