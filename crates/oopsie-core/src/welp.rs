@@ -3,7 +3,21 @@
 use std::error::Error as StdError;
 use std::fmt;
 
-use crate::{Backtrace, Capturable as _, Diagnostic, SpanTrace};
+#[cfg(feature = "tracing")]
+use crate::SpanTrace;
+use crate::{Backtrace, Capturable as _, Diagnostic};
+
+#[cfg(feature = "tracing")]
+type MaybeSpanTrace = SpanTrace;
+#[cfg(not(feature = "tracing"))]
+type MaybeSpanTrace = ();
+
+#[cfg(feature = "tracing")]
+fn capture_maybe_spantrace() -> MaybeSpanTrace {
+    SpanTrace::capture()
+}
+#[cfg(not(feature = "tracing"))]
+fn capture_maybe_spantrace() -> MaybeSpanTrace {}
 
 /// A boxed `std::error::Error` that's `Send + Sync + 'static`.
 type BoxError = Box<dyn StdError + Send + Sync + 'static>;
@@ -38,8 +52,9 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 ///
 /// # Layout
 ///
-/// `Welp` is a small enum — both variants carry `Box<str>` +
-/// `Box<(Backtrace, SpanTrace)>` captured at construction; `Sourced`
+/// `Welp` is a small enum — both variants carry `Box<str>` + a boxed
+/// `(Backtrace, _)` captured at construction, where the second slot is the
+/// span-trace under the `tracing` feature and is otherwise empty; `Sourced`
 /// additionally carries the wrapped `Box<dyn Error>`.
 ///
 /// A `Sourced` `Welp`'s [`Diagnostic`] accessors prefer the source's traces
@@ -53,11 +68,11 @@ enum WelpRepr {
     Sourced {
         message: Box<str>,
         source: BoxError,
-        traces: Box<(Backtrace, SpanTrace)>,
+        traces: Box<(Backtrace, MaybeSpanTrace)>,
     },
     Traced {
         message: Box<str>,
-        traces: Box<(Backtrace, SpanTrace)>,
+        traces: Box<(Backtrace, MaybeSpanTrace)>,
     },
 }
 
@@ -75,7 +90,7 @@ impl Welp {
     pub fn new(message: impl Into<String>) -> Self {
         Self(WelpRepr::Traced {
             message: message.into().into_boxed_str(),
-            traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
+            traces: Box::new((Backtrace::capture(), capture_maybe_spantrace())),
         })
     }
 
@@ -107,7 +122,7 @@ impl Welp {
         Self(WelpRepr::Sourced {
             message: message.into().into_boxed_str(),
             source: Box::new(source),
-            traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
+            traces: Box::new((Backtrace::capture(), capture_maybe_spantrace())),
         })
     }
 
@@ -132,7 +147,7 @@ impl Welp {
         Self(WelpRepr::Sourced {
             message: message.into().into_boxed_str(),
             source,
-            traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
+            traces: Box::new((Backtrace::capture(), capture_maybe_spantrace())),
         })
     }
 
@@ -191,6 +206,7 @@ impl StdError for Welp {
         if traces.0.is_captured() {
             request.provide_ref::<Backtrace>(&traces.0);
         }
+        #[cfg(feature = "tracing")]
         if traces.1.is_captured() {
             request.provide_ref::<SpanTrace>(&traces.1);
         }
@@ -207,6 +223,7 @@ impl Diagnostic for Welp {
         }
     }
 
+    #[cfg(feature = "tracing")]
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         match &self.0 {
             WelpRepr::Sourced { source, traces, .. } => {
@@ -330,6 +347,7 @@ mod tests {
     use super::*;
     use crate::{RustBacktrace, with_rust_backtrace_override};
 
+    #[cfg(feature = "tracing")]
     fn with_error_subscriber<R>(f: impl FnOnce() -> R) -> R {
         use tracing_subscriber::prelude::*;
         let subscriber = tracing_subscriber::registry().with(tracing_error::ErrorLayer::default());
@@ -350,6 +368,7 @@ mod tests {
         let _: Welp = Welp::new(format!("formatted {}", 1));
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn new_captures_traces() {
         let err = Welp::new("oops");
@@ -372,6 +391,7 @@ mod tests {
         assert_eq!(source.to_string(), "disk full");
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn wrap_captures_traces_at_wrap_site() {
         let err = Welp::wrap(std::io::Error::other("x"), "msg");
@@ -471,7 +491,7 @@ mod tests {
         assert!(!dbg.contains("source"));
     }
 
-    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[cfg(all(feature = "unstable-error-generic-member-access", feature = "tracing"))]
     #[test]
     fn traced_provides_traces_via_request_ref() {
         // Only captured traces are provided, so capture must succeed here.
@@ -485,7 +505,7 @@ mod tests {
         assert!(core::error::request_ref::<SpanTrace>(&err).is_some());
     }
 
-    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[cfg(all(feature = "unstable-error-generic-member-access", feature = "tracing"))]
     #[test]
     fn empty_traces_are_not_provided() {
         // No subscriber and backtraces disabled → both traces are empty and
@@ -495,6 +515,19 @@ mod tests {
         assert!(core::error::request_ref::<SpanTrace>(&err).is_none());
     }
 
+    #[cfg(all(
+        feature = "unstable-error-generic-member-access",
+        not(feature = "tracing")
+    ))]
+    #[test]
+    fn empty_backtrace_is_not_provided() {
+        // Backtraces disabled → the empty backtrace must be withheld from the
+        // (first-wins) provider chain, independent of the span-trace slot.
+        let err = with_rust_backtrace_override(RustBacktrace::Disabled, || Welp::new("solo"));
+        assert!(core::error::request_ref::<Backtrace>(&err).is_none());
+    }
+
+    #[cfg(feature = "tracing")]
     #[test]
     fn sourced_recovers_traces_from_diagnostic_source() {
         // The inner traces must actually capture something (live span +
@@ -538,7 +571,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[cfg(all(feature = "unstable-error-generic-member-access", feature = "tracing"))]
     #[test]
     fn sourced_forwards_source_provide() {
         // Only captured traces are provided, so capture must succeed here.
@@ -552,6 +585,7 @@ mod tests {
         assert!(core::error::request_ref::<SpanTrace>(&outer).is_some());
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn sourced_falls_back_to_own_traces_for_foreign_source() {
         let outer = Welp::wrap(std::io::Error::other("x"), "outer");
@@ -559,6 +593,7 @@ mod tests {
         assert!(outer.oopsie_spantrace().is_some());
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn empty_source_spantrace_does_not_shadow_wrap_site_capture() {
         let inner = Welp::new("inner"); // no subscriber → empty spantrace
@@ -581,7 +616,7 @@ mod tests {
     // Reaching the source's trace requires the Provider API: `wrap` is
     // generic, so no construction-time extraction is possible (see `wrap`),
     // and on stable the accessors cannot descend into the type-erased source.
-    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[cfg(all(feature = "unstable-error-generic-member-access", feature = "tracing"))]
     #[test]
     fn wrap_surfaces_captured_source_spantrace() {
         let inner = with_error_subscriber(|| {
