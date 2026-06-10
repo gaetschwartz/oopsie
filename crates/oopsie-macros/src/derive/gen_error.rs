@@ -302,7 +302,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                 });
             } else {
                 let fmt = &code.format_str;
-                let args = &code.args;
+                let args = code.args.iter();
                 let code_field_names: Vec<&syn::Ident> = match &variant.fields {
                     syn::Fields::Named(f) => {
                         f.named.iter().filter_map(|f| f.ident.as_ref()).collect()
@@ -362,7 +362,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                 });
             } else {
                 let fmt = &help.format_str;
-                let args = &help.args;
+                let args = help.args.iter();
                 // The format string may reference variant fields — positional
                 // args or inline `{field}` capture — so bind them in the
                 // pattern (mirroring the `display` arm).
@@ -705,7 +705,7 @@ pub fn gen_struct_error(
             }
         } else {
             let fmt = &code.format_str;
-            let args = &code.args;
+            let args = code.args.iter();
             let field_names: Vec<&syn::Ident> = match &data.fields {
                 syn::Fields::Named(f) => f.named.iter().filter_map(|f| f.ident.as_ref()).collect(),
                 syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
@@ -777,7 +777,7 @@ pub fn gen_struct_error(
             }
         } else {
             let fmt = &help.format_str;
-            let args = &help.args;
+            let args = help.args.iter();
             // The format string may reference fields via inline `{field}`
             // capture, so destructure them into locals (mirroring the `Display`
             // impl). `#[allow(unused_variables)]` covers fields no arg uses.
@@ -838,7 +838,7 @@ fn gen_help_provide(
         })
     } else {
         let fmt = &help.format_str;
-        let args = &help.args;
+        let args = help.args.iter();
         // The enclosing `provide` method already destructures every field, so
         // an inline `{field}` capture in the format string resolves here.
         Ok(quote! {
@@ -859,7 +859,7 @@ fn gen_code_provide(
         })
     } else {
         let fmt = &code.format_str;
-        let args = &code.args;
+        let args = code.args.iter();
         // The enclosing `provide` method already destructures every field, so
         // an inline `{field}` capture in the format string resolves here.
         Ok(quote! {

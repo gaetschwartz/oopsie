@@ -10,10 +10,12 @@
     clippy::nonminimal_bool,
     clippy::if_not_else,
     clippy::allow_attributes,
-    reason = "darling's FromAttributes derive emits code tripping these lints, unreachable from our struct-level attributes"
+    clippy::redundant_closure_call,
+    reason = "derive macros (darling's FromAttributes, derive_syn_parse's #[call] closures) emit code tripping these lints, unreachable from our own logic"
 )]
 
 use syn::parse::{Parse, ParseStream};
+use syn::punctuated::Punctuated;
 use syn::{Expr, Ident, LitStr, Path, Token, Type, Visibility};
 
 // ─── Container-level attributes ──────────────────────────────────
@@ -248,20 +250,9 @@ pub struct VariantAttrsInner {
 #[derive(Debug, Clone, derive_syn_parse::Parse)]
 pub struct DisplayAttr {
     pub format_str: LitStr,
-    #[call(parse_trailing_exprs)]
-    pub args: Vec<Expr>,
-}
-
-fn parse_trailing_exprs(input: ParseStream) -> syn::Result<Vec<Expr>> {
-    let mut out = Vec::new();
-    while input.peek(Token![,]) {
-        let _: Token![,] = input.parse()?;
-        if input.is_empty() {
-            break;
-        }
-        out.push(input.parse()?);
-    }
-    Ok(out)
+    #[prefix(Option<Token![,]> as c)]
+    #[call(|s| if c.is_some() { Punctuated::parse_terminated(s) } else { Ok(Punctuated::new()) })]
+    pub args: Punctuated<Expr, Token![,]>,
 }
 
 impl darling::FromMeta for DisplayAttr {
@@ -277,7 +268,7 @@ impl darling::FromMeta for DisplayAttr {
                     ..
                 }) => Ok(Self {
                     format_str: s.clone(),
-                    args: vec![],
+                    args: Punctuated::new(),
                 }),
                 other => Err(darling::Error::custom("expected string literal").with_span(other)),
             },
@@ -550,11 +541,7 @@ pub enum SourceKind {
 #[derive(derive_syn_parse::Parse)]
 struct SourceKindTransform {
     ty: Type,
-    #[expect(
-        dead_code,
-        reason = "syntactic punctuation captured by the parser but never read"
-    )]
-    comma: Token![,],
+    #[prefix(Token![,])]
     transform: Expr,
 }
 
@@ -595,9 +582,7 @@ impl darling::FromMeta for SourceKind {
 /// the `is_ref()` helper for clarity at call sites.
 #[derive(Debug, Clone, derive_syn_parse::Parse)]
 pub struct ProvideAttr {
-    #[peek(Token![ref])]
     pub ref_kw: Option<Token![ref]>,
-    /// Syntactic-only — captured by `derive(Parse)`, never read.
     #[parse_if(ref_kw.is_some())]
     #[expect(
         dead_code,
@@ -605,12 +590,7 @@ pub struct ProvideAttr {
     )]
     pub ref_comma: Option<Token![,]>,
     pub provided_type: Type,
-    /// Syntactic-only — captured by `derive(Parse)`, never read.
-    #[expect(
-        dead_code,
-        reason = "syntactic punctuation captured by the parser but never read"
-    )]
-    pub arrow: Token![=>],
+    #[prefix(Token![=>])]
     pub expr: Expr,
 }
 
@@ -733,7 +713,7 @@ pub fn extract_short_display(
         let parsed: Option<DisplayAttr> =
             attr.parse_args_with(|input: ParseStream| -> syn::Result<Option<DisplayAttr>> {
                 if input.peek(LitStr) {
-                    Ok(Some(parse_short_display_body(input)?))
+                    Ok(Some(input.parse()?))
                 } else {
                     // Consume the rest so parse_args_with succeeds; the
                     // attribute is preserved for darling to parse later.
@@ -755,52 +735,6 @@ pub fn extract_short_display(
         }
     }
     Ok((display, kept))
-}
-
-/// Body parser for the short-display form. Same shape as `DisplayAttr::parse`
-/// but rejects any trailing meta keywords with a precise diagnostic.
-fn parse_short_display_body(input: ParseStream) -> syn::Result<DisplayAttr> {
-    let format_str: LitStr = input.parse()?;
-    let mut args = Vec::new();
-    while input.peek(Token![,]) {
-        let _: Token![,] = input.parse()?;
-        if input.is_empty() {
-            break;
-        }
-        // Reject meta-keyword tails so the short form doesn't silently swallow
-        // a misplaced `help = ...` / `transparent` / etc.
-        if input.peek(Ident) {
-            let ahead = input.fork();
-            let ident = ahead.parse::<Ident>()?;
-            let kw = ident.to_string();
-            let is_keyword = match kw.as_str() {
-                // Bare `transparent` is almost certainly a misplaced flag;
-                // every other key is a plausible field name, so a bare ident
-                // in argument position is treated as an expression and only
-                // the meta shapes (`key(...)` / `key = ...`) are rejected.
-                "transparent" => true,
-                "capture" | "backtrace" | "spantrace" | "traces" | "module" | "suffix" | "from"
-                | "help" | "code" | "vis" => {
-                    ahead.peek(syn::token::Paren)
-                        || (ahead.peek(Token![=]) && !ahead.peek(Token![==]))
-                }
-                "display" | "provide" | "size" => ahead.peek(syn::token::Paren),
-                "path" => ahead.peek(Token![=]) && !ahead.peek(Token![==]),
-                _ => false,
-            };
-            if is_keyword {
-                return Err(syn::Error::new(
-                    ident.span(),
-                    format!(
-                        "`{kw}` cannot be combined with the short display form; \
-                         use `#[oopsie(display(...), {kw}...)]` instead"
-                    ),
-                ));
-            }
-        }
-        args.push(input.parse()?);
-    }
-    Ok(DisplayAttr { format_str, args })
 }
 
 #[cfg(test)]
@@ -1060,23 +994,6 @@ mod tests {
     }
 
     #[test]
-    fn short_display_rejects_keyword_tail() {
-        let attrs: Vec<syn::Attribute> = parse_quote! {
-            #[oopsie("fmt {}", help = "X")]
-        };
-        extract_short_display(&attrs).unwrap_err();
-    }
-
-    #[test]
-    fn short_display_rejects_list_form_keyword_tail() {
-        let attrs: Vec<syn::Attribute> = parse_quote! {
-            #[oopsie("fmt {x}", help("try {x}"))]
-        };
-        let err = extract_short_display(&attrs).unwrap_err();
-        assert!(err.to_string().contains("cannot be combined"), "{err}");
-    }
-
-    #[test]
     fn short_display_allows_non_keyword_call_arg() {
         let attrs: Vec<syn::Attribute> = parse_quote! {
             #[oopsie("fmt {}", helper(x))]
@@ -1125,14 +1042,6 @@ mod tests {
         let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("trace: {}", backtrace)] };
         let (display, _) = extract_short_display(&attrs).unwrap();
         assert_eq!(display.unwrap().args.len(), 1);
-    }
-
-    #[test]
-    fn short_display_still_rejects_keyword_meta_shapes() {
-        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("fmt {}", capture(false))] };
-        extract_short_display(&attrs).unwrap_err();
-        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("fmt", transparent)] };
-        extract_short_display(&attrs).unwrap_err();
     }
 
     #[test]

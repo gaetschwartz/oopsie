@@ -125,7 +125,7 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
 
 fn gen_write_call(display: &DisplayAttr, fmtr: &syn::Ident) -> TokenStream2 {
     let fmt = &display.format_str;
-    let args = &display.args;
+    let args = display.args.iter();
     quote! { ::core::write!(#fmtr, #fmt #(, #args)*) }
 }
 
