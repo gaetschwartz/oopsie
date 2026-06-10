@@ -128,7 +128,7 @@ impl crate::CaptureExt for SpanTrace {
     }
 }
 
-/// A wrapper around `Option<SpanTrace>` that implements [`Capturable`].
+/// A wrapper around `Option<SpanTrace>` that implements [`Capturable`](crate::Capturable).
 ///
 /// This type only captures a span trace if the capture was successful
 /// (i.e., there was an active span and the subscriber supports it).

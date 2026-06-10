@@ -105,6 +105,12 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | `debug = false` | Skip the automatic `Debug` derive (for hand-written `impl Debug`) |
 /// | `path = "my_crate::oopsie"` | Custom path to the `oopsie` crate (all generated impls) |
 ///
+/// With `traced`, every variant (or the struct itself) also gets an automatic
+/// error code unless it is `transparent` or carries an explicit
+/// `#[oopsie(code = "...")]`. The code is `module_path::Type` for structs and
+/// `module_path::Type::Variant` for enum variants; `Report` renders it as
+/// `Error[...]:` in the report header.
+///
 /// Container-level `#[oopsie(...)]` attributes (`module`, `vis`, `size`, etc.)
 /// are placed on the type itself, not in the attribute macro's argument list.
 #[proc_macro_attribute]

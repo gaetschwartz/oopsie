@@ -12,6 +12,11 @@ members = [
 edition = "2024"
 authors = ["Gaëtan Schwartz"]
 rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/gaetschwartz/oopsie"
+readme = "README.md"
+keywords = ["error", "error-handling", "diagnostics", "backtrace", "spantrace"]
+categories = ["rust-patterns", "development-tools::debugging"]
 
 [workspace.dependencies]
 oopsie-core = { path = "crates/oopsie-core", default-features = false }

@@ -65,7 +65,58 @@
 //! # fn main() {}
 //! ```
 //!
+//! `traced` also assigns each variant an automatic error code —
+//! `module_path::Type::Variant` — shown as `Error[...]` in `Report` headers.
+//! Override it per variant with `#[oopsie(code = "...")]`, or disable it with
+//! `#[oopsie::oopsie(traced, code = false)]`.
+//!
 //! See the [`#[oopsie]` documentation](oopsie) for the full parameter reference.
+//!
+//! # Reporting
+//!
+//! [`Report`] renders an error — message, source chain, span trace, backtrace —
+//! as a rich, colorized report. It implements [`Termination`](std::process::Termination),
+//! so it can be returned straight from `main`. [`Report::run`] additionally
+//! installs the library's panic hook for the duration of the closure, so
+//! panics are rendered in the same style:
+//!
+//! ```
+//! use oopsie::Report;
+//! use oopsie::prelude::*;
+//!
+//! #[oopsie::oopsie(traced)]
+//! pub enum AppError {
+//!     #[oopsie("Key not found: {key}")]
+//!     MissingKey { key: String },
+//! }
+//!
+//! fn run() -> Result<(), AppError> {
+//!     let config: Option<&str> = Some("42");
+//!     let _value = config.context(app_oopsies::MissingKey { key: "answer" })?;
+//!     Ok(())
+//! }
+//!
+//! fn main() -> Report<AppError> {
+//!     Report::run(run)
+//! }
+//! ```
+//!
+//! When `run` returns an error, the report is printed to stderr and the
+//! process exits with a failure code. To render panics outside of
+//! [`Report::run`], install the hook process-wide with [`install_panic_hook`]
+//! once, early in `main`. Color output is auto-detected; override it with
+//! [`set_color_mode`] or per report via [`Report::no_colors`] /
+//! [`Report::force_colors`].
+//!
+//! # Beyond typed errors
+//!
+//! - [`Welp`] is a string-shaped escape hatch for prototypes and one-off
+//!   errors: `Welp::new("...")`, or `.welp_context("...")` on any `Result` via
+//!   the prelude.
+//! - The companion `erased-oopsie` crate (in the same workspace) converts any
+//!   error into a serializable, type-erased representation — message, source
+//!   chain, code/help, span trace, and backtrace — for transporting errors
+//!   across process boundaries, e.g. API error responses.
 //!
 //! # What gets generated
 //!
@@ -142,7 +193,7 @@
 //! | `#[oopsie(display("msg"), ...)]` | Long-form display (combine with other attrs) |
 //! | `#[oopsie(transparent)]` | Generate `From` impl instead of a selector struct |
 //! | `#[oopsie(help = "...")]` | Help text, surfaced via [`Diagnostic::oopsie_help_text`] and consumed by `Report` |
-//! | `#[oopsie(code = "...")]` / `#[oopsie(code("fmt {}", expr))]` | Error code with optional format-string interpolation, surfaced via [`Diagnostic::oopsie_error_code`] and consumed by `Report` |
+//! | `#[oopsie(code = "...")]` / `#[oopsie(code("fmt {}", expr))]` | Error code with optional format-string interpolation, surfaced via [`Diagnostic::oopsie_error_code`] and consumed by `Report`; replaces the auto code from `traced` |
 //!
 //! With the `unstable` feature, help and code are additionally surfaced through the
 //! nightly `Provider` API.

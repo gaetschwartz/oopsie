@@ -4,6 +4,12 @@ version = "0.1.0"
 edition.workspace = true
 authors.workspace = true
 rust-version.workspace = true
+description = "Serializable, type-erased error representation for transporting oopsie errors across process boundaries"
+license.workspace = true
+repository.workspace = true
+readme.workspace = true
+keywords.workspace = true
+categories.workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
