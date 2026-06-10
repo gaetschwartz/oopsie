@@ -16,7 +16,8 @@
 //! `oopsie` centers on a single attribute macro:
 //!
 //! **[`#[oopsie]`](oopsie)** — generates context selectors, `Display`, `Debug`, and `Error`
-//! impls for your error type. Pass `traced` to also capture backtrace and span-trace.
+//! impls for your error type. Pass `traced` to also capture a backtrace (and a span-trace
+//! when the `tracing` feature is enabled).
 //!
 //! # Quick start
 //!
@@ -54,7 +55,8 @@
 //!
 //! # Diagnostics
 //!
-//! Pass `traced` to automatically capture backtrace and span-trace fields:
+//! Pass `traced` to automatically capture a backtrace field (and a span-trace when
+//! the `tracing` feature is enabled):
 //!
 //! ```
 //! #[oopsie::oopsie(traced)]
@@ -113,10 +115,10 @@
 //! - [`Welp`] is a string-shaped escape hatch for prototypes and one-off
 //!   errors: `Welp::new("...")`, or `.welp_context("...")` on any `Result` via
 //!   the prelude.
-//! - The companion `erased-oopsie` crate (in the same workspace) converts any
-//!   error into a serializable, type-erased representation — message, source
-//!   chain, code/help, span trace, and backtrace — for transporting errors
-//!   across process boundaries, e.g. API error responses.
+//! - The [`oopsie::erased`](erased) module (available with the `serde` feature)
+//!   converts any error into a serializable, type-erased representation —
+//!   message, source chain, code/help, span trace, and backtrace — for
+//!   transporting errors across process boundaries, e.g. API error responses.
 //!
 //! # What gets generated
 //!
@@ -219,10 +221,12 @@ pub use oopsie_macros::oopsie;
 // contract via incidental glob re-export.
 pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
-    NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace, Welp,
-    WelpOptionExt, WelpResultExt, clear_rust_backtrace_override, rust_backtrace,
-    rust_panic_backtrace, set_rust_backtrace_override, with_rust_backtrace_override,
+    NoSource, OptionExt, ResultExt, RustBacktrace, Welp, WelpOptionExt, WelpResultExt,
+    clear_rust_backtrace_override, rust_backtrace, rust_panic_backtrace,
+    set_rust_backtrace_override, with_rust_backtrace_override,
 };
+#[cfg(feature = "tracing")]
+pub use oopsie_core::{OptionalSpanTrace, SpanTrace};
 
 // Hidden re-export so macro-generated code can reach the autoref-probe
 // machinery via `::oopsie::__private::CaptureProbe`. Not part of the public
@@ -230,7 +234,16 @@ pub use oopsie_core::{
 #[doc(hidden)]
 pub use oopsie_core::__private;
 
+#[cfg(feature = "serde")]
+pub mod erased {
+    pub use oopsie_core::erased::{
+        Diagnostics, ErasedBacktrace, ErasedError, ErasedFrame, ErasedMetadata, ErasedSpan,
+        ErasedSpanTrace, TracingLevel,
+    };
+}
+
 /// `tracing-subscriber` integration helpers.
+#[cfg(feature = "tracing")]
 pub mod tracing {
     pub use oopsie_core::json_error_layer;
 }
