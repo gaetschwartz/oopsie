@@ -37,15 +37,6 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
             _ => Vec::new(),
         };
 
-        let pattern = if field_names.is_empty() {
-            quote! { Self::#variant_ident { .. } }
-        } else {
-            quote! {
-                #[allow(unused_variables)]
-                Self::#variant_ident { #(#field_names),*, .. }
-            }
-        };
-
         let write_call = if let Some(display) = &variant_attrs.display {
             gen_write_call(display, &fmtr)
         } else if let (true, Some(source)) = (variant_attrs.transparent, &categorized.source) {
@@ -60,7 +51,8 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
         arms.push(quote! {
             #(#cfg_attrs)*
-            #pattern => #write_call,
+            #[allow(unused_variables)]
+            Self::#variant_ident { #(#field_names,)* .. } => #write_call,
         });
     }
 
@@ -134,9 +126,5 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
 fn gen_write_call(display: &DisplayAttr, fmtr: &syn::Ident) -> TokenStream2 {
     let fmt = &display.format_str;
     let args = &display.args;
-    if args.is_empty() {
-        quote! { ::core::write!(#fmtr, #fmt) }
-    } else {
-        quote! { ::core::write!(#fmtr, #fmt, #(#args),*) }
-    }
+    quote! { ::core::write!(#fmtr, #fmt #(, #args)*) }
 }

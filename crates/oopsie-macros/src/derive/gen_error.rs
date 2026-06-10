@@ -220,27 +220,13 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
         }
 
-        // Collect all field names needed for pattern
         let field_names = collect_provide_field_names(&categorized);
-        let pattern = if field_names.is_empty() {
-            quote! { Self::#variant_ident { .. } }
-        } else {
-            quote! { Self::#variant_ident { #(#field_names),*, .. } }
-        };
-
-        if provide_stmts.is_empty() {
-            provide_arms.push(quote! {
-                #(#cfg_attrs)*
-                #pattern => {}
-            });
-        } else {
-            provide_arms.push(quote! {
-                #(#cfg_attrs)*
-                #pattern => {
-                    #(#provide_stmts)*
-                }
-            });
-        }
+        provide_arms.push(quote! {
+            #(#cfg_attrs)*
+            Self::#variant_ident { #(#field_names,)* .. } => {
+                #(#provide_stmts)*
+            }
+        });
 
         // ── Diagnostic arms ──
 
@@ -323,15 +309,10 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                     }
                     syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
                 };
-                let code_pattern = if code_field_names.is_empty() {
-                    quote! { Self::#variant_ident { .. } }
-                } else {
-                    quote! { Self::#variant_ident { #(#code_field_names),*, .. } }
-                };
                 code_arms.push(quote! {
                     #(#cfg_attrs)*
                     #[allow(unused_variables)]
-                    #code_pattern => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*))),
+                    Self::#variant_ident { #(#code_field_names,)* .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*))),
                 });
             }
         } else if let Some(provide_attr) = variant_attrs
@@ -343,11 +324,6 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             // The provide expr may reference fields (it gets the same bindings
             // inside the generated `provide()`), so bind them here too.
             let binds = collect_provide_field_names(&categorized);
-            let code_pattern = if binds.is_empty() {
-                quote! { Self::#variant_ident { .. } }
-            } else {
-                quote! { Self::#variant_ident { #(#binds),*, .. } }
-            };
             // A ref-form provide evaluates to `&ErrorCode`; the accessor
             // returns it by value.
             let value = if provide_attr.is_ref() {
@@ -358,7 +334,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             code_arms.push(quote! {
                 #(#cfg_attrs)*
                 #[allow(unused_variables)]
-                #code_pattern => #value,
+                Self::#variant_ident { #(#binds,)* .. } => #value,
             });
         } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
         {
@@ -396,15 +372,10 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                     }
                     syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
                 };
-                let help_pattern = if help_field_names.is_empty() {
-                    quote! { Self::#variant_ident { .. } }
-                } else {
-                    quote! { Self::#variant_ident { #(#help_field_names),*, .. } }
-                };
                 help_arms.push(quote! {
                     #(#cfg_attrs)*
                     #[allow(unused_variables)]
-                    #help_pattern => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*))),
+                    Self::#variant_ident { #(#help_field_names,)* .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*))),
                 });
             }
         } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
