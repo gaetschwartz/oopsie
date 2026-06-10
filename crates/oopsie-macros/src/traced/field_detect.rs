@@ -68,6 +68,13 @@ pub fn is_traces_type(ty: &syn::Type) -> bool {
     is_ident_type(a, "Backtrace") && is_ident_type(b, "SpanTrace")
 }
 
+/// `true` for a type whose last path segment is `SystemTime` or `DateTime` —
+/// the injectable timestamp shapes. Same last-segment heuristic (and the same
+/// alias/false-positive trade-offs) as `is_backtrace_type`.
+pub fn is_timestamp_type(ty: &syn::Type) -> bool {
+    is_ident_type(ty, "SystemTime") || is_ident_type(ty, "DateTime")
+}
+
 fn is_ident_type(ty: &syn::Type, ident: &str) -> bool {
     let syn::Type::Path(type_path) = ty else {
         return false;

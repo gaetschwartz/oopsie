@@ -1,0 +1,5 @@
+error: display strings don't go on the enum itself; put them in an `#[oopsie("...")]` attribute on each enum variant
+ --> tests/compile-fail/enum_container_short_display.rs:4:10
+  |
+4 | #[oopsie("all failed")]
+  |          ^^^^^^^^^^^^

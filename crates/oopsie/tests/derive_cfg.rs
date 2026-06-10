@@ -91,3 +91,23 @@ fn attr_cfg_active_variant_builds() {
     assert!(matches!(err, AttrCfgError::Active { n: 7 }));
     assert_eq!(err.to_string(), "active: 7");
 }
+
+// Two variants whose stripped selector names collide (`Read` / `ReadError`)
+// are allowed when each carries a mutually exclusive `#[cfg(...)]`: only one
+// selector is ever emitted, so the collision check must exempt them.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+pub enum CfgCollisionError {
+    #[cfg(all())]
+    #[oopsie("read")]
+    Read,
+    #[cfg(any())]
+    #[oopsie("read (io)")]
+    ReadError,
+}
+
+#[test]
+fn cfg_gated_variants_may_share_selector_name() {
+    let err = Read.build();
+    assert_eq!(err.to_string(), "read");
+}

@@ -228,3 +228,17 @@ fn user_defined_capturable_field_is_captured() {
         "custom Capturable::capture must populate the field"
     );
 }
+
+// A `cfg_attr`-gated `Debug` derive is recognized by `fix_derives`, so the attr
+// macro does not also inject `Debug` (which would conflict when the cfg is on).
+#[test]
+fn cfg_attr_gated_debug_is_not_duplicated() {
+    #[oopsie::oopsie]
+    #[cfg_attr(test, derive(Debug))]
+    #[oopsie(module(false))]
+    enum CfgDebugError {
+        #[oopsie("x")]
+        X,
+    }
+    let _ = format!("{:?}", X.build());
+}

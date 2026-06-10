@@ -177,6 +177,9 @@ pub mod __private {
     ) -> Option<&'a crate::SpanTrace> {
         source_trace::<crate::SpanTrace>(source).filter(|st| st.is_captured())
     }
+
+    #[cfg(feature = "chrono")]
+    pub use chrono;
 }
 
 pub use spantrace::{OptionalSpanTrace, SpanTrace};

@@ -20,6 +20,7 @@ use crate::utils::FieldSetting;
 pub struct OopsieAttrArgs {
     pub traced: Option<FieldSetting<true, TracedArgs>>,
     pub code: FieldSetting<true, CodeSettings>,
+    pub debug: crate::utils::BetterFlag<true>,
     pub path: Option<syn::Path>,
 }
 
@@ -109,7 +110,7 @@ fn expand_enum(
     // Step 3: emit the item with Debug added, Oopsie removed from derives,
     // and all #[oopsie(...)] helper attrs stripped (they've been consumed).
     let mut out_item: syn::ItemEnum = syn::parse2(injected_ts)?;
-    fix_derives(&mut out_item.attrs);
+    fix_derives(&mut out_item.attrs, args.debug.is_enabled());
     strip_oopsie_attrs(&mut out_item.attrs);
     for variant in &mut out_item.variants {
         strip_oopsie_attrs(&mut variant.attrs);
@@ -160,7 +161,7 @@ fn expand_struct(
     // Step 3: emit the item with Debug added, Oopsie removed from derives,
     // and all #[oopsie(...)] helper attrs stripped (they've been consumed).
     let mut out_item: syn::ItemStruct = syn::parse2(injected_ts)?;
-    fix_derives(&mut out_item.attrs);
+    fix_derives(&mut out_item.attrs, args.debug.is_enabled());
     strip_oopsie_attrs(&mut out_item.attrs);
     for field in &mut out_item.fields {
         strip_oopsie_attrs(&mut field.attrs);
@@ -179,14 +180,40 @@ fn derive_path_is(path: &syn::Path, ident: &str) -> bool {
     path.segments.last().is_some_and(|seg| seg.ident == ident)
 }
 
+/// Whether a `#[cfg_attr(<pred>, ..., derive(...))]` attribute conditionally
+/// derives `ident`. Injection must not race a conditional derive: the injected
+/// impl conflicts whenever the cfg is active.
+fn cfg_attr_derives(attr: &syn::Attribute, ident: &str) -> bool {
+    if !attr.path().is_ident("cfg_attr") {
+        return false;
+    }
+    let Ok(metas) = attr.parse_args_with(
+        syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+    ) else {
+        return false;
+    };
+    // First meta is the cfg predicate; the rest are the gated attributes.
+    metas.iter().skip(1).any(|meta| match meta {
+        syn::Meta::List(list) if list.path.is_ident("derive") => list
+            .parse_args_with(
+                syn::punctuated::Punctuated::<syn::Path, syn::Token![,]>::parse_terminated,
+            )
+            .is_ok_and(|paths| paths.iter().any(|p| derive_path_is(p, ident))),
+        syn::Meta::List(_) | syn::Meta::Path(_) | syn::Meta::NameValue(_) => false,
+    })
+}
+
 /// Adjust the `#[derive(...)]` attributes on an item:
 /// - Remove `Oopsie` (the attr macro handles code generation itself).
-/// - Ensure `Debug` is present (required by `std::error::Error`).
-fn fix_derives(attrs: &mut Vec<syn::Attribute>) {
+/// - Ensure `Debug` is present (required by `std::error::Error`) when
+///   `inject_debug` is set and no `Debug` derive (plain or `cfg_attr`-gated)
+///   is already there.
+fn fix_derives(attrs: &mut Vec<syn::Attribute>, inject_debug: bool) {
     let mut has_debug = false;
     let mut new_attrs: Vec<syn::Attribute> = Vec::with_capacity(attrs.len() + 1);
 
     for attr in attrs.drain(..) {
+        has_debug = has_debug || cfg_attr_derives(&attr, "Debug");
         if !attr.path().is_ident("derive") {
             new_attrs.push(attr);
             continue;
@@ -214,7 +241,7 @@ fn fix_derives(attrs: &mut Vec<syn::Attribute>) {
         }
     }
 
-    if !has_debug {
+    if inject_debug && !has_debug {
         new_attrs.push(syn::parse_quote! { #[derive(::core::fmt::Debug)] });
     }
 
@@ -368,6 +395,25 @@ mod tests {
             !output.contains("derive (Clone , Oopsie)")
                 && !output.contains("derive(Clone, Oopsie)"),
             "Oopsie should be stripped from derive: {output}"
+        );
+    }
+
+    #[test]
+    fn debug_false_skips_injected_debug() {
+        let output = expand(
+            quote! { debug = false },
+            quote! {
+                pub enum AppError {
+                    #[oopsie("Fail")]
+                    Fail,
+                }
+            },
+        )
+        .unwrap()
+        .to_string();
+        assert!(
+            !output.contains("core :: fmt :: Debug"),
+            "debug = false must not inject Debug:\n{output}"
         );
     }
 

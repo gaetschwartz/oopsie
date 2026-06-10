@@ -197,9 +197,21 @@ impl std::ops::Deref for EnumContainerAttrs {
 impl EnumContainerAttrs {
     /// Parse `#[oopsie(...)]` on an enum definition. Strict: unknown keys
     /// (including variant-only keys like `display`) error.
+    ///
+    /// The short-display form is extracted first so a misplaced
+    /// `#[oopsie("...")]` on the enum itself gets targeted guidance instead of
+    /// darling's generic literal error.
     pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         use darling::FromAttributes as _;
-        Self::from_attributes(attrs).map_err(syn::Error::from)
+        let (short_display, attrs) = extract_short_display(attrs)?;
+        if let Some(short) = short_display {
+            return Err(syn::Error::new_spanned(
+                &short.format_str,
+                "display strings don't go on the enum itself; put them in an \
+                 `#[oopsie(\"...\")]` attribute on each enum variant",
+            ));
+        }
+        Self::from_attributes(&attrs).map_err(syn::Error::from)
     }
 
     /// Unwrap the `SynParse` wrapper to expose the inner `Visibility`.
@@ -503,7 +515,7 @@ pub struct FieldAttrs {
     #[darling(default)]
     pub from: SourceKind,
     #[darling(default)]
-    pub capture: bool,
+    pub capture: crate::utils::BetterFlag<false>,
     #[darling(default, multiple)]
     pub provide: Vec<ProvideAttr>,
     #[darling(default)]
@@ -636,9 +648,16 @@ impl FieldAttrs {
 
         let mut result = Self::from_attributes(&field.attrs).map_err(syn::Error::from)?;
 
-        // `backtrace` / `spantrace` / `traces` flags imply `capture`.
+        // `backtrace` / `spantrace` / `traces` flags imply `capture`; an
+        // explicit opt-out alongside them is contradictory.
         if result.backtrace || result.spantrace || result.traces {
-            result.capture = true;
+            if matches!(result.capture, crate::utils::BetterFlag::Disabled) {
+                return Err(syn::Error::new_spanned(
+                    field,
+                    "`capture(false)` cannot be combined with `backtrace`/`spantrace`/`traces`",
+                ));
+            }
+            result.capture = crate::utils::BetterFlag::Enabled;
         }
 
         // Auto-source by field name (only if no explicit `from`).
@@ -651,12 +670,14 @@ impl FieldAttrs {
 
         // Auto-capture for trace fields, detected by type. A field merely
         // *named* `backtrace`/`spantrace` of an unrelated type is an ordinary
-        // field, not auto-captured.
-        if crate::traced::field_detect::is_backtrace_type(&field.ty)
-            || crate::traced::field_detect::is_spantrace_type(&field.ty)
-            || crate::traced::field_detect::is_traces_type(&field.ty)
+        // field, not auto-captured. An explicit `capture(false)` opts out of
+        // this detection: the field stays on the selector and is caller-supplied.
+        if matches!(result.capture, crate::utils::BetterFlag::Default)
+            && (crate::traced::field_detect::is_backtrace_type(&field.ty)
+                || crate::traced::field_detect::is_spantrace_type(&field.ty)
+                || crate::traced::field_detect::is_traces_type(&field.ty))
         {
-            result.capture = true;
+            result.capture = crate::utils::BetterFlag::Enabled;
         }
 
         // Auto-boxing: source field with `Box<T>` type (and T is not a trait
@@ -753,13 +774,17 @@ fn parse_short_display_body(input: ParseStream) -> syn::Result<DisplayAttr> {
             let ident = ahead.parse::<Ident>()?;
             let kw = ident.to_string();
             let is_keyword = match kw.as_str() {
-                "transparent" | "capture" | "backtrace" | "spantrace" | "traces" => true,
-                "module" | "suffix" | "from" => true,
-                "display" | "provide" | "size" => ahead.peek(syn::token::Paren),
-                "help" | "code" | "vis" => {
+                // Bare `transparent` is almost certainly a misplaced flag;
+                // every other key is a plausible field name, so a bare ident
+                // in argument position is treated as an expression and only
+                // the meta shapes (`key(...)` / `key = ...`) are rejected.
+                "transparent" => true,
+                "capture" | "backtrace" | "spantrace" | "traces" | "module" | "suffix" | "from"
+                | "help" | "code" | "vis" => {
                     ahead.peek(syn::token::Paren)
                         || (ahead.peek(Token![=]) && !ahead.peek(Token![==]))
                 }
+                "display" | "provide" | "size" => ahead.peek(syn::token::Paren),
                 "path" => ahead.peek(Token![=]) && !ahead.peek(Token![==]),
                 _ => false,
             };
@@ -1095,6 +1120,47 @@ mod tests {
     // Typo rejection is handled by darling's strict mode on the per-scope
     // attribute structs; coverage lives in the `from_attrs` integration paths.
 
+    #[test]
+    fn short_display_allows_bare_arg_named_like_keyword() {
+        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("trace: {}", backtrace)] };
+        let (display, _) = extract_short_display(&attrs).unwrap();
+        assert_eq!(display.unwrap().args.len(), 1);
+    }
+
+    #[test]
+    fn short_display_still_rejects_keyword_meta_shapes() {
+        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("fmt {}", capture(false))] };
+        extract_short_display(&attrs).unwrap_err();
+        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("fmt", transparent)] };
+        extract_short_display(&attrs).unwrap_err();
+    }
+
+    #[test]
+    fn capture_false_keeps_trace_typed_field_on_selector() {
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { #[oopsie(capture = false)] bt: Backtrace, msg: String }
+        };
+        let categorized = CategorizedFields::from_fields(&item.fields).unwrap();
+        assert!(categorized.user_fields.iter().any(|f| f.ident == "bt"));
+        assert!(!categorized.auto_fields.iter().any(|f| f.ident == "bt"));
+        // Still surfaced through Diagnostic accessors.
+        assert_eq!(
+            categorized
+                .backtrace_field
+                .as_ref()
+                .map(ToString::to_string),
+            Some("bt".into())
+        );
+    }
+
+    #[test]
+    fn capture_false_with_backtrace_flag_errors() {
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { #[oopsie(backtrace, capture(false))] bt: Backtrace }
+        };
+        CategorizedFields::from_fields(&item.fields).unwrap_err();
+    }
+
     // ── CategorizedFields ──────────────────────────────────────────────
 
     #[test]
@@ -1322,7 +1388,7 @@ impl CategorizedFields {
                     ty: field.ty.clone(),
                     kind: attrs.from,
                 });
-            } else if attrs.capture || is_traces {
+            } else if attrs.capture.is_enabled() {
                 auto_fields.push(AutoField {
                     ident,
                     ty: field.ty.clone(),

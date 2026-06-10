@@ -2,6 +2,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
+use syn::ext::IdentExt as _;
 use syn::{DeriveInput, Ident, Visibility};
 
 use super::parse::{
@@ -63,6 +64,8 @@ pub fn gen_enum_selectors(
     };
 
     let mut selectors = Vec::new();
+    let mut seen_selectors: std::collections::HashMap<String, Ident> =
+        std::collections::HashMap::new();
     for variant in &data.variants {
         let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
         let categorized = CategorizedFields::from_fields(&variant.fields)?;
@@ -133,7 +136,28 @@ pub fn gen_enum_selectors(
             continue;
         }
 
-        let selector_ident = selector_name(variant_ident, &container.effective_suffix(true));
+        let selector_ident = selector_name(variant_ident, &container.effective_suffix(true))?;
+        // cfg-gated variants may legitimately share a selector name under
+        // mutually exclusive cfgs, so only unconditional variants participate
+        // in the collision check.
+        if cfg_attrs.is_empty()
+            && let Some(first) =
+                seen_selectors.insert(selector_ident.to_string(), variant_ident.clone())
+        {
+            let mut err = syn::Error::new_spanned(
+                variant_ident,
+                format!(
+                    "variants `{first}` and `{variant_ident}` both generate a selector named \
+                     `{selector_ident}` (a trailing `Error` is stripped from variant names); \
+                     rename one of the variants"
+                ),
+            );
+            err.combine(syn::Error::new_spanned(
+                &first,
+                format!("`{first}` also generates selector `{selector_ident}`"),
+            ));
+            return Err(err);
+        }
         let selector_vis = variant_attrs
             .visibility()
             .cloned()
@@ -156,10 +180,13 @@ pub fn gen_enum_selectors(
                     let ty_param = format_ident!("__T{}", i);
                     let field_ident = &uf.ident;
                     let field_ty = &uf.ty;
+                    let field_doc = format!(
+                        "Value for the `{field_ident}` field of `{enum_ident}::{variant_ident}`."
+                    );
                     params.push(quote! { #ty_param });
                     args.push(quote! { #ty_param });
                     bounds.push(quote! { #ty_param: ::core::convert::Into<#field_ty> });
-                    fields.push(quote! { pub #field_ident: #ty_param });
+                    fields.push(quote! { #[doc = #field_doc] pub #field_ident: #ty_param });
                 }
                 (
                     quote! { <#(#params),*> },
@@ -169,15 +196,18 @@ pub fn gen_enum_selectors(
                 )
             };
 
+        let selector_doc = format!("Context selector for `{enum_ident}::{variant_ident}`.");
         let selector_struct = if user_fields.is_empty() {
             quote! {
                 #(#cfg_attrs)*
+                #[doc = #selector_doc]
                 #[derive(Debug, Copy, Clone)]
                 #selector_vis struct #selector_ident;
             }
         } else {
             quote! {
                 #(#cfg_attrs)*
+                #[doc = #selector_doc]
                 #[derive(Debug, Copy, Clone)]
                 #selector_vis struct #selector_ident #generic_params #struct_fields
             }
@@ -301,7 +331,7 @@ pub fn gen_struct_selector(
         });
     }
 
-    let selector_ident = selector_name(struct_ident, &attrs.container.effective_suffix(false));
+    let selector_ident = selector_name(struct_ident, &attrs.container.effective_suffix(false))?;
     let has_source = categorized.source.is_some();
     let user_fields = &categorized.user_fields;
 
@@ -316,10 +346,11 @@ pub fn gen_struct_selector(
             let ty_param = format_ident!("__T{}", i);
             let field_ident = &uf.ident;
             let field_ty = &uf.ty;
+            let field_doc = format!("Value for the `{field_ident}` field of `{struct_ident}`.");
             params.push(quote! { #ty_param });
             args.push(quote! { #ty_param });
             bounds.push(quote! { #ty_param: ::core::convert::Into<#field_ty> });
-            fields.push(quote! { pub #field_ident: #ty_param });
+            fields.push(quote! { #[doc = #field_doc] pub #field_ident: #ty_param });
         }
         (
             quote! { <#(#params),*> },
@@ -329,13 +360,16 @@ pub fn gen_struct_selector(
         )
     };
 
+    let selector_doc = format!("Context selector for `{struct_ident}`.");
     let selector_struct = if user_fields.is_empty() {
         quote! {
+            #[doc = #selector_doc]
             #[derive(Debug, Copy, Clone)]
             #vis struct #selector_ident;
         }
     } else {
         quote! {
+            #[doc = #selector_doc]
             #[derive(Debug, Copy, Clone)]
             #vis struct #selector_ident #generic_params #struct_fields
         }
@@ -367,15 +401,38 @@ pub fn gen_struct_selector(
     })
 }
 
-fn selector_name(base: &Ident, suffix: &SuffixSetting) -> Ident {
-    let base_str = base.to_string();
+fn selector_name(base: &Ident, suffix: &SuffixSetting) -> syn::Result<Ident> {
+    let base_str = base.unraw().to_string();
     let stripped = base_str
         .strip_suffix("Error")
         .filter(|s| !s.is_empty())
         .unwrap_or(&base_str);
-    match suffix {
-        SuffixSetting::Off => Ident::new(stripped, base.span()),
-        SuffixSetting::Custom(s) => format_ident!("{}{}", stripped, s),
+    let name = match suffix {
+        SuffixSetting::Off => stripped.to_owned(),
+        SuffixSetting::Custom(s) => format!("{stripped}{s}"),
+    };
+    ident_maybe_raw(&name, base.span())
+}
+
+/// Derived names can collide with keywords (`r#try` strips to `try`), which
+/// `Ident::new` panics on; those become raw idents. The handful of names that
+/// cannot be raw either are a real error, not a panic.
+fn ident_maybe_raw(name: &str, span: proc_macro2::Span) -> syn::Result<Ident> {
+    match syn::parse_str::<Ident>(name) {
+        Ok(mut id) => {
+            id.set_span(span);
+            Ok(id)
+        }
+        Err(_) if matches!(name, "self" | "Self" | "super" | "crate" | "_") => {
+            Err(syn::Error::new(
+                span,
+                format!(
+                    "cannot generate a selector named `{name}`; rename the item or set \
+                 `#[oopsie(suffix = \"...\")]`"
+                ),
+            ))
+        }
+        Err(_) => Ok(Ident::new_raw(name, span)),
     }
 }
 
@@ -511,10 +568,13 @@ fn gen_build_fail(
         }
     };
 
+    let build_doc = format!("Builds `{enum_ident}::{variant_ident}` from this selector's fields.");
+    let fail_doc = format!("Builds `{enum_ident}::{variant_ident}` and returns it as `Err`.");
     quote! {
         impl #generic_params #selector_ident #generic_params
         #where_clauses
         {
+            #[doc = #build_doc]
             #[must_use]
             #[track_caller]
             pub fn build(self) -> #enum_ident {
@@ -525,6 +585,7 @@ fn gen_build_fail(
                 }
             }
 
+            #[doc = #fail_doc]
             #[track_caller]
             pub fn fail<__T>(self) -> ::core::result::Result<__T, #enum_ident> {
                 ::core::result::Result::Err(self.build())
@@ -633,10 +694,13 @@ fn gen_build_fail_struct(
         }
     };
 
+    let build_doc = format!("Builds `{struct_ident}` from this selector's fields.");
+    let fail_doc = format!("Builds `{struct_ident}` and returns it as `Err`.");
     quote! {
         impl #generic_params #selector_ident #generic_params
         #where_clauses
         {
+            #[doc = #build_doc]
             #[must_use]
             #[track_caller]
             pub fn build(self) -> #struct_ident {
@@ -647,6 +711,7 @@ fn gen_build_fail_struct(
                 }
             }
 
+            #[doc = #fail_doc]
             #[track_caller]
             pub fn fail<__T>(self) -> ::core::result::Result<__T, #struct_ident> {
                 ::core::result::Result::Err(self.build())

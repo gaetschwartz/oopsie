@@ -575,3 +575,30 @@ fn custom_backtrace_type_is_injected_and_captured() {
     assert!(e.oopsie_backtrace().is_some());
     assert!(e.oopsie_spantrace().is_some());
 }
+
+// The injected chrono timestamp type routes through `oopsie::__private::chrono`,
+// so the caller needs no direct `chrono` dependency and no `::chrono` in scope.
+#[cfg(feature = "chrono")]
+#[test]
+fn chrono_timestamp_compiles_without_direct_dep_path() {
+    #[oopsie(traced(timestamp(chrono = true)))]
+    #[oopsie(module(false))]
+    pub enum ChronoStamp {
+        #[oopsie("boom")]
+        Boom,
+    }
+    let e = Boom.build();
+    assert!(format!("{e:?}").contains("__oopsie_timestamp"));
+}
+
+// A user field merely *named* `timestamp` of an unrelated type does not
+// suppress timestamp injection; the injected field uses the mangled name.
+#[test]
+fn wrongly_typed_timestamp_named_field_does_not_suppress_injection() {
+    #[oopsie(traced(timestamp))]
+    pub struct TsNamed {
+        timestamp: u64,
+    }
+    let e = TsNamedOopsie { timestamp: 5u64 }.build();
+    assert!(format!("{e:?}").contains("__oopsie_timestamp"));
+}

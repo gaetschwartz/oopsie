@@ -63,9 +63,12 @@ impl FieldInjectorConfig {
         let traces_type = maybe_box(&tuple, resolved.backtrace_boxed);
 
         let timestamp_type: syn::Type = if resolved.timestamp_chrono {
-            // Leading `::` so the injected field does not depend on `chrono`
-            // being nameable (unshadowed, unrenamed) in the caller's scope.
-            parse_quote! { ::chrono::DateTime<::chrono::Local> }
+            // Routed through the facade so the caller needs no direct chrono
+            // dependency and the type unifies with oopsie-core's Capturable impl
+            // regardless of any chrono version in the caller's tree.
+            parse_quote! {
+                #oopsie_path::__private::chrono::DateTime<#oopsie_path::__private::chrono::Local>
+            }
         } else {
             parse_quote! { ::std::time::SystemTime }
         };
@@ -204,7 +207,7 @@ mod tests {
         // `chrono` is opt-in and independent of `provide`.
         let cfg = config_for(&parse_quote!(traced(timestamp(chrono = true))));
         let s = cfg.timestamp_type.to_token_stream().to_string();
-        // Leading `::` keeps the field independent of a local `chrono` binding.
+        assert!(s.contains("__private"), "{s}");
         assert!(s.contains("chrono"), "{s}");
         assert!(s.contains("DateTime"), "{s}");
         assert!(s.contains("Local"), "{s}");

@@ -96,12 +96,13 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | Parameter | Effect |
 /// |-----------|--------|
 /// | *(bare)* | No diagnostics; equivalent to `#[derive(Debug, Oopsie)]` |
-/// | `traced` | Inject backtrace + spantrace |
+/// | `traced` | Inject backtrace + spantrace, plus an auto error code (`module_path::Type::Variant`) |
 /// | `traced(timestamp)` | …plus an auto-captured timestamp |
 /// | `traced(backtrace(false))` | Disable one part (any of `backtrace`/`spantrace`/`timestamp`) |
-/// | `traced(timestamp(chrono = true))` | `chrono::DateTime<Local>` timestamps (needs the `chrono` feature) |
+/// | `traced(timestamp(chrono = true))` | `chrono::DateTime<Local>` timestamps (needs oopsie's `chrono` feature) |
 /// | `traced(packed = false, boxed = false)` | Trace field layout tuning |
-/// | `code = false` | Disable error-code injection |
+/// | `code = false` | Disable the auto error code (only meaningful with `traced`) |
+/// | `debug = false` | Skip the automatic `Debug` derive (for hand-written `impl Debug`) |
 /// | `path = "my_crate::oopsie"` | Custom path to the `oopsie` crate (all generated impls) |
 ///
 /// Container-level `#[oopsie(...)]` attributes (`module`, `vis`, `size`, etc.)

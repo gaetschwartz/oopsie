@@ -113,7 +113,12 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
 
     // Wrap selectors in module if enabled
     let effective_module = attrs.effective_module(true);
-    let wrapped_selectors = wrap_in_module(&effective_module, &input.ident, &selectors);
+    let module_vis = attrs
+        .visibility()
+        .cloned()
+        .unwrap_or_else(|| input.vis.clone());
+    let wrapped_selectors =
+        wrap_in_module(&effective_module, &input.ident, &module_vis, &selectors);
 
     let size_assert = attrs
         .size
@@ -142,12 +147,17 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
         .map(|c| gen_size_assertion(&input.ident, c));
 
     let effective_module = attrs.container.effective_module(false);
+    let module_vis = attrs
+        .visibility()
+        .cloned()
+        .unwrap_or_else(|| input.vis.clone());
     let wrapped_selector = if attrs.transparent {
         selector
     } else {
         wrap_in_module(
             &effective_module,
             &input.ident,
+            &module_vis,
             std::slice::from_ref(&selector),
         )
     };
@@ -222,6 +232,59 @@ mod tests {
         };
         let output = expand(input).unwrap().to_string();
         insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn module_vis_mirrors_error_type_vis() {
+        let out = expand(quote! {
+            pub(crate) enum InternalError { #[oopsie("x")] X { f: String } }
+        })
+        .unwrap()
+        .to_string();
+        assert!(out.contains("pub (crate) mod internal_oopsies"), "{out}");
+
+        let out = expand(quote! {
+            enum PrivError { #[oopsie("x")] X { f: String } }
+        })
+        .unwrap()
+        .to_string();
+        assert!(
+            out.contains("mod priv_oopsies") && !out.contains("pub mod priv_oopsies"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn generated_public_items_are_documented() {
+        let out = expand(quote! {
+            pub enum AppError { #[oopsie("x")] Connect { host: String } }
+        })
+        .unwrap()
+        .to_string();
+        assert!(
+            out.contains("Auto-generated context selectors for `AppError`"),
+            "{out}"
+        );
+        assert!(
+            out.contains("Context selector for `AppError::Connect`"),
+            "{out}"
+        );
+        assert!(out.contains("Value for the `host` field"), "{out}");
+    }
+
+    #[test]
+    fn selector_collision_after_error_stripping_errors() {
+        let err = expand(quote! {
+            pub enum AppError {
+                #[oopsie("read failed")] Read,
+                #[oopsie("read failed (io)")] ReadError,
+            }
+        })
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("both generate a selector named"),
+            "{err}"
+        );
     }
 
     #[test]

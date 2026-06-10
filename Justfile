@@ -24,6 +24,7 @@ doctest:
 nextest *ARGS:
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo nextest run --features unstable {{ ARGS }}
+    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run -p oopsie -F chrono {{ ARGS }}
 
 test *ARGS: (nextest ARGS) doctest
 

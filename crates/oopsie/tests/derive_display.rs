@@ -230,3 +230,20 @@ fn same_field_used_twice() {
     .build();
     assert_eq!(err.to_string(), "prefix X middle X suffix");
 }
+
+// A bare ident named like an attribute key (`backtrace`) in a short-display
+// argument position is an ordinary expression arg, not a misplaced flag.
+#[test]
+fn short_display_bare_arg_named_like_keyword_is_expression() {
+    #[oopsie::oopsie]
+    #[oopsie(module(false))]
+    enum E {
+        #[oopsie("trace: {}", backtrace)]
+        Snap { backtrace: String },
+    }
+    let err = Snap {
+        backtrace: "frames".to_owned(),
+    }
+    .build();
+    assert_eq!(err.to_string(), "trace: frames");
+}

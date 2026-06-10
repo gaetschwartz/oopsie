@@ -155,7 +155,7 @@
 //! | `#[oopsie(from(false))]` | Opt a field named `source` out of source detection |
 //! | `#[oopsie(from(Type, transform))]` | Source with type transformation |
 //! | *(type `Box<T>`, source)* | Auto-unboxed: the selector accepts `T` and boxes it (trait objects exempt) |
-//! | `#[oopsie(capture)]` | Auto-filled via [`Capturable`]; excluded from selector |
+//! | `#[oopsie(capture)]` | Auto-filled via [`Capturable`]; excluded from selector. Trace-typed fields get this automatically; `capture(false)` opts out |
 //! | `#[oopsie(help)]` | Dynamic help text from this field's `Display` |
 
 // Re-export the proc-macro attribute and derive.

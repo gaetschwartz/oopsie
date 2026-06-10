@@ -301,3 +301,44 @@ fn selector_fields_are_pub() {
     let err = external::build_via_pub_fields();
     assert!(matches!(err, AppError::Config { .. }));
 }
+
+// A raw-identifier variant (`r#try`) strips to the keyword `try`, which a
+// non-rawness-aware `Ident::new` would panic on; the selector must round-trip
+// as a raw ident instead.
+#[test]
+#[expect(
+    non_camel_case_types,
+    reason = "the raw-identifier variant under test is intentionally keyword-shaped"
+)]
+fn raw_identifier_variant_generates_raw_selector() {
+    #[oopsie::oopsie]
+    #[oopsie(module(false))]
+    enum KwError {
+        #[oopsie("looped")]
+        r#try,
+    }
+    let e = r#try.build();
+    assert_eq!(e.to_string(), "looped");
+}
+
+// `capture = false` opts a trace-typed field out of type-based auto-capture:
+// it stays a selector field the caller supplies, instead of being captured.
+#[test]
+fn capture_false_keeps_backtrace_field_on_selector() {
+    #[oopsie::oopsie]
+    #[oopsie(module(false))]
+    enum E {
+        #[oopsie("snap")]
+        Snap {
+            #[oopsie(capture = false)]
+            bt: oopsie::Backtrace,
+            msg: String,
+        },
+    }
+    let e = Snap {
+        bt: <oopsie::Backtrace as oopsie::Capturable>::capture(),
+        msg: "m",
+    }
+    .build();
+    assert_eq!(e.to_string(), "snap");
+}

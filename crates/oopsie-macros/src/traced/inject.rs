@@ -4,7 +4,9 @@ use syn::punctuated::Punctuated;
 use syn::{Fields, FieldsNamed, parse_quote, token};
 
 use super::config::{FieldExistence, FieldInjectorConfig, FieldsToInject};
-use super::field_detect::{is_backtrace_type, is_spantrace_type, is_traces_type};
+use super::field_detect::{
+    is_backtrace_type, is_spantrace_type, is_timestamp_type, is_traces_type,
+};
 
 /// Check which fields already exist in a `Fields` collection.
 pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type) -> FieldExistence {
@@ -17,10 +19,14 @@ pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type)
     };
 
     for field in iter {
-        let is_timestamp_name = field
+        // The mangled name guards re-expansion of already-injected fields; a
+        // user field merely *named* `timestamp` of an unrelated type is an
+        // ordinary field and does not suppress injection (same rule as
+        // backtrace/spantrace detection).
+        let is_injected_timestamp = field
             .ident
             .as_ref()
-            .is_some_and(|id| id == "timestamp" || id == "__oopsie_timestamp");
+            .is_some_and(|id| id == "__oopsie_timestamp");
 
         if is_traces_type(&field.ty) {
             // One packed field supplies both traces; mark all three so neither
@@ -36,10 +42,7 @@ pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type)
         if is_spantrace_type(&field.ty) {
             existence.has_spantrace = true;
         }
-        // Match by name as well as exact type: a user-written `SystemTime`
-        // (unqualified) is not token-equal to the configured fully-qualified
-        // type, so the type check alone misses the common case.
-        if is_timestamp_name || field.ty == *timestamp_type {
+        if is_injected_timestamp || is_timestamp_type(&field.ty) || field.ty == *timestamp_type {
             existence.has_timestamp = true;
         }
     }
@@ -251,6 +254,20 @@ mod tests {
         assert!(!existence.has_backtrace);
         assert!(existence.has_spantrace);
         assert!(!existence.has_timestamp);
+    }
+
+    #[test]
+    fn wrongly_typed_timestamp_name_does_not_suppress_injection() {
+        let fields = parse_fields(quote! { struct S { timestamp: u64, msg: String } });
+        let ts: syn::Type = parse_quote!(::std::time::SystemTime);
+        assert!(!check_existing_fields(&fields, &ts).has_timestamp);
+    }
+
+    #[test]
+    fn timestamp_typed_field_suppresses_regardless_of_name() {
+        let fields = parse_fields(quote! { struct S { when: SystemTime } });
+        let ts: syn::Type = parse_quote!(::std::time::SystemTime);
+        assert!(check_existing_fields(&fields, &ts).has_timestamp);
     }
 
     #[test]

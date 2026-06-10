@@ -4,6 +4,7 @@ use convert_case::{Case, Casing as _};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::Ident;
+use syn::ext::IdentExt as _;
 
 use super::parse::ModuleSetting;
 
@@ -11,6 +12,7 @@ use super::parse::ModuleSetting;
 pub fn wrap_in_module(
     module_setting: &ModuleSetting,
     enum_ident: &Ident,
+    vis: &syn::Visibility,
     tokens: &[TokenStream2],
 ) -> TokenStream2 {
     match module_setting {
@@ -22,7 +24,7 @@ pub fn wrap_in_module(
             let module_name = if let Some(name) = custom_name {
                 name.clone()
             } else {
-                let name = enum_ident.to_string();
+                let name = enum_ident.unraw().to_string();
                 let stripped = name.strip_suffix("Error").unwrap_or(&name);
                 let mut module_name = stripped.to_case(Case::Snake);
                 if !module_name.is_empty() {
@@ -31,8 +33,10 @@ pub fn wrap_in_module(
                 module_name.push_str("oopsies");
                 Ident::new(&module_name, enum_ident.span())
             };
+            let doc = format!("Auto-generated context selectors for `{enum_ident}`.");
             quote! {
-                pub mod #module_name {
+                #[doc = #doc]
+                #vis mod #module_name {
                     use super::*;
                     #(#tokens)*
                 }
