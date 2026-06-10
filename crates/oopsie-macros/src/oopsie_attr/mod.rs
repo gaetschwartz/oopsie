@@ -64,12 +64,14 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
     let args = OopsieAttrArgs::from_list(&meta)?;
     let needs_tracing = args.traced.as_ref().is_some_and(FieldSetting::is_enabled);
 
-    // The resolved `spantrace` setting can't tell an explicit request apart from
+    // The resolved `spantrace` setting can't tell an explicit enable apart from
     // the omitted default — both resolve to the same `Flag(true)` — so an
     // explicit-only rejection has to scan the raw tokens before darling folds them.
+    // An explicit disable (`spantrace = false` / `spantrace(false)`) is a no-op
+    // without tracing and must be allowed through.
     #[cfg(not(feature = "tracing"))]
     {
-        let names_spantrace = meta.iter().any(|m| {
+        let enables_spantrace = meta.iter().any(|m| {
             let NestedMeta::Meta(syn::Meta::List(list)) = m else {
                 return false;
             };
@@ -81,9 +83,31 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
             ) else {
                 return false;
             };
-            inner.iter().any(|nm| nm.path().is_ident("spantrace"))
+            inner.iter().any(|nm| {
+                if !nm.path().is_ident("spantrace") {
+                    return false;
+                }
+                match nm {
+                    // bare `spantrace` — enables
+                    syn::Meta::Path(_) => true,
+                    // `spantrace = <bool>` — enables only when true
+                    syn::Meta::NameValue(syn::MetaNameValue {
+                        value:
+                            syn::Expr::Lit(syn::ExprLit {
+                                lit: syn::Lit::Bool(b),
+                                ..
+                            }),
+                        ..
+                    }) => b.value,
+                    // `spantrace(<tokens>)` — disabled only when the sole token is `false`
+                    syn::Meta::List(list) => {
+                        !syn::parse2::<syn::LitBool>(list.tokens.clone()).is_ok_and(|b| !b.value)
+                    }
+                    syn::Meta::NameValue(_) => true,
+                }
+            })
         });
-        if names_spantrace {
+        if enables_spantrace {
             return Err(syn::Error::new(
                 proc_macro2::Span::call_site(),
                 "`spantrace` requires the `tracing` feature of `oopsie`",
@@ -602,6 +626,40 @@ mod tests {
         // packed default => single combined field, no separate ones.
         assert!(output.contains("__oopsie_traces"), "{output}");
         assert!(!output.contains("__oopsie_backtrace"), "{output}");
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn spantrace_bare_rejected_without_tracing() {
+        let err = expand(
+            quote! { traced(spantrace) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("spantrace"),
+            "expected spantrace error, got: {err}"
+        );
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn spantrace_equals_false_allowed_without_tracing() {
+        expand(
+            quote! { traced(spantrace = false) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .expect("explicit spantrace opt-out must be allowed without tracing");
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn spantrace_list_false_allowed_without_tracing() {
+        expand(
+            quote! { traced(spantrace(false)) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .expect("explicit spantrace(false) must be allowed without tracing");
     }
 
     #[cfg(not(feature = "tracing"))]
