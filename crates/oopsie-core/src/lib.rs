@@ -191,10 +191,9 @@ pub use welp::{Welp, WelpOptionExt, WelpResultExt};
 
 macro_rules! impl_string_newtypes {
     ($($(#[$meta:meta])* $ident:ident,)* $(,)?) => { $(
-        #[derive(
-            Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-        )]
-        #[serde(transparent)]
+        #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[cfg_attr(feature = "serde", serde(transparent))]
         #[repr(transparent)]
         $(#[$meta])*
         pub struct $ident(Cow<'static, str>);
