@@ -15,7 +15,7 @@ categories.workspace = true
 all-features = true
 
 [features]
-default = ["fancy"]
+default = ["fancy", "tracing", "serde"]   # TEMPORARY: -> [] in Phase 6 (Task 6.2)
 unstable-error-generic-member-access = [
     "oopsie-macros/unstable-error-generic-member-access",
     "oopsie-core/unstable-error-generic-member-access",
@@ -27,7 +27,9 @@ unstable = [
     "unstable-try-trait-v2",
     "oopsie-core/unstable",
 ]
-fancy = ["dep:owo-colors", "dep:serde", "dep:serde_json"]
+fancy = ["dep:owo-colors"]
+serde = ["oopsie-core/serde", "dep:serde", "dep:serde_json"]
+tracing = ["oopsie-core/tracing", "oopsie-macros/tracing"]
 chrono = ["oopsie-core/chrono"]
 
 [dependencies]
