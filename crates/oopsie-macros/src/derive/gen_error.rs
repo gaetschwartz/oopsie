@@ -7,13 +7,16 @@ use syn::{DeriveInput, Type};
 use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr, StructAttrs, VariantAttrs};
 
 /// Build the body of a `oopsie_backtrace`/`oopsie_spantrace` accessor that
-/// surfaces the deepest available trace: prefer the source's (origin-most)
+/// surfaces the deepest *captured* trace: prefer the source's (origin-most)
 /// trace, falling back to this layer's own field. This mirrors the source-first
 /// ordering of the generated `provide()` (plus std's first-wins `Request`) so
 /// the stable accessor and the provider path return the same trace. Without the
-/// `unstable-error-generic-member-access` feature `source_trace` yields `None`,
-/// so the body degrades to the own field. Returns `None` when the layer has
-/// neither a source nor an own trace.
+/// `unstable-error-generic-member-access` feature the source lookup yields
+/// `None`, so the body degrades to the own field. Returns `None` when the layer
+/// has neither a source nor an own trace.
+///
+/// `source_fn` names the skip-empty `__private` lookup (`source_backtrace` /
+/// `source_spantrace`), so an empty source trace never shadows a captured one.
 ///
 /// `probe` is the stable `DiagProbe` forwarding expression, supplied only for
 /// `transparent` layers. It sits between the (nightly-only) provider path and
@@ -23,16 +26,16 @@ fn trace_accessor_body(
     own: Option<TokenStream2>,
     source_access: Option<TokenStream2>,
     probe: Option<TokenStream2>,
-    trace_ty: &TokenStream2,
+    source_fn: &syn::Ident,
     oopsie_path: &syn::Path,
 ) -> Option<TokenStream2> {
     match (own, source_access) {
         (Some(own), Some(src)) => {
-            let head = provider_then_probe(&src, probe, trace_ty, oopsie_path);
+            let head = provider_then_probe(&src, probe, source_fn, oopsie_path);
             Some(quote! { #head.or(::core::option::Option::Some(#own)) })
         }
         (Some(own), None) => Some(quote! { ::core::option::Option::Some(#own) }),
-        (None, Some(src)) => Some(provider_then_probe(&src, probe, trace_ty, oopsie_path)),
+        (None, Some(src)) => Some(provider_then_probe(&src, probe, source_fn, oopsie_path)),
         (None, None) => None,
     }
 }
@@ -42,10 +45,10 @@ fn trace_accessor_body(
 fn provider_then_probe(
     src: &TokenStream2,
     probe: Option<TokenStream2>,
-    trace_ty: &TokenStream2,
+    source_fn: &syn::Ident,
     oopsie_path: &syn::Path,
 ) -> TokenStream2 {
-    let base = quote! { #oopsie_path::__private::source_trace::<#trace_ty>(#src) };
+    let base = quote! { #oopsie_path::__private::#source_fn(#src) };
     match probe {
         Some(probe) => quote! { #base.or(#probe) },
         None => base,
@@ -161,27 +164,39 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             provide_stmts.push(gen_provide_call(provide_attr, &req));
         }
 
-        // Provide backtrace/spantrace refs from detected fields
+        // Provide backtrace/spantrace refs from detected fields. An empty
+        // trace is never provided, so it cannot shadow a captured one further
+        // out (`Request` is first-wins).
         if let Some(tf) = &categorized.traces_field {
             provide_stmts.push(quote! {
-                #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
+                if #tf.0.is_captured() {
+                    #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
+                }
             });
             provide_stmts.push(quote! {
-                #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
+                if #tf.1.is_captured() {
+                    #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
+                }
             });
         } else {
             if let Some(bt_field) = &categorized.backtrace_field {
                 provide_stmts.push(quote! {
-                    #req.provide_ref::<#oopsie_path::Backtrace>(
-                        ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
-                    );
+                    {
+                        let __bt = ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field);
+                        if __bt.is_captured() {
+                            #req.provide_ref::<#oopsie_path::Backtrace>(__bt);
+                        }
+                    }
                 });
             }
             if let Some(st_field) = &categorized.spantrace_field {
                 provide_stmts.push(quote! {
-                    #req.provide_ref::<#oopsie_path::SpanTrace>(
-                        ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
-                    );
+                    {
+                        let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
+                        if __st.is_captured() {
+                            #req.provide_ref::<#oopsie_path::SpanTrace>(__st);
+                        }
+                    }
                 });
             }
         }
@@ -241,8 +256,8 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         let st_probe = source_ident
             .filter(|_| variant_attrs.transparent)
             .map(|s| gen_diag_forward(s, "fwd_spantrace", oopsie_path));
-        let bt_ty = quote! { #oopsie_path::Backtrace };
-        let st_ty = quote! { #oopsie_path::SpanTrace };
+        let bt_fn = format_ident!("source_backtrace");
+        let st_fn = format_ident!("source_spantrace");
 
         // Backtrace
         let (bt_own, bt_bind) = if let Some(tf) = &categorized.traces_field {
@@ -258,7 +273,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             (None, None)
         };
         if let Some(body) =
-            trace_accessor_body(bt_own, src_access.clone(), bt_probe, &bt_ty, oopsie_path)
+            trace_accessor_body(bt_own, src_access.clone(), bt_probe, &bt_fn, oopsie_path)
         {
             let binds = accessor_pattern_binds(bt_bind, source_ident);
             bt_arms.push(quote! {
@@ -282,7 +297,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             (None, None)
         };
         if let Some(body) =
-            trace_accessor_body(st_own, src_access.clone(), st_probe, &st_ty, oopsie_path)
+            trace_accessor_body(st_own, src_access.clone(), st_probe, &st_fn, oopsie_path)
         {
             let binds = accessor_pattern_binds(st_bind, source_ident);
             st_arms.push(quote! {
@@ -547,27 +562,39 @@ pub fn gen_struct_error(
         provide_stmts.push(gen_provide_call(provide_attr, &req));
     }
 
-    // Provide backtrace/spantrace refs from detected fields
+    // Provide backtrace/spantrace refs from detected fields. An empty trace
+    // is never provided, so it cannot shadow a captured one further out
+    // (`Request` is first-wins).
     if let Some(tf) = &categorized.traces_field {
         provide_stmts.push(quote! {
-            #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
+            if #tf.0.is_captured() {
+                #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
+            }
         });
         provide_stmts.push(quote! {
-            #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
+            if #tf.1.is_captured() {
+                #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
+            }
         });
     } else {
         if let Some(bt_field) = &categorized.backtrace_field {
             provide_stmts.push(quote! {
-                #req.provide_ref::<#oopsie_path::Backtrace>(
-                    ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
-                );
+                {
+                    let __bt = ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field);
+                    if __bt.is_captured() {
+                        #req.provide_ref::<#oopsie_path::Backtrace>(__bt);
+                    }
+                }
             });
         }
         if let Some(st_field) = &categorized.spantrace_field {
             provide_stmts.push(quote! {
-                #req.provide_ref::<#oopsie_path::SpanTrace>(
-                    ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
-                );
+                {
+                    let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
+                    if __st.is_captured() {
+                        #req.provide_ref::<#oopsie_path::SpanTrace>(__st);
+                    }
+                }
             });
         }
     }
@@ -631,8 +658,8 @@ pub fn gen_struct_error(
     let st_probe = struct_source
         .filter(|_| variant_attrs.transparent)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_spantrace", oopsie_path));
-    let bt_ty = quote! { #oopsie_path::Backtrace };
-    let st_ty = quote! { #oopsie_path::SpanTrace };
+    let bt_fn = format_ident!("source_backtrace");
+    let st_fn = format_ident!("source_spantrace");
 
     let bt_own = if let Some(tf) = &categorized.traces_field {
         Some(quote! { &self.#tf.0 })
@@ -647,7 +674,7 @@ pub fn gen_struct_error(
         bt_own,
         struct_src_access.clone(),
         bt_probe,
-        &bt_ty,
+        &bt_fn,
         oopsie_path,
     ) {
         Some(body) => quote! {
@@ -669,7 +696,7 @@ pub fn gen_struct_error(
         })
     };
     let st_method =
-        match trace_accessor_body(st_own, struct_src_access, st_probe, &st_ty, oopsie_path) {
+        match trace_accessor_body(st_own, struct_src_access, st_probe, &st_fn, oopsie_path) {
             Some(body) => quote! {
                 fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
                     #struct_use_aes

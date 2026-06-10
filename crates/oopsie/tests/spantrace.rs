@@ -198,6 +198,35 @@ fn non_diagnostic_source_captures_fresh_backtrace() {
     );
 }
 
+#[oopsie(traced)]
+enum ChainInnerError {
+    #[oopsie("chain inner")]
+    Inner { info: String },
+}
+
+#[oopsie(traced)]
+enum ChainOuterError {
+    #[oopsie("chain outer")]
+    Wrap { source: ChainInnerError },
+}
+
+#[test]
+fn derive_chain_skips_empty_source_spantrace() {
+    use oopsie::Diagnostic as _;
+
+    // Inner constructed with no subscriber → empty spantrace.
+    let inner: ChainInnerError = chain_inner_oopsies::Inner { info: "x" }.build();
+    assert!(!inner.oopsie_spantrace().unwrap().is_captured());
+
+    let _guard = common::init_test_subscriber();
+    let outer: ChainOuterError =
+        tracing::info_span!("wrap").in_scope(|| chain_outer_oopsies::Wrap.build_error(inner));
+    assert!(
+        outer.oopsie_spantrace().unwrap().is_captured(),
+        "the source's empty spantrace must not shadow the captured wrap-site one"
+    );
+}
+
 #[cfg(feature = "unstable-error-generic-member-access")]
 mod provide_test {
     use super::*;

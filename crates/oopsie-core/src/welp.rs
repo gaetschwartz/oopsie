@@ -34,7 +34,8 @@
 //! A `Sourced` `Welp`'s [`Diagnostic`] accessors prefer the source's traces
 //! (reached via the Provider API under the
 //! `unstable-error-generic-member-access` feature) and fall back to the
-//! wrap-site ones, so the deepest available trace surfaces.
+//! wrap-site ones, so the deepest trace that actually captured anything
+//! surfaces.
 
 use std::error::Error as StdError;
 use std::fmt;
@@ -82,10 +83,11 @@ impl Welp {
     }
 
     /// Wrap an existing error with a string message. Captures backtrace and
-    /// span-trace at the wrap site; when the source provides its own (via the
-    /// Provider API under the `unstable-error-generic-member-access` feature)
-    /// the [`Diagnostic`] accessors surface those instead, so the origin-most
-    /// trace wins.
+    /// span-trace at the wrap site; when the source provides its own captured
+    /// traces (via the Provider API under the
+    /// `unstable-error-generic-member-access` feature) the [`Diagnostic`]
+    /// accessors surface those instead, so the origin-most captured trace
+    /// wins.
     ///
     /// ```
     /// use oopsie_core::Welp;
@@ -100,6 +102,11 @@ impl Welp {
     where
         E: StdError + Send + Sync + 'static,
     {
+        // No construction-time extraction: `wrap` is generic, so the
+        // `CaptureProbe` autoref trick cannot see the source's `Diagnostic`
+        // impl here (method resolution happens against this body's bounds,
+        // not per instantiation). The origin trace is reached at accessor
+        // time instead, through the source-first Provider lookup.
         Self(WelpRepr::Sourced {
             message: message.into().into_boxed_str(),
             source: Box::new(source),
@@ -173,20 +180,22 @@ impl StdError for Welp {
 
     #[cfg(feature = "unstable-error-generic-member-access")]
     fn provide<'a>(&'a self, request: &mut core::error::Request<'a>) {
-        match &self.0 {
+        let traces = match &self.0 {
             WelpRepr::Sourced { source, traces, .. } => {
                 // `Request` is first-wins: forwarding the source first keeps
-                // its deeper trace ahead of the wrap-site one.
+                // its deeper trace ahead of the wrap-site one. An empty trace
+                // is never provided, so it cannot shadow a captured one in an
+                // outer layer.
                 source.provide(request);
-                request
-                    .provide_ref::<Backtrace>(&traces.0)
-                    .provide_ref::<SpanTrace>(&traces.1);
+                traces
             }
-            WelpRepr::Traced { traces, .. } => {
-                request
-                    .provide_ref::<Backtrace>(&traces.0)
-                    .provide_ref::<SpanTrace>(&traces.1);
-            }
+            WelpRepr::Traced { traces, .. } => traces,
+        };
+        if traces.0.is_captured() {
+            request.provide_ref::<Backtrace>(&traces.0);
+        }
+        if traces.1.is_captured() {
+            request.provide_ref::<SpanTrace>(&traces.1);
         }
     }
 }
@@ -195,7 +204,7 @@ impl Diagnostic for Welp {
     fn oopsie_backtrace(&self) -> Option<&Backtrace> {
         match &self.0 {
             WelpRepr::Sourced { source, traces, .. } => {
-                source_request_ref::<Backtrace>(source).or(Some(&traces.0))
+                crate::__private::source_backtrace(&**source).or(Some(&traces.0))
             }
             WelpRepr::Traced { traces, .. } => Some(&traces.0),
         }
@@ -204,18 +213,11 @@ impl Diagnostic for Welp {
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         match &self.0 {
             WelpRepr::Sourced { source, traces, .. } => {
-                source_request_ref::<SpanTrace>(source).or(Some(&traces.1))
+                crate::__private::source_spantrace(&**source).or(Some(&traces.1))
             }
             WelpRepr::Traced { traces, .. } => Some(&traces.1),
         }
     }
-}
-
-/// Pull a `T` reference out of a boxed source error via the Provider API —
-/// the only portable way to reach into a type-erased source. Returns `None`
-/// on stable (without the unstable Provider API).
-fn source_request_ref<T: 'static>(source: &BoxError) -> Option<&T> {
-    crate::__private::source_trace::<T>(&**source)
 }
 
 /// Extension trait on [`Result`] for attaching a string message that produces
@@ -329,6 +331,13 @@ impl<T> WelpOptionExt<T> for Option<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{RustBacktrace, with_rust_backtrace_override};
+
+    fn with_error_subscriber<R>(f: impl FnOnce() -> R) -> R {
+        use tracing_subscriber::prelude::*;
+        let subscriber = tracing_subscriber::registry().with(tracing_error::ErrorLayer::default());
+        tracing::subscriber::with_default(subscriber, f)
+    }
 
     #[test]
     fn new_captures_message() {
@@ -468,15 +477,38 @@ mod tests {
     #[cfg(feature = "unstable-error-generic-member-access")]
     #[test]
     fn traced_provides_traces_via_request_ref() {
-        let err = Welp::new("solo");
+        // Only captured traces are provided, so capture must succeed here.
+        let err = with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            with_error_subscriber(|| {
+                let _g = tracing::info_span!("solo").entered();
+                Welp::new("solo")
+            })
+        });
         assert!(core::error::request_ref::<Backtrace>(&err).is_some());
         assert!(core::error::request_ref::<SpanTrace>(&err).is_some());
     }
 
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[test]
+    fn empty_traces_are_not_provided() {
+        // No subscriber and backtraces disabled → both traces are empty and
+        // must be withheld from the (first-wins) provider chain.
+        let err = with_rust_backtrace_override(RustBacktrace::Disabled, || Welp::new("solo"));
+        assert!(core::error::request_ref::<Backtrace>(&err).is_none());
+        assert!(core::error::request_ref::<SpanTrace>(&err).is_none());
+    }
+
     #[test]
     fn sourced_recovers_traces_from_diagnostic_source() {
-        let inner = Welp::new("inner");
-        let outer = Welp::wrap(inner, "outer");
+        // The inner traces must actually capture something (live span +
+        // backtraces enabled), otherwise the skip-empty filters surface the
+        // wrap-site traces instead and the ptr-eq assertions are meaningless.
+        let outer = with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            with_error_subscriber(|| {
+                let _g = tracing::info_span!("origin").entered();
+                Welp::wrap(Welp::new("inner"), "outer")
+            })
+        });
         let bt = outer.oopsie_backtrace().expect("backtrace");
         let st = outer.oopsie_spantrace().expect("spantrace");
         // On nightly the Provider API is available, so the source's own
@@ -512,7 +544,13 @@ mod tests {
     #[cfg(feature = "unstable-error-generic-member-access")]
     #[test]
     fn sourced_forwards_source_provide() {
-        let outer = Welp::wrap(Welp::new("inner"), "outer");
+        // Only captured traces are provided, so capture must succeed here.
+        let outer = with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            with_error_subscriber(|| {
+                let _g = tracing::info_span!("origin").entered();
+                Welp::wrap(Welp::new("inner"), "outer")
+            })
+        });
         assert!(core::error::request_ref::<Backtrace>(&outer).is_some());
         assert!(core::error::request_ref::<SpanTrace>(&outer).is_some());
     }
@@ -522,6 +560,40 @@ mod tests {
         let outer = Welp::wrap(std::io::Error::other("x"), "outer");
         assert!(outer.oopsie_backtrace().is_some());
         assert!(outer.oopsie_spantrace().is_some());
+    }
+
+    #[test]
+    fn empty_source_spantrace_does_not_shadow_wrap_site_capture() {
+        let inner = Welp::new("inner"); // no subscriber → empty spantrace
+        assert!(!inner.oopsie_spantrace().unwrap().is_captured());
+        let outer = with_error_subscriber(|| {
+            let _g = tracing::info_span!("wrap_site").entered();
+            Welp::wrap(inner, "outer")
+        });
+        assert!(outer.oopsie_spantrace().unwrap().is_captured());
+    }
+
+    #[test]
+    fn empty_source_backtrace_does_not_shadow_wrap_site_capture() {
+        let inner = with_rust_backtrace_override(RustBacktrace::Disabled, || Welp::new("inner"));
+        let outer =
+            with_rust_backtrace_override(RustBacktrace::Enabled, || Welp::wrap(inner, "outer"));
+        assert!(!outer.oopsie_backtrace().unwrap().frames().is_empty());
+    }
+
+    // Reaching the source's trace requires the Provider API: `wrap` is
+    // generic, so no construction-time extraction is possible (see `wrap`),
+    // and on stable the accessors cannot descend into the type-erased source.
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[test]
+    fn wrap_surfaces_captured_source_spantrace() {
+        let inner = with_error_subscriber(|| {
+            let _g = tracing::info_span!("origin").entered();
+            Welp::new("inner")
+        });
+        assert!(inner.oopsie_spantrace().unwrap().is_captured());
+        let outer = Welp::wrap(inner, "outer"); // no live span here
+        assert!(outer.oopsie_spantrace().unwrap().is_captured());
     }
 
     // Compile-time guarantees about `Welp`'s shape.

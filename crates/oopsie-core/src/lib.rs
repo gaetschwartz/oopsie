@@ -14,7 +14,7 @@
 
 mod backtrace;
 mod diagnostic;
-pub mod spantrace;
+mod spantrace;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 mod traits;
@@ -135,8 +135,9 @@ pub mod __private {
     /// The generated `provide()` forwards to the source before providing its
     /// own trace, and std's `Request` is first-wins, so the deepest provider in
     /// the chain fills the slot — this surfaces the origin-most trace rather
-    /// than a wrap-site one. Derived stable accessors call this on their source
-    /// so they agree with the provider path.
+    /// than a wrap-site one. Trace accessors go through the typed
+    /// [`source_backtrace`]/[`source_spantrace`] wrappers, which add the
+    /// skip-empty filter on top of this lookup.
     ///
     /// Returns `None` without `unstable-error-generic-member-access`: descending
     /// into a type-erased `dyn Error` source is not portable there, and the
@@ -155,6 +156,26 @@ pub mod __private {
             let _ = source;
             None
         }
+    }
+
+    /// [`source_trace`] for `Backtrace`, treating an empty trace as absent:
+    /// a trace that captured no frames is not "available" and must not shadow
+    /// a captured one further out.
+    #[inline]
+    #[must_use]
+    pub fn source_backtrace<'a>(
+        source: &'a (dyn std::error::Error + 'static),
+    ) -> Option<&'a crate::Backtrace> {
+        source_trace::<crate::Backtrace>(source).filter(|bt| bt.is_captured())
+    }
+
+    /// [`source_trace`] for `SpanTrace`, treating an empty trace as absent.
+    #[inline]
+    #[must_use]
+    pub fn source_spantrace<'a>(
+        source: &'a (dyn std::error::Error + 'static),
+    ) -> Option<&'a crate::SpanTrace> {
+        source_trace::<crate::SpanTrace>(source).filter(|st| st.is_captured())
     }
 }
 

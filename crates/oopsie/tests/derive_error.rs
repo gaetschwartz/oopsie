@@ -329,6 +329,8 @@ fn nested_attr_macro_backtrace_propagated() {
     use attr_inner_oopsies::Boom;
     use attr_outer_oopsies::Wrapper;
 
+    // Empty traces are withheld from provide(), so capture must succeed.
+    oopsie_core::test_utils::force_backtrace();
     let inner = Boom { msg: "kaboom" }.build();
     let outer: AttrOuterError = Wrapper { ctx: "handling" }.build_error(inner);
 
@@ -348,8 +350,19 @@ fn stable_accessor_surfaces_deepest_trace() {
     use attr_inner_oopsies::Boom;
     use attr_outer_oopsies::Wrapper;
     use oopsie::Diagnostic as _;
+    use tracing::instrument;
 
-    let inner = Boom { msg: "deep" }.build();
+    #[instrument(target = "test")]
+    fn make_inner() -> AttrInnerError {
+        attr_inner_oopsies::Boom { msg: "deep" }.build()
+    }
+
+    // Empty traces are withheld from provide(), so both captures must
+    // succeed: force backtraces and build inside an instrumented span.
+    oopsie_core::test_utils::force_backtrace();
+    let _guard = oopsie_core::test_utils::init_test_subscriber();
+
+    let inner = make_inner();
     let outer: AttrOuterError = Wrapper { ctx: "shallow" }.build_error(inner);
 
     // The unstable provider path walks source-first under std's first-wins
@@ -443,6 +456,8 @@ pub struct AttrStructWithBt {
 #[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn struct_provide_backtrace() {
+    // Empty traces are withheld from provide(), so capture must succeed.
+    oopsie_core::test_utils::force_backtrace();
     let err = AttrStructWithBtOopsie { msg: "test" }.build();
     let bt = core::error::request_ref::<oopsie::Backtrace>(&err);
     assert!(

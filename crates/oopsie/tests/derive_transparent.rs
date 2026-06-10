@@ -358,9 +358,19 @@ mod traced_transparent {
     // so the deepest (leaf) trace fills the slot. The stable accessor must agree.
     #[test]
     fn transparent_traced_stable_matches_provider_deepest() {
-        use leaf_oopsies::Boom;
+        use tracing::instrument;
 
-        let leaf = Boom { detail: "x" }.build();
+        #[instrument(target = "test")]
+        fn make_leaf() -> Leaf {
+            leaf_oopsies::Boom { detail: "x" }.build()
+        }
+
+        // Empty traces are withheld from provide(), so both captures must
+        // succeed: force backtraces and build inside an instrumented span.
+        oopsie_core::test_utils::force_backtrace();
+        let _guard = oopsie_core::test_utils::init_test_subscriber();
+
+        let leaf = make_leaf();
         let outer: Wrapper = Wrapper::from(leaf);
 
         let bt_provide = core::error::request_ref::<oopsie::Backtrace>(&outer)

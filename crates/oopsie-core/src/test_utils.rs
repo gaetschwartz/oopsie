@@ -15,11 +15,17 @@ pub mod __private {
     pub use target_triple::TARGET;
 }
 
-pub const CHANNEL: &str = if cfg!(feature = "unstable") {
+// Keyed on the granular feature (not the `unstable` umbrella) because the
+// Provider-API trace surfacing it gates is what actually changes snapshot
+// content.
+pub const CHANNEL: &str = if cfg!(feature = "unstable-error-generic-member-access") {
     "unstable"
 } else {
     "stable"
 };
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+const _: () = assert!(matches!(CHANNEL.as_bytes(), b"unstable"));
 
 #[macro_export]
 macro_rules! snap_name {

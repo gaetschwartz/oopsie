@@ -1,7 +1,7 @@
 use std::cell::Cell;
-use std::sync::LazyLock;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Relaxed;
+use std::sync::{Arc, LazyLock};
 use std::{env, fmt, path};
 
 use crate::Capturable as _;
@@ -164,20 +164,12 @@ pub fn with_rust_backtrace_override<R>(value: RustBacktrace, f: impl FnOnce() ->
     f()
 }
 
+// Clones share one `Arc`-held capture, so cloning is a refcount bump and the
+// first frame access resolves symbols exactly once for all clones.
+#[derive(Clone)]
 enum Inner {
-    Captured(LazyLock<Capture, helper::LazyResolve>),
-    Resolved(Capture),
+    Captured(Arc<LazyLock<Capture, helper::LazyResolve>>),
     Disabled(backtrace::Backtrace), // Always empty, used when capture is disabled to avoid the LazyLock indirection.
-}
-
-impl Clone for Inner {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Captured(bt) => Self::Resolved((**bt).clone()),
-            Self::Resolved(bt) => Self::Resolved(bt.clone()),
-            Self::Disabled(bt) => Self::Disabled(bt.clone()),
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -190,9 +182,9 @@ impl crate::Capturable for Backtrace {
     fn capture() -> Self {
         if rust_backtrace().is_enabled() {
             Self {
-                inner: Inner::Captured(LazyLock::new(helper::lazy_resolve(Capture {
+                inner: Inner::Captured(Arc::new(LazyLock::new(helper::lazy_resolve(Capture {
                     backtrace: backtrace::Backtrace::new_unresolved(),
-                }))),
+                })))),
             }
         } else {
             Self {
@@ -205,10 +197,13 @@ impl crate::Capturable for Backtrace {
 impl crate::CaptureExt for Backtrace {
     #[inline]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
-        source
-            .oopsie_backtrace()
-            .cloned()
-            .unwrap_or_else(Self::capture)
+        match source.oopsie_backtrace() {
+            // Keep the source's trace only if capture actually succeeded; an
+            // empty trace carries nothing worth preserving over a fresh
+            // capture at the wrap site.
+            Some(trace) if trace.is_captured() => trace.clone(),
+            _ => Self::capture(),
+        }
     }
 }
 
@@ -372,8 +367,8 @@ impl fmt::Debug for Backtrace {
         if rust_backtrace().is_full() {
             return fmt::Debug::fmt(&self.as_backtrace(), f);
         }
-        let kept: Vec<backtrace::BacktraceFrame> = self
-            .frames()
+        let frames = self.frames();
+        let kept: Vec<backtrace::BacktraceFrame> = frames
             .iter()
             .filter(|frame| {
                 let name = primary_name(frame);
@@ -382,7 +377,14 @@ impl fmt::Debug for Backtrace {
             })
             .cloned()
             .collect();
-        let bt = backtrace::Backtrace::from(kept);
+        // Trimming classifies nameless frames as internal; when no symbols
+        // resolved at all that would erase the whole capture. A raw rendering
+        // beats a silently empty one.
+        let bt = if kept.is_empty() && !frames.is_empty() {
+            backtrace::Backtrace::from(frames.to_vec())
+        } else {
+            backtrace::Backtrace::from(kept)
+        };
         fmt::Debug::fmt(&bt, f)
     }
 }
@@ -395,7 +397,20 @@ impl Backtrace {
         match &self.inner {
             Inner::Captured(bt) => &bt.backtrace,
             Inner::Disabled(bt) => bt,
-            Inner::Resolved(bt) => &bt.backtrace,
+        }
+    }
+
+    /// `true` if frames were recorded at construction (capture was enabled and
+    /// the platform produced a stack). An empty backtrace renders nothing and
+    /// is not worth propagating over a fresh capture.
+    ///
+    /// Never forces symbol resolution.
+    #[must_use]
+    #[inline]
+    pub const fn is_captured(&self) -> bool {
+        match &self.inner {
+            Inner::Captured(_) => true,
+            Inner::Disabled(_) => false,
         }
     }
 
@@ -416,9 +431,16 @@ impl Backtrace {
     pub fn resolve(&self) {
         let _ = self.as_backtrace();
     }
+
+    #[cfg(test)]
+    fn is_resolved(&self) -> bool {
+        match &self.inner {
+            Inner::Captured(bt) => LazyLock::get(&**bt).is_some(),
+            Inner::Disabled(_) => true,
+        }
+    }
 }
 
-#[derive(Clone)]
 struct Capture {
     backtrace: backtrace::Backtrace,
 }
@@ -550,6 +572,41 @@ mod tests {
         let bt = Backtrace::capture_or_extract(&ErrorWithoutBacktrace);
         clear_rust_backtrace_override();
         assert!(bt.frames().is_empty());
+    }
+
+    #[test]
+    fn capture_or_extract_recaptures_over_empty_source_backtrace() {
+        let src = with_rust_backtrace_override(RustBacktrace::Disabled, || ErrorWithBacktrace {
+            backtrace: Backtrace::capture(),
+        });
+        assert!(
+            src.backtrace.frames().is_empty(),
+            "precondition: source bt empty"
+        );
+        let extracted = with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            <Backtrace as CaptureExt>::capture_or_extract(&src)
+        });
+        assert!(!extracted.frames().is_empty());
+    }
+
+    #[test]
+    fn clone_does_not_force_resolution() {
+        let bt = with_rust_backtrace_override(RustBacktrace::Enabled, Backtrace::capture);
+        let clone = bt.clone();
+        assert!(!bt.is_resolved(), "clone must not symbolicate");
+        assert!(!clone.is_resolved());
+        let _ = clone.frames();
+        assert!(bt.is_resolved(), "clones share a single resolution");
+    }
+
+    #[test]
+    fn debug_never_renders_empty_for_nonempty_capture() {
+        let bt = with_rust_backtrace_override(RustBacktrace::Enabled, Backtrace::capture);
+        assert!(!bt.frames().is_empty());
+        let rendered = with_rust_backtrace_override(RustBacktrace::Enabled, || format!("{bt:?}"));
+        // Whatever the platform's symbol situation, a non-empty capture must
+        // render at least one frame entry.
+        assert!(rendered.contains("0:"), "rendered: {rendered}");
     }
 
     #[test]
