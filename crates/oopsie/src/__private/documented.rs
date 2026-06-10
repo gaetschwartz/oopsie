@@ -177,32 +177,24 @@ pub mod field {
 pub mod attr {
     use super::params::{Path, Settings};
 
-    /// Injects trace-capture fields (backtrace + spantrace, both on by
-    /// default) into every variant / the struct.
-    ///
-    /// Forms: `traced`, `traced(false)`,
-    /// `traced(backtrace(...), spantrace(...), timestamp(...), packed = ..., boxed = ...)`.
+    #[doc = include_str!("keyword_docs/attr/traced.md")]
     pub fn traced(settings: Settings) {
         _ = settings;
     }
 
-    /// With `traced`: attaches an auto-generated error code
-    /// (`module_path::Type::Variant`) to every variant / the struct that has
-    /// no explicit `code = "..."` (`transparent` items excluded).
-    ///
-    /// Forms: `code = false`, `code(r#type = Path)`
-    /// (code type default: `ErrorCode`).
+    #[doc = include_str!("keyword_docs/attr/code.md")]
     pub fn code(settings: Settings) {
         _ = settings;
     }
 
-    /// Path to the `oopsie` crate used in generated code
-    /// (default: `::oopsie`); a container-level `#[oopsie(path = ...)]` on
-    /// the type itself wins over this.
-    ///
-    /// Form: `path = "some::path"`.
+    #[doc = include_str!("keyword_docs/attr/path.md")]
     pub fn path(path: Path) {
         _ = path;
+    }
+
+    #[doc = include_str!("keyword_docs/attr/debug.md")]
+    pub fn debug(enabled: bool) {
+        _ = enabled;
     }
 }
 
@@ -211,80 +203,47 @@ pub mod attr {
 pub mod traced {
     use super::params::{Settings, TypePath};
 
-    /// Enables and tunes capture of the backtrace (default: on). Mentioning
-    /// one part never disables the others.
-    ///
-    /// Forms: `backtrace`, `backtrace(false)`,
-    /// `backtrace(r#type = Path, boxed = ..., enabled = ...)`.
+    #[doc = include_str!("keyword_docs/traced/backtrace.md")]
     pub fn backtrace(settings: Settings) {
         _ = settings;
     }
 
-    /// Enables and tunes capture of the span trace (default: on). Mentioning
-    /// one part never disables the others.
-    ///
-    /// Forms: `spantrace`, `spantrace(false)`,
-    /// `spantrace(r#type = Path, boxed = ..., enabled = ...)`.
+    #[doc = include_str!("keyword_docs/traced/spantrace.md")]
     pub fn spantrace(settings: Settings) {
         _ = settings;
     }
 
-    /// Injects an auto-captured timestamp field (default: off).
-    ///
-    /// Forms: `timestamp`, `timestamp(chrono = ..., provide = ...)`.
+    #[doc = include_str!("keyword_docs/traced/timestamp.md")]
     pub fn timestamp(settings: Settings) {
         _ = settings;
     }
 
-    /// Stores backtrace + spantrace as one packed `(Backtrace, SpanTrace)`
-    /// field (default: on); `packed = false` keeps separate fields. Packing
-    /// requires backtrace and spantrace to share one boxing mode.
-    ///
-    /// Forms: `packed`, `packed = false`.
+    #[doc = include_str!("keyword_docs/traced/packed.md")]
     pub fn packed(enabled: bool) {
         _ = enabled;
     }
 
-    /// Boxes the injected trace field(s) (default: on). Applies to both
-    /// traces at this level, or to one trace inside
-    /// `backtrace(...)`/`spantrace(...)`.
-    ///
-    /// Forms: `boxed`, `boxed = false`.
+    #[doc = include_str!("keyword_docs/traced/boxed.md")]
     pub fn boxed(enabled: bool) {
         _ = enabled;
     }
 
-    /// Inside `timestamp(...)`: uses `chrono::DateTime<Local>` instead of
-    /// `SystemTime` as the timestamp type (needs the `chrono` feature;
-    /// default: off).
-    ///
-    /// Form: `chrono = true`.
+    #[doc = include_str!("keyword_docs/traced/chrono.md")]
     pub fn chrono(enabled: bool) {
         _ = enabled;
     }
 
-    /// Inside `timestamp(...)`: also exposes the timestamp through the
-    /// `std::error::Request` provider API (default: off).
-    ///
-    /// Form: `provide = true`.
+    #[doc = include_str!("keyword_docs/traced/provide.md")]
     pub fn provide(enabled: bool) {
         _ = enabled;
     }
 
-    /// Overrides the injected type for this part: the trace field type inside
-    /// `backtrace(...)`/`spantrace(...)`, or the error-code type inside
-    /// `code(...)`.
-    ///
-    /// Form: `r#type = some::Path`.
+    #[doc = include_str!("keyword_docs/traced/type.md")]
     pub fn r#type(r#type: TypePath) {
         _ = r#type;
     }
 
-    /// Explicit on/off switch accepted in any settings block, e.g.
-    /// `backtrace(enabled = false, r#type = ...)`; a settings block without
-    /// it counts as enabled.
-    ///
-    /// Forms: `enabled = true`, `enabled = false`.
+    #[doc = include_str!("keyword_docs/traced/enabled.md")]
     pub fn enabled(enabled: bool) {
         _ = enabled;
     }

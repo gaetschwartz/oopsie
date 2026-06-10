@@ -94,17 +94,49 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 ///
 /// ## Parameters
 ///
+/// The bare `#[oopsie]` adds no diagnostics; it is equivalent to
+/// `#[derive(Debug, Oopsie)]`. The arguments below tune what gets generated;
+/// each has its own subsection further down.
+///
 /// | Parameter | Effect |
 /// |-----------|--------|
-/// | *(bare)* | No diagnostics; equivalent to `#[derive(Debug, Oopsie)]` |
-/// | `traced` | Inject backtrace + spantrace, plus an auto error code (`module_path::Type::Variant`) |
-/// | `traced(timestamp)` | …plus an auto-captured timestamp |
-/// | `traced(backtrace(false))` | Disable one part (any of `backtrace`/`spantrace`/`timestamp`) |
-/// | `traced(timestamp(chrono = true))` | `chrono::DateTime<Local>` timestamps (needs oopsie's `chrono` feature) |
-/// | `traced(packed = false, boxed = false)` | Trace field layout tuning |
-/// | `code = false` | Disable the auto error code (only meaningful with `traced`) |
-/// | `debug = false` | Skip the automatic `Debug` derive (for hand-written `impl Debug`) |
-/// | `path = "my_crate::oopsie"` | Custom path to the `oopsie` crate (all generated impls) |
+/// | `traced` | Inject backtrace + spantrace fields, plus an auto error code |
+/// | `code` | Tune (or disable) the auto error code |
+/// | `path` | Path to the `oopsie` crate in generated impls |
+/// | `debug` | Skip the automatic `Debug` derive |
+///
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/traced.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/code.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/path.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/debug.md")]
+///
+/// ## `traced(...)` options
+///
+/// These keys are spelled nested inside `traced(...)`. `backtrace`/`spantrace`
+/// take an optional settings block (`r#type`, `boxed`, `enabled`); `timestamp`
+/// takes `chrono`/`provide`; `packed`/`boxed` are pair-level layout flags.
+///
+/// | Option | Effect |
+/// |--------|--------|
+/// | `backtrace` | Enable/tune the captured backtrace (default on) |
+/// | `spantrace` | Enable/tune the captured span trace (default on) |
+/// | `timestamp` | Inject an auto-captured timestamp field (default off) |
+/// | `packed` | Store both traces as one `(Backtrace, SpanTrace)` field |
+/// | `boxed` | Box the injected trace field(s) |
+/// | `chrono` | Use `chrono::DateTime<Local>` timestamps |
+/// | `provide` | Expose the timestamp via the provider API |
+/// | `r#type` | Override the injected type for this part |
+/// | `enabled` | Explicit on/off inside a settings block |
+///
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/backtrace.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/spantrace.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/timestamp.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/packed.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/boxed.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/chrono.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/provide.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/type.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/enabled.md")]
 ///
 /// With `traced`, every variant (or the struct itself) also gets an automatic
 /// error code unless it is `transparent` or carries an explicit
