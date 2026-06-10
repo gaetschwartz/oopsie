@@ -139,9 +139,9 @@ fn formatter(data: &syn::Data) -> syn::Ident {
         syn::Data::Enum(de) => de
             .variants
             .iter()
-            .flat_map(|v| match &v.fields {
+            .filter_map(|v| match &v.fields {
                 syn::Fields::Named(f) => Some(f.named.iter().filter_map(|f| f.ident.as_ref())),
-                _ => None,
+                syn::Fields::Unnamed(_) | syn::Fields::Unit => None,
             })
             .flatten()
             .collect::<Vec<_>>(),
@@ -150,7 +150,7 @@ fn formatter(data: &syn::Data) -> syn::Ident {
 
     let mut candidate = format_ident!("__oopsie_fmt");
     let mut n = 0u32;
-    while field_names.iter().any(|id| *id == &candidate) {
+    while field_names.contains(&&candidate) {
         candidate = format_ident!("__oopsie_fmt_{n}");
         n += 1;
     }
