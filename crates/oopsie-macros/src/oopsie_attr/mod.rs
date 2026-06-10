@@ -64,6 +64,33 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
     let args = OopsieAttrArgs::from_list(&meta)?;
     let needs_tracing = args.traced.as_ref().is_some_and(FieldSetting::is_enabled);
 
+    // The resolved `spantrace` setting can't tell an explicit request apart from
+    // the omitted default — both resolve to the same `Flag(true)` — so an
+    // explicit-only rejection has to scan the raw tokens before darling folds them.
+    #[cfg(not(feature = "tracing"))]
+    {
+        let names_spantrace = meta.iter().any(|m| {
+            let NestedMeta::Meta(syn::Meta::List(list)) = m else {
+                return false;
+            };
+            if !list.path.is_ident("traced") {
+                return false;
+            }
+            let Ok(inner) = list.parse_args_with(
+                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+            ) else {
+                return false;
+            };
+            inner.iter().any(|nm| nm.path().is_ident("spantrace"))
+        });
+        if names_spantrace {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "`spantrace` requires the `tracing` feature of `oopsie`",
+            ));
+        }
+    }
+
     match syn::parse2::<syn::Item>(input)? {
         syn::Item::Enum(item_enum) => expand_enum(&args, needs_tracing, item_enum),
         syn::Item::Struct(item_struct) => expand_struct(&args, needs_tracing, item_struct),
@@ -307,7 +334,10 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
-    #[cfg(not(feature = "unstable-error-generic-member-access"))]
+    #[cfg(all(
+        not(feature = "unstable-error-generic-member-access"),
+        feature = "tracing"
+    ))]
     #[test]
     fn backtrace_only_struct() {
         let result = expand(
@@ -513,6 +543,7 @@ mod tests {
         result.unwrap_err();
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn traced_list_form_parses_and_injects() {
         // `traced(packed = false)` must parse (not error on unknown key `traced`)
@@ -534,6 +565,7 @@ mod tests {
         assert!(output.contains("__oopsie_spantrace"), "{output}");
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn traced_list_form_default_is_packed() {
         let result = expand(
@@ -549,5 +581,24 @@ mod tests {
         // packed default => single combined field, no separate ones.
         assert!(output.contains("__oopsie_traces"), "{output}");
         assert!(!output.contains("__oopsie_backtrace"), "{output}");
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn traced_injects_backtrace_only_without_tracing() {
+        let output = expand(
+            quote! { traced },
+            quote! {
+                pub enum AppError {
+                    #[oopsie("boom")]
+                    Boom { info: String },
+                }
+            },
+        )
+        .unwrap()
+        .to_string();
+        assert!(output.contains("__oopsie_backtrace"), "{output}");
+        assert!(!output.contains("__oopsie_spantrace"), "{output}");
+        assert!(!output.contains("__oopsie_traces"), "{output}");
     }
 }
