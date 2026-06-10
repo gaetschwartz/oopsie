@@ -32,8 +32,6 @@ pub use diagnostic::Diagnostic;
 /// Private helpers used by macro-generated code. Not part of the public API.
 #[doc(hidden)]
 pub mod __private {
-    pub mod documented;
-
     pub use crate::backtrace::{
         is_backtrace_capture_code, is_internal_frame, is_post_panic_code, is_runtime_init_code,
     };

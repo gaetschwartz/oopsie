@@ -79,41 +79,27 @@ pub mod helper {
 pub mod container {
     use super::params::{IdentiferOrFalse, IntOrRange, Path, StringOrFalse, Vis};
 
-    /// Wraps the generated context selectors in a module
-    /// (enum default: on, auto-named; struct default: off).
-    ///
-    /// Forms: `module`, `module(name)`, `module(false)`.
+    #[doc = include_str!("keyword_docs/container/module.md")]
     pub fn module(name: IdentiferOrFalse) {
         _ = name;
     }
 
-    /// Appends a suffix to generated selector names
-    /// (enum default: none; struct default: `"Oopsie"`).
-    ///
-    /// Forms: `suffix`, `suffix("X")`, `suffix(false)`.
+    #[doc = include_str!("keyword_docs/container/suffix.md")]
     pub fn suffix(text: StringOrFalse) {
         _ = text;
     }
 
-    /// Asserts the size of the error type at compile time.
-    ///
-    /// Forms: `size(N)`, `size(..=N)`, `size(N..)`, `size(N..=M)`.
+    #[doc = include_str!("keyword_docs/container/size.md")]
     pub fn size(size: IntOrRange) {
         _ = size;
     }
 
-    /// Overrides the path to the `oopsie` crate used in generated code
-    /// (default: `::oopsie`).
-    ///
-    /// Form: `path = "some::path"`.
+    #[doc = include_str!("keyword_docs/container/path.md")]
     pub fn path(path: Path) {
         _ = path;
     }
 
-    /// Overrides the visibility of generated selectors
-    /// (default: the error type's own visibility).
-    ///
-    /// Forms: `vis(pub)`, `vis(pub(crate))`, ...
+    #[doc = include_str!("keyword_docs/container/vis.md")]
     pub fn vis(vis: Vis) {
         _ = vis;
     }
@@ -124,47 +110,33 @@ pub mod container {
 pub mod variant {
     use super::params::{FmtArg, FormatString, TypeArrowExpr, Vis};
 
-    /// Sets the `Display` message, with `format!` semantics (named or
-    /// positional interpolation).
-    ///
-    /// Forms: `display("msg {field}")`, `display("msg {}", expr)`.
+    #[doc = include_str!("keyword_docs/variant/display.md")]
     pub fn display(fmt: FormatString, args: Vec<FmtArg>) {
         _ = fmt;
         _ = args;
     }
 
-    /// Delegates `Display` and `source` to the inner source field, and
-    /// generates a `From` impl instead of a context selector.
+    #[doc = include_str!("keyword_docs/variant/transparent.md")]
     pub fn transparent() {}
 
-    /// Attaches help text, surfaced via `Diagnostic::oopsie_help_text` and
-    /// shown by `Report`.
-    ///
-    /// Forms: `help = "..."`, `help("fmt {}", args)`.
+    #[doc = include_str!("keyword_docs/variant/help.md")]
     pub fn help(text: FormatString, args: Vec<FmtArg>) {
         _ = text;
         _ = args;
     }
 
-    /// Attaches an error code, surfaced via `Diagnostic::oopsie_error_code`.
-    ///
-    /// Forms: `code = "..."`, `code("fmt {}", args)`.
+    #[doc = include_str!("keyword_docs/variant/code.md")]
     pub fn code(code: FormatString, args: Vec<FmtArg>) {
         _ = code;
         _ = args;
     }
 
-    /// Provides a value or reference through the `std::error::Request`
-    /// provider API (with the `unstable` feature).
-    ///
-    /// Forms: `provide(Type => expr)`, `provide(ref, Type => expr)`.
+    #[doc = include_str!("keyword_docs/variant/provide.md")]
     pub fn provide(spec: TypeArrowExpr) {
         _ = spec;
     }
 
-    /// Overrides this variant's selector visibility.
-    ///
-    /// Forms: `vis(pub)`, `vis(pub(crate))`, ...
+    #[doc = include_str!("keyword_docs/variant/vis.md")]
     pub fn vis(vis: Vis) {
         _ = vis;
     }
@@ -174,39 +146,29 @@ pub mod variant {
 pub mod field {
     use super::params::{TypeAndTransform, TypeArrowExpr};
 
-    /// Marks this field as the chained source error, accepted by the
-    /// selector at construction.
-    ///
-    /// Forms: `from`, `from(false)` (opt a `source`-named field out),
-    /// `from(Type, transform)` (accept `Type`, store `transform(value)`).
+    #[doc = include_str!("keyword_docs/field/from.md")]
     pub fn from(spec: TypeAndTransform) {
         _ = spec;
     }
 
-    /// Auto-fills this field via `Capturable` when the error is constructed;
-    /// the field is excluded from the context selector.
+    #[doc = include_str!("keyword_docs/field/capture.md")]
     pub fn capture() {}
 
-    /// Provides a value or reference through the `std::error::Request`
-    /// provider API (with the `unstable` feature).
-    ///
-    /// Forms: `provide(Type => expr)`, `provide(ref, Type => expr)`.
+    #[doc = include_str!("keyword_docs/field/provide.md")]
     pub fn provide(spec: TypeArrowExpr) {
         _ = spec;
     }
 
-    /// Marks this field as the captured backtrace. The field type's last
-    /// path segment must be `Backtrace`.
+    #[doc = include_str!("keyword_docs/field/backtrace.md")]
     pub fn backtrace() {}
 
-    /// Marks this field as the captured span trace. The field type's last
-    /// path segment must be `SpanTrace`.
+    #[doc = include_str!("keyword_docs/field/spantrace.md")]
     pub fn spantrace() {}
 
-    /// Marks this field as the packed `(Backtrace, SpanTrace)` pair.
+    #[doc = include_str!("keyword_docs/field/traces.md")]
     pub fn traces() {}
 
-    /// Uses this field's `Display` output as the error's dynamic help text.
+    #[doc = include_str!("keyword_docs/field/help.md")]
     pub fn help() {}
 }
 

@@ -172,42 +172,73 @@
 //!
 //! # Attribute reference
 //!
+//! Each keyword has its own subsection below; the per-scope tables are a
+//! scannable index into them.
+//!
 //! ## Container (`enum` / `struct`)
-//! | Attribute | Effect |
-//! |-----------|--------|
-//! | `#[oopsie("msg")]` | Display message (short form; structs only — on enums it goes on each variant) |
-//! | `#[oopsie(module)]` | Wrap selectors in auto-named module (enum default) |
-//! | `#[oopsie(module(name))]` | Wrap selectors in module named `name` |
-//! | `#[oopsie(module(false))]` | Disable module wrapping (struct default) |
-//! | `#[oopsie(vis(pub))]` | Override selector visibility (default: the error type's own visibility) |
-//! | `#[oopsie(suffix)]` | Append `"Oopsie"` suffix to selector names (struct default) |
-//! | `#[oopsie(suffix = "X")]` | Append custom suffix to selector names |
-//! | `#[oopsie(suffix(false))]` | No selector suffix (enum default) |
-//! | `#[oopsie(size(N))]` | Assert error type is exactly `N` bytes at compile time |
-//! | `#[oopsie(size(N..=M))]` | Assert error type size is within range at compile time |
+//!
+//! | Keyword | Effect |
+//! |---------|--------|
+//! | `module` | Wrap selectors in a module |
+//! | `suffix` | Suffix on selector names |
+//! | `size` | Compile-time size assertion |
+//! | `path` | Path to the `oopsie` crate |
+//! | `vis` | Selector visibility |
+//!
+//! The short form `#[oopsie("msg")]` on a container sets the struct's display
+//! message (on enums the message goes on each variant instead).
+//!
+#![doc = include_str!("__private/keyword_docs/container/module.md")]
+#![doc = include_str!("__private/keyword_docs/container/suffix.md")]
+#![doc = include_str!("__private/keyword_docs/container/size.md")]
+#![doc = include_str!("__private/keyword_docs/container/path.md")]
+#![doc = include_str!("__private/keyword_docs/container/vis.md")]
 //!
 //! ## Variant / struct
-//! | Attribute | Effect |
-//! |-----------|--------|
-//! | `#[oopsie("msg {field}")]` | Short-form display message |
-//! | `#[oopsie(display("msg"), ...)]` | Long-form display (combine with other attrs) |
-//! | `#[oopsie(transparent)]` | Generate `From` impl instead of a selector struct |
-//! | `#[oopsie(help = "...")]` | Help text, surfaced via [`Diagnostic::oopsie_help_text`] and consumed by `Report` |
-//! | `#[oopsie(code = "...")]` / `#[oopsie(code("fmt {}", expr))]` | Error code with optional format-string interpolation, surfaced via [`Diagnostic::oopsie_error_code`] and consumed by `Report`; replaces the auto code from `traced` |
 //!
-//! With the `unstable` feature, help and code are additionally surfaced through the
-//! nightly `Provider` API.
+//! | Keyword | Effect |
+//! |---------|--------|
+//! | `display` | `Display` message |
+//! | `transparent` | Delegate to the wrapped error |
+//! | `help` | Static help text |
+//! | `code` | Error code |
+//! | `provide` | Provide a typed value |
+//! | `vis` | Selector visibility |
+//!
+//! The short form `#[oopsie("msg {field}")]` is shorthand for `display(...)`.
+//! With the `unstable` feature, `help` and `code` are additionally surfaced
+//! through the nightly `Provider` API.
+//!
+#![doc = include_str!("__private/keyword_docs/variant/display.md")]
+#![doc = include_str!("__private/keyword_docs/variant/transparent.md")]
+#![doc = include_str!("__private/keyword_docs/variant/help.md")]
+#![doc = include_str!("__private/keyword_docs/variant/code.md")]
+#![doc = include_str!("__private/keyword_docs/variant/provide.md")]
+#![doc = include_str!("__private/keyword_docs/variant/vis.md")]
 //!
 //! ## Field
-//! | Attribute | Effect |
-//! |-----------|--------|
-//! | *(named `source`)* | Auto-detected as the chained source error |
-//! | `#[oopsie(from)]` | Mark as source (for non-`source`-named fields) |
-//! | `#[oopsie(from(false))]` | Opt a field named `source` out of source detection |
-//! | `#[oopsie(from(Type, transform))]` | Source with type transformation |
-//! | *(type `Box<T>`, source)* | Auto-unboxed: the selector accepts `T` and boxes it (trait objects exempt) |
-//! | `#[oopsie(capture)]` | Auto-filled via [`Capturable`]; excluded from selector. Trace-typed fields get this automatically; `capture(false)` opts out |
-//! | `#[oopsie(help)]` | Dynamic help text from this field's `Display` |
+//!
+//! | Keyword | Effect |
+//! |---------|--------|
+//! | `from` | Mark the chained source error |
+//! | `capture` | Auto-fill via [`Capturable`] |
+//! | `provide` | Provide a typed value |
+//! | `backtrace` | Captured backtrace field |
+//! | `spantrace` | Captured span-trace field |
+//! | `traces` | Packed `(Backtrace, SpanTrace)` field |
+//! | `help` | Dynamic help from this field's `Display` |
+//!
+//! A field named `source` is auto-detected as the chained source error, and a
+//! `Box<T>` source is auto-unboxed so the selector accepts `T` (trait objects
+//! exempt).
+//!
+#![doc = include_str!("__private/keyword_docs/field/from.md")]
+#![doc = include_str!("__private/keyword_docs/field/capture.md")]
+#![doc = include_str!("__private/keyword_docs/field/provide.md")]
+#![doc = include_str!("__private/keyword_docs/field/backtrace.md")]
+#![doc = include_str!("__private/keyword_docs/field/spantrace.md")]
+#![doc = include_str!("__private/keyword_docs/field/traces.md")]
+#![doc = include_str!("__private/keyword_docs/field/help.md")]
 
 // Re-export the proc-macro attribute and derive.
 pub use oopsie_macros::Oopsie;
@@ -224,11 +255,17 @@ pub use oopsie_core::{
     rust_panic_backtrace, set_rust_backtrace_override, with_rust_backtrace_override,
 };
 
-// Hidden re-export so macro-generated code can reach the autoref-probe
-// machinery via `::oopsie::__private::CaptureProbe`. Not part of the public
-// API; do not depend on its contents.
+// Hidden surface macro-generated code reaches via `::oopsie::__private::…`:
+// the autoref-probe machinery re-exported from `oopsie-core`, plus the
+// hover-documentation targets, which live here so their `include_str!`
+// examples compile against this crate's `#[oopsie]` macro. Not part of the
+// public API; do not depend on its contents.
 #[doc(hidden)]
-pub use oopsie_core::__private;
+pub mod __private {
+    pub use oopsie_core::__private::*;
+
+    pub mod documented;
+}
 
 /// `tracing-subscriber` integration helpers.
 pub mod tracing {
