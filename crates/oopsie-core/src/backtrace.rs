@@ -175,6 +175,7 @@ enum Inner {
 #[derive(Clone)]
 pub struct Backtrace {
     inner: Inner,
+    marker: Option<Arc<crate::marker::TraceMarker>>,
 }
 
 impl crate::Capturable for Backtrace {
@@ -185,10 +186,12 @@ impl crate::Capturable for Backtrace {
                 inner: Inner::Captured(Arc::new(LazyLock::new(helper::lazy_resolve(Capture {
                     backtrace: backtrace::Backtrace::new_unresolved(),
                 })))),
+                marker: crate::marker::current(),
             }
         } else {
             Self {
                 inner: Inner::Disabled(backtrace::Backtrace::from(vec![])),
+                marker: None,
             }
         }
     }
@@ -419,6 +422,32 @@ impl Backtrace {
     #[inline]
     pub fn frames(&self) -> &[backtrace::BacktraceFrame] {
         self.as_backtrace().frames()
+    }
+
+    /// IPs of the trailing frames hidden by this trace's marker: the suffix
+    /// shared with the marker stack, plus the boundary frame for inclusive
+    /// markers. `None` when no marker was set on the capturing thread, the
+    /// stacks share nothing (cross-thread), or the cut would hide every frame.
+    ///
+    /// Forces symbol resolution, like [`frames`](Self::frames).
+    #[must_use]
+    pub fn marker_hidden_ips(&self) -> Option<Vec<usize>> {
+        let marker = self.marker.as_deref()?;
+        let frames = self.frames();
+        let trace: Vec<(usize, usize)> = frames
+            .iter()
+            .map(|f| (f.ip() as usize, f.symbol_address() as usize))
+            .collect();
+        let cut = marker.cut_len(&trace);
+        if cut == 0 || cut >= trace.len() {
+            return None;
+        }
+        Some(
+            trace[trace.len() - cut..]
+                .iter()
+                .map(|&(ip, _)| ip)
+                .collect(),
+        )
     }
 
     /// Force symbol resolution now, caching the result in place.
@@ -831,4 +860,68 @@ mod tests {
         const fn is_capture_ext<T: CaptureExt>() {}
         is_capture_ext::<Backtrace>();
     };
+
+    #[test]
+    fn capture_embeds_marker_and_computes_hidden_ips() {
+        crate::with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            let _restore_guard = {
+                // Isolate the TLS slot from other tests on this thread.
+                let prev = crate::marker::current();
+                scopeguard(prev)
+            };
+            crate::__private::set_start_marker();
+            let bt = <Backtrace as crate::Capturable>::capture();
+            let hidden = bt
+                .marker_hidden_ips()
+                .expect("same-thread marker must produce a cut");
+            assert!(!hidden.is_empty());
+            // Hidden IPs are exactly a suffix of the physical frames.
+            let frames = bt.frames();
+            let tail: Vec<usize> = frames[frames.len() - hidden.len()..]
+                .iter()
+                .map(|f| f.ip() as usize)
+                .collect();
+            assert_eq!(hidden, tail);
+            // The cut must not swallow the whole trace.
+            assert!(hidden.len() < frames.len());
+        });
+    }
+
+    #[test]
+    fn capture_without_marker_has_no_hidden_ips() {
+        crate::with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            let prev = crate::marker::current();
+            crate::__private::restore_marker(None);
+            let bt = <Backtrace as crate::Capturable>::capture();
+            assert!(bt.marker_hidden_ips().is_none());
+            crate::__private::restore_marker(prev);
+        });
+    }
+
+    #[test]
+    fn marker_does_not_cross_threads() {
+        crate::with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            crate::__private::set_start_marker();
+            let bt = std::thread::spawn(|| {
+                crate::with_rust_backtrace_override(RustBacktrace::Enabled, || {
+                    <Backtrace as crate::Capturable>::capture()
+                })
+            })
+            .join()
+            .unwrap();
+            // The spawned thread has no marker of its own.
+            assert!(bt.marker_hidden_ips().is_none());
+        });
+    }
+
+    /// Restore the previous marker when the test scope ends.
+    fn scopeguard(prev: Option<std::sync::Arc<crate::marker::TraceMarker>>) -> impl Drop {
+        struct Restore(Option<std::sync::Arc<crate::marker::TraceMarker>>);
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                crate::__private::restore_marker(self.0.take());
+            }
+        }
+        Restore(prev)
+    }
 }
