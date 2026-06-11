@@ -6,7 +6,7 @@ use quote::quote;
 use super::args::{CodeSettings, TracedArgs};
 use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{
-    add_provide_attrs, check_existing_fields, has_oopsie_flag, has_oopsie_name_value, inject_fields,
+    add_provide_attrs, check_existing_fields, has_oopsie_flag, has_oopsie_meta, inject_fields,
 };
 use crate::utils::FieldSetting;
 
@@ -43,8 +43,8 @@ pub fn expand_enum(
 
         inject_fields(&mut variant.fields, &config, &to_inject)?;
 
-        // Check if user specified `code = "..."` in #[oopsie(...)] to suppress auto-code
-        let has_user_code = has_oopsie_name_value(&variant.attrs, "code");
+        // A user-supplied `code` (any form) suppresses the auto-code.
+        let has_user_code = has_oopsie_meta(&variant.attrs, "code");
         let is_transparent = has_oopsie_flag(&variant.attrs, "transparent");
 
         let variant_name = variant.ident.to_string();

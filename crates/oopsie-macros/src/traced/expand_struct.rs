@@ -6,7 +6,7 @@ use quote::quote;
 use super::args::{CodeSettings, TracedArgs};
 use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{
-    add_provide_attrs, check_existing_fields, has_oopsie_flag, has_oopsie_name_value, inject_fields,
+    add_provide_attrs, check_existing_fields, has_oopsie_flag, has_oopsie_meta, inject_fields,
 };
 use crate::utils::FieldSetting;
 
@@ -44,8 +44,8 @@ pub fn expand_struct(
 
     inject_fields(&mut input.fields, &config, &to_inject)?;
 
-    // Check if user specified `code = "..."` in #[oopsie(...)] to suppress auto-code
-    let has_user_code = has_oopsie_name_value(&input.attrs, "code");
+    // A user-supplied `code` (any form) suppresses the auto-code.
+    let has_user_code = has_oopsie_meta(&input.attrs, "code");
     let is_transparent = has_oopsie_flag(&input.attrs, "transparent");
 
     // Add struct-level provide attrs

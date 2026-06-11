@@ -638,3 +638,52 @@ fn wrongly_typed_timestamp_named_field_does_not_suppress_injection() {
     let e = TsNamedOopsie { timestamp: 5u64 }.build();
     assert!(format!("{e:?}").contains("__oopsie_timestamp"));
 }
+
+// ---- List-form `code(...)` suppresses the traced auto-code ----
+//
+// `code("fmt", args)` is the only way to interpolate an error code. The traced
+// auto-code injection must treat it as a user code and step aside, on both the
+// stable accessor and (nightly) the provider path, which std resolves first-wins.
+
+#[oopsie(traced)]
+#[oopsie(module(false))]
+pub enum ListCodeError {
+    #[oopsie("conn failed")]
+    #[oopsie(code("app::{}", kind))]
+    Conn { kind: String },
+}
+
+#[test]
+fn list_form_code_suppresses_auto_code() {
+    use oopsie::Diagnostic as _;
+    let err = Conn {
+        kind: "db".to_owned(),
+    }
+    .build();
+    let code = err
+        .oopsie_error_code()
+        .expect("list-form code should be present");
+    assert_eq!(code.as_str(), "app::db");
+    // The auto-code would qualify the variant path; its absence proves it was
+    // suppressed rather than overriding the user's formatted code.
+    assert!(
+        !code.as_str().contains("ListCodeError"),
+        "auto-code leaked: {}",
+        code.as_str()
+    );
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn list_form_code_accessor_and_provider_agree() {
+    use oopsie::Diagnostic as _;
+    let err = Conn {
+        kind: "net".to_owned(),
+    }
+    .build();
+    let via_accessor = err.oopsie_error_code().expect("accessor yields code");
+    let via_provider =
+        core::error::request_value::<oopsie::ErrorCode>(&err).expect("provider yields code");
+    assert_eq!(via_accessor.as_str(), "app::net");
+    assert_eq!(via_accessor.as_str(), via_provider.as_str());
+}
