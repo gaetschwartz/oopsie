@@ -544,9 +544,8 @@ impl<T: ?Sized> Deref for BoxOrBorrow<'_, T> {
 const fn noop_frame_filter(_frames: &mut Vec<&BacktraceFrame>) {}
 
 /// Frame filter hiding a marker-stripped tail: trailing frames whose physical
-/// `ip` is in `hidden` (see [`Backtrace::marker_hidden_ips`]). Membership is
-/// checked per rendered frame, so an inline run sharing one physical frame is
-/// consumed together. Never empties the list.
+/// `ip` is in `hidden` (see [`Backtrace::marker_hidden_ips`]). Inline runs
+/// sharing one `ip` are consumed together. Never empties the list.
 ///
 /// [`Backtrace::marker_hidden_ips`]: oopsie_core::Backtrace::marker_hidden_ips
 pub fn marker_strip_filter(hidden: Vec<usize>) -> impl Fn(&mut Vec<&BacktraceFrame>) {
