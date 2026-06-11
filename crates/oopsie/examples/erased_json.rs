@@ -12,8 +12,9 @@
 //!
 //! Run with: `cargo run --example erased_json -p oopsie --features serde`
 
+use oopsie::backtrace::set_override;
 use oopsie::erased::ErasedError;
-use oopsie::{Contextual as _, RustBacktrace, oopsie, set_rust_backtrace_override};
+use oopsie::{Contextual as _, RustBacktrace, oopsie};
 
 #[oopsie(traced)]
 #[oopsie("upstream service {service} failed with status {status}")]
@@ -37,7 +38,7 @@ fn call_upstream() -> Result<(), UpstreamError> {
 }
 
 fn main() {
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    set_override(RustBacktrace::Enabled);
 
     let err = call_upstream().unwrap_err();
 

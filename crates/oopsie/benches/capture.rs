@@ -3,26 +3,27 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use oopsie::{Backtrace, Capturable as _, RustBacktrace, set_rust_backtrace_override};
+use oopsie::backtrace::set_override;
+use oopsie::{Backtrace, Capturable as _, RustBacktrace};
 
 fn bench_capture(c: &mut Criterion) {
     let mut group = c.benchmark_group("backtrace_capture");
 
-    set_rust_backtrace_override(RustBacktrace::Disabled);
+    set_override(RustBacktrace::Disabled);
     group.bench_function("disabled", |b| b.iter(|| black_box(Backtrace::capture())));
 
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    set_override(RustBacktrace::Enabled);
     group.bench_function("enabled_unresolved", |b| {
         b.iter(|| black_box(Backtrace::capture()));
     });
 
-    set_rust_backtrace_override(RustBacktrace::Full);
+    set_override(RustBacktrace::Full);
     group.bench_function("full_unresolved", |b| {
         b.iter(|| black_box(Backtrace::capture()));
     });
 
     // Symbol resolution is paid only at render time, never at capture.
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    set_override(RustBacktrace::Enabled);
     group.bench_function("resolve", |b| {
         b.iter_batched(
             Backtrace::capture,

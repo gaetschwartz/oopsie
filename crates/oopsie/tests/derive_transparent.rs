@@ -62,7 +62,7 @@ enum TracedError {
 
 #[test]
 fn transparent_with_auto_fields() {
-    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+    oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
     let io_err = io::Error::new(io::ErrorKind::Other, "something");
     // From impl auto-generates the captured backtrace field.
     let err: TracedError = TracedError::from(io_err);
@@ -120,7 +120,7 @@ enum TransformCaptureError {
 
 #[test]
 fn transparent_transform_with_auto_field() {
-    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+    oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
     let io_err = io::Error::new(io::ErrorKind::TimedOut, "slow");
     let err: TransformCaptureError = TransformCaptureError::from(io_err);
     let TransformCaptureError::Wrapped { source, bt } = &err;
@@ -238,7 +238,7 @@ struct TracedStruct {
 
 #[test]
 fn transparent_struct_with_auto_field() {
-    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+    oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
     let io_err = io::Error::new(io::ErrorKind::Other, "boom");
     let err: TracedStruct = TracedStruct::from(io_err);
     assert_eq!(err.to_string(), "traced struct");

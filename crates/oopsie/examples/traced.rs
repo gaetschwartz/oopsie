@@ -11,7 +11,8 @@
 //!
 //! Run with: `cargo run --example traced`
 
-use oopsie::{Report, RustBacktrace, oopsie, set_rust_backtrace_override};
+use oopsie::backtrace::set_override;
+use oopsie::{Report, RustBacktrace, oopsie};
 
 // `traced` captures a backtrace; under the `tracing` feature a span-trace is captured too.
 #[oopsie(traced)]
@@ -33,7 +34,7 @@ fn main() {
         eprintln!(
             "Warning: RUST_BACKTRACE environment variable not set; force-enabling backtrace capture for this example. Set RUST_BACKTRACE=1 to enable by default."
         );
-        set_rust_backtrace_override(RustBacktrace::Enabled);
+        set_override(RustBacktrace::Enabled);
     }
 
     let err = deep_call(3).unwrap_err();

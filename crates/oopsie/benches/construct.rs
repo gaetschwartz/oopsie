@@ -7,7 +7,8 @@
 use std::hint::black_box;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use oopsie::{RustBacktrace, oopsie, set_rust_backtrace_override};
+use oopsie::backtrace::set_override;
+use oopsie::{RustBacktrace, oopsie};
 
 #[oopsie]
 #[oopsie("plain error {code}")]
@@ -28,12 +29,12 @@ fn bench_construct(c: &mut Criterion) {
         b.iter(|| black_box(PlainOopsie { code: 1u32 }.build()));
     });
 
-    set_rust_backtrace_override(RustBacktrace::Disabled);
+    set_override(RustBacktrace::Disabled);
     group.bench_function("traced_backtrace_disabled", |b| {
         b.iter(|| black_box(TracedOopsie { code: 1u32 }.build()));
     });
 
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    set_override(RustBacktrace::Enabled);
     group.bench_function("traced_backtrace_enabled", |b| {
         b.iter(|| black_box(TracedOopsie { code: 1u32 }.build()));
     });

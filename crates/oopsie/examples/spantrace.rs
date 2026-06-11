@@ -11,7 +11,8 @@
 //!
 //! Run with: `cargo run --example spantrace`
 
-use oopsie::{Report, RustBacktrace, oopsie, set_rust_backtrace_override};
+use oopsie::backtrace::set_override;
+use oopsie::{Report, RustBacktrace, oopsie};
 use tracing::instrument;
 use tracing_subscriber::prelude::*;
 
@@ -38,7 +39,7 @@ fn main() {
         .init();
 
     // Disable the backtrace so the rendered output is just the span trace.
-    set_rust_backtrace_override(RustBacktrace::Disabled);
+    set_override(RustBacktrace::Disabled);
 
     let err = handle_request("alice").unwrap_err();
     print!("{}", Report::new(err));

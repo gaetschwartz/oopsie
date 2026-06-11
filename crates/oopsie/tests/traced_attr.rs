@@ -323,13 +323,13 @@ fn layout_single_trace_fallback_backtrace_only() {
 #[cfg(not(feature = "tracing"))]
 #[test]
 fn layout_default_packed_backtrace_only_without_tracing() {
-    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+    oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
     let e = default_packed_oopsies::Boom { info: "x" }.build();
     assert!(
         e.oopsie_backtrace().is_some(),
         "backtrace accessor must work in no-tracing layout"
     );
-    oopsie::clear_rust_backtrace_override();
+    oopsie::backtrace::clear_override();
 }
 
 // Struct path (symmetric to the enum cases above): default packed + boxed,

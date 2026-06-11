@@ -297,11 +297,24 @@ pub use oopsie_core::start_marker;
 pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, Contextual, Diagnostic, ErrorCode, HelpText, NoSource,
     OptionExt, ResultExt, RustBacktrace, Welp, WelpOptionExt, WelpResultExt,
-    clear_rust_backtrace_override, rust_backtrace, rust_panic_backtrace,
-    set_rust_backtrace_override, with_rust_backtrace_override,
 };
 #[cfg(feature = "tracing")]
 pub use oopsie_core::{OptionalSpanTrace, SpanTrace};
+
+/// Thread-local control over backtrace capture.
+///
+/// [`current`] reports the effective [`RustBacktrace`] setting for the calling
+/// thread, derived from the environment unless overridden. [`set_override`],
+/// [`clear_override`], and [`with_override`] force that setting on the current
+/// thread, taking precedence over the environment. [`current_panic`] reports the
+/// setting that applies to panic backtraces, which honor `RUST_BACKTRACE` only.
+pub mod backtrace {
+    pub use oopsie_core::{
+        clear_rust_backtrace_override as clear_override, rust_backtrace as current,
+        rust_panic_backtrace as current_panic, set_rust_backtrace_override as set_override,
+        with_rust_backtrace_override as with_override,
+    };
+}
 
 // Hidden surface macro-generated code reaches via `::oopsie::__private::…`:
 // the autoref-probe machinery re-exported from `oopsie-core`, plus the

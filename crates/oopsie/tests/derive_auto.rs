@@ -153,7 +153,7 @@ enum TripleCaptureError {
 #[cfg(feature = "tracing")]
 #[test]
 fn three_heterogeneous_capture_fields_all_initialize() {
-    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+    oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
     // Only `label` is on the selector; the three capture fields are auto-filled.
     let err = Triple { label: "x" }.build();
     let TripleCaptureError::Triple { bt, st, ost, .. } = &err;
@@ -180,7 +180,7 @@ enum TupleCaptureError {
 #[cfg(feature = "tracing")]
 #[test]
 fn tuple_capture_field_initializes_both_elements() {
-    oopsie::set_rust_backtrace_override(oopsie::RustBacktrace::Enabled);
+    oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
     let err = Tuple.build();
     let TupleCaptureError::Tuple { traces } = &err;
     // The tuple `Capturable` impl captured both halves.

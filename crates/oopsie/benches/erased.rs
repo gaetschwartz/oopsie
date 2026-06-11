@@ -8,8 +8,9 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
+use oopsie::backtrace::set_override;
 use oopsie::erased::ErasedError;
-use oopsie::{RustBacktrace, oopsie, set_rust_backtrace_override};
+use oopsie::{RustBacktrace, oopsie};
 
 #[oopsie(traced)]
 #[oopsie("erased target {id}")]
@@ -22,7 +23,7 @@ fn make() -> ErasedTarget {
 }
 
 fn bench_erased(c: &mut Criterion) {
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    set_override(RustBacktrace::Enabled);
     let mut group = c.benchmark_group("erased");
 
     group.bench_function("from_error", |b| {

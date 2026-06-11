@@ -8,8 +8,9 @@ use std::hint::black_box;
 use std::io;
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use oopsie::backtrace::set_override;
 use oopsie::prelude::*;
-use oopsie::{RustBacktrace, oopsie, set_rust_backtrace_override};
+use oopsie::{RustBacktrace, oopsie};
 
 #[oopsie]
 #[oopsie("wrapped: {context}")]
@@ -35,7 +36,7 @@ fn with_context(fail: bool) -> Result<u64, WrapError> {
 }
 
 fn bench_propagate(c: &mut Criterion) {
-    set_rust_backtrace_override(RustBacktrace::Disabled);
+    set_override(RustBacktrace::Disabled);
     let mut group = c.benchmark_group("propagate");
 
     group.bench_function("baseline_ok", |b| b.iter(|| black_box(io_result(false))));

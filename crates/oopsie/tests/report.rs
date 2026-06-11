@@ -15,7 +15,7 @@ use std::process::Termination as _;
 
 use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter};
 use oopsie::{
-    Contextual as _, Report, RustBacktrace, Theme, get_theme, oopsie, rust_backtrace, set_theme,
+    Contextual as _, Report, RustBacktrace, Theme, get_theme, oopsie, set_theme,
 };
 use oopsie_core::{redact, snap_name};
 
@@ -41,7 +41,7 @@ fn strip_ansi(s: &str) -> String {
 fn test_report_basic() {
     common::force_backtrace();
     assert_eq!(
-        rust_backtrace(),
+        oopsie::backtrace::current(),
         RustBacktrace::Enabled,
         "backtrace override should be enabled for deterministic snapshots"
     );
@@ -721,7 +721,7 @@ fn test_trace_printer_unfiltered_keeps_all_frames() {
 /// `Report` routes through `TracePrinter::unfiltered()`, so its backtrace render
 /// never carries a "frames hidden" notice.
 ///
-/// The override is thread-local (set via `set_rust_backtrace_override`), so this
+/// The override is thread-local (set via `backtrace::set_override`), so this
 /// is safe under test parallelism; we restore `Enabled` before returning.
 ///
 /// NOTE: we cannot assert "Full is longer than the filtered render" here. The
@@ -736,13 +736,13 @@ fn test_trace_printer_unfiltered_keeps_all_frames() {
 fn test_report_backtrace_full_renders_without_hidden_notice() {
     common::force_backtrace();
 
-    oopsie::set_rust_backtrace_override(RustBacktrace::Full);
+    oopsie::backtrace::set_override(RustBacktrace::Full);
     let error = TestOopsie {
         message: "full backtrace",
     }
     .build();
     let output = Report::new(error).no_colors().to_string();
-    oopsie::set_rust_backtrace_override(RustBacktrace::Enabled);
+    oopsie::backtrace::set_override(RustBacktrace::Enabled);
 
     assert!(
         output.contains("BACKTRACE"),

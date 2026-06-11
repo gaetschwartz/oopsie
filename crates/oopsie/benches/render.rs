@@ -7,7 +7,8 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use oopsie::{Report, RustBacktrace, oopsie, set_rust_backtrace_override};
+use oopsie::backtrace::set_override;
+use oopsie::{Report, RustBacktrace, oopsie};
 
 #[oopsie(traced)]
 #[oopsie("render target {id}")]
@@ -20,7 +21,7 @@ fn make() -> RenderError {
 }
 
 fn bench_render(c: &mut Criterion) {
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    set_override(RustBacktrace::Enabled);
     let mut group = c.benchmark_group("render");
 
     group.bench_function("display_no_colors", |b| {

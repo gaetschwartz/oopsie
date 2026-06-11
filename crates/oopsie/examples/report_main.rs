@@ -6,9 +6,10 @@
 //!
 //! Run with: `cargo run --example report_main` (exits non-zero on error).
 
+use oopsie::backtrace::set_override;
 use oopsie::oopsie;
 use oopsie::prelude::*;
-use oopsie::{Report, RustBacktrace, set_rust_backtrace_override};
+use oopsie::{Report, RustBacktrace};
 
 #[oopsie(traced)]
 pub enum CliError {
@@ -29,7 +30,7 @@ fn run() -> Result<(), CliError> {
 }
 
 fn main() -> Report<CliError> {
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    set_override(RustBacktrace::Enabled);
     // `Report::run` runs the closure and captures the error; returning it from
     // `main` renders the diagnostic and sets a failing exit code via `Termination`.
     Report::run(run)

@@ -17,7 +17,8 @@ use std::io;
 use std::sync::Once;
 
 use criterion::{Criterion, criterion_group, criterion_main};
-use oopsie::{Report, RustBacktrace, oopsie, set_rust_backtrace_override};
+use oopsie::backtrace::set_override;
+use oopsie::{Report, RustBacktrace, oopsie};
 
 #[oopsie]
 #[oopsie("wrap failed: {ctx}")]
@@ -88,7 +89,7 @@ fn enable_env_backtraces() {
 
 fn bench_wrap(c: &mut Criterion) {
     enable_env_backtraces();
-    set_rust_backtrace_override(RustBacktrace::Disabled);
+    set_override(RustBacktrace::Disabled);
     let mut group = c.benchmark_group("wrap_io_error");
 
     group.bench_function("oopsie", |b| {
@@ -134,7 +135,7 @@ fn bench_wrap(c: &mut Criterion) {
 /// snafu, alternate `Debug` for anyhow and eyre.
 fn bench_render(c: &mut Criterion) {
     enable_env_backtraces();
-    set_rust_backtrace_override(RustBacktrace::Disabled);
+    set_override(RustBacktrace::Disabled);
     let mut group = c.benchmark_group("render_error");
 
     let oopsie_report = Report::new(
@@ -183,7 +184,7 @@ fn bench_render(c: &mut Criterion) {
 /// against the two ecosystem renderers that specialize in colored diagnostics.
 fn bench_colored(c: &mut Criterion) {
     enable_env_backtraces();
-    set_rust_backtrace_override(RustBacktrace::Disabled);
+    set_override(RustBacktrace::Disabled);
     // `color_eyre::install` sets a process-global eyre hook, so this group must
     // run last — otherwise the plain `eyre` benches above would pick up the
     // colored handler. eyre attaches the handler at report-creation time, so
@@ -227,7 +228,7 @@ fn bench_colored(c: &mut Criterion) {
 /// others rely on the forced `RUST_BACKTRACE` env (see module docs).
 fn bench_traced(c: &mut Criterion) {
     enable_env_backtraces();
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    set_override(RustBacktrace::Enabled);
     let mut group = c.benchmark_group("render_traced");
 
     let oopsie_report = Report::new(
@@ -264,7 +265,7 @@ fn bench_traced(c: &mut Criterion) {
 /// color-eyre, the ecosystem's colored-backtrace renderer.
 fn bench_traced_colored(c: &mut Criterion) {
     enable_env_backtraces();
-    set_rust_backtrace_override(RustBacktrace::Enabled);
+    set_override(RustBacktrace::Enabled);
     let _ = color_eyre::install();
     let mut group = c.benchmark_group("render_traced_colored");
 
