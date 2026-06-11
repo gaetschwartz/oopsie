@@ -263,8 +263,8 @@ fn is_post_panic_tail(tail: &str) -> bool {
         || tail.starts_with("__rust_start_panic")
 }
 
-/// Prefixes for runtime-entry frames below user code; the bottom cutoff drains
-/// from the first match down.
+/// Prefixes for runtime-entry frames below user code, recognized anywhere in
+/// a trace (see also [`RUNTIME_TAIL_PREFIXES`]).
 const RUNTIME_INIT_PREFIXES: &[&str] = &[
     "std::sys::backtrace::__rust_begin_short_backtrace",
     "test::__rust_begin_short_backtrace",
@@ -272,17 +272,32 @@ const RUNTIME_INIT_PREFIXES: &[&str] = &[
     "std::rt::lang_start",
     "std::panicking::catch_unwind::",
     "std::panic::catch_unwind::",
-    "std::panicking::try",
-    "<std::panic::AssertUnwindSafe<",
-    "___rust_try",
     "__rustc",
     "__libc_start",
     "__scrt_common_main",
-    "_main",
+];
+
+/// Additional prefixes recognized only by the bottom-anchored tail peel
+/// ([`is_runtime_tail_code`]): too broad for per-frame internal-frame
+/// classification, safe when matching is anchored at the bottom of the stack.
+const RUNTIME_TAIL_PREFIXES: &[&str] = &[
+    "std::panicking::try",
+    "<std::panic::AssertUnwindSafe<",
     "std::sys::",
     "std::thread::",
     "test::run_test",
     "__pthread",
+    "_main",
+    "___rust_try",
+    "__rust_try",
+    "_start",
+    "start_thread",
+    "__clone",
+    "clone3",
+    "RtlUserThreadStart",
+    "BaseThreadInitThunk",
+    "invoke_main",
+    "mainCRTStartup",
 ];
 
 const CRATE_SRC_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/");
@@ -331,20 +346,13 @@ pub fn is_post_panic_code(name: &str, _filename: Option<&path::Path>) -> bool {
     false
 }
 
-/// Check if a frame name matches runtime initialization code.
-#[inline]
-#[must_use]
-pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
-    // `<… as …FnOnce…>::call_once` dispatch shims (AssertUnwindSafe, boxed
-    // closures, vtable shims) — impl-block symbols user code never produces.
-    if name.starts_with('<') && name.contains("::call_once") {
-        return true;
-    }
-
-    if RUNTIME_INIT_PREFIXES
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
-    {
+/// Match `name` against `prefixes`, including the v0-mangled
+/// `crate[hash]::path` spelling: an optional leading `<` and the
+/// `std[`/`test[` crate designator are peeled, an inner `sys::backtrace::`
+/// segment is stripped, and list entries are also tried with their
+/// `std::`/`test::` module prefix removed (the peeled tail lacks it).
+fn matches_runtime_prefixes(name: &str, prefixes: &[&str]) -> bool {
+    if prefixes.iter().any(|prefix| name.starts_with(prefix)) {
         return true;
     }
 
@@ -357,9 +365,7 @@ pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool 
         && let Some((_, mut tail)) = rest.split_once("]::")
     {
         tail = tail.strip_prefix("sys::backtrace::").unwrap_or(tail);
-        // The list entries carry a `std::` or `test::` module prefix the
-        // peeled tail lacks; strip either before comparing.
-        return RUNTIME_INIT_PREFIXES.iter().any(|prefix| {
+        return prefixes.iter().any(|prefix| {
             tail.starts_with(prefix)
                 || prefix
                     .strip_prefix("std::")
@@ -371,6 +377,36 @@ pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool 
     }
 
     false
+}
+
+/// Check if a frame name matches runtime initialization code.
+#[inline]
+#[must_use]
+pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
+    matches_runtime_prefixes(name, RUNTIME_INIT_PREFIXES)
+}
+
+/// Like [`is_runtime_init_code`], plus matching that is only safe when
+/// anchored at the bottom of the stack: broad std/test/OS prefixes, the C
+/// `main` shim, and `FnOnce` dispatch shims. A mid-stack frame must never be
+/// classified by these rules — the bottom peel stops at the first miss, which
+/// is what bounds them.
+#[inline]
+#[must_use]
+pub fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
+    if is_runtime_init_code(name, filename) {
+        return true;
+    }
+    // The C entry shim; the user's own Rust `main` demangles crate-qualified.
+    if name == "main" {
+        return true;
+    }
+    // `<… as …FnOnce…>::call_once` dispatch shims (AssertUnwindSafe, boxed
+    // closures, vtable shims).
+    if name.starts_with('<') && name.contains("::call_once") {
+        return true;
+    }
+    matches_runtime_prefixes(name, RUNTIME_TAIL_PREFIXES)
 }
 
 impl fmt::Debug for Backtrace {
@@ -729,7 +765,7 @@ mod tests {
     fn is_internal_frame_drops_runtime_entry_points() {
         // Frames at the bottom-of-stack runtime boundary. Lower-level OS/libc
         // frames below these (pthread, `__GI___*`) are not matched per-frame —
-        // the render-time bottom cutoff drains everything beneath the boundary.
+        // the bottom peel ([`is_runtime_tail_code`]) recognizes them instead.
         for name in [
             "__libc_start_main",
             "__scrt_common_main_seh",
@@ -883,7 +919,7 @@ mod tests {
     }
 
     #[test]
-    fn runtime_init_recognizes_test_thread_tail_spellings() {
+    fn runtime_tail_recognizes_test_thread_tail_spellings() {
         for name in [
             "__pthread_cond_wait",
             "<std[1a2b]::sys::thread::unix::Thread>::new::thread_start",
@@ -895,21 +931,47 @@ mod tests {
             "test[3c]::run_test::{closure#0}",
             "std::thread::lifecycle::spawn_unchecked",
             "std::sys::pal::unix::thread::Thread::new::thread_start",
+            "_start",
+            "start_thread",
+            "__clone",
+            "clone3",
+            "RtlUserThreadStart",
+            "BaseThreadInitThunk",
+            "invoke_main",
+            "mainCRTStartup",
+            "__rust_try",
+            "main",
         ] {
-            assert!(is_runtime_init_code(name, None), "should match: {name}");
+            assert!(is_runtime_tail_code(name, None), "should match: {name}");
         }
     }
 
     #[test]
-    fn runtime_init_spares_user_spellings() {
+    fn runtime_tail_spares_user_spellings() {
         for name in [
             "my_crate::run_tests",
             "my_crate::test::run_testish",
             "<my_crate::Foo as my_crate::Bar>::call_me",
             "my_crate::sys::thread_pool::spawn",
             "my_crate::thread::worker",
+            "main_loop",
+            "mainframe::connect",
         ] {
-            assert!(!is_runtime_init_code(name, None), "must not match: {name}");
+            assert!(!is_runtime_tail_code(name, None), "must not match: {name}");
+        }
+    }
+
+    #[test]
+    fn tail_only_rules_do_not_classify_per_frame_internal() {
+        for name in ["std::thread::sleep", "std::sys::pal::unix::futex", "main"] {
+            assert!(
+                !is_runtime_init_code(name, None),
+                "leaked into per-frame: {name}"
+            );
+            assert!(
+                is_runtime_tail_code(name, None),
+                "missing from tail: {name}"
+            );
         }
     }
 

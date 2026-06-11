@@ -158,7 +158,7 @@ pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
         let frame = frames[keep - 1];
         let internal = match frame.name.as_ref() {
             Some(name) => {
-                oopsie_core::__private::is_runtime_init_code(name, frame.filename.as_deref())
+                oopsie_core::__private::is_runtime_tail_code(name, frame.filename.as_deref())
             }
             // Unresolvable frames are runtime/shim detail (`__rust_try` etc.).
             None => true,
@@ -212,10 +212,8 @@ pub fn post_panic_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
 ///
 /// Trims the panic-raising plumbing above the user's `panic!` site
 /// ([`post_panic_frame_filter`]) and then the runtime-init tail below `main`
-/// ([`error_backtrace_frame_filter`]). The order matters: the top trim removes
-/// the unwind entry frame (`__rustc::rust_begin_unwind`) first, so the bottom
-/// trim's runtime-prefix match cannot mistake it for the runtime boundary and
-/// drain user code along with it.
+/// ([`error_backtrace_frame_filter`]). The top trim runs first so the unwind
+/// entry frame never reaches the bottom peel.
 pub fn panic_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
     post_panic_frame_filter(frames);
     error_backtrace_frame_filter(frames);

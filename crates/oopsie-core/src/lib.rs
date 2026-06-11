@@ -38,6 +38,7 @@ pub use diagnostic::Diagnostic;
 pub mod __private {
     pub use crate::backtrace::{
         is_backtrace_capture_code, is_internal_frame, is_post_panic_code, is_runtime_init_code,
+        is_runtime_tail_code,
     };
     /// Autoref probe for capture deduplication.
     ///
