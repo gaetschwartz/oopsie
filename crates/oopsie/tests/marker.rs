@@ -106,7 +106,7 @@ fn report_run_mid_stack_catch_unwind_survives_with_marker() {
         fn supervised() -> Result<(), KaboomError> {
             std::panic::catch_unwind(|| {
                 Err(KaboomOopsie {
-                    message: "inside supervised section",
+                    message: "inside guarded section",
                 }
                 .build())
             })

@@ -454,6 +454,7 @@ impl Backtrace {
         if marker.is_inclusive()
             && cut > 0
             && cut < trace.len().saturating_sub(1)
+            && cut < marker.frames().len()
             && trace[trace.len() - 1 - cut].1 != marker.frames()[marker.frames().len() - 1 - cut].1
         {
             let trace_divergent_name = frames[trace.len() - 1 - cut]
