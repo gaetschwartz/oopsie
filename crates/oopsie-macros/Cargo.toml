@@ -19,8 +19,8 @@ proc-macro = true
 
 [features]
 default = []
-tracing = []
-unstable-error-generic-member-access = []
+tracing = ["oopsie/tracing"]
+unstable-error-generic-member-access = ["oopsie/unstable-error-generic-member-access"]
 unstable = ["unstable-error-generic-member-access"]
 
 [dependencies]
