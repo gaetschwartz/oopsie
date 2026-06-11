@@ -277,6 +277,7 @@ const RUNTIME_INIT_PREFIXES: &[&str] = &[
     "__rustc",
     "__libc_start",
     "__scrt_common_main",
+    "_main",
 ];
 
 const CRATE_SRC_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/");
@@ -342,9 +343,14 @@ pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool 
         && let Some((_, mut name)) = name.split_once("]::")
     {
         name = name.strip_prefix("sys::backtrace::").unwrap_or(name);
-        return RUNTIME_INIT_PREFIXES
-            .iter()
-            .any(|prefix| name.starts_with(prefix));
+        // The peeled tail lost its `std::` segment; match list entries both
+        // bare and with their own `std::` prefix stripped.
+        return RUNTIME_INIT_PREFIXES.iter().any(|prefix| {
+            name.starts_with(prefix)
+                || prefix
+                    .strip_prefix("std::")
+                    .is_some_and(|tail| name.starts_with(tail))
+        });
     }
 
     false

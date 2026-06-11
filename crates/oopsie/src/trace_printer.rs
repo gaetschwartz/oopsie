@@ -653,8 +653,8 @@ mod tests {
     #[test]
     fn test_panic_frame_filter_trims_both_ends() {
         // A realistic panic stack: capture machinery + the unwind entry above
-        // user code, and a runtime-init cluster below `main` terminated by an
-        // unrecognized C-runtime frame (`_main`).
+        // user code, and the runtime-init tail (with `catch_unwind` frames that
+        // must NOT pull the top cut down) below `main`.
         let capture = make_frame(Some("std::backtrace_rs::backtrace::libunwind::trace"), None);
         let unwind = make_frame(Some("__rustc[ab12cd34]::rust_begin_unwind"), None);
         let panic_fmt = make_frame(Some("core[ab12cd34]::panicking::panic_fmt"), None);
@@ -672,20 +672,9 @@ mod tests {
         ];
         panic_frame_filter(&mut frames);
 
-        // The contiguous peel stops at the first unrecognized bottom frame;
-        // leaking noise is preferred over hiding user frames.
-        assert_eq!(frames.len(), 5);
+        assert_eq!(frames.len(), 2);
         assert_eq!(frames[0].name.as_deref(), Some("my_crate::parse_header"));
         assert_eq!(frames[1].name.as_deref(), Some("my_crate::main"));
-        assert_eq!(
-            frames[2].name.as_deref(),
-            Some("__rust_begin_short_backtrace<fn(), ()>")
-        );
-        assert_eq!(
-            frames[3].name.as_deref(),
-            Some("std[ab12cd34]::panicking::catch_unwind::do_call")
-        );
-        assert_eq!(frames[4].name.as_deref(), Some("_main"));
     }
 
     #[test]
