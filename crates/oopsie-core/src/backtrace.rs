@@ -279,6 +279,10 @@ const RUNTIME_INIT_PREFIXES: &[&str] = &[
     "__libc_start",
     "__scrt_common_main",
     "_main",
+    "std::sys::",
+    "std::thread::",
+    "test::run_test",
+    "__pthread",
 ];
 
 const CRATE_SRC_PATH: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/src/");
@@ -331,6 +335,12 @@ pub fn is_post_panic_code(name: &str, _filename: Option<&path::Path>) -> bool {
 #[inline]
 #[must_use]
 pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
+    // `<… as …FnOnce…>::call_once` dispatch shims (AssertUnwindSafe, boxed
+    // closures, vtable shims) — impl-block symbols user code never produces.
+    if name.starts_with('<') && name.contains("::call_once") {
+        return true;
+    }
+
     if RUNTIME_INIT_PREFIXES
         .iter()
         .any(|prefix| name.starts_with(prefix))
@@ -338,19 +348,25 @@ pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool 
         return true;
     }
 
-    if let Some(name) = name
+    // Allow one leading `<` before the crate designator so angle-bracket
+    // wrapped v0 symbols like `<std[hash]::sys::…>::method` are peeled too.
+    let bare = name.strip_prefix('<').unwrap_or(name);
+    if let Some(rest) = bare
         .strip_prefix("std[")
-        .or_else(|| name.strip_prefix("test["))
-        && let Some((_, mut name)) = name.split_once("]::")
+        .or_else(|| bare.strip_prefix("test["))
+        && let Some((_, mut tail)) = rest.split_once("]::")
     {
-        name = name.strip_prefix("sys::backtrace::").unwrap_or(name);
-        // The list entries carry a `std::` module prefix the peeled tail lacks;
-        // strip it from each entry before comparing.
+        tail = tail.strip_prefix("sys::backtrace::").unwrap_or(tail);
+        // The list entries carry a `std::` or `test::` module prefix the
+        // peeled tail lacks; strip either before comparing.
         return RUNTIME_INIT_PREFIXES.iter().any(|prefix| {
-            name.starts_with(prefix)
+            tail.starts_with(prefix)
                 || prefix
                     .strip_prefix("std::")
-                    .is_some_and(|tail| name.starts_with(tail))
+                    .is_some_and(|p| tail.starts_with(p))
+                || prefix
+                    .strip_prefix("test::")
+                    .is_some_and(|p| tail.starts_with(p))
         });
     }
 
@@ -863,6 +879,37 @@ mod tests {
                 "/home/u/my-backtrace-experiments/src/lib.rs"
             ))
         ));
+    }
+
+    #[test]
+    fn runtime_init_recognizes_test_thread_tail_spellings() {
+        for name in [
+            "__pthread_cond_wait",
+            "<std[1a2b]::sys::thread::unix::Thread>::new::thread_start",
+            "<alloc[9f]::boxed::Box<dyn core[9f]::ops::function::FnOnce<(), Output = ()> + core[9f]::marker::Send> as core[9f]::ops::function::FnOnce<()>>::call_once",
+            "<std[1a2b]::thread::lifecycle::spawn_unchecked<f, ()>::{closure#1} as core[9f]::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}",
+            "std[1a2b]::thread::lifecycle::spawn_unchecked::<f, ()>::{closure#1}",
+            "<core[9f]::panic::unwind_safe::AssertUnwindSafe<f> as core[9f]::ops::function::FnOnce<()>>::call_once",
+            "test[3c]::run_test_in_process",
+            "test[3c]::run_test::{closure#0}",
+            "std::thread::lifecycle::spawn_unchecked",
+            "std::sys::pal::unix::thread::Thread::new::thread_start",
+        ] {
+            assert!(is_runtime_init_code(name, None), "should match: {name}");
+        }
+    }
+
+    #[test]
+    fn runtime_init_spares_user_spellings() {
+        for name in [
+            "my_crate::run_tests",
+            "my_crate::test::run_testish",
+            "<my_crate::Foo as my_crate::Bar>::call_me",
+            "my_crate::sys::thread_pool::spawn",
+            "my_crate::thread::worker",
+        ] {
+            assert!(!is_runtime_init_code(name, None), "must not match: {name}");
+        }
     }
 
     #[test]
