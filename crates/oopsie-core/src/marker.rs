@@ -10,10 +10,10 @@ use std::sync::Arc;
 
 /// Whether the frame that set the marker is itself hidden.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) enum MarkerBoundary {
-    /// Hide the setter's own frame too (`Report::run` hiding itself).
+pub enum MarkerBoundary {
+    /// Hide the setter's own frame too.
     Inclusive,
-    /// Keep the caller's frame visible (`start_marker!`).
+    /// Keep the caller's frame visible.
     Exclusive,
 }
 
@@ -70,7 +70,7 @@ fn capture_marker(boundary: MarkerBoundary) -> TraceMarker {
 }
 
 /// Snapshot the current thread's marker, if any.
-pub(crate) fn current() -> Option<Arc<TraceMarker>> {
+pub fn current() -> Option<Arc<TraceMarker>> {
     MARKER.with(|slot| {
         let cur = slot.take();
         let snapshot = cur.clone();
@@ -89,6 +89,7 @@ pub fn set_start_marker() {
 /// Install an inclusive marker anchored at the caller, returning the previous
 /// marker for [`restore_marker`].
 #[doc(hidden)]
+#[must_use]
 pub fn set_inclusive_marker() -> Option<Arc<TraceMarker>> {
     MARKER.with(|slot| {
         let prev = slot.take();
@@ -203,6 +204,15 @@ mod tests {
             boundary: MarkerBoundary::Inclusive,
         };
         assert_eq!(marker.cut_len(&[(1, 1)]), 0);
+    }
+
+    #[test]
+    fn cut_len_empty_trace_is_zero() {
+        let marker = TraceMarker {
+            frames: vec![(10, 1), (20, 2)],
+            boundary: MarkerBoundary::Inclusive,
+        };
+        assert_eq!(marker.cut_len(&[]), 0);
     }
 
     #[test]
