@@ -882,6 +882,14 @@ mod tests {
                 .map(|f| f.ip() as usize)
                 .collect();
             assert_eq!(hidden, tail);
+            // Every hidden ip must come from the marker's own recorded stack —
+            // pins cut_len against returning frames the marker never saw.
+            let marker = crate::marker::current().expect("marker still set");
+            assert!(
+                hidden
+                    .iter()
+                    .all(|ip| marker.frames().iter().any(|&(m_ip, _)| m_ip == *ip))
+            );
             // The cut must not swallow the whole trace.
             assert!(hidden.len() < frames.len());
         });
@@ -890,11 +898,10 @@ mod tests {
     #[test]
     fn capture_without_marker_has_no_hidden_ips() {
         crate::with_rust_backtrace_override(RustBacktrace::Enabled, || {
-            let prev = crate::marker::current();
+            let _restore_guard = scopeguard(crate::marker::current());
             crate::__private::restore_marker(None);
             let bt = <Backtrace as crate::Capturable>::capture();
             assert!(bt.marker_hidden_ips().is_none());
-            crate::__private::restore_marker(prev);
         });
     }
 
