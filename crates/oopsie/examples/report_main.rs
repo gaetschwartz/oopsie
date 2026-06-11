@@ -6,10 +6,10 @@
 //!
 //! Run with: `cargo run --example report_main` (exits non-zero on error).
 
+use oopsie::RustBacktrace;
 use oopsie::backtrace::set_override;
 use oopsie::oopsie;
 use oopsie::prelude::*;
-use oopsie::{Report, RustBacktrace};
 
 #[oopsie(traced)]
 pub enum CliError {

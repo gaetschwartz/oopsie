@@ -7,7 +7,6 @@
 //!
 //! Run with: `cargo run --example welp`
 
-use oopsie::Welp;
 use oopsie::prelude::*;
 
 fn read_config(path: &str) -> Result<String, Welp> {

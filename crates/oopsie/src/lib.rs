@@ -348,10 +348,11 @@ pub mod tracing {
     pub use oopsie_core::json_error_layer;
 }
 
-/// Extension traits for error handling at the call site.
+/// Common imports for error handling at the call site.
 ///
-/// Import this at the top of any file that calls `.context(...)` or
-/// `.with_context(...)` on `Result` / `Option` values, or inspects oopsie errors.
+/// Brings in the extension traits behind `.context(...)` / `.with_context(...)`
+/// on `Result` / `Option`, the [`Diagnostic`] accessors, and the ready-made
+/// error type [`Welp`] (plus `Report` with the `fancy` feature).
 /// You do **not** need this to *define* error types — `#[oopsie::oopsie]` works
 /// as a fully-qualified attribute with no `use`.
 ///
@@ -371,7 +372,11 @@ pub mod tracing {
 /// # }
 /// ```
 pub mod prelude {
-    pub use crate::{Contextual, Diagnostic, OptionExt, ResultExt, WelpOptionExt, WelpResultExt};
+    #[cfg(feature = "fancy")]
+    pub use crate::Report;
+    pub use crate::{
+        Contextual, Diagnostic, OptionExt, ResultExt, Welp, WelpOptionExt, WelpResultExt,
+    };
 }
 
 #[cfg(feature = "fancy")]
