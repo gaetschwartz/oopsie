@@ -3,12 +3,10 @@
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::ext::IdentExt as _;
-use syn::{DeriveInput, Ident, Visibility};
+use syn::{Ident, Visibility};
 
-use super::parse::{
-    CategorizedFields, EnumContainerAttrs, ModuleSetting, SourceKind, StructAttrs, SuffixSetting,
-    UserField, VariantAttrs,
-};
+use super::model::{ResolvedEnum, ResolvedStruct};
+use super::parse::{CategorizedFields, ModuleSetting, SourceKind, SuffixSetting, UserField};
 
 /// The generic-parameter list, where-clause, field block, and derive set for a
 /// selector struct built from a variant/struct's user fields.
@@ -135,74 +133,50 @@ fn lift_into_child_module(vis: &Visibility) -> Visibility {
 }
 
 /// Generate context selectors for all variants of an enum.
-pub fn gen_enum_selectors(
-    input: &DeriveInput,
-    container: &EnumContainerAttrs,
-    oopsie_path: &syn::Path,
-) -> syn::Result<Vec<TokenStream2>> {
+pub fn gen_enum_selectors(resolved: &ResolvedEnum, oopsie_path: &syn::Path) -> Vec<TokenStream2> {
+    let input = resolved.input;
+    let container = resolved.container;
     let enum_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let wrapped_in_module = matches!(container.effective_module(true), ModuleSetting::On(_));
     let vis = resolve_selector_vis(container.visibility(), &input.vis, wrapped_in_module);
 
-    let syn::Data::Enum(data) = &input.data else {
-        unreachable!()
-    };
-
     let mut selectors = Vec::new();
-    let mut seen_selectors: std::collections::HashMap<String, Ident> =
-        std::collections::HashMap::new();
-    for variant in &data.variants {
-        let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
-        let categorized = CategorizedFields::from_fields(&variant.fields)?;
-        let variant_ident = &variant.ident;
-        // Extract `#[cfg(...)]` attrs so the generated selector + impl carry
-        // the same gating as the variant. Without this, callers behind a
-        // disabled feature still see references to types that don't exist.
-        let cfg_attrs: Vec<&syn::Attribute> = variant
-            .attrs
-            .iter()
-            .filter(|a| a.path().is_ident("cfg"))
-            .collect();
+    for v in &resolved.variants {
+        let variant_attrs = &v.attrs;
+        let categorized = &v.fields;
+        let variant_ident = v.ident();
+        let cfg_attrs = &v.cfg_attrs;
 
-        if variant_attrs.transparent {
-            let Some(source) = &categorized.source else {
-                return Err(syn::Error::new_spanned(
-                    &variant.ident,
-                    "`transparent` requires a source field (a field named `source` \
-                     or marked `#[oopsie(from)]`)",
-                ));
-            };
-            if let Some(extra) = categorized.user_fields.first() {
-                return Err(syn::Error::new_spanned(
-                    &extra.ident,
-                    "`transparent` allows no fields besides the source and \
-                     auto-captured trace fields; remove this field or drop `transparent`",
-                ));
-            }
-            // When the source field uses `from(T, transform)` (or auto-box
-            // detected `Box<T>`), the generated `From` impl accepts the
-            // pre-transform type `T` and applies the transform internally,
-            // matching snafu's `#[snafu(context(false))]` semantics.
+        let Some(selector_ident) = &v.selector_ident else {
+            // `transparent` variant: the resolved model validated the source
+            // shape, so emit the `From` impl directly. When the source uses
+            // `from(T, transform)` (or auto-box detected `Box<T>`), the `From`
+            // accepts the pre-transform type `T` and applies the transform
+            // internally, matching snafu's `#[snafu(context(false))]`.
+            let source = categorized
+                .source
+                .as_ref()
+                .expect("transparent variant has a validated source");
             let source_ident = &source.ident;
             let (param_ty, body_assign) = match &source.kind {
-                super::parse::SourceKind::Transformed {
+                SourceKind::Transformed {
                     source_type,
                     transform,
                 } => (
                     quote! { #source_type },
                     quote! { let #source_ident = (#transform)(source); },
                 ),
-                super::parse::SourceKind::Yes => {
+                SourceKind::Yes => {
                     let ty = &source.ty;
                     (quote! { #ty }, quote! { let #source_ident = source; })
                 }
-                super::parse::SourceKind::No | super::parse::SourceKind::Disabled => {
+                SourceKind::No | SourceKind::Disabled => {
                     unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
                 }
             };
-            let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
-            let auto_names = gen_auto_field_inits(&categorized);
+            let auto_inits = gen_auto_inits(categorized, oopsie_path, true);
+            let auto_names = gen_auto_field_inits(categorized);
             selectors.push(quote! {
                 #(#cfg_attrs)*
                 impl #impl_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics #where_clause {
@@ -220,30 +194,8 @@ pub fn gen_enum_selectors(
                 }
             });
             continue;
-        }
+        };
 
-        let selector_ident = selector_name(variant_ident, &container.effective_suffix(true))?;
-        // cfg-gated variants may legitimately share a selector name under
-        // mutually exclusive cfgs, so only unconditional variants participate
-        // in the collision check.
-        if cfg_attrs.is_empty()
-            && let Some(first) =
-                seen_selectors.insert(selector_ident.to_string(), variant_ident.clone())
-        {
-            let mut err = syn::Error::new_spanned(
-                variant_ident,
-                format!(
-                    "variants `{first}` and `{variant_ident}` both generate a selector named \
-                     `{selector_ident}` (a trailing `Error` is stripped from variant names); \
-                     rename one of the variants"
-                ),
-            );
-            err.combine(syn::Error::new_spanned(
-                &first,
-                format!("`{first}` also generates selector `{selector_ident}`"),
-            ));
-            return Err(err);
-        }
         // `vis` is already re-anchored to the child module, so the fallback
         // takes no further lift; an explicit variant override goes through the
         // same lift as the container default rather than being emitted verbatim.
@@ -288,20 +240,20 @@ pub fn gen_enum_selectors(
         // Generate Contextual or build/fail depending on whether there's a source
         let methods_inner = if has_source {
             gen_build_error(
-                &selector_ident,
+                selector_ident,
                 enum_ident,
                 variant_ident,
-                &categorized,
+                categorized,
                 &generic_params,
                 &where_clauses,
                 oopsie_path,
             )
         } else {
             gen_build_fail(
-                &selector_ident,
+                selector_ident,
                 enum_ident,
                 variant_ident,
-                &categorized,
+                categorized,
                 &generic_params,
                 &where_clauses,
                 oopsie_path,
@@ -326,15 +278,16 @@ pub fn gen_enum_selectors(
         });
     }
 
-    Ok(selectors)
+    selectors
 }
 
 /// Generate context selector for a struct error.
 pub fn gen_struct_selector(
-    input: &DeriveInput,
-    attrs: &StructAttrs,
+    resolved: &ResolvedStruct,
     oopsie_path: &syn::Path,
 ) -> syn::Result<TokenStream2> {
+    let input = resolved.input;
+    let attrs = resolved.attrs;
     let struct_ident = &input.ident;
     let wrapped_in_module = matches!(
         attrs.container.effective_module(false),
@@ -346,46 +299,33 @@ pub fn gen_struct_selector(
     // naturally as `variant_attrs.transparent` etc.
     let variant_attrs = attrs;
 
-    let syn::Data::Struct(data) = &input.data else {
-        unreachable!()
-    };
-
-    let categorized = CategorizedFields::from_fields(&data.fields)?;
+    let categorized = &resolved.fields;
 
     if variant_attrs.transparent {
-        let Some(source) = &categorized.source else {
-            return Err(syn::Error::new_spanned(
-                &input.ident,
-                "`transparent` requires a source field (a field named `source` \
-                 or marked `#[oopsie(from)]`)",
-            ));
-        };
-        if let Some(extra) = categorized.user_fields.first() {
-            return Err(syn::Error::new_spanned(
-                &extra.ident,
-                "`transparent` allows no fields besides the source and \
-                 auto-captured trace fields; remove this field or drop `transparent`",
-            ));
-        }
+        // The resolved model validated the source shape for a transparent struct.
+        let source = categorized
+            .source
+            .as_ref()
+            .expect("transparent struct has a validated source");
         let source_ident = &source.ident;
         let (param_ty, body_assign) = match &source.kind {
-            super::parse::SourceKind::Transformed {
+            SourceKind::Transformed {
                 source_type,
                 transform,
             } => (
                 quote! { #source_type },
                 quote! { let #source_ident = (#transform)(source); },
             ),
-            super::parse::SourceKind::Yes => {
+            SourceKind::Yes => {
                 let ty = &source.ty;
                 (quote! { #ty }, quote! { let #source_ident = source; })
             }
-            super::parse::SourceKind::No | super::parse::SourceKind::Disabled => {
+            SourceKind::No | SourceKind::Disabled => {
                 unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
             }
         };
-        let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
-        let auto_names = gen_auto_field_inits(&categorized);
+        let auto_inits = gen_auto_inits(categorized, oopsie_path, true);
+        let auto_names = gen_auto_field_inits(categorized);
         return Ok(quote! {
             impl ::core::convert::From<#param_ty> for #struct_ident {
                 #[track_caller]
@@ -432,7 +372,7 @@ pub fn gen_struct_selector(
         gen_build_error_struct(
             &selector_ident,
             struct_ident,
-            &categorized,
+            categorized,
             &generic_params,
             &where_clauses,
             oopsie_path,
@@ -441,7 +381,7 @@ pub fn gen_struct_selector(
         gen_build_fail_struct(
             &selector_ident,
             struct_ident,
-            &categorized,
+            categorized,
             &generic_params,
             &where_clauses,
             oopsie_path,
@@ -454,7 +394,7 @@ pub fn gen_struct_selector(
     })
 }
 
-fn selector_name(base: &Ident, suffix: &SuffixSetting) -> syn::Result<Ident> {
+pub(super) fn selector_name(base: &Ident, suffix: &SuffixSetting) -> syn::Result<Ident> {
     let base_str = base.unraw().to_string();
     let stripped = base_str
         .strip_suffix("Error")

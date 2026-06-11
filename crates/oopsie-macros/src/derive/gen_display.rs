@@ -2,21 +2,16 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::DeriveInput;
 use syn::ext::IdentExt as _;
 
-use super::parse::{
-    CategorizedFields, DisplayAttr, DisplayScope, StructAttrs, VariantAttrs, any_variant_has_cfg,
-};
+use super::model::{ResolvedEnum, ResolvedStruct, field_binding_pats};
+use super::parse::DisplayAttr;
 
 /// Generate a `Display` impl for an enum.
-pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
+pub fn gen_enum_display(resolved: &ResolvedEnum) -> TokenStream2 {
+    let input = resolved.input;
     let enum_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    let syn::Data::Enum(data) = &input.data else {
-        unreachable!()
-    };
 
     // Mangled formatter binding: the destructure binds every field name (so the
     // format string can interpolate `{field}`), which would shadow a `Formatter`
@@ -24,22 +19,14 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let fmtr = formatter(&input.data);
 
     let mut arms = Vec::new();
-    for variant in &data.variants {
-        let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
-        let categorized = CategorizedFields::from_fields(&variant.fields)?;
-        let variant_ident = &variant.ident;
-        let cfg_attrs: Vec<&syn::Attribute> = variant
-            .attrs
-            .iter()
-            .filter(|a| a.path().is_ident("cfg"))
-            .collect();
+    for v in &resolved.variants {
+        let variant_ident = v.ident();
+        let cfg_attrs = &v.cfg_attrs;
+        let field_binds = field_binding_pats(&v.variant.fields);
 
-        let field_binds = field_binding_pats(&variant.fields);
-
-        let write_call = if let Some(display) = &variant_attrs.display {
-            display.reject_keyword_args(&variant.fields, DisplayScope::Variant)?;
+        let write_call = if let Some(display) = &v.attrs.display {
             gen_write_call(display, &fmtr)
-        } else if let (true, Some(source)) = (variant_attrs.transparent, &categorized.source) {
+        } else if let (true, Some(source)) = (v.attrs.transparent, &v.fields.source) {
             // `transparent` delegates Display to the source (thiserror parity).
             let source_ident = &source.ident;
             quote! { ::core::fmt::Display::fmt(#source_ident, #fmtr) }
@@ -58,32 +45,31 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let body = if arms.is_empty() {
         quote! { match *self {} }
-    } else if any_variant_has_cfg(data) {
+    } else if resolved.any_variant_cfg {
         quote! { match self { #(#arms)* _ => ::core::unreachable!() } }
     } else {
         quote! { match self { #(#arms)* } }
     };
 
-    Ok(quote! {
+    quote! {
         impl #impl_generics ::core::fmt::Display for #enum_ident #ty_generics #where_clause {
             fn fmt(&self, #fmtr: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 #body
             }
         }
-    })
+    }
 }
 
 /// Generate a `Display` impl for a struct.
-pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<TokenStream2> {
+pub fn gen_struct_display(resolved: &ResolvedStruct) -> TokenStream2 {
+    let input = resolved.input;
     let struct_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let variant_attrs = attrs;
+    let attrs = resolved.attrs;
 
     let syn::Data::Struct(data) = &input.data else {
         unreachable!()
     };
-
-    let categorized = CategorizedFields::from_fields(&data.fields)?;
 
     let field_binds = field_binding_pats(&data.fields);
 
@@ -100,10 +86,9 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
     // parameter named `f` when a user field is also named `f`.
     let fmtr = formatter(&input.data);
 
-    let write_call = if let Some(display) = &variant_attrs.display {
-        display.reject_keyword_args(&data.fields, DisplayScope::Struct)?;
+    let write_call = if let Some(display) = &attrs.display {
         gen_write_call(display, &fmtr)
-    } else if let (true, Some(source)) = (variant_attrs.transparent, &categorized.source) {
+    } else if let (true, Some(source)) = (attrs.transparent, &resolved.fields.source) {
         // `transparent` delegates Display to the source (thiserror parity).
         let source_ident = &source.ident;
         quote! { ::core::fmt::Display::fmt(#source_ident, #fmtr) }
@@ -112,36 +97,14 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
         quote! { ::core::write!(#fmtr, #name) }
     };
 
-    Ok(quote! {
+    quote! {
         impl #impl_generics ::core::fmt::Display for #struct_ident #ty_generics #where_clause {
             fn fmt(&self, #fmtr: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 #destructure
                 #write_call
             }
         }
-    })
-}
-
-/// Field-binding patterns (`name,`) for a destructure, each carrying its
-/// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs so a binding for a stripped field is
-/// stripped too — the trailing `..` in the pattern absorbs the gap. Pattern
-/// fields accept attributes; the destructure relies on that.
-fn field_binding_pats(fields: &syn::Fields) -> Vec<TokenStream2> {
-    let syn::Fields::Named(named) = fields else {
-        return Vec::new();
-    };
-    named
-        .named
-        .iter()
-        .filter_map(|f| {
-            let ident = f.ident.as_ref()?;
-            let cfg = f
-                .attrs
-                .iter()
-                .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"));
-            Some(quote! { #(#cfg)* #ident, })
-        })
-        .collect()
+    }
 }
 
 fn gen_write_call(display: &DisplayAttr, fmtr: &syn::Ident) -> TokenStream2 {

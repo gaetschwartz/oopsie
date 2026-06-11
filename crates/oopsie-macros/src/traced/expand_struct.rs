@@ -6,9 +6,8 @@ use syn::ext::IdentExt as _;
 
 use super::args::{CodeSettings, TracedArgs};
 use super::config::{FieldInjectorConfig, FieldsToInject};
-use super::inject::{
-    add_provide_attrs, check_existing_fields, has_oopsie_flag, has_oopsie_meta, inject_fields,
-};
+use super::inject::{add_provide_attrs, check_existing_fields, inject_fields};
+use crate::derive::parse::StructAttrs;
 use crate::utils::FieldSetting;
 
 pub fn expand_struct(
@@ -45,9 +44,12 @@ pub fn expand_struct(
 
     inject_fields(&mut input.fields, &config, &to_inject)?;
 
-    // A user-supplied `code` (any form) suppresses the auto-code.
-    let has_user_code = has_oopsie_meta(&input.attrs, "code");
-    let is_transparent = has_oopsie_flag(&input.attrs, "transparent");
+    // Read the auto-code suppression facts through the same parser the derive
+    // layer uses, so injection and codegen can't disagree on what counts as a
+    // user `code` or a `transparent` struct.
+    let struct_attrs = StructAttrs::from_attrs(&input.attrs)?;
+    let has_user_code = struct_attrs.code.is_some();
+    let is_transparent = struct_attrs.transparent;
 
     // Add struct-level provide attrs
     add_provide_attrs(

@@ -119,57 +119,6 @@ fn inject_into_named(
     }
 }
 
-/// Whether any `#[oopsie(...)]` attribute carries a top-level entry named `key`
-/// in either name-value (`key = "..."`) or list (`key(...)`) form — every shape
-/// the derive layer accepts for `code`.
-///
-/// Parses each attribute as a comma-separated meta list so a string literal at
-/// the head (the short-display form `#[oopsie("fmt", key = expr)]`, whose
-/// `key = expr` is a format argument, not an attribute key) fails the meta parse
-/// and is correctly ignored rather than matching the inner assignment.
-pub(super) fn has_oopsie_meta(attrs: &[syn::Attribute], key: &str) -> bool {
-    use syn::punctuated::Punctuated;
-
-    attrs
-        .iter()
-        .filter(|attr| attr.path().is_ident("oopsie"))
-        .filter_map(|attr| {
-            attr.parse_args_with(Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated)
-                .ok()
-        })
-        .flatten()
-        .any(|meta| meta.path().is_ident(key))
-}
-
-/// Check whether any `#[oopsie(...)]` attribute on this item contains a bare
-/// flag like `transparent` — an ident not followed by `=` (name-value) or a
-/// `(...)` group (call/list form). Complements [`has_oopsie_meta`].
-pub(super) fn has_oopsie_flag(attrs: &[syn::Attribute], key: &str) -> bool {
-    for attr in attrs {
-        if !attr.path().is_ident("oopsie") {
-            continue;
-        }
-        let Ok(tokens) = attr.parse_args::<proc_macro2::TokenStream>() else {
-            continue;
-        };
-        let mut iter = tokens.into_iter().peekable();
-        while let Some(tok) = iter.next() {
-            let proc_macro2::TokenTree::Ident(ident) = &tok else {
-                continue;
-            };
-            if ident != key {
-                continue;
-            }
-            match iter.peek() {
-                Some(proc_macro2::TokenTree::Punct(p)) if p.as_char() == '=' => {}
-                Some(proc_macro2::TokenTree::Group(_)) => {}
-                _ => return true,
-            }
-        }
-    }
-    false
-}
-
 /// Add Oopsie provide attributes for auto-generated error code.
 ///
 /// Backtrace and spantrace are handled by Diagnostic via field detection, so
@@ -371,54 +320,6 @@ mod tests {
         assert_eq!(attrs.len(), 1);
         let attr_str = quote! { #(#attrs)* }.to_string();
         insta::assert_snapshot!(attr_str);
-    }
-
-    // ── has_oopsie_meta ──────────────────────────────────────────────
-
-    #[test]
-    fn has_oopsie_meta_finds_name_value_code() {
-        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(code = "my::error")] };
-        assert!(has_oopsie_meta(&attrs, "code"));
-    }
-
-    #[test]
-    fn has_oopsie_meta_finds_list_form_code() {
-        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(code("app::{}", kind))] };
-        assert!(has_oopsie_meta(&attrs, "code"));
-    }
-
-    #[test]
-    fn has_oopsie_meta_missing_key() {
-        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(code = "my::error")] };
-        assert!(!has_oopsie_meta(&attrs, "help"));
-    }
-
-    #[test]
-    fn has_oopsie_meta_ignores_display_format_arg() {
-        // The `code = expr` here is a format argument of the short-display string,
-        // not a `code` attribute, and must not suppress the auto-code.
-        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("fmt {}", code = x)] };
-        assert!(!has_oopsie_meta(&attrs, "code"));
-    }
-
-    // ── has_oopsie_flag ──────────────────────────────────────────────
-
-    #[test]
-    fn has_oopsie_flag_finds_bare_flag() {
-        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(display("x"), transparent)] };
-        assert!(has_oopsie_flag(&attrs, "transparent"));
-    }
-
-    #[test]
-    fn has_oopsie_flag_ignores_name_value() {
-        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(code = "my::error")] };
-        assert!(!has_oopsie_flag(&attrs, "code"));
-    }
-
-    #[test]
-    fn has_oopsie_flag_ignores_call_form() {
-        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie(display("x"))] };
-        assert!(!has_oopsie_flag(&attrs, "display"));
     }
 
     #[test]

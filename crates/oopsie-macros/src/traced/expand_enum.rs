@@ -6,9 +6,8 @@ use syn::ext::IdentExt as _;
 
 use super::args::{CodeSettings, TracedArgs};
 use super::config::{FieldInjectorConfig, FieldsToInject};
-use super::inject::{
-    add_provide_attrs, check_existing_fields, has_oopsie_flag, has_oopsie_meta, inject_fields,
-};
+use super::inject::{add_provide_attrs, check_existing_fields, inject_fields};
+use crate::derive::parse::VariantAttrs;
 use crate::utils::FieldSetting;
 
 pub fn expand_enum(
@@ -61,9 +60,12 @@ pub fn expand_enum(
 
         inject_fields(&mut variant.fields, &config, &to_inject)?;
 
-        // A user-supplied `code` (any form) suppresses the auto-code.
-        let has_user_code = has_oopsie_meta(&variant.attrs, "code");
-        let is_transparent = has_oopsie_flag(&variant.attrs, "transparent");
+        // Read the auto-code suppression facts through the same parser the
+        // derive layer uses, so injection and codegen can't disagree on what
+        // counts as a user `code` or a `transparent` variant.
+        let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
+        let has_user_code = variant_attrs.code.is_some();
+        let is_transparent = variant_attrs.transparent;
 
         let variant_name = variant.ident.unraw().to_string();
         add_provide_attrs(

@@ -2,11 +2,10 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{DeriveInput, Type};
+use syn::Type;
 
-use super::parse::{
-    CategorizedFields, DisplayAttr, ProvideAttr, StructAttrs, VariantAttrs, any_variant_has_cfg,
-};
+use super::model::{ResolvedEnum, ResolvedStruct, field_binding_pats};
+use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr};
 
 /// Build the body of a `oopsie_backtrace`/`oopsie_spantrace` accessor that
 /// surfaces the deepest *captured* trace: prefer the source's (origin-most)
@@ -93,13 +92,13 @@ fn gen_diag_forward(
 }
 
 /// Generate `std::error::Error` impl for an enum.
-pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Result<TokenStream2> {
+pub fn gen_enum_error(
+    resolved: &ResolvedEnum,
+    oopsie_path: &syn::Path,
+) -> syn::Result<TokenStream2> {
+    let input = resolved.input;
     let enum_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-
-    let syn::Data::Enum(data) = &input.data else {
-        unreachable!()
-    };
 
     // Mangled `provide` parameter: the arm destructures every field name (so
     // provide exprs can reference fields), which would shadow a parameter named
@@ -116,22 +115,12 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
     let mut help_arms = Vec::new();
     let mut accessor_uses_source = false;
 
-    for variant in &data.variants {
-        let variant_ident = &variant.ident;
-        let categorized = CategorizedFields::from_fields(&variant.fields)?;
-        let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
-        if let (Some(help_field), Some(_)) = (&categorized.help_field, &variant_attrs.help) {
-            return Err(syn::Error::new_spanned(
-                help_field,
-                "ambiguous help: this `#[oopsie(help)]` field conflicts with the \
-                 `help = ...` attribute; remove one",
-            ));
-        }
-        let cfg_attrs: Vec<&syn::Attribute> = variant
-            .attrs
-            .iter()
-            .filter(|a| a.path().is_ident("cfg"))
-            .collect();
+    for v in &resolved.variants {
+        let variant = v.variant;
+        let variant_ident = v.ident();
+        let categorized = &v.fields;
+        let variant_attrs = &v.attrs;
+        let cfg_attrs = &v.cfg_attrs;
 
         // source() arm
         if let Some(source_field) = &categorized.source {
@@ -227,7 +216,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
         }
 
-        let field_binds = collect_provide_field_binds(&categorized);
+        let field_binds = collect_provide_field_binds(categorized);
         provide_arms.push(quote! {
             #(#cfg_attrs)*
             Self::#variant_ident { #(#field_binds)* .. } => {
@@ -325,7 +314,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             let expr = &provide_attr.expr;
             // The provide expr may reference fields (it gets the same bindings
             // inside the generated `provide()`), so bind them here too.
-            let binds = collect_provide_field_binds(&categorized);
+            let binds = collect_provide_field_binds(categorized);
             // A ref-form provide evaluates to `&ErrorCode`; the accessor
             // returns it by value.
             let value = if provide_attr.is_ref() {
@@ -354,7 +343,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             // The body interpolates the help field, so a cfg-stripped help field
             // takes the whole arm with it; the trailing `_ => None` arm covers
             // the variant then.
-            let field_cfg = field_cfg_for(&categorized, help_field);
+            let field_cfg = field_cfg_for(categorized, help_field);
             help_arms.push(quote! {
                 #(#cfg_attrs)*
                 #(#field_cfg)*
@@ -394,7 +383,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
     // An all-stripped enum reaches the generators with every arm gated out (the
     // attribute-macro path runs before cfg-stripping), so matches that bind one
     // arm per variant need a wildcard fallback to stay exhaustive.
-    let cfg_fallback_arm = if any_variant_has_cfg(data) {
+    let cfg_fallback_arm = if resolved.any_variant_cfg {
         quote! { _ => ::core::unreachable!() }
     } else {
         quote! {}
@@ -513,10 +502,11 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
 
 /// Generate `std::error::Error` impl for a struct.
 pub fn gen_struct_error(
-    input: &DeriveInput,
-    attrs: &StructAttrs,
+    resolved: &ResolvedStruct,
     oopsie_path: &syn::Path,
 ) -> syn::Result<TokenStream2> {
+    let input = resolved.input;
+    let attrs = resolved.attrs;
     let struct_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
@@ -524,15 +514,8 @@ pub fn gen_struct_error(
         unreachable!()
     };
 
-    let categorized = CategorizedFields::from_fields(&data.fields)?;
+    let categorized = &resolved.fields;
     let variant_attrs = attrs;
-    if let (Some(help_field), Some(_)) = (&categorized.help_field, &variant_attrs.help) {
-        return Err(syn::Error::new_spanned(
-            help_field,
-            "ambiguous help: this `#[oopsie(help)]` field conflicts with the \
-             `help = ...` attribute; remove one",
-        ));
-    }
 
     // Mangled `provide` parameter (see `gen_enum_error`): the destructure binds
     // every field name, which would shadow a parameter named `request`.
@@ -628,7 +611,7 @@ pub fn gen_struct_error(
     }
 
     // Destructure self to bring field names into scope (same pattern as enum match arms)
-    let provide_field_binds = collect_provide_field_binds(&categorized);
+    let provide_field_binds = collect_provide_field_binds(categorized);
     let destructure = if provide_stmts.is_empty() || provide_field_binds.is_empty() {
         quote! {}
     } else {
@@ -744,7 +727,7 @@ pub fn gen_struct_error(
             let expr = &provide_attr.expr;
             // The provide expr may reference fields (it gets the same bindings
             // inside the generated `provide()`), so destructure them here too.
-            let field_binds = collect_provide_field_binds(&categorized);
+            let field_binds = collect_provide_field_binds(categorized);
             let code_destructure = if field_binds.is_empty() {
                 quote! {}
             } else {
@@ -958,28 +941,6 @@ fn collect_provide_field_binds(categorized: &CategorizedFields) -> Vec<TokenStre
         binds.push(quote! { #(#cfg)* #ident, });
     }
     binds
-}
-
-/// Field-binding patterns (`name,`) for every named field, each carrying its
-/// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs so a stripped field's binding goes with
-/// it. The destructure's trailing `..` absorbs the gap. Used by the
-/// format-string arms (`code`/`help`), which may interpolate any field.
-fn field_binding_pats(fields: &syn::Fields) -> Vec<TokenStream2> {
-    let syn::Fields::Named(named) = fields else {
-        return Vec::new();
-    };
-    named
-        .named
-        .iter()
-        .filter_map(|f| {
-            let ident = f.ident.as_ref()?;
-            let cfg = f
-                .attrs
-                .iter()
-                .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"));
-            Some(quote! { #(#cfg)* #ident, })
-        })
-        .collect()
 }
 
 /// The cfg attrs of the categorized field named `ident`, or `&[]` if it is not a
