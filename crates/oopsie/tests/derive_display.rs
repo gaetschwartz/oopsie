@@ -280,15 +280,19 @@ fn short_display_keyword_named_field_is_expression() {
 }
 
 // Raw-ident variants must not leak the `r#` prefix into default Display output.
-#[derive(Debug, Oopsie)]
-#[oopsie(module(false))]
-enum RawIdentError {
-    r#type { code: u16 },
-    r#fn { code: u16 },
-}
-
 #[test]
+#[expect(
+    non_camel_case_types,
+    reason = "the raw-identifier variants under test are intentionally keyword-shaped"
+)]
 fn raw_ident_variant_default_display_drops_prefix() {
+    #[derive(Debug, Oopsie)]
+    #[oopsie(module(false))]
+    enum RawIdentError {
+        r#type { code: u16 },
+        r#fn { code: u16 },
+    }
+
     let err = r#type { code: 1u16 }.build();
     assert_eq!(format!("{err}"), "type");
 
@@ -298,14 +302,18 @@ fn raw_ident_variant_default_display_drops_prefix() {
 
 // A struct named with a raw ident (`r#struct`) must not leak `r#` in default
 // Display either; its selector strips the prefix before suffixing.
-#[derive(Debug, Oopsie)]
-#[oopsie(suffix)]
-struct r#struct {
-    value: i32,
-}
-
 #[test]
+#[expect(
+    non_camel_case_types,
+    reason = "the raw-identifier struct under test is intentionally keyword-shaped"
+)]
 fn raw_ident_struct_default_display_drops_prefix() {
+    #[derive(Debug, Oopsie)]
+    #[oopsie(suffix)]
+    struct r#struct {
+        value: i32,
+    }
+
     let err = structOopsie { value: 7i32 }.build();
     assert_eq!(format!("{err}"), "struct");
 }

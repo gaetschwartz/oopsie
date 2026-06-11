@@ -690,16 +690,21 @@ fn list_form_code_accessor_and_provider_agree() {
 
 // ---- Raw-ident variants must not leak `r#` into the auto error code ----
 
-#[oopsie(traced)]
-#[oopsie(module(false))]
-pub enum RawCodeError {
-    #[oopsie("raw")]
-    r#type { info: String },
-}
-
 #[test]
+#[expect(
+    non_camel_case_types,
+    reason = "the raw-identifier variant under test is intentionally keyword-shaped"
+)]
 fn raw_ident_variant_auto_code_drops_prefix() {
     use oopsie::Diagnostic as _;
+
+    #[oopsie(traced)]
+    #[oopsie(module(false))]
+    enum RawCodeError {
+        #[oopsie("raw")]
+        r#type { info: String },
+    }
+
     let err = r#type {
         info: "x".to_owned(),
     }

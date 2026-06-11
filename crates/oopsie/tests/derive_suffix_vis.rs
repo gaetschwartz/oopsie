@@ -232,6 +232,10 @@ mod lift_in_path {
 
         #[derive(Debug, Oopsie)]
         #[oopsie(vis(pub(in super::super)))]
+        #[expect(
+            clippy::redundant_pub_crate,
+            reason = "the restricted visibility is the behavior under test"
+        )]
         pub(in super::super) enum ScopedError {
             #[oopsie("scoped: {detail}")]
             Detail { detail: String },
