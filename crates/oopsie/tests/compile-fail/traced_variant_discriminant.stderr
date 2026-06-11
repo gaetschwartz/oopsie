@@ -1,0 +1,5 @@
+error: traced cannot inject fields into a variant with an explicit discriminant; remove the discriminant or the trace fields from this variant
+  --> tests/compile-fail/traced_variant_discriminant.rs:15:12
+   |
+15 |     Boom = 1,
+   |            ^

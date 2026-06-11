@@ -42,6 +42,23 @@ pub fn expand_enum(
             traces: packed,
         };
 
+        // An explicit discriminant requires a fieldless variant; injecting trace
+        // fields would change its shape, which rustc rejects. Refuse here so the
+        // user sees a discriminant-spanning message instead of one pointing into
+        // the rewritten enum.
+        if let Some((_, disc)) = &variant.discriminant
+            && (to_inject.backtrace
+                || to_inject.spantrace
+                || to_inject.timestamp
+                || to_inject.traces)
+        {
+            return Err(syn::Error::new_spanned(
+                disc,
+                "traced cannot inject fields into a variant with an explicit discriminant; \
+                 remove the discriminant or the trace fields from this variant",
+            ));
+        }
+
         inject_fields(&mut variant.fields, &config, &to_inject)?;
 
         // A user-supplied `code` (any form) suppresses the auto-code.
