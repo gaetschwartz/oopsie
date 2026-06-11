@@ -1324,6 +1324,17 @@ pub struct UserField {
     pub cfg_attrs: Vec<syn::Attribute>,
 }
 
+/// Whether any variant carries a `#[cfg(...)]` gate, meaning the set of variants
+/// rustc keeps is not knowable at macro-expansion time. Generated matches over
+/// `self` then need a wildcard fallback: the attribute-macro path expands before
+/// cfg-stripping, so an all-stripped enum would otherwise leave an empty `match`
+/// on a still-inhabited reference.
+pub fn any_variant_has_cfg(data: &syn::DataEnum) -> bool {
+    data.variants
+        .iter()
+        .any(|v| v.attrs.iter().any(|a| a.path().is_ident("cfg")))
+}
+
 /// Field attributes a stripped field would take with it: `#[cfg(...)]` gates and
 /// `#[cfg_attr(...)]` conditionals. Forwarded verbatim onto every generated
 /// reference (selector field, struct-expression field, match-arm binding) so

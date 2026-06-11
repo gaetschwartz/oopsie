@@ -5,7 +5,9 @@ use quote::{format_ident, quote};
 use syn::DeriveInput;
 use syn::ext::IdentExt as _;
 
-use super::parse::{CategorizedFields, DisplayAttr, DisplayScope, StructAttrs, VariantAttrs};
+use super::parse::{
+    CategorizedFields, DisplayAttr, DisplayScope, StructAttrs, VariantAttrs, any_variant_has_cfg,
+};
 
 /// Generate a `Display` impl for an enum.
 pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
@@ -56,6 +58,8 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
 
     let body = if arms.is_empty() {
         quote! { match *self {} }
+    } else if any_variant_has_cfg(data) {
+        quote! { match self { #(#arms)* _ => ::core::unreachable!() } }
     } else {
         quote! { match self { #(#arms)* } }
     };

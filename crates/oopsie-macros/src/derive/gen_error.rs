@@ -4,7 +4,9 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{DeriveInput, Type};
 
-use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr, StructAttrs, VariantAttrs};
+use super::parse::{
+    CategorizedFields, DisplayAttr, ProvideAttr, StructAttrs, VariantAttrs, any_variant_has_cfg,
+};
 
 /// Build the body of a `oopsie_backtrace`/`oopsie_spantrace` accessor that
 /// surfaces the deepest *captured* trace: prefer the source's (origin-most)
@@ -389,6 +391,15 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         }
     }
 
+    // An all-stripped enum reaches the generators with every arm gated out (the
+    // attribute-macro path runs before cfg-stripping), so matches that bind one
+    // arm per variant need a wildcard fallback to stay exhaustive.
+    let cfg_fallback_arm = if any_variant_has_cfg(data) {
+        quote! { _ => ::core::unreachable!() }
+    } else {
+        quote! {}
+    };
+
     let provide_method =
         if provide_arms.is_empty() || !cfg!(feature = "unstable-error-generic-member-access") {
             quote! {}
@@ -399,6 +410,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                     use #oopsie_path::AsErrorSource as _;
                     match self {
                         #(#provide_arms)*
+                        #cfg_fallback_arm
                     }
                 }
             }
@@ -476,6 +488,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             use #oopsie_path::AsErrorSource as _;
             match self {
                 #(#source_arms)*
+                #cfg_fallback_arm
             }
         }
     };

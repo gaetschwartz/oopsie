@@ -166,3 +166,62 @@ fn field_cfg_active_field_is_present_and_usable() {
     assert!(matches!(err, FieldCfgPresentError::V { keep: 4, .. }));
     assert_eq!(err.to_string(), "v: 4");
 }
+
+// ---- fully cfg-stripped enums under the attribute-macro path ----
+//
+// The attribute macro expands before rustc strips `#[cfg]`, so an enum whose
+// variants are *all* gated out reaches the generators with every match arm
+// present. After stripping the arms vanish but `&Enum` is still inhabited, so a
+// bare `match self {}` would be E0004. The generated matches over `self` carry a
+// wildcard fallback whenever any variant is cfg-gated.
+
+#[cfg(any())]
+pub struct AllGoneGhost;
+
+#[oopsie]
+#[oopsie(module(false), suffix)]
+pub enum AllStrippedError {
+    #[cfg(any())]
+    #[oopsie("a: {x}")]
+    A { x: u32 },
+    #[cfg(any())]
+    #[oopsie("b")]
+    B { ghost: AllGoneGhost },
+}
+
+#[test]
+fn all_variants_stripped_still_compiles() {
+    // No variant survives, so there is nothing to construct; the assertion is
+    // that the generated `Display`/`Error::source`/`provide` matches over the
+    // still-inhabited `&AllStrippedError` compile at all.
+    fn _accepts(_: &AllStrippedError) {}
+}
+
+// Mixed enum: one variant stripped, one kept. The wildcard fallback is emitted
+// because a variant is cfg-gated, yet the kept variant's Display and source
+// arms must still resolve normally.
+
+#[cfg(any())]
+pub struct MixedGhost;
+
+#[oopsie]
+#[oopsie(module(false), suffix)]
+pub enum MixedCfgError {
+    #[oopsie("kept: {n}")]
+    Kept { n: u32, source: std::io::Error },
+
+    #[cfg(any())]
+    #[oopsie("dropped")]
+    Dropped { ghost: MixedGhost },
+}
+
+#[test]
+fn mixed_cfg_kept_variant_display_and_source_work() {
+    use oopsie::Contextual as _;
+    use std::error::Error as _;
+
+    let io = std::io::Error::other("boom");
+    let err = KeptOopsie { n: 3u32 }.build_error(io);
+    assert_eq!(err.to_string(), "kept: 3");
+    assert!(err.source().is_some());
+}
