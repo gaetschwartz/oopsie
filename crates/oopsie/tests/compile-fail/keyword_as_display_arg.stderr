@@ -1,0 +1,5 @@
+error: `transparent` is an `#[oopsie(...)]` keyword, not a display format argument; give it its own attribute: `#[oopsie("wrapped: {source}")] #[oopsie(transparent)]`
+ --> tests/compile-fail/keyword_as_display_arg.rs:8:35
+  |
+8 |     #[oopsie("wrapped: {source}", transparent)]
+  |                                   ^^^^^^^^^^^

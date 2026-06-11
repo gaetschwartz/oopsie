@@ -5,7 +5,7 @@ use quote::{format_ident, quote};
 use syn::DeriveInput;
 use syn::ext::IdentExt as _;
 
-use super::parse::{CategorizedFields, DisplayAttr, StructAttrs, VariantAttrs};
+use super::parse::{CategorizedFields, DisplayAttr, DisplayScope, StructAttrs, VariantAttrs};
 
 /// Generate a `Display` impl for an enum.
 pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
@@ -35,6 +35,7 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
         let field_binds = field_binding_pats(&variant.fields);
 
         let write_call = if let Some(display) = &variant_attrs.display {
+            display.reject_keyword_args(&variant.fields, DisplayScope::Variant)?;
             gen_write_call(display, &fmtr)
         } else if let (true, Some(source)) = (variant_attrs.transparent, &categorized.source) {
             // `transparent` delegates Display to the source (thiserror parity).
@@ -96,6 +97,7 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
     let fmtr = formatter(&input.data);
 
     let write_call = if let Some(display) = &variant_attrs.display {
+        display.reject_keyword_args(&data.fields, DisplayScope::Struct)?;
         gen_write_call(display, &fmtr)
     } else if let (true, Some(source)) = (variant_attrs.transparent, &categorized.source) {
         // `transparent` delegates Display to the source (thiserror parity).

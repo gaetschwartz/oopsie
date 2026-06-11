@@ -248,6 +248,37 @@ fn short_display_bare_arg_named_like_keyword_is_expression() {
     assert_eq!(err.to_string(), "trace: frames");
 }
 
+// A bare arg that is not an `#[oopsie(...)]` keyword passes through untouched,
+// even when the format string interpolates a different field by name.
+#[test]
+fn short_display_non_keyword_bare_arg_is_expression() {
+    #[oopsie::oopsie]
+    #[oopsie(module(false))]
+    enum E {
+        #[oopsie("x: {}", extra)]
+        Detail { extra: String },
+    }
+    let err = Detail {
+        extra: "more".to_owned(),
+    }
+    .build();
+    assert_eq!(err.to_string(), "x: more");
+}
+
+// A variant keyword (`code`) that is also a real field is a legitimate format
+// argument: the field guard keeps it out of the misparse diagnostic.
+#[test]
+fn short_display_keyword_named_field_is_expression() {
+    #[oopsie::oopsie]
+    #[oopsie(module(false))]
+    enum E {
+        #[oopsie("failed ({})", code)]
+        Failed { code: u16 },
+    }
+    let err = Failed { code: 42u16 }.build();
+    assert_eq!(err.to_string(), "failed (42)");
+}
+
 // Raw-ident variants must not leak the `r#` prefix into default Display output.
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]

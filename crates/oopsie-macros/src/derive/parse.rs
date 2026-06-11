@@ -277,7 +277,88 @@ impl darling::FromMeta for DisplayAttr {
     }
 }
 
+/// `#[oopsie(...)]` keywords accepted on a variant/struct, used to recognize one
+/// misparsed as a trailing display format arg (`#[oopsie("fmt", transparent)]`).
+const VARIANT_KEYWORDS: &[&str] = &["display", "transparent", "help", "code", "provide"];
+
+/// Container-only keywords; valid on a struct's `#[oopsie(...)]` alongside the
+/// variant set but never on an enum variant.
+const CONTAINER_KEYWORDS: &[&str] = &["module", "suffix", "size", "path", "vis"];
+
+/// Which `#[oopsie(...)]` keyword set a short display attaches to: an enum
+/// variant accepts only variant keywords, a struct's single list mixes container
+/// and variant keys.
+#[derive(Clone, Copy)]
+pub enum DisplayScope {
+    Variant,
+    Struct,
+}
+
+impl DisplayScope {
+    fn is_keyword(self, ident: &str) -> bool {
+        let in_set = |set: &[&str]| set.contains(&ident);
+        match self {
+            Self::Variant => in_set(VARIANT_KEYWORDS),
+            Self::Struct => in_set(VARIANT_KEYWORDS) || in_set(CONTAINER_KEYWORDS),
+        }
+    }
+}
+
+/// The bare single-segment ident of `expr`, or `None` for any richer expression
+/// (`self.0`, `foo()`, `a::b`, a generic path). A trailing display arg of this
+/// shape is what an `#[oopsie(...)]` keyword degrades to once the parser swallows
+/// it past the leading string.
+fn bare_path_ident(expr: &Expr) -> Option<&Ident> {
+    let Expr::Path(p) = expr else { return None };
+    if p.qself.is_some() {
+        return None;
+    }
+    let seg = match p.path.segments.len() {
+        1 => &p.path.segments[0],
+        _ => return None,
+    };
+    if p.path.leading_colon.is_some() || !matches!(seg.arguments, syn::PathArguments::None) {
+        return None;
+    }
+    Some(&seg.ident)
+}
+
 impl DisplayAttr {
+    /// Reject a trailing display arg that is actually a misparsed `#[oopsie(...)]`
+    /// keyword. Greedy `Punctuated<Expr>` parsing of the args swallows a bare
+    /// keyword after the string (`#[oopsie("wrapped: {source}", transparent)]`),
+    /// which otherwise surfaces as an unused-argument warning plus a resolution
+    /// error on a value that was never meant to be one.
+    ///
+    /// An arg is flagged only when it is a bare single ident matching a keyword
+    /// for `scope` **and** is not a field of the item — a field of that name is a
+    /// legitimate `{field}` interpolation argument, so it passes through.
+    pub fn reject_keyword_args(
+        &self,
+        fields: &syn::Fields,
+        scope: DisplayScope,
+    ) -> syn::Result<()> {
+        let field_named = |ident: &Ident| matches!(fields, syn::Fields::Named(f) if f.named.iter().any(|f| f.ident.as_ref() == Some(ident)));
+        for arg in &self.args {
+            let Some(ident) = bare_path_ident(arg) else {
+                continue;
+            };
+            if field_named(ident) || !scope.is_keyword(&ident.to_string()) {
+                continue;
+            }
+            let fmt = self.format_str.value();
+            return Err(syn::Error::new_spanned(
+                ident,
+                format!(
+                    "`{ident}` is an `#[oopsie(...)]` keyword, not a display format \
+                     argument; give it its own attribute: \
+                     `#[oopsie(\"{fmt}\")] #[oopsie({ident})]`"
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     /// Whether this renders to a `&'static str` literal rather than a `format!`.
     ///
     /// True iff there are no explicit args *and* the format string has no
@@ -1042,6 +1123,47 @@ mod tests {
         let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("trace: {}", backtrace)] };
         let (display, _) = extract_short_display(&attrs).unwrap();
         assert_eq!(display.unwrap().args.len(), 1);
+    }
+
+    fn fields_of(item: syn::ItemStruct) -> syn::Fields {
+        item.fields
+    }
+
+    #[test]
+    fn reject_keyword_args_flags_non_field_keyword() {
+        let d: DisplayAttr =
+            DisplayAttr::from_meta(&parse_quote!(display("wrapped", transparent))).unwrap();
+        let fields = fields_of(parse_quote! { struct S { source: std::io::Error } });
+        d.reject_keyword_args(&fields, DisplayScope::Variant)
+            .unwrap_err();
+    }
+
+    #[test]
+    fn reject_keyword_args_allows_keyword_named_field() {
+        let d: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(display("{}", code))).unwrap();
+        let fields = fields_of(parse_quote! { struct S { code: u16 } });
+        d.reject_keyword_args(&fields, DisplayScope::Variant)
+            .unwrap();
+    }
+
+    #[test]
+    fn reject_keyword_args_allows_non_keyword_and_rich_exprs() {
+        let d: DisplayAttr =
+            DisplayAttr::from_meta(&parse_quote!(display("{} {}", extra, self.0))).unwrap();
+        let fields = fields_of(parse_quote! { struct S { whatever: u8 } });
+        d.reject_keyword_args(&fields, DisplayScope::Variant)
+            .unwrap();
+    }
+
+    #[test]
+    fn reject_keyword_args_struct_scope_flags_container_keyword() {
+        let d: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(display("x", size))).unwrap();
+        let fields = fields_of(parse_quote! { struct S { msg: String } });
+        // `size` is container-only: legal on a struct's list, never on a variant.
+        d.reject_keyword_args(&fields, DisplayScope::Variant)
+            .unwrap();
+        d.reject_keyword_args(&fields, DisplayScope::Struct)
+            .unwrap_err();
     }
 
     #[test]
