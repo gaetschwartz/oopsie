@@ -101,8 +101,8 @@ required-features = ["fancy"]
 
 [[example]]
 name = "panic_hook"
-required-features = ["fancy", "tracing"]
+required-features = ["fancy", "tracing", "serde"]
 
 [[example]]
 name = "spantrace"
-required-features = ["fancy", "tracing"]
+required-features = ["fancy", "tracing", "serde"]

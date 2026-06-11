@@ -23,6 +23,7 @@ jobs:
           - "tracing"
           - "serde,tracing"
           - "chrono"
+          - "fancy,tracing"
           - "fancy,serde,tracing,chrono"
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.toolchain == 'stable' && 'stable' || '' }}
@@ -99,6 +100,12 @@ jobs:
         run: >
           cargo clippy --workspace --all-targets --no-default-features
           --features chrono
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (fancy,tracing)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features fancy,tracing
           ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
           -- -D warnings
       - name: cargo clippy (full)

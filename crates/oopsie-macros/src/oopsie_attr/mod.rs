@@ -644,6 +644,34 @@ mod tests {
 
     #[cfg(not(feature = "tracing"))]
     #[test]
+    fn spantrace_equals_true_rejected_without_tracing() {
+        let err = expand(
+            quote! { traced(spantrace = true) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("spantrace"),
+            "expected spantrace error, got: {err}"
+        );
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn spantrace_list_true_rejected_without_tracing() {
+        let err = expand(
+            quote! { traced(spantrace(true)) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("spantrace"),
+            "expected spantrace error, got: {err}"
+        );
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
     fn spantrace_equals_false_allowed_without_tracing() {
         expand(
             quote! { traced(spantrace = false) },

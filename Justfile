@@ -8,6 +8,7 @@ check:
     cargo +stable check --workspace --no-default-features --features tracing
     cargo +stable check --workspace --no-default-features --features serde,tracing
     cargo +stable check --workspace --no-default-features --features chrono
+    cargo +stable check --workspace --no-default-features --features fancy,tracing
     cargo +stable check --workspace --no-default-features --features fancy,serde,tracing,chrono
     cargo check --workspace --features unstable,fancy,serde,tracing,chrono
     cargo +stable check -p oopsie --no-default-features --lib
@@ -21,6 +22,7 @@ clippy:
     cargo +stable clippy --workspace --all-targets --no-default-features --features tracing -- -D warnings
     cargo +stable clippy --workspace --all-targets --no-default-features --features serde,tracing -- -D warnings
     cargo +stable clippy --workspace --all-targets --no-default-features --features chrono -- -D warnings
+    cargo +stable clippy --workspace --all-targets --no-default-features --features fancy,tracing -- -D warnings
     cargo +stable clippy --workspace --all-targets --no-default-features --features fancy,serde,tracing,chrono -- -D warnings
     cargo clippy --workspace --all-targets --features unstable,fancy,serde,tracing,chrono -- -D warnings
 
@@ -42,6 +44,7 @@ nextest *ARGS:
     cargo +stable nextest run --workspace --no-default-features --features tracing {{ ARGS }}
     cargo +stable nextest run --workspace --no-default-features --features serde,tracing {{ ARGS }}
     cargo +stable nextest run --workspace --no-default-features --features chrono {{ ARGS }}
+    cargo +stable nextest run --workspace --no-default-features --features fancy,tracing {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo nextest run --workspace --features unstable,fancy,serde,tracing,chrono {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run -p oopsie -F chrono {{ ARGS }}

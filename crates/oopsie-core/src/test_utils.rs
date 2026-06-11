@@ -42,8 +42,8 @@ macro_rules! snap_name {
     }};
 }
 
-/// Install a test subscriber with the JSON `ErrorLayer` so spantraces are
-/// captured for the duration of the returned guard.
+/// Install a test subscriber with an `ErrorLayer` so span traces are captured
+/// for the duration of the returned guard.
 #[cfg(feature = "tracing")]
 #[must_use]
 pub fn init_test_subscriber() -> tracing::subscriber::DefaultGuard {

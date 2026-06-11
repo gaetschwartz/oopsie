@@ -804,11 +804,6 @@ mod tests {
         );
     }
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Lossy filename: ErasedFrame.filename is now Box<str>, not Box<Path>.
-    // Smoke-test that a real backtrace produces str filenames.
-    // ─────────────────────────────────────────────────────────────────────
-
     // Constructs an ErasedError without tracing (spantrace: None) and verifies
     // that Clone preserves message, source chain, and diagnostics.
     #[test]
@@ -837,6 +832,10 @@ mod tests {
         assert!(cloned.backtrace.is_none());
     }
 
+    // ─────────────────────────────────────────────────────────────────────
+    // Lossy filename: ErasedFrame.filename is now Box<str>, not Box<Path>.
+    // Smoke-test that a real backtrace produces str filenames.
+    // ─────────────────────────────────────────────────────────────────────
     #[test]
     fn erased_frame_filename_is_str() {
         crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);
