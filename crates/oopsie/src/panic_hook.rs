@@ -190,6 +190,8 @@ impl<'a> PanicReport<'a> {
         let mut printer = if self.backtrace_setting.is_full() {
             TracePrinter::unfiltered()
         } else if let Some(hidden) = self.backtrace.marker_hidden_ips() {
+            // Marker cut first (exact bottom); panic_frame_filter then trims
+            // the panic plumbing on top and the residue left above the cut.
             TracePrinter::with_filter_and_theme(marker_strip_filter(hidden), TraceTheme::DEFAULT)
                 .add_frame_filter(panic_frame_filter)
         } else {
