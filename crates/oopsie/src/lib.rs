@@ -193,6 +193,10 @@ e.g. API error responses."
 //!
 //! Control this with `#[oopsie(module(false))]` (disable) or `#[oopsie(module(custom_name))]`.
 //!
+//! An error type declared inside a function body requires `#[oopsie(module(false))]`:
+//! the generated module cannot reference items local to a function, so the wrapped
+//! selectors would be unable to name the error type.
+//!
 //! # Display messages
 //!
 //! Display strings follow `format!` semantics with named or positional interpolation:

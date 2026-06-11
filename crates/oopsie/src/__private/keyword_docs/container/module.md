@@ -5,6 +5,10 @@ disabled by default for structs.
 
 Forms: `module`, `module(true)`, `module(false)`, `module(name)`, `module = "name"`.
 
+An error type declared inside a function body needs `module(false)`: the
+generated module cannot reference items local to a function, so wrapping the
+selectors in one leaves them unable to name the error type.
+
 ### Example
 ```
 #[oopsie::oopsie]
