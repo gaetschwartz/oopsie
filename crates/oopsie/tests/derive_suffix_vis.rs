@@ -187,3 +187,85 @@ fn variant_named_error_with_suffix_appends() {
     assert!(matches!(err, SuffixedErrorVariant::Error { code: 13 }));
     assert_eq!(err.to_string(), "suffixed error: 13");
 }
+
+// ---- Test 9: explicit restricted `vis` is lifted into the selector module ----
+//
+// Selectors live one module deeper than the error type (inside the generated
+// `<prefix>_oopsies` module), so a module-relative `vis(...)` must be re-anchored
+// to that depth. Writing the enum's own visibility explicitly must therefore
+// match the default (no-`vis`) behaviour, not produce *less* reachable selectors.
+
+mod lift_super {
+    mod inner {
+        use oopsie::Oopsie;
+
+        #[derive(Debug, Oopsie)]
+        #[oopsie(vis(pub(super)))]
+        pub(super) enum NestedError {
+            #[oopsie("nested: {value}")]
+            Boom { value: u32 },
+        }
+    }
+
+    // `inner::NestedError` and its selectors are `pub(super)` — reachable here,
+    // the parent of `inner`. Without the lift the selector would resolve to
+    // `pub(super)` relative to `nested_oopsies`, i.e. only `inner`, so naming
+    // `Boom` from here would fail with E0603.
+    #[test]
+    fn explicit_super_vis_lifted_into_module() {
+        let err = inner::nested_oopsies::Boom { value: 5u32 }.build();
+        assert!(matches!(err, inner::NestedError::Boom { value: 5 }));
+        assert_eq!(err.to_string(), "nested: 5");
+    }
+}
+
+// ---- Test 10: explicit `vis(pub(in path))` is lifted ----
+//
+// A `pub(in path)`-style restricted visibility is module-relative and must gain
+// a `super` when the selectors sit in the generated child module. The error and
+// its consumer both target `lift_in_path`, two levels above the selector module,
+// so the verbatim (unlifted) form would resolve only as far as `scope` → E0603.
+
+mod lift_in_path {
+    mod scope {
+        use oopsie::Oopsie;
+
+        #[derive(Debug, Oopsie)]
+        #[oopsie(vis(pub(in super::super)))]
+        pub(in super::super) enum ScopedError {
+            #[oopsie("scoped: {detail}")]
+            Detail { detail: String },
+        }
+    }
+
+    #[test]
+    fn explicit_in_path_vis_lifted_into_module() {
+        let err = scope::scoped_oopsies::Detail { detail: "x" }.build();
+        assert_eq!(err.to_string(), "scoped: x");
+        assert!(matches!(err, scope::ScopedError::Detail { detail } if detail == "x"));
+    }
+}
+
+// ---- Test 11: explicit empty `vis()` (private) is lifted ----
+//
+// `vis()` with no argument is inherited (private) visibility. A private error
+// type's selectors must still reach the type's own scope from inside the
+// generated child module, which requires `pub(super)` there, not bare private.
+
+mod lift_private {
+    use oopsie::Oopsie;
+
+    #[derive(Debug, Oopsie)]
+    #[oopsie(vis())]
+    enum PrivateVisError {
+        #[oopsie("private: {n}")]
+        Tick { n: u8 },
+    }
+
+    #[test]
+    fn explicit_private_vis_lifted_into_module() {
+        let err = private_vis_oopsies::Tick { n: 1u8 }.build();
+        assert!(matches!(err, PrivateVisError::Tick { n: 1 }));
+        assert_eq!(err.to_string(), "private: 1");
+    }
+}

@@ -95,30 +95,34 @@ fn user_init_exprs(user_fields: &[UserField]) -> Vec<TokenStream2> {
         .collect()
 }
 
-/// Default selector visibility when no explicit `vis(...)` is given: mirror
-/// the error type's own visibility, so a library's `pub` error yields
-/// selectors its downstream users can name (snafu parity). Restricted
-/// visibilities gain one `super` when the selectors live in a generated child
-/// module, so they still reach the error's own scope.
-fn default_selector_vis(error_vis: &Visibility, wrapped_in_module: bool) -> Visibility {
-    match error_vis {
-        Visibility::Public(_) => error_vis.clone(),
-        Visibility::Restricted(_) | Visibility::Inherited => {
-            if wrapped_in_module {
-                lift_into_child_module(error_vis)
-            } else {
-                error_vis.clone()
-            }
-        }
+/// Resolve a selector's visibility from an explicit `vis(...)` override or, in
+/// its absence, the error type's own visibility (snafu parity: a library's
+/// `pub` error yields selectors its downstream users can name). Both sources go
+/// through the same child-module lift, so an explicit override can't drift the
+/// way it did when only the default path lifted.
+fn resolve_selector_vis(
+    explicit: Option<&Visibility>,
+    error_vis: &Visibility,
+    wrapped_in_module: bool,
+) -> Visibility {
+    let chosen = explicit.unwrap_or(error_vis);
+    if wrapped_in_module {
+        lift_into_child_module(chosen)
+    } else {
+        chosen.clone()
     }
 }
 
-/// Re-express a restricted visibility one module level deeper, as seen from a
-/// generated child module that holds the selectors. Crate-absolute paths are
-/// position-independent; module-relative ones gain a `super`.
+/// Re-express a visibility one module level deeper, as seen from a generated
+/// child module that holds the selectors. `pub` and crate-absolute paths are
+/// position-independent; module-relative ones (`super`, `self`, `in path`) and
+/// inherited (private) visibility gain a `super` so they still reach the
+/// error's own scope.
 fn lift_into_child_module(vis: &Visibility) -> Visibility {
-    let Visibility::Restricted(restricted) = vis else {
-        return syn::parse_quote! { pub(super) };
+    let restricted = match vis {
+        Visibility::Public(_) => return vis.clone(),
+        Visibility::Inherited => return syn::parse_quote! { pub(super) },
+        Visibility::Restricted(restricted) => restricted,
     };
     let path = &restricted.path;
     match path.segments.first() {
@@ -139,10 +143,7 @@ pub fn gen_enum_selectors(
     let enum_ident = &input.ident;
     let (_, ty_generics, _) = input.generics.split_for_impl();
     let wrapped_in_module = matches!(container.effective_module(true), ModuleSetting::On(_));
-    let vis = container
-        .visibility()
-        .cloned()
-        .unwrap_or_else(|| default_selector_vis(&input.vis, wrapped_in_module));
+    let vis = resolve_selector_vis(container.visibility(), &input.vis, wrapped_in_module);
 
     let syn::Data::Enum(data) = &input.data else {
         unreachable!()
@@ -243,10 +244,13 @@ pub fn gen_enum_selectors(
             ));
             return Err(err);
         }
-        let selector_vis = variant_attrs
-            .visibility()
-            .cloned()
-            .unwrap_or_else(|| vis.clone());
+        // `vis` is already re-anchored to the child module, so the fallback
+        // takes no further lift; an explicit variant override goes through the
+        // same lift as the container default rather than being emitted verbatim.
+        let selector_vis = match variant_attrs.visibility() {
+            Some(explicit) => resolve_selector_vis(Some(explicit), &vis, wrapped_in_module),
+            None => vis.clone(),
+        };
 
         let has_source = categorized.source.is_some();
         let user_fields = &categorized.user_fields;
@@ -336,10 +340,7 @@ pub fn gen_struct_selector(
         attrs.container.effective_module(false),
         ModuleSetting::On(_)
     );
-    let vis = attrs
-        .visibility()
-        .cloned()
-        .unwrap_or_else(|| default_selector_vis(&input.vis, wrapped_in_module));
+    let vis = resolve_selector_vis(attrs.visibility(), &input.vis, wrapped_in_module);
     // Variant-level fields are inlined on `StructAttrs` (darling allows only
     // one flatten per derive); aliasing makes downstream field access read
     // naturally as `variant_attrs.transparent` etc.
