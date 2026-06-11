@@ -31,11 +31,7 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
             .filter(|a| a.path().is_ident("cfg"))
             .collect();
 
-        // Collect all field names for destructuring
-        let field_names: Vec<_> = match &variant.fields {
-            syn::Fields::Named(f) => f.named.iter().filter_map(|f| f.ident.as_ref()).collect(),
-            _ => Vec::new(),
-        };
+        let field_binds = field_binding_pats(&variant.fields);
 
         let write_call = if let Some(display) = &variant_attrs.display {
             gen_write_call(display, &fmtr)
@@ -52,7 +48,7 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
         arms.push(quote! {
             #(#cfg_attrs)*
             #[allow(unused_variables)]
-            Self::#variant_ident { #(#field_names,)* .. } => #write_call,
+            Self::#variant_ident { #(#field_binds)* .. } => #write_call,
         });
     }
 
@@ -83,18 +79,14 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
 
     let categorized = CategorizedFields::from_fields(&data.fields)?;
 
-    // Collect field names for destructuring
-    let field_names: Vec<_> = match &data.fields {
-        syn::Fields::Named(f) => f.named.iter().filter_map(|f| f.ident.as_ref()).collect(),
-        _ => Vec::new(),
-    };
+    let field_binds = field_binding_pats(&data.fields);
 
-    let destructure = if field_names.is_empty() {
+    let destructure = if field_binds.is_empty() {
         quote! {}
     } else {
         quote! {
             #[allow(unused_variables)]
-            let Self { #(#field_names),*, .. } = self;
+            let Self { #(#field_binds)* .. } = self;
         }
     };
 
@@ -121,6 +113,28 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
             }
         }
     })
+}
+
+/// Field-binding patterns (`name,`) for a destructure, each carrying its
+/// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs so a binding for a stripped field is
+/// stripped too — the trailing `..` in the pattern absorbs the gap. Pattern
+/// fields accept attributes; the destructure relies on that.
+fn field_binding_pats(fields: &syn::Fields) -> Vec<TokenStream2> {
+    let syn::Fields::Named(named) = fields else {
+        return Vec::new();
+    };
+    named
+        .named
+        .iter()
+        .filter_map(|f| {
+            let ident = f.ident.as_ref()?;
+            let cfg = f
+                .attrs
+                .iter()
+                .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"));
+            Some(quote! { #(#cfg)* #ident, })
+        })
+        .collect()
 }
 
 fn gen_write_call(display: &DisplayAttr, fmtr: &syn::Ident) -> TokenStream2 {

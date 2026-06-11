@@ -7,8 +7,93 @@ use syn::{DeriveInput, Ident, Visibility};
 
 use super::parse::{
     CategorizedFields, EnumContainerAttrs, ModuleSetting, SourceKind, StructAttrs, SuffixSetting,
-    VariantAttrs,
+    UserField, VariantAttrs,
 };
+
+/// The generic-parameter list, where-clause, field block, and derive set for a
+/// selector struct built from a variant/struct's user fields.
+struct SelectorShape {
+    /// `<__T0, ...>` for the selector's `Into`-converted fields (empty when all
+    /// user fields are cfg-gated, which keeps decl/use positions in sync).
+    generic_params: TokenStream2,
+    where_clauses: TokenStream2,
+    /// The braced field block (`{ ... }`), each field carrying its cfg attrs.
+    struct_fields: TokenStream2,
+    /// The `#[derive(...)]` line for the selector struct.
+    derives: TokenStream2,
+}
+
+/// Build a selector's generic params, where-clause, field block, and derive set
+/// from its user fields. `doc` renders each field's doc-comment.
+///
+/// A cfg-gated field cannot ride an `Into` type parameter: cfg attrs are
+/// rejected on generic *arguments* (the `Selector<__T>` use position) and
+/// unstable in `where` clauses, so a gated `__T` would dangle once the field is
+/// stripped. Such fields instead take their own concrete type (no conversion),
+/// gated alongside the field; only unconditional fields contribute a parameter.
+/// A concrete-typed field also can't ride a blanket `Copy`/`Clone` derive (its
+/// type may be neither), so any cfg-gated field drops both from the selector.
+fn selector_shape(user_fields: &[UserField], doc: &dyn Fn(&UserField) -> String) -> SelectorShape {
+    let mut params = Vec::new();
+    let mut bounds = Vec::new();
+    let mut fields = Vec::new();
+    let mut has_cfg_field = false;
+    for (i, uf) in user_fields.iter().enumerate() {
+        let field_ident = &uf.ident;
+        let field_ty = &uf.ty;
+        let cfg = &uf.cfg_attrs;
+        let field_doc = doc(uf);
+        if cfg.is_empty() {
+            let ty_param = format_ident!("__T{}", i);
+            params.push(quote! { #ty_param });
+            bounds.push(quote! { #ty_param: ::core::convert::Into<#field_ty> });
+            fields.push(quote! { #[doc = #field_doc] pub #field_ident: #ty_param });
+        } else {
+            has_cfg_field = true;
+            fields.push(quote! { #(#cfg)* #[doc = #field_doc] pub #field_ident: #field_ty });
+        }
+    }
+    let generic_params = if params.is_empty() {
+        quote! {}
+    } else {
+        quote! { <#(#params),*> }
+    };
+    let where_clauses = if bounds.is_empty() {
+        quote! {}
+    } else {
+        quote! { where #(#bounds),* }
+    };
+    let derives = if has_cfg_field {
+        quote! { #[derive(Debug)] }
+    } else {
+        quote! { #[derive(Debug, Copy, Clone)] }
+    };
+    SelectorShape {
+        generic_params,
+        where_clauses,
+        struct_fields: quote! { { #(#fields),* } },
+        derives,
+    }
+}
+
+/// Per-field initializers for the destination's struct expression, e.g.
+/// `name: self.name.into()`. cfg-gated fields keep their concrete type, so they
+/// move without `.into()` and carry their cfg attrs so the initializer is
+/// stripped together with the field.
+fn user_init_exprs(user_fields: &[UserField]) -> Vec<TokenStream2> {
+    user_fields
+        .iter()
+        .map(|uf| {
+            let ident = &uf.ident;
+            let cfg = &uf.cfg_attrs;
+            if cfg.is_empty() {
+                quote! { #ident: self.#ident.into() }
+            } else {
+                quote! { #(#cfg)* #ident: self.#ident }
+            }
+        })
+        .collect()
+}
 
 /// Default selector visibility when no explicit `vis(...)` is given: mirror
 /// the error type's own visibility, so a library's `pub` error yields
@@ -116,7 +201,7 @@ pub fn gen_enum_selectors(
                 }
             };
             let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
-            let auto_names = gen_auto_field_names(&categorized);
+            let auto_names = gen_auto_field_inits(&categorized);
             selectors.push(quote! {
                 #(#cfg_attrs)*
                 impl #ty_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics {
@@ -128,7 +213,7 @@ pub fn gen_enum_selectors(
                         #body_assign
                         #enum_ident::#variant_ident {
                             #source_ident,
-                            #(#auto_names,)*
+                            #(#auto_names)*
                         }
                     }
                 }
@@ -167,34 +252,17 @@ pub fn gen_enum_selectors(
         let user_fields = &categorized.user_fields;
 
         // Generate selector struct
-        let (generic_params, _generic_args, where_clauses, struct_fields) =
-            if user_fields.is_empty() {
-                // Unit struct for source-only or no-field variants
-                (quote! {}, quote! {}, quote! {}, quote! {})
-            } else {
-                let mut params = Vec::new();
-                let mut args = Vec::new();
-                let mut bounds = Vec::new();
-                let mut fields = Vec::new();
-                for (i, uf) in user_fields.iter().enumerate() {
-                    let ty_param = format_ident!("__T{}", i);
-                    let field_ident = &uf.ident;
-                    let field_ty = &uf.ty;
-                    let field_doc = format!(
-                        "Value for the `{field_ident}` field of `{enum_ident}::{variant_ident}`."
-                    );
-                    params.push(quote! { #ty_param });
-                    args.push(quote! { #ty_param });
-                    bounds.push(quote! { #ty_param: ::core::convert::Into<#field_ty> });
-                    fields.push(quote! { #[doc = #field_doc] pub #field_ident: #ty_param });
-                }
-                (
-                    quote! { <#(#params),*> },
-                    quote! { <#(#args),*> },
-                    quote! { where #(#bounds),* },
-                    quote! { { #(#fields),* } },
-                )
-            };
+        let SelectorShape {
+            generic_params,
+            where_clauses,
+            struct_fields,
+            derives,
+        } = selector_shape(user_fields, &|uf| {
+            format!(
+                "Value for the `{}` field of `{enum_ident}::{variant_ident}`.",
+                uf.ident
+            )
+        });
 
         let selector_doc = format!("Context selector for `{enum_ident}::{variant_ident}`.");
         let selector_struct = if user_fields.is_empty() {
@@ -208,7 +276,7 @@ pub fn gen_enum_selectors(
             quote! {
                 #(#cfg_attrs)*
                 #[doc = #selector_doc]
-                #[derive(Debug, Copy, Clone)]
+                #derives
                 #selector_vis struct #selector_ident #generic_params #struct_fields
             }
         };
@@ -316,7 +384,7 @@ pub fn gen_struct_selector(
             }
         };
         let auto_inits = gen_auto_inits(&categorized, oopsie_path, true);
-        let auto_names = gen_auto_field_names(&categorized);
+        let auto_names = gen_auto_field_inits(&categorized);
         return Ok(quote! {
             impl ::core::convert::From<#param_ty> for #struct_ident {
                 #[track_caller]
@@ -325,7 +393,7 @@ pub fn gen_struct_selector(
                     // moves it into the renamed field.
                     #(#auto_inits)*
                     #body_assign
-                    Self { #source_ident, #(#auto_names,)* }
+                    Self { #source_ident, #(#auto_names)* }
                 }
             }
         });
@@ -335,30 +403,14 @@ pub fn gen_struct_selector(
     let has_source = categorized.source.is_some();
     let user_fields = &categorized.user_fields;
 
-    let (generic_params, _generic_args, where_clauses, struct_fields) = if user_fields.is_empty() {
-        (quote! {}, quote! {}, quote! {}, quote! {})
-    } else {
-        let mut params = Vec::new();
-        let mut args = Vec::new();
-        let mut bounds = Vec::new();
-        let mut fields = Vec::new();
-        for (i, uf) in user_fields.iter().enumerate() {
-            let ty_param = format_ident!("__T{}", i);
-            let field_ident = &uf.ident;
-            let field_ty = &uf.ty;
-            let field_doc = format!("Value for the `{field_ident}` field of `{struct_ident}`.");
-            params.push(quote! { #ty_param });
-            args.push(quote! { #ty_param });
-            bounds.push(quote! { #ty_param: ::core::convert::Into<#field_ty> });
-            fields.push(quote! { #[doc = #field_doc] pub #field_ident: #ty_param });
-        }
-        (
-            quote! { <#(#params),*> },
-            quote! { <#(#args),*> },
-            quote! { where #(#bounds),* },
-            quote! { { #(#fields),* } },
-        )
-    };
+    let SelectorShape {
+        generic_params,
+        where_clauses,
+        struct_fields,
+        derives,
+    } = selector_shape(user_fields, &|uf| {
+        format!("Value for the `{}` field of `{struct_ident}`.", uf.ident)
+    });
 
     let selector_doc = format!("Context selector for `{struct_ident}`.");
     let selector_struct = if user_fields.is_empty() {
@@ -370,7 +422,7 @@ pub fn gen_struct_selector(
     } else {
         quote! {
             #[doc = #selector_doc]
-            #[derive(Debug, Copy, Clone)]
+            #derives
             #vis struct #selector_ident #generic_params #struct_fields
         }
     };
@@ -447,22 +499,35 @@ fn gen_auto_inits(
         .map(|af| {
             let ident = &af.ident;
             let ty = &af.ty;
+            let cfg = &af.cfg_attrs;
             if has_source {
                 quote! {
+                    #(#cfg)*
                     let #ident = {
                         use #oopsie_path::__private::{CaptureFromExt as _, CaptureFromFallback as _};
                         (&#oopsie_path::__private::CaptureProbe(&source)).resolve::<#ty>()
                     };
                 }
             } else {
-                quote! { let #ident = <#ty as #oopsie_path::Capturable>::capture(); }
+                quote! { #(#cfg)* let #ident = <#ty as #oopsie_path::Capturable>::capture(); }
             }
         })
         .collect()
 }
 
-fn gen_auto_field_names(categorized: &CategorizedFields) -> Vec<&Ident> {
-    categorized.auto_fields.iter().map(|af| &af.ident).collect()
+/// Shorthand struct-expression initializers (`name,`) for auto-captured fields,
+/// each carrying its cfg attrs so a stripped field's binding and reference
+/// vanish together.
+fn gen_auto_field_inits(categorized: &CategorizedFields) -> Vec<TokenStream2> {
+    categorized
+        .auto_fields
+        .iter()
+        .map(|af| {
+            let ident = &af.ident;
+            let cfg = &af.cfg_attrs;
+            quote! { #(#cfg)* #ident, }
+        })
+        .collect()
 }
 
 /// Generate `Contextual` impl for an enum variant with a source field.
@@ -493,15 +558,8 @@ fn gen_build_error(
     };
 
     let auto_inits = gen_auto_inits(categorized, oopsie_path, true);
-    let auto_names = gen_auto_field_names(categorized);
-    let user_inits: Vec<_> = categorized
-        .user_fields
-        .iter()
-        .map(|uf| {
-            let ident = &uf.ident;
-            quote! { #ident: self.#ident.into() }
-        })
-        .collect();
+    let auto_names = gen_auto_field_inits(categorized);
+    let user_inits = user_init_exprs(&categorized.user_fields);
 
     let source_assign = if let Some(transform) = source_transform {
         quote! { let #source_ident = #transform(source); }
@@ -526,7 +584,7 @@ fn gen_build_error(
                 #enum_ident::#variant_ident {
                     #(#user_inits,)*
                     #source_ident,
-                    #(#auto_names,)*
+                    #(#auto_names)*
                 }
             }
         }
@@ -544,15 +602,8 @@ fn gen_build_fail(
     oopsie_path: &syn::Path,
 ) -> TokenStream2 {
     let auto_inits = gen_auto_inits(categorized, oopsie_path, false);
-    let auto_names = gen_auto_field_names(categorized);
-    let user_inits: Vec<_> = categorized
-        .user_fields
-        .iter()
-        .map(|uf| {
-            let ident = &uf.ident;
-            quote! { #ident: self.#ident.into() }
-        })
-        .collect();
+    let auto_names = gen_auto_field_inits(categorized);
+    let user_inits = user_init_exprs(&categorized.user_fields);
 
     // Also implement Contextual with NoSource for OptionExt support
     let none_error_impl = quote! {
@@ -581,7 +632,7 @@ fn gen_build_fail(
                 #(#auto_inits)*
                 #enum_ident::#variant_ident {
                     #(#user_inits,)*
-                    #(#auto_names,)*
+                    #(#auto_names)*
                 }
             }
 
@@ -623,15 +674,8 @@ fn gen_build_error_struct(
     };
 
     let auto_inits = gen_auto_inits(categorized, oopsie_path, true);
-    let auto_names = gen_auto_field_names(categorized);
-    let user_inits: Vec<_> = categorized
-        .user_fields
-        .iter()
-        .map(|uf| {
-            let ident = &uf.ident;
-            quote! { #ident: self.#ident.into() }
-        })
-        .collect();
+    let auto_names = gen_auto_field_inits(categorized);
+    let user_inits = user_init_exprs(&categorized.user_fields);
 
     let source_assign = if let Some(transform) = source_transform {
         quote! { let #source_ident = #transform(source); }
@@ -654,7 +698,7 @@ fn gen_build_error_struct(
                 #struct_ident {
                     #(#user_inits,)*
                     #source_ident,
-                    #(#auto_names,)*
+                    #(#auto_names)*
                 }
             }
         }
@@ -671,15 +715,8 @@ fn gen_build_fail_struct(
     oopsie_path: &syn::Path,
 ) -> TokenStream2 {
     let auto_inits = gen_auto_inits(categorized, oopsie_path, false);
-    let auto_names = gen_auto_field_names(categorized);
-    let user_inits: Vec<_> = categorized
-        .user_fields
-        .iter()
-        .map(|uf| {
-            let ident = &uf.ident;
-            quote! { #ident: self.#ident.into() }
-        })
-        .collect();
+    let auto_names = gen_auto_field_inits(categorized);
+    let user_inits = user_init_exprs(&categorized.user_fields);
 
     let none_error_impl = quote! {
         impl #generic_params #oopsie_path::Contextual<#oopsie_path::NoSource> for #selector_ident #generic_params
@@ -707,7 +744,7 @@ fn gen_build_fail_struct(
                 #(#auto_inits)*
                 #struct_ident {
                     #(#user_inits,)*
-                    #(#auto_names,)*
+                    #(#auto_names)*
                 }
             }
 

@@ -225,10 +225,10 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
         }
 
-        let field_names = collect_provide_field_names(&categorized);
+        let field_binds = collect_provide_field_binds(&categorized);
         provide_arms.push(quote! {
             #(#cfg_attrs)*
-            Self::#variant_ident { #(#field_names,)* .. } => {
+            Self::#variant_ident { #(#field_binds)* .. } => {
                 #(#provide_stmts)*
             }
         });
@@ -308,16 +308,11 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             } else {
                 let fmt = &code.format_str;
                 let args = code.args.iter();
-                let code_field_names: Vec<&syn::Ident> = match &variant.fields {
-                    syn::Fields::Named(f) => {
-                        f.named.iter().filter_map(|f| f.ident.as_ref()).collect()
-                    }
-                    syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
-                };
+                let code_field_binds = field_binding_pats(&variant.fields);
                 code_arms.push(quote! {
                     #(#cfg_attrs)*
                     #[allow(unused_variables)]
-                    Self::#variant_ident { #(#code_field_names,)* .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*))),
+                    Self::#variant_ident { #(#code_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*))),
                 });
             }
         } else if let Some(provide_attr) = variant_attrs
@@ -328,7 +323,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             let expr = &provide_attr.expr;
             // The provide expr may reference fields (it gets the same bindings
             // inside the generated `provide()`), so bind them here too.
-            let binds = collect_provide_field_names(&categorized);
+            let binds = collect_provide_field_binds(&categorized);
             // A ref-form provide evaluates to `&ErrorCode`; the accessor
             // returns it by value.
             let value = if provide_attr.is_ref() {
@@ -339,7 +334,7 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
             code_arms.push(quote! {
                 #(#cfg_attrs)*
                 #[allow(unused_variables)]
-                Self::#variant_ident { #(#binds,)* .. } => #value,
+                Self::#variant_ident { #(#binds)* .. } => #value,
             });
         } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
         {
@@ -354,8 +349,13 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
         // Help text: dynamic field, then static attribute, then (for
         // `transparent`) forwarded from the source.
         if let Some(help_field) = &categorized.help_field {
+            // The body interpolates the help field, so a cfg-stripped help field
+            // takes the whole arm with it; the trailing `_ => None` arm covers
+            // the variant then.
+            let field_cfg = field_cfg_for(&categorized, help_field);
             help_arms.push(quote! {
                 #(#cfg_attrs)*
+                #(#field_cfg)*
                 Self::#variant_ident { #help_field, .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(#help_field.to_string())),
             });
         } else if let Some(help) = &variant_attrs.help {
@@ -371,16 +371,11 @@ pub fn gen_enum_error(input: &DeriveInput, oopsie_path: &syn::Path) -> syn::Resu
                 // The format string may reference variant fields — positional
                 // args or inline `{field}` capture — so bind them in the
                 // pattern (mirroring the `display` arm).
-                let help_field_names: Vec<&syn::Ident> = match &variant.fields {
-                    syn::Fields::Named(f) => {
-                        f.named.iter().filter_map(|f| f.ident.as_ref()).collect()
-                    }
-                    syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
-                };
+                let help_field_binds = field_binding_pats(&variant.fields);
                 help_arms.push(quote! {
                     #(#cfg_attrs)*
                     #[allow(unused_variables)]
-                    Self::#variant_ident { #(#help_field_names,)* .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*))),
+                    Self::#variant_ident { #(#help_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*))),
                 });
             }
         } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
@@ -620,11 +615,11 @@ pub fn gen_struct_error(
     }
 
     // Destructure self to bring field names into scope (same pattern as enum match arms)
-    let provide_field_names = collect_provide_field_names(&categorized);
-    let destructure = if provide_stmts.is_empty() || provide_field_names.is_empty() {
+    let provide_field_binds = collect_provide_field_binds(&categorized);
+    let destructure = if provide_stmts.is_empty() || provide_field_binds.is_empty() {
         quote! {}
     } else {
-        quote! { let Self { #(#provide_field_names),*, .. } = self; }
+        quote! { let Self { #(#provide_field_binds)* .. } = self; }
     };
 
     let provide_method =
@@ -716,14 +711,11 @@ pub fn gen_struct_error(
         } else {
             let fmt = &code.format_str;
             let args = code.args.iter();
-            let field_names: Vec<&syn::Ident> = match &data.fields {
-                syn::Fields::Named(f) => f.named.iter().filter_map(|f| f.ident.as_ref()).collect(),
-                syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
-            };
-            let destructure = if field_names.is_empty() {
+            let field_binds = field_binding_pats(&data.fields);
+            let destructure = if field_binds.is_empty() {
                 quote! {}
             } else {
-                quote! { #[allow(unused_variables)] let Self { #(#field_names),*, .. } = self; }
+                quote! { #[allow(unused_variables)] let Self { #(#field_binds)* .. } = self; }
             };
             quote! {
                 fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
@@ -739,11 +731,11 @@ pub fn gen_struct_error(
             let expr = &provide_attr.expr;
             // The provide expr may reference fields (it gets the same bindings
             // inside the generated `provide()`), so destructure them here too.
-            let field_names = collect_provide_field_names(&categorized);
-            let code_destructure = if field_names.is_empty() {
+            let field_binds = collect_provide_field_binds(&categorized);
+            let code_destructure = if field_binds.is_empty() {
                 quote! {}
             } else {
-                quote! { #[allow(unused_variables)] let Self { #(#field_names),*, .. } = self; }
+                quote! { #[allow(unused_variables)] let Self { #(#field_binds)* .. } = self; }
             };
             // A ref-form provide evaluates to `&ErrorCode`; the accessor
             // returns it by value.
@@ -791,14 +783,11 @@ pub fn gen_struct_error(
             // The format string may reference fields via inline `{field}`
             // capture, so destructure them into locals (mirroring the `Display`
             // impl). `#[allow(unused_variables)]` covers fields no arg uses.
-            let field_names: Vec<&syn::Ident> = match &data.fields {
-                syn::Fields::Named(f) => f.named.iter().filter_map(|f| f.ident.as_ref()).collect(),
-                syn::Fields::Unnamed(_) | syn::Fields::Unit => Vec::new(),
-            };
-            let destructure = if field_names.is_empty() {
+            let field_binds = field_binding_pats(&data.fields);
+            let destructure = if field_binds.is_empty() {
                 quote! {}
             } else {
-                quote! { #[allow(unused_variables)] let Self { #(#field_names),*, .. } = self; }
+                quote! { #[allow(unused_variables)] let Self { #(#field_binds)* .. } = self; }
             };
             quote! {
                 fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
@@ -915,29 +904,87 @@ fn is_error_code_provide(attr: &ProvideAttr) -> bool {
     }
 }
 
-fn collect_provide_field_names(categorized: &CategorizedFields) -> Vec<&syn::Ident> {
-    let mut names = Vec::new();
+/// Field-binding patterns (`name,`) for the fields a `provide(...)` expr can
+/// reference (source, provide-attr fields, auto, then user fields). Each binding
+/// carries its `#[cfg(...)]` attrs, so a stripped field's binding is stripped
+/// with it (the destructure's trailing `..` absorbs the gap). The generated
+/// `provide` method carries `#[allow(unused_variables)]` for fields no expr uses.
+fn collect_provide_field_binds(categorized: &CategorizedFields) -> Vec<TokenStream2> {
+    let mut seen: Vec<&syn::Ident> = Vec::new();
+    let mut binds = Vec::new();
     if let Some(source) = &categorized.source {
-        names.push(&source.ident);
+        seen.push(&source.ident);
+        let cfg = &source.cfg_attrs;
+        let ident = &source.ident;
+        binds.push(quote! { #(#cfg)* #ident, });
     }
     for (ident, _) in &categorized.provides {
-        if !names.contains(&ident) {
-            names.push(ident);
+        if seen.contains(&ident) {
+            continue;
         }
+        seen.push(ident);
+        let cfg = field_cfg_for(categorized, ident);
+        binds.push(quote! { #(#cfg)* #ident, });
     }
-    // Also include auto fields that may be referenced in provide exprs
     for af in &categorized.auto_fields {
-        if !names.contains(&&af.ident) {
-            names.push(&af.ident);
+        if seen.contains(&&af.ident) {
+            continue;
         }
+        seen.push(&af.ident);
+        let cfg = &af.cfg_attrs;
+        let ident = &af.ident;
+        binds.push(quote! { #(#cfg)* #ident, });
     }
-    // User fields may be referenced by a variant/struct-level `provide(...)`
-    // expr; bind them so those exprs resolve. The generated `provide` method
-    // carries `#[allow(unused_variables)]` for fields no expr references.
     for uf in &categorized.user_fields {
-        if !names.contains(&&uf.ident) {
-            names.push(&uf.ident);
+        if seen.contains(&&uf.ident) {
+            continue;
         }
+        seen.push(&uf.ident);
+        let cfg = &uf.cfg_attrs;
+        let ident = &uf.ident;
+        binds.push(quote! { #(#cfg)* #ident, });
     }
-    names
+    binds
+}
+
+/// Field-binding patterns (`name,`) for every named field, each carrying its
+/// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs so a stripped field's binding goes with
+/// it. The destructure's trailing `..` absorbs the gap. Used by the
+/// format-string arms (`code`/`help`), which may interpolate any field.
+fn field_binding_pats(fields: &syn::Fields) -> Vec<TokenStream2> {
+    let syn::Fields::Named(named) = fields else {
+        return Vec::new();
+    };
+    named
+        .named
+        .iter()
+        .filter_map(|f| {
+            let ident = f.ident.as_ref()?;
+            let cfg = f
+                .attrs
+                .iter()
+                .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"));
+            Some(quote! { #(#cfg)* #ident, })
+        })
+        .collect()
+}
+
+/// The cfg attrs of the categorized field named `ident`, or `&[]` if it is not a
+/// user/auto/source field (e.g. a provide attr referencing a synthetic name).
+fn field_cfg_for<'a>(
+    categorized: &'a CategorizedFields,
+    ident: &syn::Ident,
+) -> &'a [syn::Attribute] {
+    if let Some(source) = &categorized.source
+        && &source.ident == ident
+    {
+        return &source.cfg_attrs;
+    }
+    if let Some(af) = categorized.auto_fields.iter().find(|f| &f.ident == ident) {
+        return &af.cfg_attrs;
+    }
+    if let Some(uf) = categorized.user_fields.iter().find(|f| &f.ident == ident) {
+        return &uf.cfg_attrs;
+    }
+    &[]
 }

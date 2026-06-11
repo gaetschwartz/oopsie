@@ -1,0 +1,5 @@
+error: `#[cfg(...)]` is not supported on a source field; gating the source would strip the `From`/`Contextual` impls that depend on it
+  --> tests/compile-fail/cfg_on_source_field.rs:13:9
+   |
+13 |         #[cfg(all())]
+   |         ^^^^^^^^^^^^^

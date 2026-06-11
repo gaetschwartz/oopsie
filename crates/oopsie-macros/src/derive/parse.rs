@@ -1181,18 +1181,38 @@ pub struct SourceField {
     pub ident: Ident,
     pub ty: Type,
     pub kind: SourceKind,
+    /// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs on the field, forwarded onto every
+    /// generated mention so stripped fields take their references with them.
+    pub cfg_attrs: Vec<syn::Attribute>,
 }
 
 #[derive(Debug)]
 pub struct AutoField {
     pub ident: Ident,
     pub ty: Type,
+    /// See [`SourceField::cfg_attrs`].
+    pub cfg_attrs: Vec<syn::Attribute>,
 }
 
 #[derive(Debug)]
 pub struct UserField {
     pub ident: Ident,
     pub ty: Type,
+    /// See [`SourceField::cfg_attrs`].
+    pub cfg_attrs: Vec<syn::Attribute>,
+}
+
+/// Field attributes a stripped field would take with it: `#[cfg(...)]` gates and
+/// `#[cfg_attr(...)]` conditionals. Forwarded verbatim onto every generated
+/// reference (selector field, struct-expression field, match-arm binding) so
+/// the reference vanishes together with the field rustc strips.
+fn field_cfg_attrs(field: &syn::Field) -> Vec<syn::Attribute> {
+    field
+        .attrs
+        .iter()
+        .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"))
+        .cloned()
+        .collect()
 }
 
 impl CategorizedFields {
@@ -1236,6 +1256,7 @@ impl CategorizedFields {
                 continue;
             };
             let attrs = FieldAttrs::from_field(field)?;
+            let cfg_attrs = field_cfg_attrs(field);
 
             // Collect provides
             for p in &attrs.provide {
@@ -1296,16 +1317,19 @@ impl CategorizedFields {
                     ident: ident.clone(),
                     ty: field.ty.clone(),
                     kind: attrs.from,
+                    cfg_attrs,
                 });
             } else if attrs.capture.is_enabled() {
                 auto_fields.push(AutoField {
                     ident,
                     ty: field.ty.clone(),
+                    cfg_attrs,
                 });
             } else {
                 user_fields.push(UserField {
                     ident,
                     ty: field.ty.clone(),
+                    cfg_attrs,
                 });
             }
         }

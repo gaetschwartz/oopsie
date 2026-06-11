@@ -111,3 +111,58 @@ fn cfg_gated_variants_may_share_selector_name() {
     let err = Read.build();
     assert_eq!(err.to_string(), "read");
 }
+
+// ---- field-level cfg under the `#[oopsie(...)]` attribute-macro form ----
+//
+// Attribute macros run before rustc strips `#[cfg]`, so a field gated out by an
+// inactive cfg is still visible to the macro. Its cfg attrs must ride onto every
+// generated mention (selector struct field, `build()` initializer, Display
+// destructure binding); if they don't, the generated code references a field
+// rustc removed and fails with E0559/E0026/E0063.
+
+#[cfg(any())]
+pub struct FieldGhost;
+
+#[oopsie]
+#[oopsie(module(false), suffix)]
+pub enum FieldCfgError {
+    #[oopsie("v: {keep}")]
+    V {
+        #[cfg(any())]
+        extra: FieldGhost,
+        keep: u32,
+    },
+}
+
+#[test]
+fn field_cfg_stripped_field_drops_its_generated_mentions() {
+    // The selector has only the kept field; the stripped field left no dangling
+    // references behind in the selector struct, `build()`, or Display.
+    let err = VOopsie { keep: 9u32 }.build();
+    assert!(matches!(err, FieldCfgError::V { keep: 9 }));
+    assert_eq!(err.to_string(), "v: 9");
+}
+
+// Enabled-cfg twin: the field is present and usable. A cfg-gated field takes its
+// concrete type (not the `Into` selector param), so `keep` is passed concretely.
+#[oopsie]
+#[oopsie(module(false), suffix = "Ctx")]
+pub enum FieldCfgPresentError {
+    #[oopsie("v: {keep}")]
+    V {
+        #[cfg(all())]
+        extra: String,
+        keep: u32,
+    },
+}
+
+#[test]
+fn field_cfg_active_field_is_present_and_usable() {
+    let err = VCtx {
+        extra: "details".to_owned(),
+        keep: 4u32,
+    }
+    .build();
+    assert!(matches!(err, FieldCfgPresentError::V { keep: 4, .. }));
+    assert_eq!(err.to_string(), "v: 4");
+}
