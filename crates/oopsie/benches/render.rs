@@ -26,7 +26,7 @@ fn bench_render(c: &mut Criterion) {
     group.bench_function("display_no_colors", |b| {
         b.iter_batched(
             make,
-            |e| black_box(Report::from_std(e).no_colors().to_string()),
+            |e| black_box(Report::new(e).no_colors().to_string()),
             BatchSize::SmallInput,
         );
     });
@@ -34,7 +34,7 @@ fn bench_render(c: &mut Criterion) {
     group.bench_function("display_colored", |b| {
         b.iter_batched(
             make,
-            |e| black_box(Report::from_std(e).force_colors().to_string()),
+            |e| black_box(Report::new(e).force_colors().to_string()),
             BatchSize::SmallInput,
         );
     });
@@ -42,7 +42,7 @@ fn bench_render(c: &mut Criterion) {
     group.bench_function("debug", |b| {
         b.iter_batched(
             make,
-            |e| black_box(format!("{:?}", Report::from_std(e))),
+            |e| black_box(format!("{:?}", Report::new(e))),
             BatchSize::SmallInput,
         );
     });

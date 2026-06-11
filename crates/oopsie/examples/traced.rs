@@ -37,5 +37,5 @@ fn main() {
     }
 
     let err = deep_call(3).unwrap_err();
-    print!("{}", Report::from_std(err));
+    print!("{}", Report::new(err));
 }

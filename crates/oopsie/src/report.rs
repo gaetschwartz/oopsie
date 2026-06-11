@@ -6,7 +6,7 @@
 use std::fmt;
 use std::process::{ExitCode, Termination};
 
-use crate::ColorConfig;
+use crate::ColorMode;
 
 use crate::Diagnostic;
 
@@ -27,7 +27,7 @@ use crate::trace_printer::{TracePrinter, error_backtrace_frame_filter, marker_st
 /// source deeper in its chain carries one.
 pub struct Report<E> {
     res: Result<(), E>,
-    color_config: ColorConfig,
+    color_config: ColorMode,
     /// Per-report theme; `None` falls back to the process-global [`get_theme`]
     /// at render time.
     theme_override: Option<Theme>,
@@ -52,12 +52,12 @@ impl<E: Diagnostic> Report<E> {
     /// terminal detection.
     #[must_use]
     #[inline]
-    pub fn from_std(error: E) -> Self {
+    pub fn new(error: E) -> Self {
         let res = Err(error);
         Self {
             backtrace: Self::resolve_backtrace(&res),
             res,
-            color_config: ColorConfig::Auto,
+            color_config: ColorMode::Auto,
             theme_override: None,
         }
     }
@@ -68,7 +68,7 @@ impl<E: Diagnostic> Report<E> {
     pub const fn ok() -> Self {
         Self {
             res: Ok(()),
-            color_config: ColorConfig::Auto,
+            color_config: ColorMode::Auto,
             theme_override: None,
             backtrace: None,
         }
@@ -115,20 +115,7 @@ impl<E: Diagnostic> Report<E> {
         Self {
             backtrace: Self::resolve_backtrace(&result),
             res: result,
-            color_config: ColorConfig::Auto,
-            theme_override: None,
-        }
-    }
-
-    /// Create with explicit color configuration.
-    #[must_use]
-    #[inline]
-    pub fn with_colors(error: E, color_config: ColorConfig) -> Self {
-        let res = Err(error);
-        Self {
-            backtrace: Self::resolve_backtrace(&res),
-            res,
-            color_config,
+            color_config: ColorMode::Auto,
             theme_override: None,
         }
     }
@@ -137,7 +124,7 @@ impl<E: Diagnostic> Report<E> {
     #[must_use]
     #[inline]
     pub const fn no_colors(mut self) -> Self {
-        self.color_config = ColorConfig::Never;
+        self.color_config = ColorMode::Never;
         self
     }
 
@@ -145,7 +132,7 @@ impl<E: Diagnostic> Report<E> {
     #[must_use]
     #[inline]
     pub const fn force_colors(mut self) -> Self {
-        self.color_config = ColorConfig::Always;
+        self.color_config = ColorMode::Always;
         self
     }
 
@@ -333,7 +320,7 @@ impl<T, E: Diagnostic> core::ops::FromResidual<Result<T, E>> for Report<E> {
         Self {
             backtrace: Self::resolve_backtrace(&res),
             res,
-            color_config: ColorConfig::default(),
+            color_config: ColorMode::default(),
             theme_override: None,
         }
     }
@@ -358,6 +345,6 @@ impl<E: Diagnostic> fmt::Debug for Report<E> {
 impl<E: Diagnostic> From<E> for Report<E> {
     #[inline]
     fn from(error: E) -> Self {
-        Self::from_std(error)
+        Self::new(error)
     }
 }

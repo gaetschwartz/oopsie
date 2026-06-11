@@ -137,7 +137,7 @@ fn bench_render(c: &mut Criterion) {
     set_rust_backtrace_override(RustBacktrace::Disabled);
     let mut group = c.benchmark_group("render_error");
 
-    let oopsie_report = Report::from_std(
+    let oopsie_report = Report::new(
         oopsie::ResultExt::context(io_err(), OopsieErrOopsie { ctx: "render" }).unwrap_err(),
     )
     .no_colors();
@@ -192,7 +192,7 @@ fn bench_colored(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("render_colored");
 
-    let oopsie_report = Report::from_std(
+    let oopsie_report = Report::new(
         oopsie::ResultExt::context(io_err(), OopsieErrOopsie { ctx: "render" }).unwrap_err(),
     )
     .force_colors();
@@ -230,7 +230,7 @@ fn bench_traced(c: &mut Criterion) {
     set_rust_backtrace_override(RustBacktrace::Enabled);
     let mut group = c.benchmark_group("render_traced");
 
-    let oopsie_report = Report::from_std(
+    let oopsie_report = Report::new(
         oopsie::ResultExt::context(io_err(), TracedOopsie { ctx: "render" }).unwrap_err(),
     )
     .no_colors();
@@ -268,7 +268,7 @@ fn bench_traced_colored(c: &mut Criterion) {
     let _ = color_eyre::install();
     let mut group = c.benchmark_group("render_traced_colored");
 
-    let oopsie_report = Report::from_std(
+    let oopsie_report = Report::new(
         oopsie::ResultExt::context(io_err(), TracedOopsie { ctx: "render" }).unwrap_err(),
     )
     .force_colors();

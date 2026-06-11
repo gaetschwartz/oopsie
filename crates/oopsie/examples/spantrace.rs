@@ -41,5 +41,5 @@ fn main() {
     set_rust_backtrace_override(RustBacktrace::Disabled);
 
     let err = handle_request("alice").unwrap_err();
-    print!("{}", Report::from_std(err));
+    print!("{}", Report::new(err));
 }

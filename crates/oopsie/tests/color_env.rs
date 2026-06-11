@@ -6,7 +6,7 @@
 //! 2024 — so it can't be exercised from an in-process unit test. We re-exec
 //! this test binary as a child (the same pattern as `panic_hook.rs`): with
 //! `OOPSIE_COLOR_ENV_TEST_TRIGGER` set, the `color_probe_child` test prints
-//! `has_color={}` for `ColorConfig::Auto.should_colorize()`; the parent spawns
+//! `has_color={}` for `ColorMode::Auto.should_colorize()`; the parent spawns
 //! it under a controlled env matrix and asserts on the result.
 
 use std::process::Command;
@@ -24,7 +24,7 @@ fn color_probe_child() {
     if std::env::var_os(TRIGGER_ENV).is_none() {
         return;
     }
-    println!("has_color={}", oopsie::ColorConfig::Auto.should_colorize());
+    println!("has_color={}", oopsie::ColorMode::Auto.should_colorize());
 }
 
 /// Re-exec this test binary, running only `color_probe_child` with the trigger

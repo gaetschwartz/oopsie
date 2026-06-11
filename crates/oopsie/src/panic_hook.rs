@@ -13,7 +13,7 @@ use oopsie_core::Capturable as _;
 #[cfg(feature = "tracing")]
 use oopsie_core::SpanTrace;
 
-use crate::ColorConfig;
+use crate::ColorMode;
 use crate::color::style;
 use crate::theme::get_theme;
 use crate::trace_printer::{TracePrinter, marker_strip_filter, panic_frame_filter};
@@ -86,7 +86,7 @@ struct PanicReport<'a> {
     backtrace_setting: oopsie_core::RustBacktrace,
     #[cfg(feature = "tracing")]
     span_trace: Option<SpanTrace>,
-    color_config: ColorConfig,
+    color_config: ColorMode,
 }
 
 impl<'a> PanicReport<'a> {
@@ -105,7 +105,7 @@ impl<'a> PanicReport<'a> {
             backtrace_setting,
             #[cfg(feature = "tracing")]
             span_trace,
-            color_config: ColorConfig::Auto,
+            color_config: ColorMode::Auto,
         }
     }
 

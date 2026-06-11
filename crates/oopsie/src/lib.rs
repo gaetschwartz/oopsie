@@ -364,7 +364,7 @@ pub mod prelude {
 #[cfg(feature = "fancy")]
 mod color;
 #[cfg(feature = "fancy")]
-pub use color::{ColorConfig, get_color_mode, set_color_mode};
+pub use color::{ColorMode, get_color_mode, set_color_mode};
 
 #[cfg(feature = "fancy")]
 mod report;

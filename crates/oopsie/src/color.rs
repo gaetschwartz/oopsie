@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU8, Ordering::SeqCst};
 use std::{env, io};
 
 /// Global color mode setting.
-static COLOR_MODE: AtomicU8 = AtomicU8::new(ColorConfig::Auto as u8);
+static COLOR_MODE: AtomicU8 = AtomicU8::new(ColorMode::Auto as u8);
 
 /// Detect if colors should be used based on environment variables.
 fn detect_env_color_support() -> bool {
@@ -49,7 +49,7 @@ fn cached_env_supports_color() -> bool {
 /// Color output configuration.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
-pub enum ColorConfig {
+pub enum ColorMode {
     /// Automatically detect based on environment and terminal.
     #[default]
     Auto = 0,
@@ -59,10 +59,10 @@ pub enum ColorConfig {
     Never = 2,
 }
 
-impl ColorConfig {
+impl ColorMode {
     #[inline]
     const fn from_u8(value: u8) -> Option<Self> {
-        const fn is(value: u8, variant: ColorConfig) -> bool {
+        const fn is(value: u8, variant: ColorMode) -> bool {
             value == variant as u8
         }
         match value {
@@ -93,12 +93,12 @@ impl ColorConfig {
 }
 
 const _: () = {
-    const fn assert_roundtrip(value: ColorConfig) {
-        assert!(ColorConfig::from_u8(value as u8).unwrap() as u8 == value as u8);
+    const fn assert_roundtrip(value: ColorMode) {
+        assert!(ColorMode::from_u8(value as u8).unwrap() as u8 == value as u8);
     }
-    assert_roundtrip(ColorConfig::Auto);
-    assert_roundtrip(ColorConfig::Always);
-    assert_roundtrip(ColorConfig::Never);
+    assert_roundtrip(ColorMode::Auto);
+    assert_roundtrip(ColorMode::Always);
+    assert_roundtrip(ColorMode::Never);
 };
 
 /// Set the global color mode for all `Report` instances using `Auto`.
@@ -106,17 +106,17 @@ const _: () = {
 /// This affects the default behavior when no explicit color configuration is
 /// provided to `Report`.
 #[inline]
-pub fn set_color_mode(mode: ColorConfig) {
+pub fn set_color_mode(mode: ColorMode) {
     COLOR_MODE.store(mode as u8, SeqCst);
 }
 
 /// Get the current global color mode.
 #[must_use]
 #[inline]
-pub fn get_color_mode() -> ColorConfig {
-    match ColorConfig::from_u8(COLOR_MODE.load(SeqCst)) {
+pub fn get_color_mode() -> ColorMode {
+    match ColorMode::from_u8(COLOR_MODE.load(SeqCst)) {
         Some(mode) => mode,
-        None => ColorConfig::Auto,
+        None => ColorMode::Auto,
     }
 }
 
@@ -142,11 +142,11 @@ mod tests {
         // Save original
         let original = get_color_mode();
 
-        set_color_mode(ColorConfig::Never);
-        assert_eq!(get_color_mode(), ColorConfig::Never);
+        set_color_mode(ColorMode::Never);
+        assert_eq!(get_color_mode(), ColorMode::Never);
 
-        set_color_mode(ColorConfig::Always);
-        assert_eq!(get_color_mode(), ColorConfig::Always);
+        set_color_mode(ColorMode::Always);
+        assert_eq!(get_color_mode(), ColorMode::Always);
 
         // Restore
         set_color_mode(original);
@@ -154,20 +154,20 @@ mod tests {
 
     #[test]
     fn test_always_should_colorize() {
-        assert!(ColorConfig::Always.should_colorize());
+        assert!(ColorMode::Always.should_colorize());
     }
 
     #[test]
     fn test_never_should_not_colorize() {
-        assert!(!ColorConfig::Never.should_colorize());
+        assert!(!ColorMode::Never.should_colorize());
     }
 
     #[test]
     fn test_auto_roundtrip_through_global() {
         let original = get_color_mode();
 
-        set_color_mode(ColorConfig::Auto);
-        assert_eq!(get_color_mode(), ColorConfig::Auto);
+        set_color_mode(ColorMode::Auto);
+        assert_eq!(get_color_mode(), ColorMode::Auto);
 
         set_color_mode(original);
     }
@@ -175,10 +175,10 @@ mod tests {
     #[test]
     fn global_never_disables_auto_colorize() {
         let original = get_color_mode();
-        set_color_mode(ColorConfig::Never);
-        assert!(!ColorConfig::Auto.should_colorize());
-        set_color_mode(ColorConfig::Always);
-        assert!(ColorConfig::Auto.should_colorize());
+        set_color_mode(ColorMode::Never);
+        assert!(!ColorMode::Auto.should_colorize());
+        set_color_mode(ColorMode::Always);
+        assert!(ColorMode::Auto.should_colorize());
         set_color_mode(original);
     }
 }

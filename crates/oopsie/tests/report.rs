@@ -49,7 +49,7 @@ fn test_report_basic() {
         message: "something failed",
     }
     .build();
-    let report = Report::from_std(error).no_colors();
+    let report = Report::new(error).no_colors();
 
     redact!(backtrace, {
         insta::assert_snapshot!(snap_name!("report_basic"), report);
@@ -65,7 +65,7 @@ fn test_report_chain() {
     }
     .build();
     let outer: OuterError = OuterOopsie.build_error(inner);
-    let report = Report::from_std(outer).no_colors();
+    let report = Report::new(outer).no_colors();
 
     redact!(backtrace, {
         insta::assert_snapshot!(snap_name!("report_chain"), report);
@@ -80,7 +80,7 @@ fn test_report_colored() {
         message: "colored test",
     }
     .build();
-    let report = Report::from_std(error).force_colors();
+    let report = Report::new(error).force_colors();
 
     redact!(backtrace, {
         insta::assert_snapshot!(snap_name!("report_colored_stripped"), report);
@@ -90,7 +90,7 @@ fn test_report_colored() {
 /// The colored render path must actually emit ANSI escapes. `test_report_colored`
 /// strips ANSI *before* snapshotting, so its snapshot is byte-identical to the
 /// plain one — a regression that silently dropped all styling would still pass.
-/// This is the positive counterpart to `test_with_colors_never_no_ansi`: it pins
+/// This is the positive counterpart to `test_no_colors_never_no_ansi`: it pins
 /// that `force_colors()` both colorizes (escapes present, incl. the specific red
 /// header SGR) and leaves the rendered text intact when the escapes are stripped.
 #[test]
@@ -100,7 +100,7 @@ fn test_report_colored_emits_ansi() {
         message: "colored test",
     }
     .build();
-    let output = Report::from_std(error).force_colors().to_string();
+    let output = Report::new(error).force_colors().to_string();
 
     assert!(
         output.contains('\u{1b}'),
@@ -174,7 +174,7 @@ fn test_report_with_help() {
         message: "connection refused",
     }
     .build();
-    let report = Report::from_std(error).no_colors();
+    let report = Report::new(error).no_colors();
 
     redact!(backtrace, {
         insta::assert_snapshot!(snap_name!("report_with_help"), report.to_string());
@@ -186,7 +186,7 @@ fn test_report_with_help() {
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_spantrace() {
     let error = common::make_error();
-    let report = Report::from_std(error).no_colors();
+    let report = Report::new(error).no_colors();
 
     redact!(backtrace, {
         insta::assert_snapshot!(snap_name!("report_with_spantrace"), report);
@@ -211,7 +211,7 @@ fn test_report_with_spantrace_debug() {
 #[test]
 fn test_report_colored_spantrace_renders_frames() {
     let error = common::make_error();
-    let raw = Report::from_std(error).force_colors().to_string();
+    let raw = Report::new(error).force_colors().to_string();
     let stripped = strip_ansi(&raw);
 
     assert!(
@@ -246,7 +246,7 @@ fn test_error_returns_some_when_err() {
         message: "accessor test",
     }
     .build();
-    let report = Report::from_std(error);
+    let report = Report::new(error);
     assert!(report.error().is_some());
 }
 
@@ -262,7 +262,7 @@ fn test_into_error_returns_some_when_err() {
         message: "into_error test",
     }
     .build();
-    let report = Report::from_std(error);
+    let report = Report::new(error);
     let err = report.into_error();
     assert!(err.is_some());
     assert!(err.unwrap().to_string().contains("into_error test"));
@@ -282,7 +282,7 @@ fn test_debug_fmt_non_empty() {
         message: "debug test",
     }
     .build();
-    let report = Report::from_std(error).no_colors();
+    let report = Report::new(error).no_colors();
     let debug_output = format!("{report:?}");
     assert!(!debug_output.is_empty());
     assert!(debug_output.contains("debug test"));
@@ -308,7 +308,7 @@ fn test_termination_report_error() {
         message: "termination test",
     }
     .build();
-    let _code = Report::from_std(error).no_colors().report();
+    let _code = Report::new(error).no_colors().report();
 }
 
 // --- Report::run() tests ---
@@ -407,17 +407,17 @@ fn run_nested_restores_prior_hook() {
     assert!(PRIOR_HOOK_FIRED.load(Ordering::SeqCst));
 }
 
-// --- Report::with_colors() test ---
+// --- Report::no_colors() test ---
 
 #[test]
-fn test_with_colors_never_no_ansi() {
+fn test_no_colors_never_no_ansi() {
     let error = TestOopsie {
-        message: "with_colors test",
+        message: "no_colors test",
     }
     .build();
-    let report = Report::with_colors(error, oopsie::ColorConfig::Never);
+    let report = Report::new(error).no_colors();
     let output = report.to_string();
-    assert!(output.contains("with_colors test"));
+    assert!(output.contains("no_colors test"));
     // No ANSI escape codes when color is disabled
     assert!(!output.contains("\x1b["));
 }
@@ -741,7 +741,7 @@ fn test_report_backtrace_full_renders_without_hidden_notice() {
         message: "full backtrace",
     }
     .build();
-    let output = Report::from_std(error).no_colors().to_string();
+    let output = Report::new(error).no_colors().to_string();
     oopsie::set_rust_backtrace_override(RustBacktrace::Enabled);
 
     assert!(
@@ -836,7 +836,7 @@ fn test_report_transparent_forwards_code_and_help() {
     // first `╰─▶` chain entry.
     let leaf = LeafOopsie { what: "disk" }.build();
     let root: TransparentRootError = TransparentRootError::from(leaf);
-    let report = Report::from_std(root).no_colors();
+    let report = Report::new(root).no_colors();
     let rendered = strip_ansi(&report.to_string());
 
     assert_eq!(
@@ -873,7 +873,7 @@ impl oopsie::Diagnostic for Cyclic {}
 
 #[test]
 fn cyclic_source_chain_terminates_with_truncation_note() {
-    let rendered = oopsie::Report::from_std(Cyclic).no_colors().to_string();
+    let rendered = oopsie::Report::new(Cyclic).no_colors().to_string();
     assert!(rendered.contains("source chain truncated"), "{rendered}");
 }
 
@@ -902,9 +902,7 @@ fn report_does_not_search_chain_for_traces() {
     common::force_backtrace();
 
     let traced = TestOopsie { message: "root" }.build();
-    let rendered = Report::from_std(PlainWrapper(traced))
-        .no_colors()
-        .to_string();
+    let rendered = Report::new(PlainWrapper(traced)).no_colors().to_string();
 
     assert!(rendered.contains("╰─▶"), "chain messages still render");
     assert!(

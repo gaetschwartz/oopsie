@@ -385,7 +385,7 @@ fn test_round_trip_through_json_renders_in_report() {
     let json = serde_json::to_string(&erased).expect("ErasedError serializes");
     let roundtripped: ErasedError = serde_json::from_str(&json).expect("ErasedError deserializes");
 
-    let report = oopsie::Report::from_std(roundtripped);
+    let report = oopsie::Report::new(roundtripped);
     let rendered = report.to_string();
 
     assert!(
@@ -430,7 +430,7 @@ fn test_round_trip_source_chain_survives_report_and_reerasure() {
     // Report's source walk renders the cause line.
     #[cfg(feature = "fancy")]
     {
-        let rendered = oopsie::Report::from_std(roundtripped).to_string();
+        let rendered = oopsie::Report::new(roundtripped).to_string();
         assert!(
             rendered.contains(&format!("╰─▶ {}", erased.source_chain[0])),
             "Report must render the transported cause, got:\n{rendered}"
