@@ -169,7 +169,6 @@ pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
         frames.truncate(keep);
     }
 
-    // Find the index of the last backtrace capture frame
     let top_cutoff_idx = frames
         .iter()
         .rposition(|frame| {

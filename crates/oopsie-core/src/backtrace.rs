@@ -343,8 +343,8 @@ pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool 
         && let Some((_, mut name)) = name.split_once("]::")
     {
         name = name.strip_prefix("sys::backtrace::").unwrap_or(name);
-        // The peeled tail lost its `std::` segment; match list entries both
-        // bare and with their own `std::` prefix stripped.
+        // The list entries carry a `std::` module prefix the peeled tail lacks;
+        // strip it from each entry before comparing.
         return RUNTIME_INIT_PREFIXES.iter().any(|prefix| {
             name.starts_with(prefix)
                 || prefix
