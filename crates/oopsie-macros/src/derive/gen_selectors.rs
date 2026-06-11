@@ -141,7 +141,7 @@ pub fn gen_enum_selectors(
     oopsie_path: &syn::Path,
 ) -> syn::Result<Vec<TokenStream2>> {
     let enum_ident = &input.ident;
-    let (_, ty_generics, _) = input.generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let wrapped_in_module = matches!(container.effective_module(true), ModuleSetting::On(_));
     let vis = resolve_selector_vis(container.visibility(), &input.vis, wrapped_in_module);
 
@@ -205,7 +205,7 @@ pub fn gen_enum_selectors(
             let auto_names = gen_auto_field_inits(&categorized);
             selectors.push(quote! {
                 #(#cfg_attrs)*
-                impl #ty_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics {
+                impl #impl_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics #where_clause {
                     #[track_caller]
                     fn from(source: #param_ty) -> Self {
                         // Capture probes borrow `&source` before
