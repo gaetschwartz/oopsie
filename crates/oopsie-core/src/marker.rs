@@ -161,7 +161,6 @@ mod tests {
             frames: vec![(900, 90), (10, 1), (20, 2), (30, 3)],
             boundary: MarkerBoundary::Exclusive,
         };
-        // Shares the (20,2),(30,3) suffix; diverges at ip 11 vs 10.
         let trace = [(800, 80), (11, 1), (20, 2), (30, 3)];
         assert_eq!(marker.cut_len(&trace), 2);
     }
@@ -172,7 +171,6 @@ mod tests {
             frames: vec![(900, 90), (10, 1), (20, 2), (30, 3)],
             boundary: MarkerBoundary::Inclusive,
         };
-        // Divergent frames (11,1) vs (10,1) share symbol_address 1 → +1.
         let trace = [(800, 80), (11, 1), (20, 2), (30, 3)];
         assert_eq!(marker.cut_len(&trace), 3);
     }
@@ -183,7 +181,6 @@ mod tests {
             frames: vec![(10, 1), (20, 2)],
             boundary: MarkerBoundary::Inclusive,
         };
-        // Divergent symbol addresses differ (7 vs 1) → no extension.
         let trace = [(11, 7), (20, 2)];
         assert_eq!(marker.cut_len(&trace), 1);
     }
@@ -221,7 +218,6 @@ mod tests {
             frames: vec![(10, 1), (20, 2), (30, 3)],
             boundary: MarkerBoundary::Exclusive,
         };
-        // Trace is a strict suffix of the marker: every frame common.
         let trace = [(20, 2), (30, 3)];
         assert_eq!(marker.cut_len(&trace), 2);
     }

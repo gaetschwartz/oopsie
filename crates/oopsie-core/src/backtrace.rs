@@ -454,7 +454,8 @@ impl Backtrace {
     /// markers. `None` when no marker was set on the capturing thread, the
     /// stacks share nothing (cross-thread), or the cut would hide every frame.
     ///
-    /// Forces symbol resolution, like [`frames`](Self::frames).
+    /// Forces symbol resolution, like [`frames`](Self::frames); deciding the
+    /// boundary frame of an inclusive marker may resolve one further address.
     #[must_use]
     pub fn marker_hidden_ips(&self) -> Option<Vec<usize>> {
         let marker = self.marker.as_deref()?;
