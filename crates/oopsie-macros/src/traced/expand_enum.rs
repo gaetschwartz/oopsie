@@ -1,7 +1,6 @@
 //! Enum trace-field injection for `#[oopsie(traced)]`.
 
-use proc_macro2::{Span, TokenStream as TokenStream2};
-use quote::quote;
+use proc_macro2::Span;
 use syn::ext::IdentExt as _;
 
 use super::args::{CodeSettings, TracedArgs};
@@ -15,8 +14,8 @@ pub fn expand_enum(
     code: &FieldSetting<true, CodeSettings>,
     oopsie_path: &syn::Path,
     args_span: Span,
-    mut input: syn::ItemEnum,
-) -> syn::Result<TokenStream2> {
+    input: &mut syn::ItemEnum,
+) -> syn::Result<()> {
     let enum_name = input.ident.unraw().to_string();
 
     let resolved = args.resolve();
@@ -79,5 +78,5 @@ pub fn expand_enum(
         );
     }
 
-    Ok(quote! { #input })
+    Ok(())
 }

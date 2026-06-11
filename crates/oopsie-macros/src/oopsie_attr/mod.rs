@@ -138,7 +138,7 @@ fn expand_enum(
     args: &OopsieAttrArgs,
     needs_tracing: bool,
     keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
-    item: syn::ItemEnum,
+    mut item: syn::ItemEnum,
 ) -> syn::Result<TokenStream2> {
     let span = item.span();
     let oopsie_path: syn::Path = args
@@ -146,20 +146,26 @@ fn expand_enum(
         .clone()
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
-    // Step 1: inject diagnostic fields if requested.
-    let injected_ts = if needs_tracing {
+    // Step 1: inject diagnostic fields in place if requested.
+    if needs_tracing {
         let traced = args
             .traced
             .as_ref()
             .expect("needs_tracing implies traced is present")
             .settings();
-        crate::traced::expand_enum::expand_enum(&traced, &traced.code, &oopsie_path, span, item)?
-    } else {
-        quote! { #item }
-    };
+        crate::traced::expand_enum::expand_enum(
+            &traced,
+            &traced.code,
+            &oopsie_path,
+            span,
+            &mut item,
+        )?;
+    }
 
-    // Step 2: generate Oopsie impls from the (possibly modified) item.
-    let derive_input: syn::DeriveInput = syn::parse2(injected_ts.clone())?;
+    // Step 2: generate Oopsie impls from the injected item. The derive layer
+    // needs the helper attrs still present, so it reads a copy taken before the
+    // strip below.
+    let derive_input = syn::DeriveInput::from(item.clone());
     let mut container_attrs = derive::parse::EnumContainerAttrs::from_attrs(&derive_input.attrs)?;
     // The macro-level `path` governs every generated impl; an explicit
     // container-attr `path` still wins.
@@ -176,10 +182,9 @@ fn expand_enum(
 
     // Step 3: emit the item with Debug added, Oopsie removed from derives,
     // and all #[oopsie(...)] helper attrs stripped (they've been consumed).
-    let mut out_item: syn::ItemEnum = syn::parse2(injected_ts)?;
-    fix_derives(&mut out_item.attrs, args.debug.is_enabled());
-    strip_oopsie_attrs(&mut out_item.attrs);
-    for variant in &mut out_item.variants {
+    fix_derives(&mut item.attrs, args.debug.is_enabled());
+    strip_oopsie_attrs(&mut item.attrs);
+    for variant in &mut item.variants {
         strip_oopsie_attrs(&mut variant.attrs);
         for field in &mut variant.fields {
             strip_oopsie_attrs(&mut field.attrs);
@@ -187,7 +192,7 @@ fn expand_enum(
     }
 
     Ok(quote! {
-        #out_item
+        #item
         #impls
         #keyword_docs
     })
@@ -197,7 +202,7 @@ fn expand_struct(
     args: &OopsieAttrArgs,
     needs_tracing: bool,
     keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
-    item: syn::ItemStruct,
+    mut item: syn::ItemStruct,
 ) -> syn::Result<TokenStream2> {
     let span = item.span();
     let oopsie_path: syn::Path = args
@@ -205,8 +210,8 @@ fn expand_struct(
         .clone()
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
-    // Step 1: inject diagnostic fields if requested.
-    let injected_ts = if needs_tracing {
+    // Step 1: inject diagnostic fields in place if requested.
+    if needs_tracing {
         let traced = args
             .traced
             .as_ref()
@@ -217,14 +222,14 @@ fn expand_struct(
             &traced.code,
             &oopsie_path,
             span,
-            item,
-        )?
-    } else {
-        quote! { #item }
-    };
+            &mut item,
+        )?;
+    }
 
-    // Step 2: generate Oopsie impls from the (possibly modified) item.
-    let derive_input: syn::DeriveInput = syn::parse2(injected_ts.clone())?;
+    // Step 2: generate Oopsie impls from the injected item. The derive layer
+    // needs the helper attrs still present, so it reads a copy taken before the
+    // strip below.
+    let derive_input = syn::DeriveInput::from(item.clone());
     let mut container_attrs = derive::parse::StructAttrs::from_attrs(&derive_input.attrs)?;
     // The macro-level `path` governs every generated impl; an explicit
     // container-attr `path` still wins.
@@ -241,15 +246,14 @@ fn expand_struct(
 
     // Step 3: emit the item with Debug added, Oopsie removed from derives,
     // and all #[oopsie(...)] helper attrs stripped (they've been consumed).
-    let mut out_item: syn::ItemStruct = syn::parse2(injected_ts)?;
-    fix_derives(&mut out_item.attrs, args.debug.is_enabled());
-    strip_oopsie_attrs(&mut out_item.attrs);
-    for field in &mut out_item.fields {
+    fix_derives(&mut item.attrs, args.debug.is_enabled());
+    strip_oopsie_attrs(&mut item.attrs);
+    for field in &mut item.fields {
         strip_oopsie_attrs(&mut field.attrs);
     }
 
     Ok(quote! {
-        #out_item
+        #item
         #impls
         #keyword_docs
     })
