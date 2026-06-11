@@ -279,6 +279,7 @@ pub use oopsie_macros::oopsie;
 // `pub use oopsie_core::*` so transitive deps (tracing-error,
 // tracing-subscriber) don't accidentally become part of oopsie's SemVer
 // contract via incidental glob re-export.
+pub use oopsie_core::start_marker;
 pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
     NoSource, OptionExt, ResultExt, RustBacktrace, Welp, WelpOptionExt, WelpResultExt,

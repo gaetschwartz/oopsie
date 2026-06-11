@@ -26,7 +26,6 @@ pub struct TraceMarker {
 }
 
 impl TraceMarker {
-    #[cfg(test)]
     pub(crate) fn frames(&self) -> &[(usize, usize)] {
         &self.frames
     }

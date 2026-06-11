@@ -274,6 +274,7 @@ const RUNTIME_INIT_PREFIXES: &[&str] = &[
     "std::panic::catch_unwind::",
     "std::panicking::try",
     "<std::panic::AssertUnwindSafe<",
+    "___rust_try",
     "__rustc",
     "__libc_start",
     "__scrt_common_main",
@@ -446,7 +447,31 @@ impl Backtrace {
             .iter()
             .map(|f| (f.ip() as usize, f.symbol_address() as usize))
             .collect();
-        let cut = marker.cut_len(&trace);
+        let mut cut = marker.cut_len(&trace);
+        // On platforms where symbol_address() == ip() (e.g. Apple), cut_len's
+        // inclusive extension cannot fire via symbol address. Extend by one
+        // more frame when the divergent frames resolve to the same mangled name.
+        if marker.is_inclusive()
+            && cut > 0
+            && cut < trace.len().saturating_sub(1)
+            && trace[trace.len() - 1 - cut].1 != marker.frames()[marker.frames().len() - 1 - cut].1
+        {
+            let trace_divergent_name = frames[trace.len() - 1 - cut]
+                .symbols()
+                .first()
+                .and_then(|s| s.name())
+                .map(|n| n.as_bytes().to_owned());
+            let marker_divergent_ip = marker.frames()[marker.frames().len() - 1 - cut].0;
+            let mut marker_name: Option<Vec<u8>> = None;
+            backtrace::resolve(marker_divergent_ip as *mut _, |sym| {
+                if marker_name.is_none() {
+                    marker_name = sym.name().map(|n| n.as_bytes().to_owned());
+                }
+            });
+            if trace_divergent_name.is_some() && trace_divergent_name == marker_name {
+                cut += 1;
+            }
+        }
         if cut == 0 || cut >= trace.len() {
             return None;
         }

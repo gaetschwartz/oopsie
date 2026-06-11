@@ -84,11 +84,13 @@ impl<E: Diagnostic> Report<E> {
         F: FnOnce() -> Result<(), E>,
     {
         crate::panic_hook::acquire_hook();
+        let prev_marker = oopsie_core::__private::set_inclusive_marker();
         // `set_hook` panics on a panicking thread, so restoring from a `Drop`
         // guard would abort during unwind. Catch the unwind instead: the hook
         // has already rendered the panic by then, and `resume_unwind` doesn't
         // re-run it.
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(func));
+        oopsie_core::__private::restore_marker(prev_marker);
         crate::panic_hook::release_hook();
         let result = match result {
             Ok(result) => result,
@@ -242,6 +244,14 @@ impl<E: Diagnostic> Report<E> {
         writeln!(f)?;
         let mut printer = if oopsie_core::rust_backtrace().is_full() {
             TracePrinter::unfiltered()
+        } else if let Some(hidden) = backtrace.marker_hidden_ips() {
+            // Marker cut first (exact bottom), then the name filter peels the
+            // residual catch_unwind cluster sitting on top of the cut.
+            TracePrinter::with_filter_and_theme(
+                crate::trace_printer::marker_strip_filter(hidden),
+                crate::trace_printer::TraceTheme::DEFAULT,
+            )
+            .add_frame_filter(crate::trace_printer::error_backtrace_frame_filter)
         } else {
             TracePrinter::new()
         };
