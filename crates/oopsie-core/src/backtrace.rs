@@ -462,7 +462,7 @@ impl Backtrace {
                 let trace_divergent_name = frames[trace_div]
                     .symbols()
                     .first()
-                    .and_then(|s| s.name())
+                    .and_then(backtrace::BacktraceSymbol::name)
                     .map(|n| n.as_bytes().to_owned());
                 let marker_divergent_ip = marker.frames()[marker_div].0;
                 let mut marker_name: Option<Vec<u8>> = None;
