@@ -6,6 +6,10 @@
 //! `panic_child` test installs the hook and panics; the parent captures the
 //! child's stderr and asserts on the rendered report.
 #![cfg(feature = "fancy")]
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 
 use std::process::Command;
 

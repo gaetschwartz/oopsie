@@ -1,4 +1,8 @@
 #![cfg(feature = "fancy")]
+#![cfg_attr(
+    feature = "unstable-error-generic-member-access",
+    feature(error_generic_member_access)
+)]
 #![allow(
     clippy::all,
     reason = "integration test fixtures intentionally trip style lints"
