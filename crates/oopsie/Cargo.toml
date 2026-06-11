@@ -35,7 +35,6 @@ jiff = ["oopsie-core/jiff"]
 extras = ["oopsie-core/extras"]
 
 [dependencies]
-backtrace = "0.3.76"
 linkme = { version = "0.3.36", optional = true }
 oopsie-core = { workspace = true }
 oopsie-macros = { workspace = true }
@@ -47,6 +46,7 @@ workspace = true
 
 [dev-dependencies]
 anyhow = "1.0.102"
+backtrace = "0.3.76"
 chrono = "0.4.44"
 color-eyre = "0.6.5"
 criterion = "0.8.2"
