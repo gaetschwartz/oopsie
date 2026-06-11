@@ -67,6 +67,7 @@ impl BacktraceProvider for Backtrace {
     }
 }
 
+#[cfg(feature = "tracing")]
 impl SpanTraceProvider for crate::SpanTrace {
     fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata<'_>, &str) -> bool) {
         self.as_span_trace().with_spans(|md, fields| {

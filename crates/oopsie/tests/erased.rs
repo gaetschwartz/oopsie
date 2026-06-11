@@ -1,3 +1,4 @@
+#![cfg(feature = "serde")]
 #![cfg_attr(
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
@@ -9,9 +10,9 @@
 
 mod common;
 
-use erased_oopsie::{
-    ErasedBacktrace, ErasedError, ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel,
-};
+#[cfg(feature = "tracing")]
+use oopsie::erased::TracingLevel;
+use oopsie::erased::{ErasedBacktrace, ErasedError, ErasedMetadata, ErasedSpan, ErasedSpanTrace};
 use oopsie::oopsie;
 use oopsie_core::{redact, snap_name};
 
@@ -28,6 +29,7 @@ pub struct ErrorWithCodeOnly {
     message: String,
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_erased_error_text() {
@@ -37,6 +39,7 @@ fn test_erased_error_text() {
     });
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_erased_error_json() {
@@ -84,6 +87,7 @@ fn test_format_short_includes_help() {
     });
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn test_extract_backtrace_returns_some_when_provided() {
     let error = common::make_error();
@@ -108,7 +112,7 @@ fn test_extract_error_code_returns_some_for_oopsie_errors() {
 
 #[test]
 fn test_diagnostics_is_none_for_default() {
-    let diag = erased_oopsie::Diagnostics::default();
+    let diag = oopsie::erased::Diagnostics::default();
     assert!(
         diag.is_none(),
         "default Diagnostics should have no code or help"
@@ -197,6 +201,7 @@ fn test_erased_frame_display_name_without_location() {
 // Clone — explicit clone() assertions on the erased types.
 // ─────────────────────────────────────────────────────────────────────────────
 
+#[cfg(feature = "tracing")]
 #[test]
 fn test_erased_error_clone() {
     let original = ErasedError::from_error(common::make_error());
@@ -335,6 +340,7 @@ fn test_erased_spantrace_display_empty_spans() {
 // TracingLevel <-> tracing::Level — bidirectional mapping for all 5 levels.
 // ─────────────────────────────────────────────────────────────────────────────
 
+#[cfg(feature = "tracing")]
 #[test]
 fn test_tracing_level_bidirectional_conversion() {
     let cases = [
@@ -362,6 +368,7 @@ fn test_tracing_level_bidirectional_conversion() {
 // through `Report` on the receiving side with code and help intact.
 // ─────────────────────────────────────────────────────────────────────────────
 
+#[cfg(feature = "fancy")]
 #[test]
 fn test_round_trip_through_json_renders_in_report() {
     let error = ErrorWithHelpOopsie {
@@ -404,6 +411,7 @@ fn test_unknown_span_level_does_not_reject_payload() {
     assert!(erased.spantrace.is_some());
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn test_round_trip_source_chain_survives_report_and_reerasure() {
     let erased = ErasedError::from_error(common::make_error());
@@ -420,11 +428,14 @@ fn test_round_trip_source_chain_survives_report_and_reerasure() {
     assert_eq!(reerased.source_chain, roundtripped.source_chain);
 
     // Report's source walk renders the cause line.
-    let rendered = oopsie::Report::from_std(roundtripped).to_string();
-    assert!(
-        rendered.contains(&format!("╰─▶ {}", erased.source_chain[0])),
-        "Report must render the transported cause, got:\n{rendered}"
-    );
+    #[cfg(feature = "fancy")]
+    {
+        let rendered = oopsie::Report::from_std(roundtripped).to_string();
+        assert!(
+            rendered.contains(&format!("╰─▶ {}", erased.source_chain[0])),
+            "Report must render the transported cause, got:\n{rendered}"
+        );
+    }
 }
 
 // Display is intentionally just the message: chain renderers print each

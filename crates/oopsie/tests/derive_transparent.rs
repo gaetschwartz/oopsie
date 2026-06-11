@@ -338,7 +338,7 @@ fn bare_transparent_non_diagnostic_source_forwards_none() {
 // trace-injected wrapper. Uses the actual `#[oopsie(traced)]` attribute macro
 // (inject → derive) rather than a hand-written post-injection shape, so it
 // cannot drift from what injection emits.
-#[cfg(feature = "unstable-error-generic-member-access")]
+#[cfg(all(feature = "unstable-error-generic-member-access", feature = "tracing"))]
 mod traced_transparent {
     use oopsie::Diagnostic as _;
 

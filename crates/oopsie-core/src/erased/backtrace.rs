@@ -27,8 +27,7 @@ impl ErasedBacktrace {
     /// implementation/platform detail is a render-time concern; this snapshot
     /// stays raw so a consumer can still render the full stack later.
     #[must_use]
-    pub fn from_backtrace(bt: &oopsie_core::Backtrace) -> Self {
-        // Resolve the backtrace to get symbol information.
+    pub fn from_backtrace(bt: &crate::Backtrace) -> Self {
         bt.resolve();
 
         let mut frames = Vec::new();
@@ -64,15 +63,15 @@ impl ErasedBacktrace {
     }
 }
 
-impl From<&oopsie_core::Backtrace> for ErasedBacktrace {
+impl From<&crate::Backtrace> for ErasedBacktrace {
     #[inline]
-    fn from(bt: &oopsie_core::Backtrace) -> Self {
+    fn from(bt: &crate::Backtrace) -> Self {
         Self::from_backtrace(bt)
     }
 }
-impl From<oopsie_core::Backtrace> for ErasedBacktrace {
+impl From<crate::Backtrace> for ErasedBacktrace {
     #[inline]
-    fn from(bt: oopsie_core::Backtrace) -> Self {
+    fn from(bt: crate::Backtrace) -> Self {
         Self::from_backtrace(&bt)
     }
 }
@@ -153,9 +152,9 @@ mod tests {
 
     #[test]
     fn from_backtrace_retains_raw_internal_frames() {
-        oopsie_core::set_rust_backtrace_override(oopsie_core::RustBacktrace::Enabled);
-        let bt = <oopsie_core::Backtrace as oopsie_core::Capturable>::capture();
-        oopsie_core::clear_rust_backtrace_override();
+        crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);
+        let bt = <crate::Backtrace as crate::Capturable>::capture();
+        crate::clear_rust_backtrace_override();
 
         let erased = ErasedBacktrace::from_backtrace(&bt);
 
@@ -164,7 +163,7 @@ mod tests {
         // is deferred to render time rather than applied here.
         assert!(
             erased.frames().iter().any(|fr| {
-                oopsie_core::__private::is_internal_frame(
+                crate::__private::is_internal_frame(
                     fr.name.as_deref(),
                     fr.filename.as_deref().map(std::path::Path::new),
                 )
@@ -175,9 +174,9 @@ mod tests {
 
     #[test]
     fn from_backtrace_keeps_at_least_one_erased_frame_per_source_frame() {
-        oopsie_core::set_rust_backtrace_override(oopsie_core::RustBacktrace::Enabled);
-        let bt = <oopsie_core::Backtrace as oopsie_core::Capturable>::capture();
-        oopsie_core::clear_rust_backtrace_override();
+        crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);
+        let bt = <crate::Backtrace as crate::Capturable>::capture();
+        crate::clear_rust_backtrace_override();
 
         let erased = ErasedBacktrace::from_backtrace(&bt);
         assert!(

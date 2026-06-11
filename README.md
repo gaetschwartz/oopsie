@@ -38,7 +38,6 @@ fn main() -> oopsie::Report<AppError> {
 | [`oopsie`](crates/oopsie) | The facade: `#[oopsie]` macro, `Report`, panic hook, prelude. Start here. |
 | [`oopsie-core`](crates/oopsie-core) | Core types: `Backtrace`, `SpanTrace`, `Diagnostic`, `Welp`. |
 | [`oopsie-macros`](crates/oopsie-macros) | Proc macros: `#[oopsie]` attribute and `Oopsie` derive. |
-| [`erased-oopsie`](crates/erased-oopsie) | Serializable, type-erased errors for transport (API responses, IPC). |
 
 ## Features
 

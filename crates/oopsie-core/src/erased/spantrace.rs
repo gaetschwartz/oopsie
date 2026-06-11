@@ -34,6 +34,7 @@ impl<'de> Deserialize<'de> for TracingLevel {
     }
 }
 
+#[cfg(feature = "tracing")]
 impl From<TracingLevel> for tracing::Level {
     #[inline]
     fn from(level: TracingLevel) -> Self {
@@ -47,6 +48,7 @@ impl From<TracingLevel> for tracing::Level {
     }
 }
 
+#[cfg(feature = "tracing")]
 impl From<&tracing::Level> for TracingLevel {
     #[inline]
     fn from(level: &tracing::Level) -> Self {
@@ -129,6 +131,7 @@ impl ErasedMetadata {
     }
 }
 
+#[cfg(feature = "tracing")]
 impl<'a> From<&'a tracing::Metadata<'_>> for ErasedMetadata {
     fn from(meta: &'a tracing::Metadata<'_>) -> Self {
         Self {
@@ -144,8 +147,9 @@ impl<'a> From<&'a tracing::Metadata<'_>> for ErasedMetadata {
 
 impl ErasedSpanTrace {
     /// Create an `ErasedSpanTrace` from a live `SpanTrace`.
+    #[cfg(feature = "tracing")]
     #[must_use]
-    pub fn from_spantrace_ref(st: &oopsie_core::SpanTrace) -> Self {
+    pub fn from_spantrace_ref(st: &crate::SpanTrace) -> Self {
         let mut spans = Vec::new();
         st.as_span_trace().with_spans(|metadata, fields| {
             spans.push(ErasedSpan {
@@ -177,9 +181,10 @@ impl ErasedSpanTrace {
     }
 }
 
-impl From<&oopsie_core::SpanTrace> for ErasedSpanTrace {
+#[cfg(feature = "tracing")]
+impl From<&crate::SpanTrace> for ErasedSpanTrace {
     #[inline]
-    fn from(st: &oopsie_core::SpanTrace) -> Self {
+    fn from(st: &crate::SpanTrace) -> Self {
         Self::from_spantrace_ref(st)
     }
 }
@@ -318,6 +323,7 @@ mod tests {
         assert_eq!(serialized, serialized2);
     }
 
+    #[cfg(feature = "test-utils")]
     #[test]
     fn test_erased_spantrace_display() {
         let json = serde_json::json!({
@@ -353,6 +359,7 @@ mod tests {
         ");
     }
 
+    #[cfg(feature = "test-utils")]
     #[test]
     fn test_erased_spantrace_display_with_fields() {
         let json = serde_json::json!({

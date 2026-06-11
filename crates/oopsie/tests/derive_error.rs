@@ -344,7 +344,7 @@ fn nested_attr_macro_backtrace_propagated() {
     );
 }
 
-#[cfg(feature = "unstable-error-generic-member-access")]
+#[cfg(all(feature = "unstable-error-generic-member-access", feature = "tracing"))]
 #[test]
 fn stable_accessor_surfaces_deepest_trace() {
     use attr_inner_oopsies::Boom;

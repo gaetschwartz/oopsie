@@ -71,6 +71,57 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
     let needs_tracing = args.traced.as_ref().is_some_and(FieldSetting::is_enabled);
     let keywords = crate::keyword_docs::collect_attr_keywords(&meta);
 
+    // The resolved `spantrace` setting can't tell an explicit enable apart from
+    // the omitted default — both resolve to the same `Flag(true)` — so an
+    // explicit-only rejection has to scan the raw tokens before darling folds them.
+    // An explicit disable (`spantrace = false` / `spantrace(false)`) is a no-op
+    // without tracing and must be allowed through.
+    #[cfg(not(feature = "tracing"))]
+    {
+        let enables_spantrace = meta.iter().any(|m| {
+            let NestedMeta::Meta(syn::Meta::List(list)) = m else {
+                return false;
+            };
+            if !list.path.is_ident("traced") {
+                return false;
+            }
+            let Ok(inner) = list.parse_args_with(
+                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+            ) else {
+                return false;
+            };
+            inner.iter().any(|nm| {
+                if !nm.path().is_ident("spantrace") {
+                    return false;
+                }
+                match nm {
+                    // bare `spantrace` — enables
+                    syn::Meta::Path(_) => true,
+                    // `spantrace = <bool>` — enables only when true
+                    syn::Meta::NameValue(syn::MetaNameValue {
+                        value:
+                            syn::Expr::Lit(syn::ExprLit {
+                                lit: syn::Lit::Bool(b),
+                                ..
+                            }),
+                        ..
+                    }) => b.value,
+                    // `spantrace(<tokens>)` — disabled only when the sole token is `false`
+                    syn::Meta::List(list) => {
+                        !syn::parse2::<syn::LitBool>(list.tokens.clone()).is_ok_and(|b| !b.value)
+                    }
+                    syn::Meta::NameValue(_) => true,
+                }
+            })
+        });
+        if enables_spantrace {
+            return Err(syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "`spantrace` requires the `tracing` feature of `oopsie`",
+            ));
+        }
+    }
+
     match syn::parse2::<syn::Item>(input)? {
         syn::Item::Enum(item_enum) => expand_enum(&args, needs_tracing, &keywords, item_enum),
         syn::Item::Struct(item_struct) => {
@@ -294,7 +345,7 @@ mod tests {
     // so the snapshot only matches in the default-features build.
     #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
-    fn bare_enum_no_tracing() {
+    fn bare_enum() {
         let result = expand(
             quote! {},
             quote! {
@@ -309,7 +360,7 @@ mod tests {
     }
 
     #[test]
-    fn bare_struct_no_tracing() {
+    fn bare_struct() {
         let result = expand(
             quote! {},
             quote! {
@@ -322,7 +373,10 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
-    #[cfg(not(feature = "unstable-error-generic-member-access"))]
+    #[cfg(all(
+        feature = "tracing",
+        not(feature = "unstable-error-generic-member-access")
+    ))]
     #[test]
     fn traced_enum() {
         let result = expand(
@@ -338,7 +392,28 @@ mod tests {
         insta::assert_snapshot!(output);
     }
 
-    #[cfg(not(feature = "unstable-error-generic-member-access"))]
+    #[cfg(all(
+        not(feature = "tracing"),
+        not(feature = "unstable-error-generic-member-access")
+    ))]
+    #[test]
+    fn traced_enum_no_tracing() {
+        let result = expand(
+            quote! { traced },
+            quote! {
+                pub enum AppError {
+                    #[oopsie("Connection failed")]
+                    Connect,
+                }
+            },
+        );
+        insta::assert_snapshot!(result.unwrap().to_string());
+    }
+
+    #[cfg(all(
+        not(feature = "unstable-error-generic-member-access"),
+        feature = "tracing"
+    ))]
     #[test]
     fn backtrace_only_struct() {
         let result = expand(
@@ -557,6 +632,7 @@ mod tests {
         result.unwrap_err();
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn traced_list_form_parses_and_injects() {
         // `traced(packed = false)` must parse (not error on unknown key `traced`)
@@ -578,6 +654,7 @@ mod tests {
         assert!(output.contains("__oopsie_spantrace"), "{output}");
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn traced_list_form_default_is_packed() {
         let result = expand(
@@ -593,5 +670,86 @@ mod tests {
         // packed default => single combined field, no separate ones.
         assert!(output.contains("__oopsie_traces"), "{output}");
         assert!(!output.contains("__oopsie_backtrace"), "{output}");
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn spantrace_bare_rejected_without_tracing() {
+        let err = expand(
+            quote! { traced(spantrace) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("spantrace"),
+            "expected spantrace error, got: {err}"
+        );
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn spantrace_equals_true_rejected_without_tracing() {
+        let err = expand(
+            quote! { traced(spantrace = true) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("spantrace"),
+            "expected spantrace error, got: {err}"
+        );
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn spantrace_list_true_rejected_without_tracing() {
+        let err = expand(
+            quote! { traced(spantrace(true)) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("spantrace"),
+            "expected spantrace error, got: {err}"
+        );
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn spantrace_equals_false_allowed_without_tracing() {
+        expand(
+            quote! { traced(spantrace = false) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .expect("explicit spantrace opt-out must be allowed without tracing");
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn spantrace_list_false_allowed_without_tracing() {
+        expand(
+            quote! { traced(spantrace(false)) },
+            quote! { pub struct S { x: u32 } },
+        )
+        .expect("explicit spantrace(false) must be allowed without tracing");
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    #[test]
+    fn traced_injects_backtrace_only_without_tracing() {
+        let output = expand(
+            quote! { traced },
+            quote! {
+                pub enum AppError {
+                    #[oopsie("boom")]
+                    Boom { info: String },
+                }
+            },
+        )
+        .unwrap()
+        .to_string();
+        assert!(output.contains("__oopsie_backtrace"), "{output}");
+        assert!(!output.contains("__oopsie_spantrace"), "{output}");
+        assert!(!output.contains("__oopsie_traces"), "{output}");
     }
 }

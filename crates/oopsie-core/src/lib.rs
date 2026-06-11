@@ -14,6 +14,9 @@
 
 mod backtrace;
 mod diagnostic;
+#[cfg(feature = "serde")]
+pub mod erased;
+#[cfg(feature = "tracing")]
 mod spantrace;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
@@ -86,6 +89,7 @@ pub mod __private {
         fn fwd_code(&self) -> Option<crate::ErrorCode>;
         fn fwd_help(&self) -> Option<crate::HelpText>;
         fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace>;
+        #[cfg(feature = "tracing")]
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace>;
     }
 
@@ -102,6 +106,7 @@ pub mod __private {
         fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace> {
             self.0.oopsie_backtrace()
         }
+        #[cfg(feature = "tracing")]
         #[inline]
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace> {
             self.0.oopsie_spantrace()
@@ -122,6 +127,7 @@ pub mod __private {
         fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace> {
             None
         }
+        #[cfg(feature = "tracing")]
         #[inline]
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace> {
             None
@@ -136,8 +142,8 @@ pub mod __private {
     /// own trace, and std's `Request` is first-wins, so the deepest provider in
     /// the chain fills the slot — this surfaces the origin-most trace rather
     /// than a wrap-site one. Trace accessors go through the typed
-    /// [`source_backtrace`]/[`source_spantrace`] wrappers, which add the
-    /// skip-empty filter on top of this lookup.
+    /// [`source_backtrace`] / `source_spantrace` (requires the `tracing` feature)
+    /// wrappers, which add the skip-empty filter on top of this lookup.
     ///
     /// Returns `None` without `unstable-error-generic-member-access`: descending
     /// into a type-erased `dyn Error` source is not portable there, and the
@@ -170,6 +176,7 @@ pub mod __private {
     }
 
     /// [`source_trace`] for `SpanTrace`, treating an empty trace as absent.
+    #[cfg(feature = "tracing")]
     #[inline]
     #[must_use]
     pub fn source_spantrace<'a>(
@@ -182,19 +189,22 @@ pub mod __private {
     pub use chrono;
 }
 
+#[cfg(feature = "tracing")]
 pub use spantrace::{OptionalSpanTrace, SpanTrace};
+#[cfg(all(feature = "tracing", feature = "serde"))]
 use tracing_error::ErrorLayer;
+#[cfg(all(feature = "tracing", feature = "serde"))]
 use tracing_subscriber::fmt::format::JsonFields;
+#[cfg(all(feature = "tracing", feature = "serde"))]
 use tracing_subscriber::registry::LookupSpan;
 pub use traits::*;
 pub use welp::{Welp, WelpOptionExt, WelpResultExt};
 
 macro_rules! impl_string_newtypes {
     ($($(#[$meta:meta])* $ident:ident,)* $(,)?) => { $(
-        #[derive(
-            Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
-        )]
-        #[serde(transparent)]
+        #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+        #[cfg_attr(feature = "serde", serde(transparent))]
         #[repr(transparent)]
         $(#[$meta])*
         pub struct $ident(Cow<'static, str>);
@@ -284,6 +294,7 @@ impl_string_newtypes!(
 ///
 /// Equivalent to `ErrorLayer::new(JsonFields::default())` but doesn't require
 /// the caller to depend on `tracing-subscriber` directly.
+#[cfg(all(feature = "tracing", feature = "serde"))]
 #[inline]
 #[must_use]
 pub fn json_error_layer<S>() -> ErrorLayer<S, JsonFields>

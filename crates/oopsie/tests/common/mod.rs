@@ -6,7 +6,10 @@
 )]
 
 use oopsie::{ResultExt as _, oopsie};
-pub use oopsie_core::test_utils::{force_backtrace, init_test_subscriber};
+pub use oopsie_core::test_utils::force_backtrace;
+#[cfg(feature = "tracing")]
+pub use oopsie_core::test_utils::init_test_subscriber;
+#[cfg(feature = "tracing")]
 use tracing::instrument;
 
 #[oopsie(traced)]
@@ -22,6 +25,7 @@ pub struct MyErrorInner {
 }
 
 /// Create a `MyError` within instrumented functions to capture spantrace.
+#[cfg(feature = "tracing")]
 #[expect(
     clippy::items_after_statements,
     reason = "instrumented helper fns must be items; defined inside make_error to capture the spantrace"

@@ -13,8 +13,7 @@
 
 use oopsie::{Report, RustBacktrace, oopsie, set_rust_backtrace_override};
 
-// With `#[oopsie(traced)]` the backtrace and spantrace are stored together in
-// a single `Box<(Backtrace, SpanTrace)>` field (the default `packed` layout).
+// `traced` captures a backtrace; under the `tracing` feature a span-trace is captured too.
 #[oopsie(traced)]
 #[oopsie("failed to load layer {index}")]
 pub struct LoadError {

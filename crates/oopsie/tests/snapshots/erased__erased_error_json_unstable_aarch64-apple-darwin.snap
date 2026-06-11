@@ -1,5 +1,5 @@
 ---
-source: crates/erased-oopsie/tests/erased.rs
+source: crates/oopsie/tests/erased.rs
 expression: error
 ---
 {
@@ -18,7 +18,7 @@ expression: error
           "target": "sys",
           "level": "INFO",
           "module_path": "erased::common",
-          "file": "crates/erased-oopsie/tests/common/mod.rs",
+          "file": "crates/oopsie/tests/common/mod.rs",
           "line": 42
         },
         "fields": "{\"foo\":true,\"id\":42,\"name\":\"Alice\"}"
@@ -29,7 +29,7 @@ expression: error
           "target": "controller",
           "level": "INFO",
           "module_path": "erased::common",
-          "file": "crates/erased-oopsie/tests/common/mod.rs",
+          "file": "crates/oopsie/tests/common/mod.rs",
           "line": 42
         },
         "fields": "{\"foo\":true,\"name\":\"Alice\"}"
@@ -88,43 +88,43 @@ expression: error
       },
       {
         "name": "<erased[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::build",
-        "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
+        "filename": "[WORKSPACE]/crates/oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
         "name": "<erased[[HASH]]::common::MyErrorInnerOopsie<alloc[[HASH]]::string::String>>::fail::<()>",
-        "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
+        "filename": "[WORKSPACE]/crates/oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
         "name": "erased[[HASH]]::common::make_error::inner_function",
-        "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
+        "filename": "[WORKSPACE]/crates/oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
         "name": "erased[[HASH]]::common::make_error::outer_function",
-        "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
+        "filename": "[WORKSPACE]/crates/oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
         "name": "erased[[HASH]]::common::make_error",
-        "filename": "[WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs",
+        "filename": "[WORKSPACE]/crates/oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
         "name": "erased[[HASH]]::test_erased_error_json",
-        "filename": "[WORKSPACE]/crates/erased-oopsie/tests/erased.rs",
+        "filename": "[WORKSPACE]/crates/oopsie/tests/erased.rs",
         "line": 42,
         "column": 69
       },
       {
         "name": "erased[[HASH]]::test_erased_error_json::{closure#0}",
-        "filename": "[WORKSPACE]/crates/erased-oopsie/tests/erased.rs",
+        "filename": "[WORKSPACE]/crates/oopsie/tests/erased.rs",
         "line": 42,
         "column": 69
       },

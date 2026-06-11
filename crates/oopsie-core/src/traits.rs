@@ -18,10 +18,10 @@ pub trait Contextual<E> {
 
 /// A type that can auto-capture diagnostic data at the point of error construction.
 ///
-/// Implemented by [`Backtrace`](crate::Backtrace) and [`SpanTrace`](crate::SpanTrace) so they
-/// can be filled automatically. Mark a field with `#[oopsie(capture)]` to have it populated
-/// via this trait when the error is constructed — the field will not appear in the context
-/// selector and will not need to be supplied by the caller.
+/// Implemented by [`Backtrace`](crate::Backtrace) and `SpanTrace` (when the `tracing` feature
+/// is enabled) so they can be filled automatically. Mark a field with `#[oopsie(capture)]` to
+/// have it populated via this trait when the error is constructed — the field will not appear in
+/// the context selector and will not need to be supplied by the caller.
 pub trait Capturable {
     /// Capture diagnostic data at the current call site.
     #[track_caller]
@@ -481,6 +481,7 @@ mod tests {
         is_capturable::<Box<crate::Backtrace>>();
     };
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn tuple_capture_produces_both_elements() {
         use crate::{Backtrace, SpanTrace};
@@ -490,13 +491,14 @@ mod tests {
         let _ = st.status();
     }
 
+    #[cfg(feature = "tracing")]
     const _: () = {
         const fn is_capturable<T: Capturable>() {}
-        // The headline default layout must be Capturable for free via Box<T>.
         is_capturable::<Box<(crate::Backtrace, crate::SpanTrace)>>();
         is_capturable::<(crate::Backtrace, crate::SpanTrace)>();
     };
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn tuple_capture_ext_extracts_both_from_source() {
         use crate::{
@@ -542,6 +544,7 @@ mod tests {
         });
     }
 
+    #[cfg(feature = "tracing")]
     const _: () = {
         const fn is_capture_ext<T: CaptureExt>() {}
         is_capture_ext::<Box<(crate::Backtrace, crate::SpanTrace)>>();

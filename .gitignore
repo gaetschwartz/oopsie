@@ -4,3 +4,4 @@ mutants.out*/
 docs/.local/
 profile.json.gz
 .gaetan/
+*.snap.new

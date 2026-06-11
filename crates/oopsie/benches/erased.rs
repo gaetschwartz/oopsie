@@ -8,7 +8,7 @@
 use std::hint::black_box;
 
 use criterion::{BatchSize, Criterion, criterion_group, criterion_main};
-use erased_oopsie::ErasedError;
+use oopsie::erased::ErasedError;
 use oopsie::{RustBacktrace, oopsie, set_rust_backtrace_override};
 
 #[oopsie(traced)]

@@ -1,3 +1,4 @@
+#![cfg(feature = "fancy")]
 //! Integration tests for environment-based color detection.
 //!
 //! `detect_env_color_support` is private, reads process-global env, and caches

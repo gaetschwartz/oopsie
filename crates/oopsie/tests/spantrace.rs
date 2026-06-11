@@ -1,3 +1,4 @@
+#![cfg(feature = "tracing")]
 #![cfg_attr(
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)

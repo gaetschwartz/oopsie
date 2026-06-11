@@ -1,5 +1,5 @@
 ---
-source: crates/erased-oopsie/tests/erased.rs
+source: crates/oopsie/tests/erased.rs
 expression: error.to_text()
 ---
 Error[erased::common::MyError::Inner]:
@@ -10,10 +10,10 @@ Error[erased::common::MyError::Inner]:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   1: sys::inner_function
            with {"foo":true,"id":42,"name":"Alice"}
-             at crates/erased-oopsie/tests/common/mod.rs:[LOC]
+             at crates/oopsie/tests/common/mod.rs:[LOC]
   2: controller::outer_function
            with {"foo":true,"name":"Alice"}
-             at crates/erased-oopsie/tests/common/mod.rs:[LOC]
+             at crates/oopsie/tests/common/mod.rs:[LOC]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   1: backtrace::backtrace::libunwind::trace::h[HASH]
@@ -33,19 +33,19 @@ Error[erased::common::MyError::Inner]:
   8: <alloc::boxed::Box<T> as oopsie_core::traits::Capturable>::capture::h[HASH]
            at [WORKSPACE]/crates/oopsie-core/src/traits.rs:[LOC]
   9: erased::common::MyErrorInnerOopsie<__T0>::build::h[HASH]
-           at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
  10: erased::common::MyErrorInnerOopsie<__T0>::fail::h[HASH]
-           at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
  11: erased::common::make_error::inner_function::h[HASH]
-           at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
  12: erased::common::make_error::outer_function::h[HASH]
-           at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
  13: erased::common::make_error::h[HASH]
-           at [WORKSPACE]/crates/erased-oopsie/tests/common/mod.rs:[LOC]
+           at [WORKSPACE]/crates/oopsie/tests/common/mod.rs:[LOC]
  14: erased::test_erased_error_text::h[HASH]
-           at [WORKSPACE]/crates/erased-oopsie/tests/erased.rs:[LOC]
+           at [WORKSPACE]/crates/oopsie/tests/erased.rs:[LOC]
  15: erased::test_erased_error_text::{{closure}}::h[HASH]
-           at [WORKSPACE]/crates/erased-oopsie/tests/erased.rs:[LOC]
+           at [WORKSPACE]/crates/oopsie/tests/erased.rs:[LOC]
  16: core::ops::function::FnOnce::call_once::h[HASH]
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
  17: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once

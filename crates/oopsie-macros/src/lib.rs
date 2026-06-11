@@ -30,7 +30,7 @@ pub(crate) mod utils;
 ///
 /// # Usage
 ///
-/// ```
+/// ```ignore
 /// use oopsie::ResultExt as _;
 ///
 /// #[derive(Debug, oopsie::Oopsie)]
@@ -63,7 +63,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 ///
 /// # Usage
 ///
-/// ```
+/// ```ignore
 /// use oopsie::ResultExt as _;
 ///
 /// #[oopsie::oopsie]
@@ -81,9 +81,10 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 ///
 /// ## Diagnostics
 ///
-/// Pass `traced` to automatically inject backtrace and spantrace fields:
+/// Pass `traced` to automatically inject a backtrace field (and a span-trace when
+/// the `tracing` feature is enabled):
 ///
-/// ```
+/// ```ignore
 /// #[oopsie::oopsie(traced)]
 /// pub enum MyError {
 ///     #[oopsie("Connection failed")]
@@ -100,7 +101,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 ///
 /// | Parameter | Effect |
 /// |-----------|--------|
-/// | `traced` | Inject backtrace + spantrace fields, plus an auto error code |
+/// | `traced` | Inject a backtrace field (and a span-trace under the `tracing` feature), plus an auto error code |
 /// | `path` | Path to the `oopsie` crate in generated impls |
 /// | `debug` | Skip the automatic `Debug` derive |
 ///
@@ -117,7 +118,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | Option | Effect |
 /// |--------|--------|
 /// | `backtrace` | Enable/tune the captured backtrace (default on) |
-/// | `spantrace` | Enable/tune the captured span trace (default on) |
+/// | `spantrace` | Enable/tune the captured span trace (default on; requires the `tracing` feature) |
 /// | `timestamp` | Inject an auto-captured timestamp field (default off) |
 /// | `packed` | Store both traces as one `(Backtrace, SpanTrace)` field |
 /// | `boxed` | Box the injected trace field(s) |

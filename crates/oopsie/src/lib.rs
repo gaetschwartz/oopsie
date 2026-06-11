@@ -16,7 +16,8 @@
 //! `oopsie` centers on a single attribute macro:
 //!
 //! **[`#[oopsie]`](oopsie)** — generates context selectors, `Display`, `Debug`, and `Error`
-//! impls for your error type. Pass `traced` to also capture backtrace and span-trace.
+//! impls for your error type. Pass `traced` to also capture a backtrace (and a span-trace
+//! when the `tracing` feature is enabled).
 //!
 //! # Quick start
 //!
@@ -54,7 +55,8 @@
 //!
 //! # Diagnostics
 //!
-//! Pass `traced` to automatically capture backtrace and span-trace fields:
+//! Pass `traced` to automatically capture a backtrace field (and a span-trace when
+//! the `tracing` feature is enabled):
 //!
 //! ```
 //! #[oopsie::oopsie(traced)]
@@ -74,49 +76,78 @@
 //!
 //! # Reporting
 //!
-//! [`Report`] renders an error — message, source chain, span trace, backtrace —
-//! as a rich, colorized report. It implements [`Termination`](std::process::Termination),
-//! so it can be returned straight from `main`. [`Report::run`] additionally
-//! installs the library's panic hook for the duration of the closure, so
-//! panics are rendered in the same style:
-//!
-//! ```
-//! use oopsie::Report;
-//! use oopsie::prelude::*;
-//!
-//! #[oopsie::oopsie(traced)]
-//! pub enum AppError {
-//!     #[oopsie("Key not found: {key}")]
-//!     MissingKey { key: String },
-//! }
-//!
-//! fn run() -> Result<(), AppError> {
-//!     let config: Option<&str> = Some("42");
-//!     let _value = config.context(app_oopsies::MissingKey { key: "answer" })?;
-//!     Ok(())
-//! }
-//!
-//! fn main() -> Report<AppError> {
-//!     Report::run(run)
-//! }
-//! ```
-//!
-//! When `run` returns an error, the report is printed to stderr and the
-//! process exits with a failure code. To render panics outside of
-//! [`Report::run`], install the hook process-wide with [`install_panic_hook`]
-//! once, early in `main`. Color output is auto-detected; override it with
-//! [`set_color_mode`] or per report via [`Report::no_colors`] /
-//! [`Report::force_colors`].
+#![cfg_attr(
+    feature = "fancy",
+    doc = "
+[`Report`] renders an error — message, source chain, span trace, backtrace —
+as a rich, colorized report. It implements [`Termination`](std::process::Termination),
+so it can be returned straight from `main`. [`Report::run`] additionally
+installs the library's panic hook for the duration of the closure, so
+panics are rendered in the same style:
+
+```rust
+use oopsie::Report;
+use oopsie::prelude::*;
+
+#[oopsie::oopsie(traced)]
+pub enum AppError {
+    #[oopsie(\"Key not found: {key}\")]
+    MissingKey { key: String },
+}
+
+fn run() -> Result<(), AppError> {
+    let config: Option<&str> = Some(\"42\");
+    let _value = config.context(app_oopsies::MissingKey { key: \"answer\" })?;
+    Ok(())
+}
+
+fn main() -> Report<AppError> {
+    Report::run(run)
+}
+```
+
+When `run` returns an error, the report is printed to stderr and the
+process exits with a failure code. To render panics outside of
+[`Report::run`], install the hook process-wide with [`install_panic_hook`]
+once, early in `main`. Color output is auto-detected; override it with
+[`set_color_mode`] or per report via [`Report::no_colors`] /
+[`Report::force_colors`].
+
+*(Requires the `fancy` feature.)*
+"
+)]
+#![cfg_attr(
+    not(feature = "fancy"),
+    doc = "
+`Report` (requires the `fancy` feature) renders an error — message, source chain,
+span trace, backtrace — as a rich, colorized report. It implements
+`Termination`, so it can be returned straight from `main`. `Report::run`
+additionally installs the library's panic hook for the duration of the closure,
+so panics are rendered in the same style. Color output is auto-detected; override
+it with `set_color_mode` or per report via `Report::no_colors` /
+`Report::force_colors`.
+"
+)]
 //!
 //! # Beyond typed errors
 //!
 //! - [`Welp`] is a string-shaped escape hatch for prototypes and one-off
 //!   errors: `Welp::new("...")`, or `.welp_context("...")` on any `Result` via
 //!   the prelude.
-//! - The companion `erased-oopsie` crate (in the same workspace) converts any
-//!   error into a serializable, type-erased representation — message, source
-//!   chain, code/help, span trace, and backtrace — for transporting errors
-//!   across process boundaries, e.g. API error responses.
+#![cfg_attr(
+    feature = "serde",
+    doc = "- The [`oopsie::erased`](erased) module converts any error into a serializable, \
+type-erased representation — message, source chain, code/help, span trace, and \
+backtrace — for transporting errors across process boundaries, e.g. API error \
+responses. *(Requires the `serde` feature.)*"
+)]
+#![cfg_attr(
+    not(feature = "serde"),
+    doc = "- The `oopsie::erased` module (requires the `serde` feature) converts any error \
+into a serializable, type-erased representation — message, source chain, code/help, \
+span trace, and backtrace — for transporting errors across process boundaries, \
+e.g. API error responses."
+)]
 //!
 //! # What gets generated
 //!
@@ -250,10 +281,12 @@ pub use oopsie_macros::oopsie;
 // contract via incidental glob re-export.
 pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, CaptureExt, Contextual, Diagnostic, ErrorCode, HelpText,
-    NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace, Welp,
-    WelpOptionExt, WelpResultExt, clear_rust_backtrace_override, rust_backtrace,
-    rust_panic_backtrace, set_rust_backtrace_override, with_rust_backtrace_override,
+    NoSource, OptionExt, ResultExt, RustBacktrace, Welp, WelpOptionExt, WelpResultExt,
+    clear_rust_backtrace_override, rust_backtrace, rust_panic_backtrace,
+    set_rust_backtrace_override, with_rust_backtrace_override,
 };
+#[cfg(feature = "tracing")]
+pub use oopsie_core::{OptionalSpanTrace, SpanTrace};
 
 // Hidden surface macro-generated code reaches via `::oopsie::__private::…`:
 // the autoref-probe machinery re-exported from `oopsie-core`, plus the
@@ -267,7 +300,16 @@ pub mod __private {
     pub mod documented;
 }
 
+#[cfg(feature = "serde")]
+pub mod erased {
+    pub use oopsie_core::erased::{
+        Diagnostics, ErasedBacktrace, ErasedError, ErasedFrame, ErasedMetadata, ErasedSpan,
+        ErasedSpanTrace, TracingLevel,
+    };
+}
+
 /// `tracing-subscriber` integration helpers.
+#[cfg(all(feature = "tracing", feature = "serde"))]
 pub mod tracing {
     pub use oopsie_core::json_error_layer;
 }

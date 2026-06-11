@@ -11,28 +11,43 @@ env:
 
 jobs:
   test:
-    name: Test (${{ matrix.toolchain }})
+    name: Test (${{ matrix.toolchain }}, [${{ matrix.features }}])
     runs-on: macos-26
     strategy:
       fail-fast: false
       matrix:
         toolchain: [stable, nightly]
+        features:
+          - ""
+          - "serde"
+          - "tracing"
+          - "serde,tracing"
+          - "chrono"
+          - "fancy,tracing"
+          - "fancy,serde,tracing,chrono"
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.toolchain == 'stable' && 'stable' || '' }}
-      CARGO_FEATURES: ${{ matrix.toolchain == 'nightly' && '-F unstable' || '' }}
     steps:
       - uses: actions/checkout@v6
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.toolchain }}-${{ matrix.features }}
       - name: Install cargo-nextest
         uses: taiki-e/install-action@v2
         with:
           tool: nextest
       - name: cargo nextest
-        run: cargo nextest run --workspace ${CARGO_FEATURES}
+        run: >
+          cargo nextest run --workspace --no-default-features
+          ${{ matrix.features && format('--features {0}', matrix.features) || '' }}
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
         env:
-          OOPSIE_BACKTRACE_SNAPSHOT_TESTS: "1"
+          OOPSIE_BACKTRACE_SNAPSHOT_TESTS: ${{ matrix.features == 'fancy,serde,tracing,chrono' && '1' || '' }}
       - name: cargo doctest
-        run: cargo test --doc --workspace ${CARGO_FEATURES}
+        run: >
+          cargo test --doc --workspace --no-default-features
+          ${{ matrix.features && format('--features {0}', matrix.features) || '' }}
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
 
   lints:
     name: Lints (fmt + clippy)
@@ -43,7 +58,6 @@ jobs:
         toolchain: [stable, nightly]
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.toolchain == 'stable' && 'stable' || '' }}
-      CARGO_FEATURES: ${{ matrix.toolchain == 'nightly' && '-F unstable' || '' }}
     steps:
       - uses: actions/checkout@v6
       - name: Get Rust toolchain version
@@ -59,9 +73,48 @@ jobs:
           key: lints
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
-      - name: cargo clippy
-        run: cargo clippy --workspace --all-targets ${CARGO_FEATURES} -- -D warnings
-  
+      - name: cargo clippy (bare)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (serde)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features serde
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (tracing)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features tracing
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (serde,tracing)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features serde,tracing
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (chrono)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features chrono
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (fancy,tracing)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features fancy,tracing
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+      - name: cargo clippy (full)
+        run: >
+          cargo clippy --workspace --all-targets --no-default-features
+          --features fancy,serde,tracing,chrono
+          ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+          -- -D warnings
+
   msrv:
     name: MSRV
     runs-on: ubuntu-latest
@@ -75,5 +128,7 @@ jobs:
         run: |
           MSRV=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[] | select(.name == "oopsie") | .rust_version')
           rustup override set $MSRV
-      - name: cargo check
-        run: cargo check --workspace --all-targets --locked
+      - name: cargo check (bare)
+        run: cargo check --workspace --all-targets --locked --no-default-features
+      - name: cargo check (all features)
+        run: cargo check --workspace --all-targets --locked --all-features

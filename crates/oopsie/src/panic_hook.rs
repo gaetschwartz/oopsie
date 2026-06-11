@@ -10,8 +10,10 @@ use std::sync::{Mutex, PoisonError};
 
 use owo_colors::Style;
 
+use oopsie_core::Backtrace;
 use oopsie_core::Capturable as _;
-use oopsie_core::{Backtrace, SpanTrace};
+#[cfg(feature = "tracing")]
+use oopsie_core::SpanTrace;
 
 use crate::ColorConfig;
 use crate::color::style;
@@ -88,6 +90,7 @@ struct PanicReport<'a> {
     /// only) and forced as the capture setting, so library-level backtrace
     /// settings never affect panic capture.
     backtrace_setting: oopsie_core::RustBacktrace,
+    #[cfg(feature = "tracing")]
     span_trace: Option<SpanTrace>,
     color_config: ColorConfig,
 }
@@ -97,6 +100,7 @@ impl<'a> PanicReport<'a> {
         let backtrace_setting = oopsie_core::rust_panic_backtrace();
         let backtrace =
             oopsie_core::with_rust_backtrace_override(backtrace_setting, || Backtrace::capture());
+        #[cfg(feature = "tracing")]
         let span_trace = {
             let captured = SpanTrace::capture();
             captured.is_captured().then_some(captured)
@@ -105,6 +109,7 @@ impl<'a> PanicReport<'a> {
             info,
             backtrace,
             backtrace_setting,
+            #[cfg(feature = "tracing")]
             span_trace,
             color_config: ColorConfig::Auto,
         }
@@ -143,6 +148,7 @@ impl<'a> PanicReport<'a> {
         Ok(())
     }
 
+    #[cfg(feature = "tracing")]
     fn write_span_trace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Some(span_trace) = &self.span_trace else {
             return Ok(());
@@ -196,6 +202,7 @@ impl<'a> PanicReport<'a> {
 impl fmt::Display for PanicReport<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_header(f)?;
+        #[cfg(feature = "tracing")]
         self.write_span_trace(f)?;
         self.write_backtrace(f)?;
         Ok(())

@@ -19,6 +19,7 @@ proc-macro = true
 
 [features]
 default = []
+tracing = []
 unstable-error-generic-member-access = []
 unstable = ["unstable-error-generic-member-access"]
 

@@ -3,7 +3,11 @@
 //! every `#[oopsie(...)]` keyword at its scope, so a keyword that parses but
 //! has no entry in `oopsie::__private::documented` fails this build with an
 //! unresolved import.
+//!
+//! Exercises the `spantrace` keyword (and `SpanTrace`-typed fields), so the
+//! whole fixture set requires the `tracing` feature.
 
+#![cfg(feature = "tracing")]
 #![cfg_attr(
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)

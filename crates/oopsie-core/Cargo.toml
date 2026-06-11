@@ -16,6 +16,8 @@ all-features = true
 
 [features]
 default = []
+serde = ["dep:serde", "dep:serde_json", "dep:strum", "tracing-subscriber?/json"]
+tracing = ["dep:tracing", "dep:tracing-error", "dep:tracing-subscriber"]
 unstable-error-generic-member-access = []
 unstable = ["unstable-error-generic-member-access"]
 test-utils = ["dep:insta", "dep:target-triple", "dep:konst"]
@@ -30,11 +32,13 @@ insta = { version = "1.47.2", features = [
     "redactions",
 ], optional = true }
 konst = { version = "0.4.3", features = ["alloc"], optional = true }
-serde = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+strum = { version = "0.28", features = ["derive"], optional = true }
 target-triple = { version = "1.0.0", optional = true }
-tracing = "0.1"
-tracing-error = "0.2"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+tracing = { version = "0.1", optional = true }
+tracing-error = { version = "0.2", optional = true }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"], optional = true }
 
 
 [dev-dependencies]

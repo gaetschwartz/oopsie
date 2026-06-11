@@ -1,13 +1,8 @@
-//! Erased error types for serializable error reporting.
-//!
-//! This crate provides types that capture error information in a serializable
-//! format, preserving the full error context including message, source chain,
-//! spantrace, and backtrace.
-
+//! Serializable, type-erased error representations (the `serde` feature).
 mod backtrace;
-mod spantrace;
-
 pub use backtrace::{ErasedBacktrace, ErasedFrame};
+
+mod spantrace;
 pub use spantrace::{ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel};
 
 use std::fmt;
@@ -16,7 +11,7 @@ use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
-use oopsie_core::{ErrorCode, HelpText};
+use crate::{ErrorCode, HelpText};
 
 /// Upper bound on real source entries stored by `from_error_ref`; a sentinel
 /// entry is appended when the walk would exceed this limit.
@@ -133,7 +128,7 @@ impl ErasedError {
         clippy::needless_pass_by_value,
         reason = "owned input mirrors the from_error_ref ergonomics"
     )]
-    pub fn from_error<E: oopsie_core::Diagnostic>(err: E) -> Self {
+    pub fn from_error<E: crate::Diagnostic>(err: E) -> Self {
         Self::from_error_ref(&err)
     }
 
@@ -141,7 +136,7 @@ impl ErasedError {
     ///
     /// Like `from_error` but takes a reference, useful when ownership cannot be transferred
     /// (e.g., in `Serialize` implementations).
-    pub fn from_error_ref<E: oopsie_core::Diagnostic>(err: &E) -> Self {
+    pub fn from_error_ref<E: crate::Diagnostic>(err: &E) -> Self {
         let message = err.to_string().into();
 
         // `Error::source` is user-implemented and may form a cycle (returning
@@ -162,12 +157,15 @@ impl ErasedError {
             code: err.oopsie_error_code(),
             help: err.oopsie_help_text(),
         };
-        // Skip empty/unsupported traces: they carry no frames and would render
-        // as a lone `SPANTRACE`/`BACKTRACE` header with no body.
+        #[cfg(feature = "tracing")]
         let spantrace = err
             .oopsie_spantrace()
             .filter(|st| st.is_captured())
             .map(ErasedSpanTrace::from);
+        #[cfg(not(feature = "tracing"))]
+        let spantrace: Option<ErasedSpanTrace> = None;
+        // Omit a captured-but-empty backtrace: with no frames there is nothing
+        // to render, only a bare header.
         let backtrace = err
             .oopsie_backtrace()
             .map(ErasedBacktrace::from_backtrace)
@@ -297,7 +295,7 @@ impl fmt::Display for ErasedError {
     }
 }
 
-impl oopsie_core::Diagnostic for ErasedError {
+impl crate::Diagnostic for ErasedError {
     fn oopsie_error_code(&self) -> Option<ErrorCode> {
         self.diagnostics.code.clone()
     }
@@ -359,7 +357,7 @@ mod tests {
         }
     }
 
-    impl oopsie_core::Diagnostic for ChainedError {}
+    impl crate::Diagnostic for ChainedError {}
 
     #[test]
     fn test_from_error_preserves_message_and_chain() {
@@ -735,7 +733,7 @@ mod tests {
             msg: "plain error",
             source: None,
         };
-        let bt = oopsie_core::Diagnostic::oopsie_backtrace(&error);
+        let bt = crate::Diagnostic::oopsie_backtrace(&error);
         assert!(
             bt.is_none(),
             "extract_backtrace should return None for plain errors"
@@ -792,7 +790,7 @@ mod tests {
                 Some(self)
             }
         }
-        impl oopsie_core::Diagnostic for Cyclic {}
+        impl crate::Diagnostic for Cyclic {}
 
         let erased = ErasedError::from_error_ref(&Cyclic);
         assert_eq!(
@@ -806,18 +804,45 @@ mod tests {
         );
     }
 
+    // Constructs an ErasedError without tracing (spantrace: None) and verifies
+    // that Clone preserves message, source chain, and diagnostics.
+    #[test]
+    fn erased_error_clone_without_spantrace() {
+        let original = ErasedError {
+            message: "clone test".into(),
+            source_chain: vec!["cause one".into(), "cause two".into()],
+            diagnostics: Diagnostics {
+                code: Some("app::clone".into()),
+                help: Some("check again".into()),
+            },
+            spantrace: None,
+            backtrace: None,
+            source: OnceLock::new(),
+        };
+
+        let cloned = original.clone();
+
+        assert_eq!(&*cloned.message, &*original.message);
+        assert_eq!(cloned.source_chain.len(), original.source_chain.len());
+        assert_eq!(&*cloned.source_chain[0], &*original.source_chain[0]);
+        assert_eq!(&*cloned.source_chain[1], &*original.source_chain[1]);
+        assert_eq!(cloned.diagnostics.code(), original.diagnostics.code());
+        assert_eq!(cloned.diagnostics.help(), original.diagnostics.help());
+        assert!(cloned.spantrace.is_none());
+        assert!(cloned.backtrace.is_none());
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Lossy filename: ErasedFrame.filename is now Box<str>, not Box<Path>.
     // Smoke-test that a real backtrace produces str filenames.
     // ─────────────────────────────────────────────────────────────────────
-
     #[test]
     fn erased_frame_filename_is_str() {
-        oopsie_core::set_rust_backtrace_override(oopsie_core::RustBacktrace::Enabled);
-        let bt = <oopsie_core::Backtrace as oopsie_core::Capturable>::capture();
-        oopsie_core::clear_rust_backtrace_override();
+        crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);
+        let bt = <crate::Backtrace as crate::Capturable>::capture();
+        crate::clear_rust_backtrace_override();
 
-        let erased = crate::backtrace::ErasedBacktrace::from_backtrace(&bt);
+        let erased = crate::erased::backtrace::ErasedBacktrace::from_backtrace(&bt);
         // filename is already Box<str> — this compiles only if the type is correct.
         // Verify at least one frame has a non-empty filename string.
         let has_filename = erased

@@ -1,3 +1,4 @@
+#![cfg(feature = "fancy")]
 #![cfg_attr(
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
@@ -145,6 +146,7 @@ fn test_report_with_help() {
     });
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_spantrace() {
@@ -156,6 +158,7 @@ fn test_report_with_spantrace() {
     });
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_spantrace_debug() {
@@ -169,6 +172,7 @@ fn test_report_with_spantrace_debug() {
     });
 }
 
+#[cfg(feature = "tracing")]
 #[test]
 fn test_report_colored_spantrace_renders_frames() {
     let error = common::make_error();

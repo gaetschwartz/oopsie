@@ -7,6 +7,7 @@
 //! therefore deliberately light: they only erase build-to-build noise
 //! (compilation hashes, line/column numbers, machine-specific paths).
 
+#[cfg(feature = "tracing")]
 use tracing_subscriber::prelude::*;
 
 #[doc(hidden)]
@@ -41,11 +42,16 @@ macro_rules! snap_name {
     }};
 }
 
-/// Install a test subscriber with the JSON `ErrorLayer` so spantraces are
-/// captured for the duration of the returned guard.
+/// Install a test subscriber with an `ErrorLayer` so span traces are captured
+/// for the duration of the returned guard.
+#[cfg(feature = "tracing")]
 #[must_use]
 pub fn init_test_subscriber() -> tracing::subscriber::DefaultGuard {
-    let subscriber = tracing_subscriber::registry().with(crate::json_error_layer());
+    #[cfg(feature = "serde")]
+    let error_layer = crate::json_error_layer();
+    #[cfg(not(feature = "serde"))]
+    let error_layer = tracing_error::ErrorLayer::default();
+    let subscriber = tracing_subscriber::registry().with(error_layer);
     tracing::subscriber::set_default(subscriber)
 }
 

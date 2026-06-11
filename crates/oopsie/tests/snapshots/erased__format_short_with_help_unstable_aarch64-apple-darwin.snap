@@ -1,5 +1,5 @@
 ---
-source: crates/erased-oopsie/tests/erased.rs
+source: crates/oopsie/tests/erased.rs
 expression: short
 ---
 erased::ErrorWithHelp
