@@ -80,6 +80,11 @@ impl<E: Diagnostic> Report<E> {
     /// before the first call is restored when the last one finishes. A hook
     /// installed by other means *while* a `run` is in flight is overwritten by
     /// that restore.
+    ///
+    /// For the duration of `func` the thread's trace marker is set to this
+    /// call, so rendered traces stop at the `run` boundary; the previous
+    /// marker is restored afterwards. A `start_marker!` set inside `func`
+    /// does not outlive it.
     #[must_use]
     pub fn run<F>(func: F) -> Self
     where

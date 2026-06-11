@@ -488,7 +488,8 @@ impl Backtrace {
     /// IPs of the trailing frames hidden by this trace's marker: the suffix
     /// shared with the marker stack, plus the boundary frame for inclusive
     /// markers. `None` when no marker was set on the capturing thread, the
-    /// stacks share nothing (cross-thread), or the cut would hide every frame.
+    /// stacks share no frames (e.g. the marker came from another thread), or
+    /// the cut would hide every frame.
     ///
     /// Forces symbol resolution, like [`frames`](Self::frames); deciding the
     /// boundary frame of an inclusive marker may resolve one further address.

@@ -115,6 +115,7 @@ pub fn restore_marker(prev: Option<Arc<TraceMarker>>) {
 /// below this call are hidden from rendered error and panic traces. The
 /// function containing the call stays visible. A later call replaces the
 /// marker; other threads are unaffected.
+/// `RUST_BACKTRACE=full` renders traces unfiltered, ignoring markers.
 #[macro_export]
 macro_rules! start_marker {
     () => {

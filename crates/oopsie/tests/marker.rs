@@ -61,6 +61,14 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
             message: "in thread",
         }
         .build();
+        use oopsie::Diagnostic as _;
+        let bt = err
+            .oopsie_backtrace()
+            .expect("traced error has a backtrace");
+        assert!(
+            bt.marker_hidden_ips().is_some(),
+            "exclusive marker must produce a cut on its own thread"
+        );
         Report::from_std(err).no_colors().to_string()
     })
     .join()
@@ -152,4 +160,54 @@ fn marker_from_another_thread_never_applies() {
         .oopsie_backtrace()
         .expect("traced error has a backtrace");
     assert!(bt.marker_hidden_ips().is_none());
+}
+
+#[test]
+fn report_run_restores_previous_marker_on_return() {
+    common::force_backtrace();
+    oopsie::start_marker!();
+    let _ = Report::run(fail_deep);
+    // The original marker still applies to captures after `run` returns.
+    let err = KaboomOopsie {
+        message: "after run",
+    }
+    .build();
+    use oopsie::Diagnostic as _;
+    let bt = err
+        .oopsie_backtrace()
+        .expect("traced error has a backtrace");
+    assert!(bt.marker_hidden_ips().is_some());
+}
+
+#[test]
+fn report_run_restores_previous_marker_on_unwind() {
+    common::force_backtrace();
+    oopsie::start_marker!();
+    let payload = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let _ = Report::run(|| -> Result<(), KaboomError> {
+            panic!("boom through run");
+        });
+    }));
+    assert!(payload.is_err());
+    let err = KaboomOopsie {
+        message: "after unwound run",
+    }
+    .build();
+    use oopsie::Diagnostic as _;
+    let bt = err
+        .oopsie_backtrace()
+        .expect("traced error has a backtrace");
+    assert!(bt.marker_hidden_ips().is_some());
+}
+
+#[test]
+fn full_backtrace_bypasses_marker_on_error_path() {
+    oopsie::with_rust_backtrace_override(oopsie::RustBacktrace::Full, || {
+        let rendered = Report::run(fail_deep).no_colors().to_string();
+        // `full` shows everything — including the run frame the marker hides.
+        assert!(
+            rendered.contains("::report::"),
+            "full mode must not strip Report::run\n{rendered}"
+        );
+    });
 }
