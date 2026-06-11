@@ -29,8 +29,4 @@ Error[report::common::MyError::Inner]: Inner error happened
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
   7: report[[HASH]]::test_report_with_spantrace::{closure#0}
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  8: <report[[HASH]]::test_report_with_spantrace::{closure#0} as core[[HASH]]::ops::function::FnOnce<()>>::call_once
-           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-  9: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
-           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-   ... 20 frames hidden ...
+   ... 22 frames hidden ...

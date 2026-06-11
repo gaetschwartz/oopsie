@@ -31,6 +31,4 @@ Error[report::common::MyError::Inner]: Inner error happened
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
   8: core::ops::function::FnOnce::call_once::h[HASH]
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-  9: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
-           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-   ... 20 frames hidden ...
+   ... 21 frames hidden ...

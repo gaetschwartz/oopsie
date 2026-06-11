@@ -12,8 +12,4 @@ expression: report
            [2mat [0m[35m[WORKSPACE]/crates/oopsie/tests/report.rs[0m[35m:80[0m[35m:6[0m
 [2m  3[0m[2m: [0m[91mreport[[HASH]]::test_report_colored::{closure#0}[0m
            [2mat [0m[35m[WORKSPACE]/crates/oopsie/tests/report.rs[0m[35m:75[0m[35m:25[0m
-[2m  4[0m[2m: [0m[91m<report[[HASH]]::test_report_colored::{closure#0} as core[[HASH]]::ops::function::FnOnce<()>>::call_once[0m
-           [2mat [0m[35m[STDLIB]/library/core/src/ops/function.rs[0m[35m:250[0m[35m:5[0m
-[2m  5[0m[2m: [0m[91m<fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once[0m
-           [2mat [0m[35m[STDLIB]/library/core/src/ops/function.rs[0m[35m:250[0m[35m:5[0m
-[36m   ... 20 frames hidden ...[0m
+[36m   ... 22 frames hidden ...[0m

@@ -14,6 +14,4 @@ expression: report
            [2mat [0m[35m[WORKSPACE]/crates/oopsie/tests/report.rs[0m[35m:75[0m[35m:25[0m
 [2m  4[0m[2m: [0m[91mcore::ops::function::FnOnce::call_once[0m[90m::h[HASH][0m
            [2mat [0m[35m[STDLIB]/library/core/src/ops/function.rs[0m[35m:250[0m[35m:5[0m
-[2m  5[0m[2m: [0m[91m<fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once[0m
-           [2mat [0m[35m[STDLIB]/library/core/src/ops/function.rs[0m[35m:250[0m[35m:5[0m
-[36m   ... 20 frames hidden ...[0m
+[36m   ... 21 frames hidden ...[0m

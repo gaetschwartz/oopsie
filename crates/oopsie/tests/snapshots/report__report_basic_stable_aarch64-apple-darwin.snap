@@ -14,6 +14,4 @@ Error[report::TestError]: Test error: something failed
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
   4: core::ops::function::FnOnce::call_once::h[HASH]
            at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-  5: <fn() -> core[[HASH]]::result::Result<(), alloc[[HASH]]::string::String> as core[[HASH]]::ops::function::FnOnce<()>>::call_once
-           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-   ... 20 frames hidden ...
+   ... 21 frames hidden ...
