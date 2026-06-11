@@ -549,8 +549,14 @@ const fn noop_frame_filter(_frames: &mut Vec<&BacktraceFrame>) {}
 pub fn marker_strip_filter(hidden: Vec<usize>) -> impl Fn(&mut Vec<&BacktraceFrame>) {
     move |frames: &mut Vec<&BacktraceFrame>| {
         let mut keep = frames.len();
-        while keep > 0 && hidden.contains(&frames[keep - 1].ip) {
-            keep -= 1;
+        for &ip in hidden.iter().rev() {
+            let run_start = keep;
+            while keep > 0 && frames[keep - 1].ip == ip {
+                keep -= 1;
+            }
+            if keep == run_start {
+                break;
+            }
         }
         if keep > 0 {
             frames.truncate(keep);
@@ -815,6 +821,23 @@ mod tests {
 
         assert_eq!(frames.len(), 1);
         assert_eq!(frames[0].ip, 1);
+    }
+
+    #[test]
+    fn marker_strip_is_ordered_not_membership() {
+        // Visible recursion frames (ips 7,8) above the hidden tail (7,8): ordered
+        // consumption removes exactly the trailing suffix and keeps the visible pair.
+        let user = make_frame_at(5, "my_crate::a");
+        let rec_a = make_frame_at(7, "my_crate::recurse");
+        let rec_b = make_frame_at(8, "my_crate::helper");
+        let tail_a = make_frame_at(7, "std::rt::x");
+        let tail_b = make_frame_at(8, "std::rt::y");
+
+        let filter = marker_strip_filter(vec![7, 8]);
+        let mut frames: Vec<&BacktraceFrame> = vec![&user, &rec_a, &rec_b, &tail_a, &tail_b];
+        filter(&mut frames);
+
+        assert_eq!(frames.iter().map(|f| f.ip).collect::<Vec<_>>(), [5, 7, 8]);
     }
 
     #[test]

@@ -512,17 +512,18 @@ impl Backtrace {
             let trace_div = trace.len() - 1 - cut;
             let marker_div = marker.frames().len() - 1 - cut;
             if trace[trace_div].1 != marker.frames()[marker_div].1 {
+                // Compare the outermost symbol on both sides: inline expansion
+                // lists symbols innermost-first, and only the last one names
+                // the physical enclosing function.
                 let trace_divergent_name = frames[trace_div]
                     .symbols()
-                    .first()
+                    .last()
                     .and_then(backtrace::BacktraceSymbol::name)
                     .map(|n| n.as_bytes().to_owned());
                 let marker_divergent_ip = marker.frames()[marker_div].0;
                 let mut marker_name: Option<Vec<u8>> = None;
                 backtrace::resolve(marker_divergent_ip as *mut _, |sym| {
-                    if marker_name.is_none() {
-                        marker_name = sym.name().map(|n| n.as_bytes().to_owned());
-                    }
+                    marker_name = sym.name().map(|n| n.as_bytes().to_owned());
                 });
                 if trace_divergent_name.is_some() && trace_divergent_name == marker_name {
                     cut += 1;

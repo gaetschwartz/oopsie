@@ -69,19 +69,24 @@ fn capture_marker(boundary: MarkerBoundary) -> TraceMarker {
     TraceMarker { frames, boundary }
 }
 
-/// Snapshot the current thread's marker, if any.
+/// Snapshot the current thread's marker, if any. All slot accessors degrade
+/// to a no-op once the thread's TLS is being torn down — capture inside a
+/// dying thread's panic hook must never double-panic.
 pub fn current() -> Option<Arc<TraceMarker>> {
-    MARKER.with(|slot| {
-        let cur = slot.take();
-        let snapshot = cur.clone();
-        slot.set(cur);
-        snapshot
-    })
+    MARKER
+        .try_with(|slot| {
+            let cur = slot.take();
+            let snapshot = cur.clone();
+            slot.set(cur);
+            snapshot
+        })
+        .ok()
+        .flatten()
 }
 
 #[doc(hidden)]
 pub fn set_start_marker() {
-    MARKER.with(|slot| {
+    let _ = MARKER.try_with(|slot| {
         slot.set(Some(Arc::new(capture_marker(MarkerBoundary::Exclusive))));
     });
 }
@@ -91,16 +96,19 @@ pub fn set_start_marker() {
 #[doc(hidden)]
 #[must_use]
 pub fn set_inclusive_marker() -> Option<Arc<TraceMarker>> {
-    MARKER.with(|slot| {
-        let prev = slot.take();
-        slot.set(Some(Arc::new(capture_marker(MarkerBoundary::Inclusive))));
-        prev
-    })
+    MARKER
+        .try_with(|slot| {
+            let prev = slot.take();
+            slot.set(Some(Arc::new(capture_marker(MarkerBoundary::Inclusive))));
+            prev
+        })
+        .ok()
+        .flatten()
 }
 
 #[doc(hidden)]
 pub fn restore_marker(prev: Option<Arc<TraceMarker>>) {
-    MARKER.with(|slot| slot.set(prev));
+    let _ = MARKER.try_with(|slot| slot.set(prev));
 }
 
 /// Marks the start of meaningful backtraces on the current thread: frames
