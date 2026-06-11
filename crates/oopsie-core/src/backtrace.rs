@@ -272,6 +272,8 @@ const RUNTIME_INIT_PREFIXES: &[&str] = &[
     "std::rt::lang_start",
     "std::panicking::catch_unwind::",
     "std::panic::catch_unwind::",
+    "std::panicking::try",
+    "<std::panic::AssertUnwindSafe<",
     "__rustc",
     "__libc_start",
     "__scrt_common_main",

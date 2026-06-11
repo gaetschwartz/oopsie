@@ -142,17 +142,31 @@ impl Default for TraceTheme {
 /// Default frame filter for error backtraces.
 ///
 /// This filter:
-/// 1. Skips frames from the top that are backtrace capture machinery
-/// 2. Removes runtime initialization frames from the bottom
+/// 1. Removes the runtime tail from the bottom: a contiguous run of
+///    runtime-init/nameless frames. Stopping at the first real user frame
+///    keeps frames below a user's own mid-stack `catch_unwind` intact —
+///    the cost is that an unrecognized tail spelling leaks frames instead
+///    of hiding user code.
+/// 2. Skips frames from the top that are backtrace capture machinery.
 pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
-    // Find the index of runtime init code at the bottom
-    let bottom_cutoff_idx = frames.iter().position(|frame| {
-        frame.name.as_ref().is_some_and(|name| {
-            oopsie_core::__private::is_runtime_init_code(name, frame.filename.as_deref())
-        })
-    });
-    if let Some(bot) = bottom_cutoff_idx {
-        frames.drain(bot..);
+    let mut keep = frames.len();
+    while keep > 0 {
+        let frame = frames[keep - 1];
+        let internal = match frame.name.as_ref() {
+            Some(name) => {
+                oopsie_core::__private::is_runtime_init_code(name, frame.filename.as_deref())
+            }
+            // Unresolvable frames are runtime/shim detail (`__rust_try` etc.).
+            None => true,
+        };
+        if !internal {
+            break;
+        }
+        keep -= 1;
+    }
+    // A fully symbol-stripped trace would peel to nothing; show it instead.
+    if keep > 0 {
+        frames.truncate(keep);
     }
 
     // Find the index of the last backtrace capture frame
@@ -639,8 +653,8 @@ mod tests {
     #[test]
     fn test_panic_frame_filter_trims_both_ends() {
         // A realistic panic stack: capture machinery + the unwind entry above
-        // user code, and the runtime-init tail (with `catch_unwind` frames that
-        // must NOT pull the top cut down) below `main`.
+        // user code, and a runtime-init cluster below `main` terminated by an
+        // unrecognized C-runtime frame (`_main`).
         let capture = make_frame(Some("std::backtrace_rs::backtrace::libunwind::trace"), None);
         let unwind = make_frame(Some("__rustc[ab12cd34]::rust_begin_unwind"), None);
         let panic_fmt = make_frame(Some("core[ab12cd34]::panicking::panic_fmt"), None);
@@ -658,9 +672,20 @@ mod tests {
         ];
         panic_frame_filter(&mut frames);
 
-        assert_eq!(frames.len(), 2);
+        // The contiguous peel stops at the first unrecognized bottom frame;
+        // leaking noise is preferred over hiding user frames.
+        assert_eq!(frames.len(), 5);
         assert_eq!(frames[0].name.as_deref(), Some("my_crate::parse_header"));
         assert_eq!(frames[1].name.as_deref(), Some("my_crate::main"));
+        assert_eq!(
+            frames[2].name.as_deref(),
+            Some("__rust_begin_short_backtrace<fn(), ()>")
+        );
+        assert_eq!(
+            frames[3].name.as_deref(),
+            Some("std[ab12cd34]::panicking::catch_unwind::do_call")
+        );
+        assert_eq!(frames[4].name.as_deref(), Some("_main"));
     }
 
     #[test]
@@ -677,6 +702,55 @@ mod tests {
         let (base, hash) = split_function_hash("my_crate::foo::habcd");
         assert_eq!(base, "my_crate::foo::habcd");
         assert_eq!(hash, None);
+    }
+
+    #[test]
+    fn bottom_trim_spares_user_frames_below_mid_stack_catch_unwind() {
+        let app_top = make_frame(Some("my_crate::inner_work"), None);
+        let catch = make_frame(Some("std::panic::catch_unwind::do_call"), None);
+        let supervisor = make_frame(Some("my_crate::supervisor"), None);
+        let runtime = make_frame(Some("std::rt::lang_start_internal"), None);
+
+        let mut frames: Vec<&BacktraceFrame> = vec![&app_top, &catch, &supervisor, &runtime];
+        error_backtrace_frame_filter(&mut frames);
+
+        // The contiguous peel stops at `supervisor`; only the true tail goes.
+        assert_eq!(
+            frames
+                .iter()
+                .map(|f| f.name.as_deref().unwrap())
+                .collect::<Vec<_>>(),
+            [
+                "my_crate::inner_work",
+                "std::panic::catch_unwind::do_call",
+                "my_crate::supervisor"
+            ],
+        );
+    }
+
+    #[test]
+    fn bottom_trim_peels_nameless_frames_in_the_tail() {
+        let app = make_frame(Some("my_crate::function_a"), None);
+        let runtime = make_frame(Some("std::rt::lang_start"), None);
+        let nameless = make_frame(None::<String>, None);
+
+        let mut frames: Vec<&BacktraceFrame> = vec![&app, &runtime, &nameless];
+        error_backtrace_frame_filter(&mut frames);
+
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
+    }
+
+    #[test]
+    fn bottom_trim_keeps_everything_when_all_frames_are_nameless() {
+        let a = make_frame(None::<String>, None);
+        let b = make_frame(None::<String>, None);
+
+        let mut frames: Vec<&BacktraceFrame> = vec![&a, &b];
+        error_backtrace_frame_filter(&mut frames);
+
+        // A fully symbol-stripped trace must not be trimmed to nothing.
+        assert_eq!(frames.len(), 2);
     }
 
     #[test]
