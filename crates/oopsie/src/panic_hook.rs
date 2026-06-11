@@ -17,7 +17,7 @@ use oopsie_core::SpanTrace;
 
 use crate::ColorConfig;
 use crate::color::style;
-use crate::trace_printer::{TracePrinter, TraceTheme, panic_frame_filter};
+use crate::trace_printer::{TracePrinter, TraceTheme, marker_strip_filter, panic_frame_filter};
 
 const HEADER_STYLE: Style = Style::new().red().bold();
 const MESSAGE_STYLE: Style = Style::new().bright_cyan();
@@ -186,9 +186,12 @@ impl<'a> PanicReport<'a> {
 
         // `full` means "show everything"; otherwise apply the panic-aware filter
         // that trims the panic plumbing above the call site and the runtime tail
-        // below `main`.
+        // below `main` — anchored on the exact marker cut when one was captured.
         let mut printer = if self.backtrace_setting.is_full() {
             TracePrinter::unfiltered()
+        } else if let Some(hidden) = self.backtrace.marker_hidden_ips() {
+            TracePrinter::with_filter_and_theme(marker_strip_filter(hidden), TraceTheme::DEFAULT)
+                .add_frame_filter(panic_frame_filter)
         } else {
             TracePrinter::with_filter_and_theme(panic_frame_filter, TraceTheme::DEFAULT)
         };
