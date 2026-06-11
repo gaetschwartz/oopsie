@@ -453,24 +453,27 @@ impl Backtrace {
         // more frame when the divergent frames resolve to the same mangled name.
         if marker.is_inclusive()
             && cut > 0
-            && cut < trace.len().saturating_sub(1)
+            && cut < trace.len().saturating_sub(1) // leave at least one frame above the cut
             && cut < marker.frames().len()
-            && trace[trace.len() - 1 - cut].1 != marker.frames()[marker.frames().len() - 1 - cut].1
         {
-            let trace_divergent_name = frames[trace.len() - 1 - cut]
-                .symbols()
-                .first()
-                .and_then(|s| s.name())
-                .map(|n| n.as_bytes().to_owned());
-            let marker_divergent_ip = marker.frames()[marker.frames().len() - 1 - cut].0;
-            let mut marker_name: Option<Vec<u8>> = None;
-            backtrace::resolve(marker_divergent_ip as *mut _, |sym| {
-                if marker_name.is_none() {
-                    marker_name = sym.name().map(|n| n.as_bytes().to_owned());
+            let trace_div = trace.len() - 1 - cut;
+            let marker_div = marker.frames().len() - 1 - cut;
+            if trace[trace_div].1 != marker.frames()[marker_div].1 {
+                let trace_divergent_name = frames[trace_div]
+                    .symbols()
+                    .first()
+                    .and_then(|s| s.name())
+                    .map(|n| n.as_bytes().to_owned());
+                let marker_divergent_ip = marker.frames()[marker_div].0;
+                let mut marker_name: Option<Vec<u8>> = None;
+                backtrace::resolve(marker_divergent_ip as *mut _, |sym| {
+                    if marker_name.is_none() {
+                        marker_name = sym.name().map(|n| n.as_bytes().to_owned());
+                    }
+                });
+                if trace_divergent_name.is_some() && trace_divergent_name == marker_name {
+                    cut += 1;
                 }
-            });
-            if trace_divergent_name.is_some() && trace_divergent_name == marker_name {
-                cut += 1;
             }
         }
         if cut == 0 || cut >= trace.len() {

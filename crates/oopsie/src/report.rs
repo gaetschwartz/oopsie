@@ -11,7 +11,9 @@ use crate::ColorConfig;
 use crate::Diagnostic;
 
 use crate::color::style;
-use crate::trace_printer::TracePrinter;
+use crate::trace_printer::{
+    TracePrinter, TraceTheme, error_backtrace_frame_filter, marker_strip_filter,
+};
 
 /// A wrapper around an error that provides rich, colorized output.
 ///
@@ -245,13 +247,10 @@ impl<E: Diagnostic> Report<E> {
         let mut printer = if oopsie_core::rust_backtrace().is_full() {
             TracePrinter::unfiltered()
         } else if let Some(hidden) = backtrace.marker_hidden_ips() {
-            // Marker cut first (exact bottom), then the name filter peels the
-            // residual catch_unwind cluster sitting on top of the cut.
-            TracePrinter::with_filter_and_theme(
-                crate::trace_printer::marker_strip_filter(hidden),
-                crate::trace_printer::TraceTheme::DEFAULT,
-            )
-            .add_frame_filter(crate::trace_printer::error_backtrace_frame_filter)
+            // Marker cut first (exact bottom); the name filter then trims the
+            // runtime frames left above the cut.
+            TracePrinter::with_filter_and_theme(marker_strip_filter(hidden), TraceTheme::DEFAULT)
+                .add_frame_filter(error_backtrace_frame_filter)
         } else {
             TracePrinter::new()
         };
