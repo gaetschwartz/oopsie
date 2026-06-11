@@ -141,7 +141,7 @@ fn report_run_panic_backtrace_has_no_run_or_runtime_frames() {
     );
     // Inclusive marker: Report::run's own frame and everything below it.
     assert!(
-        !stderr.contains("oopsie::report::"),
+        !stderr.contains("::report::"),
         "Report::run frame leaked\n{stderr}"
     );
     assert!(
@@ -163,7 +163,7 @@ fn full_backtrace_still_bypasses_marker_stripping() {
 
     // `full` shows everything — including frames the marker would hide.
     assert!(
-        stderr.contains("oopsie::report::"),
+        stderr.contains("::report::"),
         "full mode must not strip Report::run\n{stderr}"
     );
 }

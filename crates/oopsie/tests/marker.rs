@@ -37,7 +37,7 @@ fn report_run_hides_its_own_plumbing_and_the_runtime_tail() {
     );
     // Inclusive marker hides Report::run's own frame, data-driven.
     assert!(
-        !rendered.contains("oopsie::report::"),
+        !rendered.contains("::report::"),
         "Report::run frame leaked\n{rendered}"
     );
     // The catch_unwind cluster between closure and run must be peeled.
@@ -77,7 +77,7 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
         "thread spawn plumbing leaked\n{rendered}"
     );
     assert!(
-        !rendered.contains("std::thread::"),
+        !rendered.contains("::thread::"),
         "thread spawn plumbing leaked\n{rendered}"
     );
 }
@@ -128,7 +128,7 @@ fn report_run_mid_stack_catch_unwind_survives_with_marker() {
         "user frame below mid-stack catch_unwind was over-trimmed\n{rendered}"
     );
     assert!(
-        !rendered.contains("oopsie::report::"),
+        !rendered.contains("::report::"),
         "Report::run frame leaked\n{rendered}"
     );
 }
