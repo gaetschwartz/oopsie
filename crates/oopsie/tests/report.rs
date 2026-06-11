@@ -409,6 +409,7 @@ impl BacktraceProvider for FixedFrames {
 
 fn frame(name: &str, lineno: Option<u32>, colno: Option<u32>) -> BacktraceFrame {
     BacktraceFrame {
+        ip: 0,
         name: Some(name.into()),
         filename: Some(std::path::Path::new("src/lib.rs").into()),
         lineno,
@@ -418,6 +419,7 @@ fn frame(name: &str, lineno: Option<u32>, colno: Option<u32>) -> BacktraceFrame 
 
 fn frame_clone(f: &BacktraceFrame) -> BacktraceFrame {
     BacktraceFrame {
+        ip: f.ip,
         name: f.name.clone(),
         filename: f.filename.clone(),
         lineno: f.lineno,

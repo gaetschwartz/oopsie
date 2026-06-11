@@ -19,6 +19,9 @@ use crate::Backtrace;
 
 /// A single frame from a backtrace.
 pub struct BacktraceFrame {
+    /// Instruction pointer of the physical frame this symbol belongs to.
+    /// Inline expansion gives several rendered frames the same `ip`.
+    pub ip: usize,
     pub name: Option<Box<str>>,
     pub filename: Option<Box<path::Path>>,
     pub lineno: Option<u32>,
@@ -57,6 +60,7 @@ impl BacktraceProvider for Backtrace {
             .iter()
             .flat_map(|frame| {
                 frame.symbols().iter().map(|sym| BacktraceFrame {
+                    ip: frame.ip() as usize,
                     name: sym.name().map(|s| s.to_string().into_boxed_str()),
                     filename: sym.filename().map(Box::from),
                     lineno: sym.lineno(),
@@ -539,6 +543,24 @@ impl<T: ?Sized> Deref for BoxOrBorrow<'_, T> {
 /// A frame filter that keeps every frame.
 const fn noop_frame_filter(_frames: &mut Vec<&BacktraceFrame>) {}
 
+/// Frame filter hiding a marker-stripped tail: trailing frames whose physical
+/// `ip` is in `hidden` (see [`Backtrace::marker_hidden_ips`]). Membership is
+/// checked per rendered frame, so an inline run sharing one physical frame is
+/// consumed together. Never empties the list.
+///
+/// [`Backtrace::marker_hidden_ips`]: oopsie_core::Backtrace::marker_hidden_ips
+pub fn marker_strip_filter(hidden: Vec<usize>) -> impl Fn(&mut Vec<&BacktraceFrame>) {
+    move |frames: &mut Vec<&BacktraceFrame>| {
+        let mut keep = frames.len();
+        while keep > 0 && hidden.contains(&frames[keep - 1].ip) {
+            keep -= 1;
+        }
+        if keep > 0 {
+            frames.truncate(keep);
+        }
+    }
+}
+
 fn overlay_frame_filters(under: FrameFilterBox, above: FrameFilterBox) -> FrameFilterBox {
     BoxOrBorrow::Box(Box::new(move |frames: &mut Vec<&BacktraceFrame>| {
         under.as_ref()(frames);
@@ -556,6 +578,7 @@ mod tests {
 
     fn make_frame(name: Option<impl Into<String>>, lineno: Option<u32>) -> BacktraceFrame {
         BacktraceFrame {
+            ip: 0,
             name: name.map(|s| s.into().into_boxed_str()),
             filename: None,
             lineno,
@@ -751,5 +774,60 @@ mod tests {
         let (base, hash) = split_function_hash(&name);
         assert_eq!(base, name);
         assert_eq!(hash, None);
+    }
+
+    fn make_frame_at(ip: usize, name: &str) -> BacktraceFrame {
+        BacktraceFrame {
+            ip,
+            name: Some(name.to_owned().into_boxed_str()),
+            filename: None,
+            lineno: None,
+            colno: None,
+        }
+    }
+
+    #[test]
+    fn marker_strip_hides_only_the_trailing_hidden_run() {
+        let a = make_frame_at(1, "my_crate::a");
+        let mid = make_frame_at(7, "my_crate::mid"); // ip 7 hidden, but not trailing
+        let b = make_frame_at(2, "my_crate::b");
+        let tail1 = make_frame_at(7, "std::rt::whatever");
+        let tail2 = make_frame_at(8, "std::rt::deeper");
+
+        let filter = marker_strip_filter(vec![7, 8]);
+        let mut frames: Vec<&BacktraceFrame> = vec![&a, &mid, &b, &tail1, &tail2];
+        filter(&mut frames);
+
+        assert_eq!(
+            frames.iter().map(|f| f.ip).collect::<Vec<_>>(),
+            [1, 7, 2],
+            "mid-stack frame with a hidden ip must survive; only the tail goes"
+        );
+    }
+
+    #[test]
+    fn marker_strip_consumes_inline_runs_sharing_one_ip() {
+        let user = make_frame_at(1, "my_crate::a");
+        // One physical frame expanded into two rendered frames by inlining.
+        let inline_a = make_frame_at(9, "std::rt::outer_inlined");
+        let inline_b = make_frame_at(9, "std::rt::inner_inlined");
+
+        let filter = marker_strip_filter(vec![9]);
+        let mut frames: Vec<&BacktraceFrame> = vec![&user, &inline_a, &inline_b];
+        filter(&mut frames);
+
+        assert_eq!(frames.len(), 1);
+        assert_eq!(frames[0].ip, 1);
+    }
+
+    #[test]
+    fn marker_strip_never_empties_the_frame_list() {
+        let only = make_frame_at(3, "my_crate::a");
+
+        let filter = marker_strip_filter(vec![3]);
+        let mut frames: Vec<&BacktraceFrame> = vec![&only];
+        filter(&mut frames);
+
+        assert_eq!(frames.len(), 1);
     }
 }
