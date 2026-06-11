@@ -3,6 +3,7 @@
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::DeriveInput;
+use syn::ext::IdentExt as _;
 
 use super::parse::{CategorizedFields, DisplayAttr, StructAttrs, VariantAttrs};
 
@@ -41,7 +42,7 @@ pub fn gen_enum_display(input: &DeriveInput) -> syn::Result<TokenStream2> {
             quote! { ::core::fmt::Display::fmt(#source_ident, #fmtr) }
         } else {
             // Default: use variant name as display string
-            let name = variant_ident.to_string();
+            let name = variant_ident.unraw().to_string();
             quote! { ::core::write!(#fmtr, #name) }
         };
 
@@ -101,7 +102,7 @@ pub fn gen_struct_display(input: &DeriveInput, attrs: &StructAttrs) -> syn::Resu
         let source_ident = &source.ident;
         quote! { ::core::fmt::Display::fmt(#source_ident, #fmtr) }
     } else {
-        let name = struct_ident.to_string();
+        let name = struct_ident.unraw().to_string();
         quote! { ::core::write!(#fmtr, #name) }
     };
 

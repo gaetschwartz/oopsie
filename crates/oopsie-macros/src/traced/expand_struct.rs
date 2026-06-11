@@ -2,6 +2,7 @@
 
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
+use syn::ext::IdentExt as _;
 
 use super::args::{CodeSettings, TracedArgs};
 use super::config::{FieldInjectorConfig, FieldsToInject};
@@ -17,7 +18,7 @@ pub fn expand_struct(
     args_span: Span,
     mut input: syn::ItemStruct,
 ) -> syn::Result<TokenStream2> {
-    let struct_name = input.ident.to_string();
+    let struct_name = input.ident.unraw().to_string();
 
     let resolved = args.resolve();
     resolved.validate(args_span)?;

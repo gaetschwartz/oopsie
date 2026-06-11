@@ -687,3 +687,34 @@ fn list_form_code_accessor_and_provider_agree() {
     assert_eq!(via_accessor.as_str(), "app::net");
     assert_eq!(via_accessor.as_str(), via_provider.as_str());
 }
+
+// ---- Raw-ident variants must not leak `r#` into the auto error code ----
+
+#[oopsie(traced)]
+#[oopsie(module(false))]
+pub enum RawCodeError {
+    #[oopsie("raw")]
+    r#type { info: String },
+}
+
+#[test]
+fn raw_ident_variant_auto_code_drops_prefix() {
+    use oopsie::Diagnostic as _;
+    let err = r#type {
+        info: "x".to_owned(),
+    }
+    .build();
+    let code = err
+        .oopsie_error_code()
+        .expect("auto-code should be present");
+    assert!(
+        code.as_str().ends_with("::RawCodeError::type"),
+        "auto-code leaked raw prefix: {}",
+        code.as_str()
+    );
+    assert!(
+        !code.as_str().contains("r#"),
+        "auto-code leaked raw prefix: {}",
+        code.as_str()
+    );
+}

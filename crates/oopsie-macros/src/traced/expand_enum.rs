@@ -2,6 +2,7 @@
 
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
+use syn::ext::IdentExt as _;
 
 use super::args::{CodeSettings, TracedArgs};
 use super::config::{FieldInjectorConfig, FieldsToInject};
@@ -17,7 +18,7 @@ pub fn expand_enum(
     args_span: Span,
     mut input: syn::ItemEnum,
 ) -> syn::Result<TokenStream2> {
-    let enum_name = input.ident.to_string();
+    let enum_name = input.ident.unraw().to_string();
 
     let resolved = args.resolve();
     resolved.validate(args_span)?;
@@ -47,7 +48,7 @@ pub fn expand_enum(
         let has_user_code = has_oopsie_meta(&variant.attrs, "code");
         let is_transparent = has_oopsie_flag(&variant.attrs, "transparent");
 
-        let variant_name = variant.ident.to_string();
+        let variant_name = variant.ident.unraw().to_string();
         add_provide_attrs(
             &mut variant.attrs,
             &config,
