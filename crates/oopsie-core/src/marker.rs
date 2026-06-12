@@ -103,6 +103,8 @@ pub fn restore_marker(prev: Option<TraceMarker>) {
 /// function containing the call stays visible. A later call replaces the
 /// marker; other threads are unaffected.
 /// `RUST_BACKTRACE=full` renders traces unfiltered, ignoring markers.
+/// Hiding is applied by the `fancy` feature's renderers; without that
+/// feature the marker is recorded but has no effect.
 #[macro_export]
 macro_rules! start_marker {
     () => {{

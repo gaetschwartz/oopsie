@@ -214,7 +214,16 @@ fn matches_symbol(name: &str, bare: &[&str], scoped: &[(&str, &str)]) -> bool {
     scoped
         .iter()
         .any(|&(k, p)| symbol.krate == k && symbol.path.starts_with(p))
-        || bare.iter().any(|prefix| symbol.path.starts_with(prefix))
+        // A reserved bare symbol under a crate designator must end at a
+        // segment boundary — a user symbol may merely share the prefix.
+        || bare.iter().any(|prefix| {
+            symbol.path.strip_prefix(prefix).is_some_and(|rest| {
+                !rest
+                    .bytes()
+                    .next()
+                    .is_some_and(|b| b.is_ascii_alphanumeric() || b == b'_')
+            })
+        })
 }
 
 /// The panic *raising* runtime that sits directly above the user's `panic!`
@@ -985,6 +994,18 @@ mod tests {
     }
 
     #[test]
+    fn capture_code_matches_core_src_filenames() {
+        let core_file = std::path::PathBuf::from(format!(
+            "{}backtrace.rs",
+            oopsie_core::__private::CORE_SRC_PATH
+        ));
+        assert!(is_backtrace_capture_code("any::name", Some(&core_file)));
+        // A user path merely containing "backtrace" must not match.
+        let user_file = std::path::Path::new("/home/u/my_backtrace_tool/src/lib.rs");
+        assert!(!is_backtrace_capture_code("any::name", Some(user_file)));
+    }
+
+    #[test]
     fn marker_strip_never_empties_the_frame_list() {
         let only = make_frame_at(3, "my_crate::a");
 
@@ -1121,6 +1142,9 @@ mod tests {
             // The deliberate exclusion: catch_unwind sits below `main`.
             "std::panicking::catch_unwind::do_call",
             "my_crate::panicking::panic_like",
+            // Bare reserved symbols must end at a segment boundary.
+            "mycrate::rust_begin_unwinding",
+            "app::__rust_start_panicky",
         ] {
             assert!(!is_post_panic_code(name, None), "must not match: {name}");
         }
@@ -1149,6 +1173,9 @@ mod tests {
             // is user code, and the crate ident must compare exactly.
             "my_crate::rt::lang_start",
             "std_extras::rt::lang_start",
+            // Bare reserved symbols must end at a segment boundary.
+            "user::__rustc_internal_thing",
+            "app::__libc_startup_helper",
         ] {
             assert!(!is_runtime_init_code(name, None), "must not match: {name}");
         }

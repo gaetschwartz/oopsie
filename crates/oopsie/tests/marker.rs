@@ -37,9 +37,13 @@ fn report_run_hides_its_own_plumbing_and_the_runtime_tail() {
         "user frame missing\n{rendered}"
     );
     // The exclusive boundary keeps run's closure visible as the bottom frame.
+    let boundary_lines: Vec<_> = rendered
+        .lines()
+        .filter(|line| line.contains("::report::"))
+        .collect();
     assert!(
-        rendered.contains("::report::"),
-        "run boundary frame missing\n{rendered}"
+        boundary_lines.len() == 1 && boundary_lines[0].contains("closure"),
+        "exactly the run-closure boundary frame may be visible, got {boundary_lines:?}\n{rendered}"
     );
     // The catch_unwind cluster between closure and run lands in the frozen suffix.
     assert!(
@@ -135,9 +139,13 @@ fn report_run_mid_stack_catch_unwind_survives_with_marker() {
         rendered.contains("supervised"),
         "user frame below mid-stack catch_unwind was over-trimmed\n{rendered}"
     );
+    let boundary_lines: Vec<_> = rendered
+        .lines()
+        .filter(|line| line.contains("::report::"))
+        .collect();
     assert!(
-        rendered.contains("::report::"),
-        "run boundary frame missing\n{rendered}"
+        boundary_lines.len() == 1 && boundary_lines[0].contains("closure"),
+        "exactly the run-closure boundary frame may be visible, got {boundary_lines:?}\n{rendered}"
     );
 }
 
@@ -207,4 +215,34 @@ fn full_backtrace_bypasses_marker_on_error_path() {
             "full mode must show the unwind plumbing the marker hides\n{rendered}"
         );
     });
+}
+
+#[test]
+fn report_run_leaves_no_marker_on_a_clean_thread() {
+    std::thread::spawn(|| {
+        common::force_backtrace();
+        let _ = Report::run(fail_deep);
+        let err = KaboomOopsie {
+            message: "after clean run",
+        }
+        .build();
+        let bt = err
+            .oopsie_backtrace()
+            .expect("traced error has a backtrace");
+        assert!(bt.marker_hidden_frames().is_none());
+        // The unwound path must restore None as well.
+        let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = Report::run(|| -> Result<(), KaboomError> { panic!("boom") });
+        }));
+        let err = KaboomOopsie {
+            message: "after unwound clean run",
+        }
+        .build();
+        let bt = err
+            .oopsie_backtrace()
+            .expect("traced error has a backtrace");
+        assert!(bt.marker_hidden_frames().is_none());
+    })
+    .join()
+    .unwrap();
 }

@@ -269,12 +269,16 @@ impl Backtrace {
         }
         // The render view is symbol-level: inlined frames expand to several
         // rendered frames, unresolvable ones to none. Convert the physical
-        // cut into that currency.
-        let hidden = frames[frames.len() - cut..]
-            .iter()
-            .map(|frame| frame.symbols().len())
-            .sum::<usize>();
-        (hidden > 0).then_some(hidden)
+        // cut into that currency — and re-apply the never-hide-everything
+        // guard in it, since the kept physical frames may carry no symbols.
+        let rendered = |frames: &[backtrace::BacktraceFrame]| {
+            frames
+                .iter()
+                .map(|frame| frame.symbols().len())
+                .sum::<usize>()
+        };
+        let hidden = rendered(&frames[frames.len() - cut..]);
+        (hidden > 0 && hidden < rendered(frames)).then_some(hidden)
     }
 
     /// Force symbol resolution now, caching the result in place.

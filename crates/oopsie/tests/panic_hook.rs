@@ -139,9 +139,13 @@ fn report_run_panic_backtrace_ends_at_run_boundary() {
         stderr.contains("panic_child_in_run"),
         "panic site frame missing\n{stderr}"
     );
+    let boundary_lines: Vec<_> = stderr
+        .lines()
+        .filter(|line| line.contains("::report::"))
+        .collect();
     assert!(
-        stderr.contains("::report::"),
-        "run boundary frame missing\n{stderr}"
+        boundary_lines.len() == 1 && boundary_lines[0].contains("closure"),
+        "exactly the run-closure boundary frame may be visible, got {boundary_lines:?}\n{stderr}"
     );
     assert!(
         !stderr.contains("lang_start"),
