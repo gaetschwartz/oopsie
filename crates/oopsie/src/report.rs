@@ -25,6 +25,15 @@ use crate::trace_printer::{TracePrinter, error_backtrace_frame_filter, marker_st
 /// top error without `Report` reaching for it. A hand-written top-level error
 /// that does not forward [`Diagnostic`] renders without a deep trace, even if a
 /// source deeper in its chain carries one.
+///
+/// # Exit code
+///
+/// Returning a `Report` from `main` exits with a non-`SUCCESS` code on error.
+/// The code is resolved in this order: a runtime [`ExitCode`] requested through
+/// the nightly provider API (`unstable-error-generic-member-access`) wins when
+/// present, as the more specific runtime signal; otherwise the declarative
+/// [`Diagnostic::oopsie_exit_code`] (from `#[oopsie(exit_code = N)]`) is used;
+/// failing both, the code is [`ExitCode::FAILURE`].
 pub struct Report<E> {
     res: Result<(), E>,
     color_config: ColorMode,
@@ -314,16 +323,19 @@ where
             Err(e) => {
                 eprintln!("{self}");
 
+                let declared = e
+                    .oopsie_exit_code()
+                    .map_or(ExitCode::FAILURE, |n| ExitCode::from(n.get()));
+
                 #[cfg(feature = "unstable-error-generic-member-access")]
                 {
                     core::error::request_ref::<ExitCode>(e)
                         .copied()
-                        .unwrap_or(ExitCode::FAILURE)
+                        .unwrap_or(declared)
                 }
                 #[cfg(not(feature = "unstable-error-generic-member-access"))]
                 {
-                    let _ = e;
-                    ExitCode::FAILURE
+                    declared
                 }
             }
         }

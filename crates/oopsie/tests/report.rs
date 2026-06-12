@@ -311,6 +311,19 @@ fn test_termination_report_error() {
     let _code = Report::new(error).no_colors().report();
 }
 
+#[test]
+fn test_termination_report_honors_declared_exit_code() {
+    use oopsie::Diagnostic as _;
+    // `ExitCode` is opaque, so assert via the accessor `Termination::report`
+    // consults on stable, then drive `report()` to confirm the path runs.
+    let error = exit_coded_oopsies::ExitCoded { message: "boom" }.build();
+    assert_eq!(
+        error.oopsie_exit_code().map(core::num::NonZeroU8::get),
+        Some(78)
+    );
+    let _code = Report::new(error).no_colors().report();
+}
+
 // --- Report::run() tests ---
 
 #[test]
@@ -933,4 +946,78 @@ fn test_report_welp_message_free_wraps_io_error() {
     insta::with_settings!({ filters => vec![(r"report\.rs:\d+:\d+", "report.rs:[LOC]")] }, {
         insta::assert_snapshot!(snap_name!("report_welp_message_free"), report);
     });
+}
+
+// --- exit code precedence (provider vs declarative) ---
+//
+// The runtime provider value is the more specific signal, so it wins over the
+// declarative `#[oopsie(exit_code)]` when both are present. `ExitCode` is
+// opaque, but its `Debug` renders the numeric status, which the resolved code
+// is asserted against.
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn termination_prefers_provider_exit_code_over_declarative() {
+    use std::process::ExitCode;
+
+    #[derive(Debug)]
+    struct DualExit(ExitCode);
+
+    impl fmt::Display for DualExit {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("dual exit")
+        }
+    }
+
+    impl std::error::Error for DualExit {
+        // `Termination` consults `request_ref::<ExitCode>`, so provide by ref.
+        fn provide<'a>(&'a self, request: &mut std::error::Request<'a>) {
+            request.provide_ref::<ExitCode>(&self.0);
+        }
+    }
+
+    impl oopsie::Diagnostic for DualExit {
+        fn oopsie_exit_code(&self) -> Option<core::num::NonZeroU8> {
+            core::num::NonZeroU8::new(5)
+        }
+    }
+
+    let code = Report::new(DualExit(ExitCode::from(99)))
+        .no_colors()
+        .report();
+    assert_eq!(format!("{code:?}"), format!("{:?}", ExitCode::from(99)));
+}
+
+#[test]
+fn termination_uses_declarative_exit_code_when_no_provider() {
+    use std::process::ExitCode;
+
+    #[derive(Debug)]
+    struct DeclaredExit;
+
+    impl fmt::Display for DeclaredExit {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("declared exit")
+        }
+    }
+
+    impl std::error::Error for DeclaredExit {}
+
+    impl oopsie::Diagnostic for DeclaredExit {
+        fn oopsie_exit_code(&self) -> Option<core::num::NonZeroU8> {
+            core::num::NonZeroU8::new(42)
+        }
+    }
+
+    let code = Report::new(DeclaredExit).no_colors().report();
+    assert_eq!(format!("{code:?}"), format!("{:?}", ExitCode::from(42)));
+}
+
+// Defined after the tests so its declaration doesn't shift the line numbers a
+// backtrace snapshot above pins.
+#[oopsie(traced)]
+#[oopsie(exit_code = 78)]
+#[oopsie("Exit-coded error")]
+pub struct ExitCodedError {
+    message: String,
 }

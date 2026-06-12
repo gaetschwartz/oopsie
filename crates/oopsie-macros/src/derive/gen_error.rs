@@ -5,7 +5,21 @@ use quote::{format_ident, quote};
 use syn::Type;
 
 use super::model::{ResolvedEnum, ResolvedStruct, field_binding_pats};
-use super::parse::{CategorizedFields, DisplayAttr, ProvideAttr};
+use super::parse::{CategorizedFields, DisplayAttr, ExitCodeAttr, ProvideAttr};
+
+/// A `NonZeroU8` expression for a parse-validated exit code, spanned at the
+/// user's number so any diagnostic on it points back to the source.
+fn exit_code_nonzero(exit: ExitCodeAttr, oopsie_path: &syn::Path) -> TokenStream2 {
+    let lit = proc_macro2::Literal::u8_unsuffixed(exit.value);
+    let lit = quote::quote_spanned! { exit.span => #lit };
+    quote! { #oopsie_path::__private::nonzero_u8_unchecked(#lit) }
+}
+
+/// The same exit code wrapped in `Some`, for an accessor body.
+fn exit_code_some(exit: ExitCodeAttr, oopsie_path: &syn::Path) -> TokenStream2 {
+    let nonzero = exit_code_nonzero(exit, oopsie_path);
+    quote! { ::core::option::Option::Some(#nonzero) }
+}
 
 /// Build the body of a `oopsie_backtrace`/`oopsie_spantrace` accessor that
 /// surfaces the deepest *captured* trace: prefer the source's (origin-most)
@@ -133,7 +147,12 @@ pub fn gen_enum_error(
     let mut loc_arms = Vec::new();
     let mut code_arms = Vec::new();
     let mut help_arms = Vec::new();
+    let mut exit_arms = Vec::new();
     let mut accessor_uses_source = false;
+
+    // Container-level `exit_code` is the default for every variant; a variant's
+    // own `exit_code` overrides it.
+    let container_exit = resolved.container.exit_code;
 
     for v in &resolved.variants {
         let variant = v.variant;
@@ -234,6 +253,11 @@ pub fn gen_enum_error(
         }
         if let Some(code) = &variant_attrs.code {
             provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
+        }
+        // Provide the declared exit code (variant override, else container
+        // default) so it reaches a wrapper's accessor through the Provider API.
+        if let Some(exit) = variant_attrs.exit_code.or(container_exit) {
+            provide_stmts.push(gen_exit_code_provide(exit, oopsie_path, &req));
         }
 
         let field_binds = collect_provide_field_binds(categorized);
@@ -416,6 +440,24 @@ pub fn gen_enum_error(
                 Self::#variant_ident { #source_ident, .. } => #fwd,
             });
         }
+
+        // Exit code: variant override, then container default, then (for
+        // `transparent`) forwarded from the source.
+        if let Some(exit) = variant_attrs.exit_code.or(container_exit) {
+            let some = exit_code_some(exit, oopsie_path);
+            exit_arms.push(quote! {
+                #(#cfg_attrs)*
+                Self::#variant_ident { .. } => #some,
+            });
+        } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
+        {
+            let source_ident = &source_field.ident;
+            let fwd = gen_diag_forward(source_ident, "fwd_exit_code", oopsie_path);
+            exit_arms.push(quote! {
+                #(#cfg_attrs)*
+                Self::#variant_ident { #source_ident, .. } => #fwd,
+            });
+        }
     }
 
     // An all-stripped enum reaches the generators with every arm gated out (the
@@ -518,6 +560,19 @@ pub fn gen_enum_error(
         }
     };
 
+    let exit_method = if exit_arms.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            fn oopsie_exit_code(&self) -> ::core::option::Option<::core::num::NonZeroU8> {
+                match self {
+                    #(#exit_arms)*
+                    _ => ::core::option::Option::None,
+                }
+            }
+        }
+    };
+
     let source_body = if source_arms.is_empty() {
         quote! { match *self {} }
     } else {
@@ -548,6 +603,7 @@ pub fn gen_enum_error(
             #loc_method
             #code_method
             #help_method
+            #exit_method
         }
     })
 }
@@ -660,6 +716,9 @@ pub fn gen_struct_error(
     }
     if let Some(code) = &variant_attrs.code {
         provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
+    }
+    if let Some(exit) = attrs.container.exit_code {
+        provide_stmts.push(gen_exit_code_provide(exit, oopsie_path, &req));
     }
 
     // Destructure self to bring field names into scope (same pattern as enum match arms)
@@ -871,6 +930,27 @@ pub fn gen_struct_error(
         quote! {}
     };
 
+    // A struct's single `#[oopsie(...)]` list mixes container and variant roles,
+    // so `exit_code` is parsed on the flattened container; a `transparent`
+    // struct with no own code forwards the source's.
+    let exit_method = if let Some(exit) = attrs.container.exit_code {
+        let some = exit_code_some(exit, oopsie_path);
+        quote! {
+            fn oopsie_exit_code(&self) -> ::core::option::Option<::core::num::NonZeroU8> {
+                #some
+            }
+        }
+    } else if let (true, Some(s)) = (variant_attrs.transparent, struct_source) {
+        let fwd = gen_diag_forward(quote! { &self.#s }, "fwd_exit_code", oopsie_path);
+        quote! {
+            fn oopsie_exit_code(&self) -> ::core::option::Option<::core::num::NonZeroU8> {
+                #fwd
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     Ok(quote! {
         impl #impl_generics ::core::error::Error for #struct_ident #ty_generics #where_clause {
             fn source(&self) -> ::core::option::Option<&(dyn ::core::error::Error + 'static)> {
@@ -886,6 +966,7 @@ pub fn gen_struct_error(
             #loc_method
             #code_method
             #help_method
+            #exit_method
         }
     })
 }
@@ -929,6 +1010,19 @@ fn gen_code_provide(
         Ok(quote! {
             #req.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*)));
         })
+    }
+}
+
+/// Provide the declared exit code as a `NonZeroU8`, so a type-erased wrapper
+/// (e.g. `Welp`) can surface the origin-most code through the Provider API.
+fn gen_exit_code_provide(
+    exit: ExitCodeAttr,
+    oopsie_path: &syn::Path,
+    req: &syn::Ident,
+) -> TokenStream2 {
+    let nonzero = exit_code_nonzero(exit, oopsie_path);
+    quote! {
+        #req.provide_value::<::core::num::NonZeroU8>(#nonzero);
     }
 }
 

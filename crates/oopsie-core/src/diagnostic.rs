@@ -40,6 +40,17 @@ pub trait Diagnostic: std::error::Error {
     fn oopsie_help_text(&self) -> Option<HelpText> {
         None
     }
+
+    /// Returns the process exit code this error should terminate with.
+    ///
+    /// Honored by `Report`'s [`Termination`](std::process::Termination) impl on
+    /// stable. `NonZeroU8` is what [`ExitCode::from`](std::process::ExitCode)
+    /// accepts portably, and zero would denote success on a path that is, by
+    /// construction, a failure.
+    #[inline]
+    fn oopsie_exit_code(&self) -> Option<core::num::NonZeroU8> {
+        None
+    }
 }
 
 impl<T: Diagnostic> Diagnostic for Box<T> {
@@ -67,6 +78,11 @@ impl<T: Diagnostic> Diagnostic for Box<T> {
     #[inline]
     fn oopsie_help_text(&self) -> Option<HelpText> {
         (**self).oopsie_help_text()
+    }
+
+    #[inline]
+    fn oopsie_exit_code(&self) -> Option<core::num::NonZeroU8> {
+        (**self).oopsie_exit_code()
     }
 }
 

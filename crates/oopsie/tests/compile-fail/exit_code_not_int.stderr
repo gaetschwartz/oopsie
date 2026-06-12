@@ -1,0 +1,5 @@
+error: expected an integer literal in `1..=255`
+ --> tests/compile-fail/exit_code_not_int.rs:9:26
+  |
+9 |     #[oopsie(exit_code = "x")]
+  |                          ^^^

@@ -320,6 +320,17 @@ impl Diagnostic for Welp {
             }
         }
     }
+
+    fn oopsie_exit_code(&self) -> Option<core::num::NonZeroU8> {
+        // Surface the wrapped error's declared exit code, so a `#[oopsie]`
+        // origin's code survives `.welp()` wrapping. The source is type-erased,
+        // so this reaches it through the Provider API and yields `None` on
+        // stable — `Welp` keeps no exit code of its own to fall back to.
+        match &self.0 {
+            WelpRepr::Sourced { source, .. } => crate::__private::source_exit_code(&**source),
+            WelpRepr::Traced { .. } => None,
+        }
+    }
 }
 
 /// Extension trait on [`Result`] for attaching a string message that produces

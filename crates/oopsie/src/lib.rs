@@ -218,6 +218,7 @@ e.g. API error responses."
 //! | `size` | Compile-time size assertion |
 //! | `path` | Path to the `oopsie` crate |
 //! | `vis` | Selector visibility |
+//! | `exit_code` | Default process exit code |
 //!
 //! The short form `#[oopsie("msg")]` on a container sets the struct's display
 //! message (on enums the message goes on each variant instead).
@@ -227,6 +228,7 @@ e.g. API error responses."
 #![doc = include_str!("__private/keyword_docs/container/size.md")]
 #![doc = include_str!("__private/keyword_docs/container/path.md")]
 #![doc = include_str!("__private/keyword_docs/container/vis.md")]
+#![doc = include_str!("__private/keyword_docs/container/exit_code.md")]
 //!
 //! ## Variant / struct
 //!
@@ -236,6 +238,7 @@ e.g. API error responses."
 //! | `transparent` | Delegate to the wrapped error |
 //! | `help` | Static help text |
 //! | `code` | Error code |
+//! | `exit_code` | Process exit code |
 //! | `provide` | Provide a typed value |
 //! | `vis` | Selector visibility |
 //!
@@ -247,6 +250,7 @@ e.g. API error responses."
 #![doc = include_str!("__private/keyword_docs/variant/transparent.md")]
 #![doc = include_str!("__private/keyword_docs/variant/help.md")]
 #![doc = include_str!("__private/keyword_docs/variant/code.md")]
+#![doc = include_str!("__private/keyword_docs/variant/exit_code.md")]
 #![doc = include_str!("__private/keyword_docs/variant/provide.md")]
 #![doc = include_str!("__private/keyword_docs/variant/vis.md")]
 //!

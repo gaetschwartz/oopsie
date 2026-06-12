@@ -88,6 +88,49 @@ impl darling::FromMeta for SizeConstraint {
     }
 }
 
+/// A `exit_code = N` value: a process exit code in the range `1..=255`.
+///
+/// Stored as the validated byte plus the literal's span so codegen can point
+/// any later diagnostic at the user's number.
+#[derive(Debug, Clone, Copy)]
+pub struct ExitCodeAttr {
+    pub value: u8,
+    pub span: proc_macro2::Span,
+}
+
+impl darling::FromMeta for ExitCodeAttr {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        let lit = match item {
+            syn::Meta::NameValue(nv) => &nv.value,
+            other => {
+                return Err(darling::Error::custom("expected `exit_code = N`").with_span(other));
+            }
+        };
+        let syn::Expr::Lit(syn::ExprLit {
+            lit: syn::Lit::Int(int),
+            ..
+        }) = lit
+        else {
+            return Err(
+                darling::Error::custom("expected an integer literal in `1..=255`").with_span(lit),
+            );
+        };
+        // `ExitCode::from` accepts a `u8`; `0` denotes success, contradictory on
+        // an error path, so the accepted range is `1..=255`.
+        let value: u16 = int.base10_parse().map_err(darling::Error::custom)?;
+        let value = u8::try_from(value)
+            .ok()
+            .filter(|&v| v != 0)
+            .ok_or_else(|| {
+                darling::Error::custom("exit code must be in `1..=255`").with_span(int)
+            })?;
+        Ok(Self {
+            value,
+            span: int.span(),
+        })
+    }
+}
+
 /// Container-level keys without `vis` (which is extracted by a pre-pass
 /// because `pub(crate)` isn't a `syn::Expr`).
 ///
@@ -104,6 +147,8 @@ pub struct EnumContainerAttrsInner {
     pub size: Option<SizeConstraint>,
     #[darling(default)]
     pub path: Option<Path>,
+    #[darling(default)]
+    pub exit_code: Option<ExitCodeAttr>,
 }
 
 #[derive(Debug, Clone)]
@@ -225,6 +270,8 @@ pub struct VariantAttrsInner {
     pub help: Option<DisplayAttr>,
     #[darling(default)]
     pub code: Option<DisplayAttr>,
+    #[darling(default)]
+    pub exit_code: Option<ExitCodeAttr>,
     #[darling(default, multiple, rename = "provide")]
     pub provides: Vec<ProvideAttr>,
 }
@@ -263,11 +310,18 @@ impl darling::FromMeta for DisplayAttr {
 
 /// `#[oopsie(...)]` keywords accepted on a variant/struct, used to recognize one
 /// misparsed as a trailing display format arg (`#[oopsie("fmt", transparent)]`).
-const VARIANT_KEYWORDS: &[&str] = &["display", "transparent", "help", "code", "provide"];
+const VARIANT_KEYWORDS: &[&str] = &[
+    "display",
+    "transparent",
+    "help",
+    "code",
+    "exit_code",
+    "provide",
+];
 
 /// Container-only keywords; valid on a struct's `#[oopsie(...)]` alongside the
 /// variant set but never on an enum variant.
-const CONTAINER_KEYWORDS: &[&str] = &["module", "suffix", "size", "path", "vis"];
+const CONTAINER_KEYWORDS: &[&str] = &["module", "suffix", "size", "path", "vis", "exit_code"];
 
 /// Which `#[oopsie(...)]` keyword set a short display attaches to: an enum
 /// variant accepts only variant keywords, a struct's single list mixes container
@@ -854,6 +908,36 @@ mod tests {
     fn size_constraint_name_value_rejected() {
         let meta: syn::Meta = parse_quote!(size = 64);
         SizeConstraint::from_meta(&meta).unwrap_err();
+    }
+
+    // ── ExitCodeAttr ────────────────────────────────────────────────
+
+    #[test]
+    fn exit_code_accepts_in_range() {
+        let meta: syn::Meta = parse_quote!(exit_code = 78);
+        assert_eq!(ExitCodeAttr::from_meta(&meta).unwrap().value, 78);
+        let meta: syn::Meta = parse_quote!(exit_code = 1);
+        assert_eq!(ExitCodeAttr::from_meta(&meta).unwrap().value, 1);
+        let meta: syn::Meta = parse_quote!(exit_code = 255);
+        assert_eq!(ExitCodeAttr::from_meta(&meta).unwrap().value, 255);
+    }
+
+    #[test]
+    fn exit_code_rejects_zero() {
+        let meta: syn::Meta = parse_quote!(exit_code = 0);
+        ExitCodeAttr::from_meta(&meta).unwrap_err();
+    }
+
+    #[test]
+    fn exit_code_rejects_out_of_range() {
+        let meta: syn::Meta = parse_quote!(exit_code = 300);
+        ExitCodeAttr::from_meta(&meta).unwrap_err();
+    }
+
+    #[test]
+    fn exit_code_rejects_non_integer() {
+        let meta: syn::Meta = parse_quote!(exit_code = "x");
+        ExitCodeAttr::from_meta(&meta).unwrap_err();
     }
 
     // ── DisplayAttr ─────────────────────────────────────────────────

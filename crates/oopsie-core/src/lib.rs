@@ -92,6 +92,7 @@ pub mod __private {
         #[cfg(feature = "tracing")]
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace>;
         fn fwd_location(&self) -> Option<&'static std::panic::Location<'static>>;
+        fn fwd_exit_code(&self) -> Option<core::num::NonZeroU8>;
     }
 
     impl<'a, T: crate::Diagnostic + ?Sized> DiagForwardExt<'a> for DiagProbe<'a, T> {
@@ -116,6 +117,10 @@ pub mod __private {
         fn fwd_location(&self) -> Option<&'static std::panic::Location<'static>> {
             self.0.oopsie_location()
         }
+        #[inline]
+        fn fwd_exit_code(&self) -> Option<core::num::NonZeroU8> {
+            self.0.oopsie_exit_code()
+        }
     }
 
     /// Low-priority: source doesn't implement `Diagnostic` → nothing to forward.
@@ -139,6 +144,10 @@ pub mod __private {
         }
         #[inline]
         fn fwd_location(&self) -> Option<&'static std::panic::Location<'static>> {
+            None
+        }
+        #[inline]
+        fn fwd_exit_code(&self) -> Option<core::num::NonZeroU8> {
             None
         }
     }
@@ -195,6 +204,37 @@ pub mod __private {
     }
 
     pub use crate::marker::{TraceMarker, restore_marker, set_marker};
+
+    /// The exit code a type-erased source declares, reached through the Provider
+    /// API. Returns `None` on stable (descending into a `dyn Error` is not
+    /// portable there).
+    #[inline]
+    #[must_use]
+    pub fn source_exit_code(
+        source: &(dyn std::error::Error + 'static),
+    ) -> Option<core::num::NonZeroU8> {
+        #[cfg(feature = "unstable-error-generic-member-access")]
+        {
+            core::error::request_value::<core::num::NonZeroU8>(source)
+        }
+        #[cfg(not(feature = "unstable-error-generic-member-access"))]
+        {
+            let _ = source;
+            None
+        }
+    }
+
+    /// Build a `NonZeroU8` from a value the macro already validated to be in
+    /// `1..=255`. Panics at const-eval if the invariant is ever broken, so the
+    /// generated code stays `unsafe`-free.
+    #[inline]
+    #[must_use]
+    pub const fn nonzero_u8_unchecked(value: u8) -> core::num::NonZeroU8 {
+        match core::num::NonZeroU8::new(value) {
+            Some(n) => n,
+            None => panic!("exit code must be non-zero"),
+        }
+    }
 
     #[cfg(feature = "chrono")]
     pub use chrono;

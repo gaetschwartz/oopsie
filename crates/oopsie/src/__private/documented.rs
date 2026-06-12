@@ -58,6 +58,9 @@ pub mod params {
 
     /// Argument for `#[oopsie(...)]`.
     pub struct OopsieArg;
+
+    /// A process exit code, an integer in `1..=255`.
+    pub struct ExitCode;
 }
 
 /// The `oopsie` helper-attribute name itself, read by `#[derive(Oopsie)]` and
@@ -77,7 +80,7 @@ pub mod helper {
 
 /// Keywords accepted in `#[oopsie(...)]` on the error type itself.
 pub mod container {
-    use super::params::{IdentiferOrFalse, IntOrRange, Path, StringOrFalse, Vis};
+    use super::params::{ExitCode, IdentiferOrFalse, IntOrRange, Path, StringOrFalse, Vis};
 
     #[doc = include_str!("keyword_docs/container/module.md")]
     pub fn module(name: IdentiferOrFalse) {
@@ -103,12 +106,17 @@ pub mod container {
     pub fn vis(vis: Vis) {
         _ = vis;
     }
+
+    #[doc = include_str!("keyword_docs/container/exit_code.md")]
+    pub fn exit_code(code: ExitCode) {
+        _ = code;
+    }
 }
 
 /// Keywords accepted in `#[oopsie(...)]` on an enum variant (or on a struct,
 /// which plays both container and variant roles).
 pub mod variant {
-    use super::params::{FmtArg, FormatString, TypeArrowExpr, Vis};
+    use super::params::{ExitCode, FmtArg, FormatString, TypeArrowExpr, Vis};
 
     #[doc = include_str!("keyword_docs/variant/display.md")]
     pub fn display(fmt: FormatString, args: Vec<FmtArg>) {
@@ -129,6 +137,11 @@ pub mod variant {
     pub fn code(code: FormatString, args: Vec<FmtArg>) {
         _ = code;
         _ = args;
+    }
+
+    #[doc = include_str!("keyword_docs/variant/exit_code.md")]
+    pub fn exit_code(code: ExitCode) {
+        _ = code;
     }
 
     #[doc = include_str!("keyword_docs/variant/provide.md")]

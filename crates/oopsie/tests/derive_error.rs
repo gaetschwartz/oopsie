@@ -977,3 +977,170 @@ fn struct_error_code_ref_provide_returns_owned_clone() {
     let code = err.oopsie_error_code().expect("accessor yields code");
     assert_eq!(code.as_str(), "ref::struct");
 }
+
+// ---- oopsie_exit_code() stable accessor ----
+//
+// `exit_code = N` is honored on stable through the `oopsie_exit_code()`
+// accessor; the Provider path (`request_value::<NonZeroU8>`) reaches parity on
+// nightly. A container-level value is the default for every variant, overridden
+// per variant.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false), exit_code = 3)]
+enum ExitCodeError {
+    #[oopsie("default coded")]
+    UsesDefault { msg: String },
+
+    #[oopsie("override coded")]
+    #[oopsie(exit_code = 78)]
+    Overrides { msg: String },
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum NoContainerExitError {
+    #[oopsie("only this one")]
+    #[oopsie(exit_code = 42)]
+    SoloCoded { msg: String },
+
+    #[oopsie("uncoded")]
+    Uncoded { msg: String },
+}
+
+#[test]
+fn exit_code_variant_value_surfaces() {
+    use oopsie::Diagnostic as _;
+    let err = SoloCoded {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    assert_eq!(
+        err.oopsie_exit_code().map(core::num::NonZeroU8::get),
+        Some(42)
+    );
+}
+
+#[test]
+fn exit_code_absent_returns_none() {
+    use oopsie::Diagnostic as _;
+    let err = Uncoded {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    assert!(err.oopsie_exit_code().is_none());
+}
+
+#[test]
+fn exit_code_container_default_applies() {
+    use oopsie::Diagnostic as _;
+    let err = UsesDefault {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    assert_eq!(
+        err.oopsie_exit_code().map(core::num::NonZeroU8::get),
+        Some(3)
+    );
+}
+
+#[test]
+fn exit_code_variant_overrides_container_default() {
+    use oopsie::Diagnostic as _;
+    let err = Overrides {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    assert_eq!(
+        err.oopsie_exit_code().map(core::num::NonZeroU8::get),
+        Some(78)
+    );
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn exit_code_accessor_and_provider_agree() {
+    use oopsie::Diagnostic as _;
+    let err = Overrides {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    let via_accessor = err.oopsie_exit_code().expect("accessor yields exit code");
+    let via_provider = core::error::request_value::<core::num::NonZeroU8>(&err)
+        .expect("provider yields exit code");
+    assert_eq!(via_accessor, via_provider);
+    assert_eq!(via_accessor.get(), 78);
+}
+
+// ---- struct exit_code ----
+
+#[oopsie::oopsie]
+#[oopsie(exit_code = 70)]
+pub struct ExitStructError {
+    detail: String,
+}
+
+#[test]
+fn struct_exit_code_surfaces() {
+    use oopsie::Diagnostic as _;
+    let err = exit_struct_oopsies::ExitStruct {
+        detail: "x".to_owned(),
+    }
+    .build();
+    assert_eq!(
+        err.oopsie_exit_code().map(core::num::NonZeroU8::get),
+        Some(70)
+    );
+}
+
+// ---- transparent forwarding ----
+
+#[oopsie::oopsie]
+#[oopsie(exit_code = 65)]
+pub enum ExitLeafError {
+    #[oopsie("leaf boom")]
+    Boom { detail: String },
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum ExitWrapperError {
+    #[oopsie("wrapped")]
+    #[oopsie(transparent)]
+    Wrap { source: ExitLeafError },
+}
+
+#[test]
+fn exit_code_transparent_forwards_from_source() {
+    use oopsie::Diagnostic as _;
+    let leaf = exit_leaf_oopsies::Boom {
+        detail: "x".to_owned(),
+    }
+    .build();
+    let wrapper = ExitWrapperError::Wrap { source: leaf };
+    assert_eq!(
+        wrapper.oopsie_exit_code().map(core::num::NonZeroU8::get),
+        Some(65)
+    );
+}
+
+// ---- Welp forwarding ----
+//
+// A `#[oopsie]` origin's exit code survives `.welp()` wrapping. Reaching it
+// requires the Provider API (the source is type-erased), so this is gated on
+// the unstable feature; on stable `Welp` carries no exit code of its own.
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn welp_forwards_source_exit_code() {
+    use oopsie::Diagnostic as _;
+    use oopsie::WelpResultExt as _;
+    let leaf = exit_leaf_oopsies::Boom {
+        detail: "x".to_owned(),
+    }
+    .build();
+    let welp = Err::<(), _>(leaf).welp().unwrap_err();
+    assert_eq!(
+        welp.oopsie_exit_code().map(core::num::NonZeroU8::get),
+        Some(65)
+    );
+}

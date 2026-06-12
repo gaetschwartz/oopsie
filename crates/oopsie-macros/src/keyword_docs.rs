@@ -66,7 +66,7 @@ fn collect_into(attrs: &[syn::Attribute], out: &mut Vec<Ident>, helpers: &mut Ve
 }
 
 fn is_container_key(ident: &Ident) -> bool {
-    ["module", "suffix", "size", "path", "vis"]
+    ["module", "suffix", "size", "path", "vis", "exit_code"]
         .iter()
         .any(|k| ident == k)
 }

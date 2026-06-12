@@ -1,0 +1,5 @@
+error: exit code must be in `1..=255`
+ --> tests/compile-fail/exit_code_out_of_range.rs:9:26
+  |
+9 |     #[oopsie(exit_code = 300)]
+  |                          ^^^
