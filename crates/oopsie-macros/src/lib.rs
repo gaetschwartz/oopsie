@@ -12,9 +12,11 @@ pub(crate) mod utils;
 /// Derive macro that generates context selectors, `Display`, and `Error` impls
 /// for a struct or enum.
 ///
-/// This is the low-level building block. For the batteries-included experience
-/// (automatic `Debug` generation, optional tracing/diagnostics), prefer
-/// [`#[oopsie]`](macro@oopsie) instead.
+/// This is the engine the [`#[oopsie]`](macro@oopsie) attribute drives, and the
+/// attribute is the canonical entry point. On top of this derive the attribute
+/// also derives `Debug` for you and, with `traced`, injects the backtrace and
+/// span-trace fields. Reach for the derive directly only when you want to supply
+/// those pieces yourself; otherwise prefer the attribute.
 ///
 /// # What gets generated
 ///

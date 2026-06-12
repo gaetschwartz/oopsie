@@ -44,6 +44,8 @@ fn main() -> oopsie::Report<AppError> {
 | Feature | Default | Toolchain | Effect |
 |---------|---------|-----------|--------|
 | `fancy` | yes | stable | `Report`, color output, panic hook |
+| `tracing` | no | stable | span-trace capture and the `tracing-subscriber` error layer |
+| `serde` | no | stable | the `erased` module: serialize any error as a type-erased value |
 | `chrono` | no | stable | `chrono::DateTime<Local>` timestamps for `traced(timestamp(chrono = true))`; no direct `chrono` dependency required |
 | `unstable` | no | nightly | umbrella for the two features below |
 | `unstable-error-generic-member-access` | no | nightly | trace/diagnostic surfacing through the Provider API |

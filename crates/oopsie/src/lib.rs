@@ -302,11 +302,13 @@ pub use oopsie_core::{OptionalSpanTrace, SpanTrace};
 
 /// Thread-local control over backtrace capture.
 ///
-/// [`current`] reports the effective [`RustBacktrace`] setting for the calling
-/// thread, derived from the environment unless overridden. [`set_override`],
-/// [`clear_override`], and [`with_override`] force that setting on the current
-/// thread, taking precedence over the environment. [`current_panic`] reports the
-/// setting that applies to panic backtraces, which honor `RUST_BACKTRACE` only.
+/// [`current`](backtrace::current) reports the effective [`RustBacktrace`] setting
+/// for the calling thread, derived from the environment unless overridden.
+/// [`set_override`](backtrace::set_override), [`clear_override`](backtrace::clear_override),
+/// and [`with_override`](backtrace::with_override) force that setting on the current
+/// thread, taking precedence over the environment.
+/// [`current_panic`](backtrace::current_panic) reports the setting that applies to
+/// panic backtraces, which honor `RUST_BACKTRACE` only.
 pub mod backtrace {
     pub use oopsie_core::{
         clear_rust_backtrace_override as clear_override, rust_backtrace as current,
