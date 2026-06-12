@@ -4,6 +4,7 @@ mod gen_display;
 mod gen_error;
 mod gen_module;
 mod gen_selectors;
+mod generics;
 pub mod model;
 pub mod parse;
 
@@ -47,19 +48,22 @@ fn gen_site_registration(oopsie_path: &syn::Path) -> TokenStream2 {
     }
 }
 
-/// Reject generic types up-front so users get a clear error instead of an
-/// `E0107` originating inside macro-generated code. The selector struct,
-/// `Contextual` impl, and `transparent` `From` impl would all need to thread
-/// `impl_generics` / `ty_generics` / `where_clause` through every emit site
-/// to support this properly — left for a follow-up.
-fn check_no_generics(input: &DeriveInput) -> syn::Result<()> {
-    if input.generics.params.is_empty() {
-        return Ok(());
+/// A `size(...)` constraint asserts `size_of::<E>()` against a fixed byte count,
+/// but a generic `E<T>` has no single size — it depends on `T`. Reject the
+/// combination up front so the error names the conflict rather than surfacing as
+/// an inscrutable const-eval failure inside the generated assertion.
+fn reject_size_with_generics(
+    input: &DeriveInput,
+    size: Option<&SizeConstraint>,
+) -> syn::Result<()> {
+    if size.is_some() && !input.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &input.generics,
+            "`size(...)` cannot be combined with generic parameters: the size of \
+             a generic type depends on its arguments and is unknown here",
+        ));
     }
-    Err(syn::Error::new_spanned(
-        &input.generics,
-        "oopsie does not yet support generic error types",
-    ))
+    Ok(())
 }
 
 fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenStream2 {
@@ -117,7 +121,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
 }
 
 pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Result<TokenStream2> {
-    check_no_generics(input)?;
+    reject_size_with_generics(input, attrs.size.as_ref())?;
     let resolved = ResolvedEnum::resolve(input, attrs)?;
     let path = attrs.oopsie_path();
     let selectors = gen_enum_selectors(&resolved, &path);
@@ -152,7 +156,7 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
 }
 
 pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<TokenStream2> {
-    check_no_generics(input)?;
+    reject_size_with_generics(input, attrs.container.size.as_ref())?;
     let resolved = ResolvedStruct::resolve(input, attrs)?;
     let path = attrs.container.oopsie_path();
     let selector = gen_struct_selector(&resolved, &path)?;
@@ -252,6 +256,35 @@ mod tests {
                 message: String,
                 #[oopsie(capture)]
                 __oopsie_backtrace: ::std::boxed::Box<crate::Backtrace>,
+            }
+        };
+        let output = expand(input).unwrap().to_string();
+        insta::assert_snapshot!(output);
+    }
+
+    // A representative generic enum: one variant whose field references the
+    // type param `T` (selector carries `T`, no `Into` param since the param is
+    // named directly), one transparent source-only variant whose source type is
+    // the param `E` (a `From<E>` impl, no selector), and a where-clause the impls
+    // carry but the selector struct does not. The transparent variant's trace
+    // forwarding is tracing-dependent, so the snapshot pins one combo.
+    #[cfg(all(
+        not(feature = "tracing"),
+        not(feature = "unstable-error-generic-member-access")
+    ))]
+    #[test]
+    fn test_derive_generic_enum() {
+        let input = quote! {
+            #[oopsie(module(false))]
+            pub enum GenericError<T, E>
+            where
+                T: ::core::fmt::Debug,
+                E: ::core::error::Error,
+            {
+                #[oopsie("payload was {payload:?}")]
+                Wrap { payload: T },
+                #[oopsie(display("inner failed"), transparent)]
+                Inner { source: E },
             }
         };
         let output = expand(input).unwrap().to_string();

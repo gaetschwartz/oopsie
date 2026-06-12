@@ -1,0 +1,16 @@
+error[E0277]: `T` doesn't implement `std::fmt::Display`
+  --> tests/compile-fail/stable/generic_display_bound_missing.rs:14:24
+   |
+11 | #[derive(Debug, Oopsie)]
+   |                 ------ in this derive macro expansion
+...
+14 |     #[oopsie("value is {value}")]
+   |                        ^^^^^^^ `T` cannot be formatted with the default formatter
+   |
+   = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead
+   = note: required for `&T` to implement `std::fmt::Display`
+   = note: this error originates in the macro `$crate::format_args` which comes from the expansion of the derive macro `Oopsie` (in Nightly builds, run with -Z macro-backtrace for more info)
+help: consider further restricting type parameter `T` with trait `Display`
+   |
+13 | enum E<T: std::fmt::Debug + std::fmt::Display> {
+   |                           +++++++++++++++++++

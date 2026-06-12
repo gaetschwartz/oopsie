@@ -4,6 +4,10 @@ carries it. Accepts an exact size or a range, in bytes.
 
 Forms: `size(N)`, `size(..=N)`, `size(N..)`, `size(N..=M)`.
 
+Not available on a generic error type: its size depends on the type arguments
+and has no single value to assert, so combining `size(...)` with generic
+parameters is rejected.
+
 ### Example
 ```
 #[oopsie::oopsie]

@@ -281,6 +281,34 @@ e.g. API error responses."
     doc = include_str!("__private/keyword_docs/field/traces_example.md")
 )]
 #![doc = include_str!("__private/keyword_docs/field/help.md")]
+//!
+//! ## Generic error types
+//!
+//! Type parameters, lifetimes, const parameters, bounds, and `where` clauses are
+//! supported on both enums and structs. A context selector carries only the
+//! parameters its captured fields reference: a field of type `Vec<T>` makes the
+//! selector generic over `T`, while a leaf variant that mentions no parameter
+//! stays non-generic and infers the destination's parameters from the call site.
+//!
+//! No bound is added beyond what you write. Interpolating a field in a `display`
+//! (or `help`/`code`) format string requires that field's type to implement the
+//! formatting trait the placeholder uses, exactly as in any `format!` — if a
+//! type parameter is interpolated as `{field}` but is not `Display`, the error
+//! is the ordinary missing-`Display` bound at your format string. Add the bound
+//! yourself (`T: Display`) when the message needs it.
+//!
+//! ```
+//! # use oopsie::Oopsie;
+//! #[derive(Debug, Oopsie)]
+//! #[oopsie(module(false))]
+//! enum Lookup<K: std::fmt::Debug> {
+//!     #[oopsie("no entry for {key:?}")]
+//!     Missing { key: K },
+//! }
+//!
+//! let err: Lookup<u32> = Missing { key: 7 }.build();
+//! assert_eq!(err.to_string(), "no entry for 7");
+//! ```
 
 // Re-export the proc-macro attribute and derive.
 pub use oopsie_macros::Oopsie;
