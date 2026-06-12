@@ -27,26 +27,58 @@ pub struct TraceMarker {
 
 #[derive(Debug)]
 pub struct MarkerFrame {
-    pub ip: usize,
-    pub symbol_address: usize,
+    ip: usize,
+    symbol_address: usize,
 }
 
-impl From<&backtrace::BacktraceFrame> for MarkerFrame {
+impl<F: FrameLike> From<&F> for MarkerFrame {
     #[inline]
-    fn from(frame: &backtrace::BacktraceFrame) -> Self {
+    fn from(frame: &F) -> Self {
         Self {
-            ip: frame.ip() as usize,
-            symbol_address: frame.symbol_address() as usize,
+            ip: frame.ip(),
+            symbol_address: frame.symbol_address(),
         }
     }
 }
-impl From<&backtrace::Frame> for MarkerFrame {
+
+pub trait FrameLike {
+    fn ip(&self) -> usize;
+    fn symbol_address(&self) -> usize;
+}
+
+impl FrameLike for backtrace::BacktraceFrame {
     #[inline]
-    fn from(frame: &backtrace::Frame) -> Self {
-        Self {
-            ip: frame.ip() as usize,
-            symbol_address: frame.symbol_address() as usize,
-        }
+    fn ip(&self) -> usize {
+        self.ip() as usize
+    }
+
+    #[inline]
+    fn symbol_address(&self) -> usize {
+        self.symbol_address() as usize
+    }
+}
+
+impl FrameLike for backtrace::Frame {
+    #[inline]
+    fn ip(&self) -> usize {
+        self.ip() as usize
+    }
+
+    #[inline]
+    fn symbol_address(&self) -> usize {
+        self.symbol_address() as usize
+    }
+}
+
+impl FrameLike for MarkerFrame {
+    #[inline]
+    fn ip(&self) -> usize {
+        self.ip
+    }
+
+    #[inline]
+    fn symbol_address(&self) -> usize {
+        self.symbol_address
     }
 }
 
@@ -63,19 +95,19 @@ impl TraceMarker {
     /// common `ip` suffix, extended by one frame for inclusive markers when
     /// the divergent frames share a `symbol_address` (same function,
     /// different call sites within it).
-    pub(crate) fn cut_len(&self, trace: &[MarkerFrame]) -> usize {
+    pub(crate) fn cut_len(&self, trace: &[impl FrameLike]) -> usize {
         let m = &self.frames;
         let mut k = 0;
         while k < trace.len()
             && k < m.len()
-            && trace[trace.len() - 1 - k].ip == m[m.len() - 1 - k].ip
+            && trace[trace.len() - 1 - k].ip() == m[m.len() - 1 - k].ip
         {
             k += 1;
         }
         if self.is_inclusive()
             && k < trace.len()
             && k < m.len()
-            && trace[trace.len() - 1 - k].symbol_address == m[m.len() - 1 - k].symbol_address
+            && trace[trace.len() - 1 - k].symbol_address() == m[m.len() - 1 - k].symbol_address
         {
             k += 1;
         }
@@ -257,7 +289,7 @@ mod tests {
             frames: marker_frames(&[(10, 1), (20, 2)]),
             boundary: MarkerBoundary::Inclusive,
         };
-        assert_eq!(marker.cut_len(&[]), 0);
+        assert_eq!(marker.cut_len(&marker_frames(&[])), 0);
     }
 
     #[test]

@@ -66,7 +66,7 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
             .oopsie_backtrace()
             .expect("traced error has a backtrace");
         assert!(
-            bt.marker_hidden_ips().is_some(),
+            bt.marker_hidden_frames().is_some(),
             "exclusive marker must produce a cut on its own thread"
         );
         Report::from_std(err).no_colors().to_string()
@@ -159,7 +159,7 @@ fn marker_from_another_thread_never_applies() {
     let bt = err
         .oopsie_backtrace()
         .expect("traced error has a backtrace");
-    assert!(bt.marker_hidden_ips().is_none());
+    assert!(bt.marker_hidden_frames().is_none());
 }
 
 #[test]
@@ -176,7 +176,7 @@ fn report_run_restores_previous_marker_on_return() {
     let bt = err
         .oopsie_backtrace()
         .expect("traced error has a backtrace");
-    assert!(bt.marker_hidden_ips().is_some());
+    assert!(bt.marker_hidden_frames().is_some());
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn report_run_restores_previous_marker_on_unwind() {
     let bt = err
         .oopsie_backtrace()
         .expect("traced error has a backtrace");
-    assert!(bt.marker_hidden_ips().is_some());
+    assert!(bt.marker_hidden_frames().is_some());
 }
 
 #[test]

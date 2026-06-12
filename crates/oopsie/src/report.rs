@@ -251,10 +251,10 @@ impl<E: Diagnostic> Report<E> {
         writeln!(f)?;
         let mut printer = if oopsie_core::rust_backtrace().is_full() {
             TracePrinter::unfiltered()
-        } else if let Some(hidden) = backtrace.marker_hidden_ips() {
+        } else if let Some(cut) = backtrace.marker_hidden_frames() {
             // Marker cut first (exact bottom); the name filter then trims the
             // runtime frames left above the cut.
-            TracePrinter::with_filter_and_theme(marker_strip_filter(hidden), TraceTheme::DEFAULT)
+            TracePrinter::with_filter_and_theme(marker_strip_filter(cut), TraceTheme::DEFAULT)
                 .add_frame_filter(error_backtrace_frame_filter)
         } else {
             TracePrinter::new()

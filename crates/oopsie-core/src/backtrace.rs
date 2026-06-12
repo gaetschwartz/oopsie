@@ -5,7 +5,7 @@ use std::sync::{Arc, LazyLock};
 use std::{env, fmt, path};
 
 use crate::Capturable as _;
-use crate::marker::MarkerFrame;
+use crate::marker::FrameLike;
 
 /// Whether backtrace capture is enabled, and how verbosely it should render.
 ///
@@ -486,53 +486,65 @@ impl Backtrace {
         self.as_backtrace().frames()
     }
 
-    /// IPs of the trailing frames hidden by this trace's marker: the suffix
+    /// Number of trailing frames hidden by this trace's marker: the suffix
     /// shared with the marker stack, plus the boundary frame for inclusive
-    /// markers. `None` when no marker was set on the capturing thread, the
-    /// stacks share no frames (e.g. the marker came from another thread), or
-    /// the cut would hide every frame.
+    /// markers — counted in rendered (symbol-level) frames. `None` when no
+    /// marker was set on the capturing thread, the stacks share no frames
+    /// (e.g. the marker came from another thread), the cut would hide every
+    /// frame, or none of the hidden frames carry symbols.
     ///
     /// Forces symbol resolution, like [`frames`](Self::frames); deciding the
     /// boundary frame of an inclusive marker may resolve one further address.
     #[must_use]
-    pub fn marker_hidden_ips(&self) -> Option<Vec<usize>> {
+    pub fn marker_hidden_frames(&self) -> Option<usize> {
         let marker = self.marker.as_ref()?;
         let frames = self.frames();
-        let trace: Vec<_> = frames.iter().map(MarkerFrame::from).collect();
-        let mut cut = marker.cut_len(&trace);
+        let mut cut = marker.cut_len(frames);
         // On platforms where symbol_address() == ip() (e.g. Apple), cut_len's
         // inclusive extension cannot fire via symbol address. Extend by one
         // more frame when the divergent frames resolve to the same mangled name.
         if marker.is_inclusive()
             && cut > 0
-            && cut < trace.len().saturating_sub(1) // leave at least one frame above the cut
+            && cut < frames.len().saturating_sub(1) // leave at least one frame above the cut
             && cut < marker.frames().len()
         {
-            let trace_div = trace.len() - 1 - cut;
+            let trace_div = frames.len() - 1 - cut;
             let marker_div = marker.frames().len() - 1 - cut;
-            if trace[trace_div].symbol_address != marker.frames()[marker_div].symbol_address {
+            if FrameLike::symbol_address(&frames[trace_div])
+                != FrameLike::symbol_address(&marker.frames()[marker_div])
+            {
                 // Compare the outermost symbol on both sides: inline expansion
                 // lists symbols innermost-first, and only the last one names
                 // the physical enclosing function.
                 let trace_divergent_name = frames[trace_div]
                     .symbols()
                     .last()
-                    .and_then(backtrace::BacktraceSymbol::name)
-                    .map(|n| n.as_bytes().to_owned());
-                let marker_divergent_ip = marker.frames()[marker_div].ip;
-                let mut marker_name: Option<Vec<u8>> = None;
+                    .and_then(backtrace::BacktraceSymbol::name);
+                let marker_divergent_ip = marker.frames()[marker_div].ip();
+
+                let mut outermost_matches = false;
                 backtrace::resolve(marker_divergent_ip as *mut _, |sym| {
-                    marker_name = sym.name().map(|n| n.as_bytes().to_owned());
+                    outermost_matches = trace_divergent_name
+                        .as_ref()
+                        .zip(sym.name())
+                        .is_some_and(|(t, s)| t.as_bytes() == s.as_bytes());
                 });
-                if trace_divergent_name.is_some() && trace_divergent_name == marker_name {
+                if outermost_matches {
                     cut += 1;
                 }
             }
         }
-        if cut == 0 || cut >= trace.len() {
+        if cut == 0 || cut >= frames.len() {
             return None;
         }
-        Some(trace[trace.len() - cut..].iter().map(|f| f.ip).collect())
+        // The render view is symbol-level: inlined frames expand to several
+        // rendered frames, unresolvable ones to none. Convert the physical
+        // cut into that currency.
+        let hidden = frames[frames.len() - cut..]
+            .iter()
+            .map(|frame| frame.symbols().len())
+            .sum::<usize>();
+        (hidden > 0).then_some(hidden)
     }
 
     /// Force symbol resolution now, caching the result in place.
@@ -1004,7 +1016,7 @@ mod tests {
     };
 
     #[test]
-    fn capture_embeds_marker_and_computes_hidden_ips() {
+    fn capture_embeds_marker_and_computes_hidden_frames() {
         crate::with_rust_backtrace_override(RustBacktrace::Enabled, || {
             let _restore_guard = {
                 // Isolate the TLS slot from other tests on this thread.
@@ -1014,36 +1026,23 @@ mod tests {
             crate::__private::set_start_marker();
             let bt = <Backtrace as crate::Capturable>::capture();
             let hidden = bt
-                .marker_hidden_ips()
+                .marker_hidden_frames()
                 .expect("same-thread marker must produce a cut");
-            assert!(!hidden.is_empty());
-            // Hidden IPs are exactly a suffix of the physical frames.
-            let frames = bt.frames();
-            let tail: Vec<usize> = frames[frames.len() - hidden.len()..]
-                .iter()
-                .map(|f| f.ip() as usize)
-                .collect();
-            assert_eq!(hidden, tail);
-            // Every hidden ip must come from the marker's own recorded stack —
-            // pins cut_len against returning frames the marker never saw.
-            let marker = crate::marker::current().expect("marker still set");
-            assert!(
-                hidden
-                    .iter()
-                    .all(|ip| marker.frames().iter().any(|f| f.ip == *ip))
-            );
-            // The cut must not swallow the whole trace.
-            assert!(hidden.len() < frames.len());
+            assert!(hidden > 0);
+            // The count is in rendered (symbol-level) currency and must not
+            // swallow the whole trace.
+            let total_rendered: usize = bt.frames().iter().map(|f| f.symbols().len()).sum();
+            assert!(hidden < total_rendered);
         });
     }
 
     #[test]
-    fn capture_without_marker_has_no_hidden_ips() {
+    fn capture_without_marker_has_no_hidden_frames() {
         crate::with_rust_backtrace_override(RustBacktrace::Enabled, || {
             let _restore_guard = scopeguard(crate::marker::current());
             crate::__private::restore_marker(None);
             let bt = <Backtrace as crate::Capturable>::capture();
-            assert!(bt.marker_hidden_ips().is_none());
+            assert!(bt.marker_hidden_frames().is_none());
         });
     }
 
@@ -1059,7 +1058,7 @@ mod tests {
             .join()
             .unwrap();
             // The spawned thread has no marker of its own.
-            assert!(bt.marker_hidden_ips().is_none());
+            assert!(bt.marker_hidden_frames().is_none());
         });
     }
 
