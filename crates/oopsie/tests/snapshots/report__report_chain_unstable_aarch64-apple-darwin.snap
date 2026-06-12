@@ -8,9 +8,9 @@ Error[report::OuterError]: Outer error
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 8 frames hidden ...
   1: <report[[HASH]]::TestOopsie<&str>>::build
-           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
+           at tests/report.rs:[LOC]
   2: report[[HASH]]::test_report_chain
-           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
+           at tests/report.rs:[LOC]
   3: report[[HASH]]::test_report_chain::{closure#0}
-           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
+           at tests/report.rs:[LOC]
    ... 22 frames hidden ...

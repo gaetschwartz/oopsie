@@ -245,9 +245,7 @@ impl<E: Diagnostic> Report<E> {
     /// Format the backtrace if available and captured.
     ///
     /// Both the colored and plain paths go through [`TracePrinter`]; the plain
-    /// path just swaps in the empty theme. This avoids the upstream `backtrace`
-    /// Debug formatter, which calls `std::env::current_dir()` (a filesystem
-    /// syscall) on every render.
+    /// path just swaps in the empty theme.
     fn write_backtrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Some(backtrace) = &self.backtrace else {
             return Ok(());

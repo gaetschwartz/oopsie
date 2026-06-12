@@ -9,9 +9,9 @@ Error[report::ErrorWithHelp]: Something went wrong: connection refused
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 8 frames hidden ...
   1: <report[[HASH]]::ErrorWithHelpOopsie<&str>>::build
-           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
+           at tests/report.rs:[LOC]
   2: report[[HASH]]::test_report_with_help
-           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
+           at tests/report.rs:[LOC]
   3: report[[HASH]]::test_report_with_help::{closure#0}
-           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
+           at tests/report.rs:[LOC]
    ... 22 frames hidden ...

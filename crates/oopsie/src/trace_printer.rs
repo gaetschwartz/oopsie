@@ -446,6 +446,7 @@ type FrameFilterBox = BoxOrBorrow<'static, dyn Fn(&mut Vec<&BacktraceFrame>)>;
 pub struct TracePrinter {
     theme: TraceTheme,
     frame_filter: FrameFilterBox,
+    strip_cwd: bool,
 }
 
 impl TracePrinter {
@@ -462,7 +463,7 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn unfiltered() -> Self {
-        Self::with_filter_and_theme_const(&noop_frame_filter, TraceTheme::DEFAULT)
+        Self::with_filter_and_theme_const(&noop_frame_filter, TraceTheme::DEFAULT).absolute_paths()
     }
 
     /// Create a new `TracePrinter` with a custom frame filter and theme.
@@ -475,6 +476,7 @@ impl TracePrinter {
         Self {
             frame_filter: BoxOrBorrow::Box(Box::new(filter)),
             theme,
+            strip_cwd: true,
         }
     }
 
@@ -488,6 +490,7 @@ impl TracePrinter {
         Self {
             frame_filter: BoxOrBorrow::Borrow(filter),
             theme,
+            strip_cwd: true,
         }
     }
 
@@ -499,6 +502,16 @@ impl TracePrinter {
     ) -> Self {
         self.frame_filter =
             overlay_frame_filters(self.frame_filter, BoxOrBorrow::Box(Box::new(filter)));
+        self
+    }
+
+    /// Render file paths exactly as captured, without stripping the current
+    /// working directory. [`unfiltered`](Self::unfiltered) implies this —
+    /// `RUST_BACKTRACE=full` means "show everything".
+    #[must_use]
+    #[inline]
+    pub const fn absolute_paths(mut self) -> Self {
+        self.strip_cwd = false;
         self
     }
 
@@ -554,8 +567,16 @@ impl TracePrinter {
             )?;
         }
 
+        // Read per render: the working directory is mutable process state,
+        // and a failed read (deleted cwd, sandbox) just disables shortening.
+        let cwd = if self.strip_cwd {
+            std::env::current_dir().ok()
+        } else {
+            None
+        };
+
         for (i, frame) in filtered.iter().enumerate() {
-            self.write_backtrace_frame(f, i + 1, frame)?;
+            self.write_backtrace_frame(f, i + 1, frame, cwd.as_deref())?;
         }
 
         if bottom_hidden > 0 {
@@ -576,6 +597,7 @@ impl TracePrinter {
         f: &mut fmt::Formatter<'_>,
         number: usize,
         frame: &BacktraceFrame,
+        cwd: Option<&path::Path>,
     ) -> fmt::Result {
         // Frame number: right-aligned in 3 chars
         write!(
@@ -599,11 +621,14 @@ impl TracePrinter {
 
         // File location
         if let Some(filename) = &frame.filename {
+            let display_path = cwd
+                .and_then(|cwd| filename.strip_prefix(cwd).ok())
+                .unwrap_or(filename);
             write!(
                 f,
                 "           {}{}",
                 "at ".style(self.theme.separator),
-                filename.display().style(self.theme.file_path)
+                display_path.display().style(self.theme.file_path)
             )?;
             if let Some(lineno) = frame.lineno {
                 write!(
@@ -990,6 +1015,44 @@ mod tests {
             frames.iter().map(|f| f.ip).collect::<Vec<_>>(),
             [1, 7, 2],
             "the cut is positional; frames above it survive regardless of ip"
+        );
+    }
+
+    #[test]
+    fn rendered_paths_are_stripped_of_the_current_dir() {
+        struct OneFrame(std::path::PathBuf);
+        impl BacktraceProvider for OneFrame {
+            fn frames(&self) -> Vec<BacktraceFrame> {
+                vec![BacktraceFrame {
+                    ip: 1,
+                    name: Some("my_crate::work".into()),
+                    filename: Some(self.0.clone().into_boxed_path()),
+                    lineno: Some(7),
+                    colno: None,
+                }]
+            }
+        }
+        fn render(printer: &TracePrinter, bt: &impl BacktraceProvider) -> String {
+            struct Render<'a, P>(&'a TracePrinter, &'a P);
+            impl<P: BacktraceProvider> fmt::Display for Render<'_, P> {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    self.0.write_backtrace(f, self.1)
+                }
+            }
+            Render(printer, bt).to_string()
+        }
+
+        let cwd = std::env::current_dir().unwrap();
+        let provider = OneFrame(cwd.join("src/work.rs"));
+
+        let stripped = render(&TracePrinter::new().plain(), &provider);
+        assert!(stripped.contains("at src/work.rs:7"), "{stripped}");
+
+        // Full mode keeps absolute paths.
+        let absolute = render(&TracePrinter::unfiltered().plain(), &provider);
+        assert!(
+            absolute.contains(&format!("at {}:7", cwd.join("src/work.rs").display())),
+            "{absolute}"
         );
     }
 
