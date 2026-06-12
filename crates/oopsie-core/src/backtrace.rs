@@ -5,6 +5,7 @@ use std::sync::{Arc, LazyLock};
 use std::{env, fmt, path};
 
 use crate::Capturable as _;
+use crate::marker::MarkerFrame;
 
 /// Whether backtrace capture is enabled, and how verbosely it should render.
 ///
@@ -175,7 +176,7 @@ enum Inner {
 #[derive(Clone)]
 pub struct Backtrace {
     inner: Inner,
-    marker: Option<Arc<crate::marker::TraceMarker>>,
+    marker: Option<crate::marker::TraceMarker>,
 }
 
 impl crate::Capturable for Backtrace {
@@ -495,12 +496,9 @@ impl Backtrace {
     /// boundary frame of an inclusive marker may resolve one further address.
     #[must_use]
     pub fn marker_hidden_ips(&self) -> Option<Vec<usize>> {
-        let marker = self.marker.as_deref()?;
+        let marker = self.marker.as_ref()?;
         let frames = self.frames();
-        let trace: Vec<(usize, usize)> = frames
-            .iter()
-            .map(|f| (f.ip() as usize, f.symbol_address() as usize))
-            .collect();
+        let trace: Vec<_> = frames.iter().map(MarkerFrame::from).collect();
         let mut cut = marker.cut_len(&trace);
         // On platforms where symbol_address() == ip() (e.g. Apple), cut_len's
         // inclusive extension cannot fire via symbol address. Extend by one
@@ -512,7 +510,7 @@ impl Backtrace {
         {
             let trace_div = trace.len() - 1 - cut;
             let marker_div = marker.frames().len() - 1 - cut;
-            if trace[trace_div].1 != marker.frames()[marker_div].1 {
+            if trace[trace_div].symbol_address != marker.frames()[marker_div].symbol_address {
                 // Compare the outermost symbol on both sides: inline expansion
                 // lists symbols innermost-first, and only the last one names
                 // the physical enclosing function.
@@ -521,7 +519,7 @@ impl Backtrace {
                     .last()
                     .and_then(backtrace::BacktraceSymbol::name)
                     .map(|n| n.as_bytes().to_owned());
-                let marker_divergent_ip = marker.frames()[marker_div].0;
+                let marker_divergent_ip = marker.frames()[marker_div].ip;
                 let mut marker_name: Option<Vec<u8>> = None;
                 backtrace::resolve(marker_divergent_ip as *mut _, |sym| {
                     marker_name = sym.name().map(|n| n.as_bytes().to_owned());
@@ -534,12 +532,7 @@ impl Backtrace {
         if cut == 0 || cut >= trace.len() {
             return None;
         }
-        Some(
-            trace[trace.len() - cut..]
-                .iter()
-                .map(|&(ip, _)| ip)
-                .collect(),
-        )
+        Some(trace[trace.len() - cut..].iter().map(|f| f.ip).collect())
     }
 
     /// Force symbol resolution now, caching the result in place.
@@ -1037,7 +1030,7 @@ mod tests {
             assert!(
                 hidden
                     .iter()
-                    .all(|ip| marker.frames().iter().any(|&(m_ip, _)| m_ip == *ip))
+                    .all(|ip| marker.frames().iter().any(|f| f.ip == *ip))
             );
             // The cut must not swallow the whole trace.
             assert!(hidden.len() < frames.len());
@@ -1071,8 +1064,8 @@ mod tests {
     }
 
     /// Restore the previous marker when the test scope ends.
-    fn scopeguard(prev: Option<std::sync::Arc<crate::marker::TraceMarker>>) -> impl Drop {
-        struct Restore(Option<std::sync::Arc<crate::marker::TraceMarker>>);
+    fn scopeguard(prev: Option<crate::marker::TraceMarker>) -> impl Drop {
+        struct Restore(Option<crate::marker::TraceMarker>);
         impl Drop for Restore {
             fn drop(&mut self) {
                 crate::__private::restore_marker(self.0.take());

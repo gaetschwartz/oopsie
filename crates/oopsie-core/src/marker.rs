@@ -19,14 +19,39 @@ pub enum MarkerBoundary {
 
 /// A recorded stack: `(ip, symbol_address)` per physical frame, top → bottom.
 #[doc(hidden)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TraceMarker {
-    frames: Vec<(usize, usize)>,
-    boundary: MarkerBoundary,
+    pub(crate) frames: Arc<[MarkerFrame]>,
+    pub(crate) boundary: MarkerBoundary,
+}
+
+#[derive(Debug)]
+pub struct MarkerFrame {
+    pub ip: usize,
+    pub symbol_address: usize,
+}
+
+impl From<&backtrace::BacktraceFrame> for MarkerFrame {
+    #[inline]
+    fn from(frame: &backtrace::BacktraceFrame) -> Self {
+        Self {
+            ip: frame.ip() as usize,
+            symbol_address: frame.symbol_address() as usize,
+        }
+    }
+}
+impl From<&backtrace::Frame> for MarkerFrame {
+    #[inline]
+    fn from(frame: &backtrace::Frame) -> Self {
+        Self {
+            ip: frame.ip() as usize,
+            symbol_address: frame.symbol_address() as usize,
+        }
+    }
 }
 
 impl TraceMarker {
-    pub(crate) fn frames(&self) -> &[(usize, usize)] {
+    pub(crate) fn frames(&self) -> &[MarkerFrame] {
         &self.frames
     }
 
@@ -35,20 +60,22 @@ impl TraceMarker {
     }
 
     /// Number of trailing `trace` frames hidden by this marker: the longest
-    /// common `(ip, _)` suffix, extended by one frame for inclusive markers
-    /// when the divergent frames share a `symbol_address` (same function,
+    /// common `ip` suffix, extended by one frame for inclusive markers when
+    /// the divergent frames share a `symbol_address` (same function,
     /// different call sites within it).
-    pub(crate) fn cut_len(&self, trace: &[(usize, usize)]) -> usize {
+    pub(crate) fn cut_len(&self, trace: &[MarkerFrame]) -> usize {
         let m = &self.frames;
         let mut k = 0;
-        while k < trace.len() && k < m.len() && trace[trace.len() - 1 - k].0 == m[m.len() - 1 - k].0
+        while k < trace.len()
+            && k < m.len()
+            && trace[trace.len() - 1 - k].ip == m[m.len() - 1 - k].ip
         {
             k += 1;
         }
         if self.is_inclusive()
             && k < trace.len()
             && k < m.len()
-            && trace[trace.len() - 1 - k].1 == m[m.len() - 1 - k].1
+            && trace[trace.len() - 1 - k].symbol_address == m[m.len() - 1 - k].symbol_address
         {
             k += 1;
         }
@@ -57,22 +84,25 @@ impl TraceMarker {
 }
 
 thread_local! {
-    static MARKER: Cell<Option<Arc<TraceMarker>>> = const { Cell::new(None) };
+    static MARKER: Cell<Option<TraceMarker>> = const { Cell::new(None) };
 }
 
 fn capture_marker(boundary: MarkerBoundary) -> TraceMarker {
     let mut frames = Vec::with_capacity(32);
     backtrace::trace(|frame| {
-        frames.push((frame.ip() as usize, frame.symbol_address() as usize));
+        frames.push(MarkerFrame::from(frame));
         true
     });
-    TraceMarker { frames, boundary }
+    TraceMarker {
+        frames: frames.into(),
+        boundary,
+    }
 }
 
 /// Snapshot the current thread's marker, if any. All slot accessors degrade
 /// to a no-op once the thread's TLS is being torn down — capture inside a
 /// dying thread's panic hook must never double-panic.
-pub fn current() -> Option<Arc<TraceMarker>> {
+pub fn current() -> Option<TraceMarker> {
     MARKER
         .try_with(|slot| {
             let cur = slot.take();
@@ -86,8 +116,9 @@ pub fn current() -> Option<Arc<TraceMarker>> {
 
 #[doc(hidden)]
 pub fn set_start_marker() {
+    let data = capture_marker(MarkerBoundary::Exclusive);
     let _ = MARKER.try_with(|slot| {
-        slot.set(Some(Arc::new(capture_marker(MarkerBoundary::Exclusive))));
+        slot.set(Some(data));
     });
 }
 
@@ -95,11 +126,12 @@ pub fn set_start_marker() {
 /// marker for [`restore_marker`].
 #[doc(hidden)]
 #[must_use]
-pub fn set_inclusive_marker() -> Option<Arc<TraceMarker>> {
+pub fn set_inclusive_marker() -> Option<TraceMarker> {
+    let data = capture_marker(MarkerBoundary::Inclusive);
     MARKER
         .try_with(|slot| {
             let prev = slot.take();
-            slot.set(Some(Arc::new(capture_marker(MarkerBoundary::Inclusive))));
+            slot.set(Some(data));
             prev
         })
         .ok()
@@ -107,7 +139,7 @@ pub fn set_inclusive_marker() -> Option<Arc<TraceMarker>> {
 }
 
 #[doc(hidden)]
-pub fn restore_marker(prev: Option<Arc<TraceMarker>>) {
+pub fn restore_marker(prev: Option<TraceMarker>) {
     let _ = MARKER.try_with(|slot| slot.set(prev));
 }
 
@@ -127,6 +159,13 @@ macro_rules! start_marker {
 mod tests {
     use super::*;
 
+    fn marker_frames(pairs: &[(usize, usize)]) -> Arc<[MarkerFrame]> {
+        pairs
+            .iter()
+            .map(|&(ip, symbol_address)| MarkerFrame { ip, symbol_address })
+            .collect()
+    }
+
     #[test]
     fn capture_records_frames() {
         let marker = capture_marker(MarkerBoundary::Exclusive);
@@ -140,7 +179,7 @@ mod tests {
         let first = current().expect("marker set");
         set_start_marker();
         let second = current().expect("marker set");
-        assert!(!Arc::ptr_eq(&first, &second));
+        assert!(!Arc::ptr_eq(&first.frames, &second.frames));
     }
 
     #[test]
@@ -148,7 +187,7 @@ mod tests {
         set_start_marker();
         let a = current().expect("marker set");
         let b = current().expect("still set");
-        assert!(Arc::ptr_eq(&a, &b));
+        assert!(Arc::ptr_eq(&a.frames, &b.frames));
     }
 
     #[test]
@@ -158,64 +197,64 @@ mod tests {
         let prev = set_inclusive_marker();
         let inclusive = current().expect("inclusive marker set");
         assert!(inclusive.is_inclusive());
-        assert!(!Arc::ptr_eq(&user_marker, &inclusive));
+        assert!(!Arc::ptr_eq(&user_marker.frames, &inclusive.frames));
         restore_marker(prev);
         let restored = current().expect("previous marker restored");
-        assert!(Arc::ptr_eq(&user_marker, &restored));
+        assert!(Arc::ptr_eq(&user_marker.frames, &restored.frames));
     }
 
     #[test]
     fn cut_len_exact_suffix() {
         let marker = TraceMarker {
-            frames: vec![(900, 90), (10, 1), (20, 2), (30, 3)],
+            frames: marker_frames(&[(900, 90), (10, 1), (20, 2), (30, 3)]),
             boundary: MarkerBoundary::Exclusive,
         };
-        let trace = [(800, 80), (11, 1), (20, 2), (30, 3)];
+        let trace = marker_frames(&[(800, 80), (11, 1), (20, 2), (30, 3)]);
         assert_eq!(marker.cut_len(&trace), 2);
     }
 
     #[test]
     fn cut_len_inclusive_extends_one_frame_on_symbol_match() {
         let marker = TraceMarker {
-            frames: vec![(900, 90), (10, 1), (20, 2), (30, 3)],
+            frames: marker_frames(&[(900, 90), (10, 1), (20, 2), (30, 3)]),
             boundary: MarkerBoundary::Inclusive,
         };
-        let trace = [(800, 80), (11, 1), (20, 2), (30, 3)];
+        let trace = marker_frames(&[(800, 80), (11, 1), (20, 2), (30, 3)]);
         assert_eq!(marker.cut_len(&trace), 3);
     }
 
     #[test]
     fn cut_len_inclusive_no_symbol_match_stays_exact() {
         let marker = TraceMarker {
-            frames: vec![(10, 1), (20, 2)],
+            frames: marker_frames(&[(10, 1), (20, 2)]),
             boundary: MarkerBoundary::Inclusive,
         };
-        let trace = [(11, 7), (20, 2)];
+        let trace = marker_frames(&[(11, 7), (20, 2)]);
         assert_eq!(marker.cut_len(&trace), 1);
     }
 
     #[test]
     fn cut_len_disjoint_stacks_is_zero() {
         let marker = TraceMarker {
-            frames: vec![(10, 1), (20, 2)],
+            frames: marker_frames(&[(10, 1), (20, 2)]),
             boundary: MarkerBoundary::Exclusive,
         };
-        assert_eq!(marker.cut_len(&[(77, 7), (88, 8)]), 0);
+        assert_eq!(marker.cut_len(&marker_frames(&[(77, 7), (88, 8)])), 0);
     }
 
     #[test]
     fn cut_len_empty_marker_is_zero() {
         let marker = TraceMarker {
-            frames: vec![],
+            frames: marker_frames(&[]),
             boundary: MarkerBoundary::Inclusive,
         };
-        assert_eq!(marker.cut_len(&[(1, 1)]), 0);
+        assert_eq!(marker.cut_len(&marker_frames(&[(1, 1)])), 0);
     }
 
     #[test]
     fn cut_len_empty_trace_is_zero() {
         let marker = TraceMarker {
-            frames: vec![(10, 1), (20, 2)],
+            frames: marker_frames(&[(10, 1), (20, 2)]),
             boundary: MarkerBoundary::Inclusive,
         };
         assert_eq!(marker.cut_len(&[]), 0);
@@ -224,10 +263,10 @@ mod tests {
     #[test]
     fn cut_len_trace_fully_contained_is_capped() {
         let marker = TraceMarker {
-            frames: vec![(10, 1), (20, 2), (30, 3)],
+            frames: marker_frames(&[(10, 1), (20, 2), (30, 3)]),
             boundary: MarkerBoundary::Exclusive,
         };
-        let trace = [(20, 2), (30, 3)];
+        let trace = marker_frames(&[(20, 2), (30, 3)]);
         assert_eq!(marker.cut_len(&trace), 2);
     }
 }
