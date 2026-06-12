@@ -15,19 +15,15 @@ Error[report::common::MyError::Inner]: Inner error happened
            at crates/oopsie/tests/common/mod.rs:[LOC]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ... 8 frames hidden ...
-  1: report::common::my_error_inner_oopsies::MyErrorInner<__T0>::build::h[HASH]
+   ... 10 frames hidden ...
+  1: report::common::make_error::inner_function::h[HASH]
            at tests/common/mod.rs:[LOC]
-  2: report::common::my_error_inner_oopsies::MyErrorInner<__T0>::fail::h[HASH]
+  2: report::common::make_error::outer_function::h[HASH]
            at tests/common/mod.rs:[LOC]
-  3: report::common::make_error::inner_function::h[HASH]
+  3: report::common::make_error::h[HASH]
            at tests/common/mod.rs:[LOC]
-  4: report::common::make_error::outer_function::h[HASH]
-           at tests/common/mod.rs:[LOC]
-  5: report::common::make_error::h[HASH]
-           at tests/common/mod.rs:[LOC]
-  6: report::test_report_with_spantrace::h[HASH]
+  4: report::test_report_with_spantrace::h[HASH]
            at tests/report.rs:[LOC]
-  7: report::test_report_with_spantrace::{{closure}}::h[HASH]
+  5: report::test_report_with_spantrace::{{closure}}::h[HASH]
            at tests/report.rs:[LOC]
    ... 22 frames hidden ...

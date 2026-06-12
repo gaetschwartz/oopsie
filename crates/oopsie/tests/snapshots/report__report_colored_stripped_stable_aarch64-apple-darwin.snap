@@ -6,11 +6,9 @@ expression: report
   [2mat[0m [2mcrates/oopsie/tests/report.rs:[LOC][0m
 
 [31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
-[36m   ... 8 frames hidden ...[0m
-[2m  1[0m[2m: [0m[91mreport::test_oopsies::Test<__T0>::build[0m[90m::h[HASH][0m
-           [2mat [0m[35mtests/report.rs[0m[35m:20[0m[35m:1[0m
-[2m  2[0m[2m: [0m[91mreport::test_report_colored[0m[90m::h[HASH][0m
+[36m   ... 9 frames hidden ...[0m
+[2m  1[0m[2m: [0m[91mreport::test_report_colored[0m[90m::h[HASH][0m
            [2mat [0m[35mtests/report.rs[0m[35m:80[0m[35m:6[0m
-[2m  3[0m[2m: [0m[91mreport::test_report_colored::{{closure}}[0m[90m::h[HASH][0m
+[2m  2[0m[2m: [0m[91mreport::test_report_colored::{{closure}}[0m[90m::h[HASH][0m
            [2mat [0m[35mtests/report.rs[0m[35m:75[0m[35m:25[0m
 [36m   ... 22 frames hidden ...[0m
