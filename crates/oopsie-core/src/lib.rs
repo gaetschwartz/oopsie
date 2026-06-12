@@ -16,7 +16,6 @@ mod backtrace;
 mod diagnostic;
 #[cfg(feature = "serde")]
 pub mod erased;
-mod generated;
 mod marker;
 #[cfg(feature = "tracing")]
 mod spantrace;
@@ -185,12 +184,10 @@ pub mod __private {
         source_trace::<crate::SpanTrace>(source).filter(|st| st.is_captured())
     }
 
-    pub use crate::generated::{GENERATED_SITES, GeneratedSite};
     pub use crate::marker::{TraceMarker, restore_marker, set_marker};
 
     #[cfg(feature = "chrono")]
     pub use chrono;
-    pub use linkme;
 }
 
 #[cfg(feature = "tracing")]

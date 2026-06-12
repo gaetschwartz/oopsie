@@ -306,7 +306,7 @@ fn is_generated_site_frame(frame: &BacktraceFrame) -> bool {
     let Some(filename) = frame.filename.as_deref() else {
         return false;
     };
-    oopsie_core::__private::GENERATED_SITES.iter().any(|site| {
+    crate::generated::GENERATED_SITES.iter().any(|site| {
         matches_site(
             symbol.krate,
             line,

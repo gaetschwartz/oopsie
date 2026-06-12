@@ -303,7 +303,11 @@ pub use oopsie_core::{OptionalSpanTrace, SpanTrace};
 // examples compile against this crate's `#[oopsie]` macro. Not part of the
 // public API; do not depend on its contents.
 #[doc(hidden)]
+mod generated;
+
 pub mod __private {
+    pub use crate::generated::{GENERATED_SITES, GeneratedSite};
+    pub use linkme;
     pub use oopsie_core::__private::*;
 
     pub mod documented;

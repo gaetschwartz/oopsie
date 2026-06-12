@@ -32,7 +32,6 @@ insta = { version = "1.47.2", features = [
     "redactions",
 ], optional = true }
 konst = { version = "0.4.3", features = ["alloc"], optional = true }
-linkme = "0.3.36"
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 strum = { version = "0.28", features = ["derive"], optional = true }
