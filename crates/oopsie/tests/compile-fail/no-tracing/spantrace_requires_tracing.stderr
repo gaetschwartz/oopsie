@@ -1,7 +1,0 @@
-error: `spantrace` requires the `tracing` feature of `oopsie`
- --> tests/compile-fail/no-tracing/spantrace_requires_tracing.rs:3:1
-  |
-3 | #[oopsie::oopsie(traced(spantrace))]
-  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  |
-  = note: this error originates in the attribute macro `oopsie::oopsie` (in Nightly builds, run with -Z macro-backtrace for more info)

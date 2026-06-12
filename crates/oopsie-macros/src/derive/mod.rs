@@ -266,12 +266,8 @@ mod tests {
     // type param `T` (selector carries `T`, no `Into` param since the param is
     // named directly), one transparent source-only variant whose source type is
     // the param `E` (a `From<E>` impl, no selector), and a where-clause the impls
-    // carry but the selector struct does not. The transparent variant's trace
-    // forwarding is tracing-dependent, so the snapshot pins one combo.
-    #[cfg(all(
-        not(feature = "tracing"),
-        not(feature = "unstable-error-generic-member-access")
-    ))]
+    // carry but the selector struct does not.
+    #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn test_derive_generic_enum() {
         let input = quote! {
@@ -360,31 +356,9 @@ mod tests {
     // full inject→derive pipeline and is covered by the `traced_transparent`
     // test in `oopsie/tests/derive_transparent.rs` — a derive-only unit test
     // can only fake post-injection fields, which drifts from real inject output.
-    #[cfg(all(
-        feature = "tracing",
-        not(feature = "unstable-error-generic-member-access")
-    ))]
+    #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn test_derive_enum_with_transparent() {
-        let input = quote! {
-            #[oopsie(module(transparent_wrapper_oopsies))]
-            #[oopsie(vis(pub(crate)))]
-            #[oopsie(path = "crate")]
-            pub enum TransparentWrapper {
-                #[oopsie(display("Inner error happened"), transparent)]
-                Inner { source: InnerError },
-            }
-        };
-        let output = expand(input).unwrap().to_string();
-        insta::assert_snapshot!(output);
-    }
-
-    #[cfg(all(
-        not(feature = "tracing"),
-        not(feature = "unstable-error-generic-member-access")
-    ))]
-    #[test]
-    fn test_derive_enum_with_transparent_no_tracing() {
         let input = quote! {
             #[oopsie(module(transparent_wrapper_oopsies))]
             #[oopsie(vis(pub(crate)))]

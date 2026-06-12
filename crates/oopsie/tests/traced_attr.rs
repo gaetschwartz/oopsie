@@ -123,7 +123,6 @@ fn traced_does_not_duplicate_backtrace() {
 
 // ---- Test 7: does not duplicate pre-existing spantrace field ----
 
-#[cfg(feature = "tracing")]
 #[oopsie(traced)]
 pub enum PreExistingStError {
     #[oopsie("has spantrace")]
@@ -135,7 +134,6 @@ pub enum PreExistingStError {
     },
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn traced_does_not_duplicate_spantrace() {
     let err = pre_existing_st_oopsies::HasSt { msg: "test" }.build();
@@ -159,14 +157,12 @@ fn traced_struct_does_not_duplicate_backtrace() {
 
 // ---- Test 9: opting out of spantrace — backtrace only ----
 
-#[cfg(feature = "tracing")]
 #[oopsie(traced(spantrace(false)))]
 pub enum BacktraceOnlyError {
     #[oopsie("bt only")]
     BtOnly { msg: String },
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn traced_explicit_backtrace_only() {
     use oopsie::Diagnostic as _;
@@ -252,7 +248,6 @@ pub enum SeparateInlineError {
 }
 
 // mixed: backtrace stays on by default, spantrace tuned to inline.
-#[cfg(feature = "tracing")]
 #[oopsie(traced(packed = false, spantrace(boxed = false)))]
 pub enum MixedError {
     #[oopsie("boom: {info}")]
@@ -260,55 +255,47 @@ pub enum MixedError {
 }
 
 // Single trace (backtrace only) — packed is a no-op; lone boxed backtrace.
-#[cfg(feature = "tracing")]
 #[oopsie(traced(spantrace(false)))]
 pub enum SingleBacktraceError {
     #[oopsie("boom: {info}")]
     Boom { info: String },
 }
 
-#[cfg(feature = "tracing")]
 fn assert_both_traces<E: oopsie::Diagnostic>(e: &E) {
     assert!(e.oopsie_backtrace().is_some(), "backtrace accessor missing");
     assert!(e.oopsie_spantrace().is_some(), "spantrace accessor missing");
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn layout_default_packed_exposes_both_traces() {
     let e = default_packed_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn layout_packed_inline_exposes_both_traces() {
     let e = packed_inline_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn layout_separate_boxed_exposes_both_traces() {
     let e = separate_boxed_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn layout_separate_inline_exposes_both_traces() {
     let e = separate_inline_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn layout_mixed_exposes_both_traces() {
     let e = mixed_oopsies::Boom { info: "x" }.build();
     assert_both_traces(&e);
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn layout_single_trace_fallback_backtrace_only() {
     let e = single_backtrace_oopsies::Boom { info: "x" }.build();
@@ -316,19 +303,46 @@ fn layout_single_trace_fallback_backtrace_only() {
     assert!(e.oopsie_spantrace().is_none());
 }
 
-// Without the tracing feature the layout types collapse to backtrace-only.
-// Verify the accessor still works — the test is intentionally ungated on tracing
-// so it exercises the no-tracing codepath in every bare combo.
+// Without the runtime tracing feature, capture degrades to a no-op stub: the
+// spantrace accessor still returns a value, but it reports nothing captured.
+// The backtrace continues to capture normally.
 #[cfg(not(feature = "tracing"))]
 #[test]
-fn layout_default_packed_backtrace_only_without_tracing() {
+fn featureless_spantrace_degrades_to_uncaptured() {
+    use oopsie::Diagnostic as _;
     oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
     let e = default_packed_oopsies::Boom { info: "x" }.build();
     assert!(
+        !e.oopsie_spantrace()
+            .expect("spantrace accessor present")
+            .is_captured(),
+        "featureless spantrace must report nothing captured"
+    );
+    assert!(
         e.oopsie_backtrace().is_some(),
-        "backtrace accessor must work in no-tracing layout"
+        "backtrace accessor must capture in the featureless layout"
     );
     oopsie::backtrace::clear_override();
+}
+
+// Explicit `traced(spantrace)` is honored featureless — the shape the old
+// pre-pass rejected — capturing the no-op stub.
+#[cfg(not(feature = "tracing"))]
+#[oopsie(traced(spantrace))]
+pub struct FeaturelessSpantraceError {
+    info: String,
+}
+
+#[cfg(not(feature = "tracing"))]
+#[test]
+fn featureless_explicit_spantrace_compiles_and_degrades() {
+    use oopsie::Diagnostic as _;
+    let e = featureless_spantrace_oopsies::FeaturelessSpantrace { info: "x" }.build();
+    assert!(
+        !e.oopsie_spantrace()
+            .expect("spantrace accessor present")
+            .is_captured()
+    );
 }
 
 // Struct path (symmetric to the enum cases above): default packed + boxed,
@@ -343,14 +357,12 @@ pub struct InlineStructError {
     info: String,
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn layout_struct_default_packed_exposes_both_traces() {
     let e = packed_struct_oopsies::PackedStruct { info: "x" }.build();
     assert_both_traces(&e);
 }
 
-#[cfg(feature = "tracing")]
 #[test]
 fn layout_struct_separate_inline_exposes_both_traces() {
     let e = inline_struct_oopsies::InlineStruct { info: "x" }.build();

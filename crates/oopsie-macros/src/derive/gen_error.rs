@@ -203,13 +203,11 @@ pub fn gen_enum_error(
                     #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
                 }
             });
-            if cfg!(feature = "tracing") {
-                provide_stmts.push(quote! {
-                    if #tf.1.is_captured() {
-                        #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
-                    }
-                });
-            }
+            provide_stmts.push(quote! {
+                if #tf.1.is_captured() {
+                    #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
+                }
+            });
         } else {
             if let Some(bt_field) = &categorized.backtrace_field {
                 provide_stmts.push(quote! {
@@ -221,10 +219,7 @@ pub fn gen_enum_error(
                     }
                 });
             }
-            // Guard against naming `SpanTrace` when the feature (and thus the type) is absent.
-            if cfg!(feature = "tracing")
-                && let Some(st_field) = &categorized.spantrace_field
-            {
+            if let Some(st_field) = &categorized.spantrace_field {
                 provide_stmts.push(quote! {
                     {
                         let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
@@ -278,7 +273,7 @@ pub fn gen_enum_error(
             .filter(|_| variant_attrs.transparent)
             .map(|s| gen_diag_forward(s, "fwd_backtrace", oopsie_path));
         let st_probe = source_ident
-            .filter(|_| cfg!(feature = "tracing") && variant_attrs.transparent)
+            .filter(|_| variant_attrs.transparent)
             .map(|s| gen_diag_forward(s, "fwd_spantrace", oopsie_path));
         let bt_fn = format_ident!("source_backtrace");
         let st_fn = format_ident!("source_spantrace");
@@ -469,6 +464,8 @@ pub fn gen_enum_error(
         quote! {}
     };
 
+    // Consumer-side cfg, not the tracing desync class: `Error::provide` is
+    // rustc's unstable API, gated by the consumer's own nightly feature.
     let provide_method =
         if provide_arms.is_empty() || !cfg!(feature = "unstable-error-generic-member-access") {
             quote! {}
@@ -507,7 +504,7 @@ pub fn gen_enum_error(
         }
     };
 
-    let st_method = if !cfg!(feature = "tracing") || st_arms.is_empty() {
+    let st_method = if st_arms.is_empty() {
         quote! {}
     } else {
         quote! {
@@ -666,13 +663,11 @@ pub fn gen_struct_error(
                 #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
             }
         });
-        if cfg!(feature = "tracing") {
-            provide_stmts.push(quote! {
-                if #tf.1.is_captured() {
-                    #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
-                }
-            });
-        }
+        provide_stmts.push(quote! {
+            if #tf.1.is_captured() {
+                #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
+            }
+        });
     } else {
         if let Some(bt_field) = &categorized.backtrace_field {
             provide_stmts.push(quote! {
@@ -684,10 +679,7 @@ pub fn gen_struct_error(
                 }
             });
         }
-        // Guard against naming `SpanTrace` when the feature (and thus the type) is absent.
-        if cfg!(feature = "tracing")
-            && let Some(st_field) = &categorized.spantrace_field
-        {
+        if let Some(st_field) = &categorized.spantrace_field {
             provide_stmts.push(quote! {
                 {
                     let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
@@ -729,6 +721,8 @@ pub fn gen_struct_error(
         quote! { let Self { #(#provide_field_binds)* .. } = self; }
     };
 
+    // Consumer-side cfg, not the tracing desync class: `Error::provide` is
+    // rustc's unstable API, gated by the consumer's own nightly feature.
     let provide_method =
         if provide_stmts.is_empty() || !cfg!(feature = "unstable-error-generic-member-access") {
             quote! {}
@@ -757,7 +751,7 @@ pub fn gen_struct_error(
         .filter(|_| variant_attrs.transparent)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_backtrace", oopsie_path));
     let st_probe = struct_source
-        .filter(|_| cfg!(feature = "tracing") && variant_attrs.transparent)
+        .filter(|_| variant_attrs.transparent)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_spantrace", oopsie_path));
     let bt_fn = format_ident!("source_backtrace");
     let st_fn = format_ident!("source_spantrace");
@@ -798,13 +792,13 @@ pub fn gen_struct_error(
     };
     let st_method =
         match trace_accessor_body(st_own, struct_src_access, st_probe, &st_fn, oopsie_path) {
-            Some(body) if cfg!(feature = "tracing") => quote! {
+            Some(body) => quote! {
                 fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
                     #struct_use_aes
                     #body
                 }
             },
-            Some(_) | None => quote! {},
+            None => quote! {},
         };
 
     let loc_own = categorized

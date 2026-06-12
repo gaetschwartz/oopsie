@@ -6,24 +6,15 @@
 //! own copies in `tests/compile-fail/{stable,nightly}/` with their respective
 //! expected output. The `#[rustversion::*]` helpers pick the right subset
 //! at compile time, so each channel's CI job runs exactly its variants.
-//!
-//! Cases whose expected diagnostic only fires with `tracing` enabled (anything
-//! that reaches a `spantrace`-dependent error rather than the earlier
-//! "requires the `tracing` feature" gate) live under a `tracing/` subdirectory
-//! and are globbed only when that feature is on.
 
 #[rustversion::stable]
 fn run_channel_specific(t: &trybuild::TestCases) {
     t.compile_fail("tests/compile-fail/stable/*.rs");
-    #[cfg(feature = "tracing")]
-    t.compile_fail("tests/compile-fail/stable/tracing/*.rs");
 }
 
 #[rustversion::nightly]
 fn run_channel_specific(t: &trybuild::TestCases) {
     t.compile_fail("tests/compile-fail/nightly/*.rs");
-    #[cfg(feature = "tracing")]
-    t.compile_fail("tests/compile-fail/nightly/tracing/*.rs");
 }
 
 #[rustversion::not(any(stable, nightly))]
@@ -32,18 +23,9 @@ const fn run_channel_specific(_t: &trybuild::TestCases) {
     // neither stored form.
 }
 
-#[cfg(not(feature = "tracing"))]
-fn run_tracing_off(t: &trybuild::TestCases) {
-    t.compile_fail("tests/compile-fail/no-tracing/*.rs");
-}
-
-#[cfg(feature = "tracing")]
-const fn run_tracing_off(_t: &trybuild::TestCases) {}
-
 #[test]
 fn compile_fail_tests() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/compile-fail/*.rs");
     run_channel_specific(&t);
-    run_tracing_off(&t);
 }

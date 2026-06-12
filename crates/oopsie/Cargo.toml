@@ -29,7 +29,7 @@ unstable = [
 ]
 fancy = ["dep:owo-colors", "dep:linkme"]
 serde = ["oopsie-core/serde", "dep:serde_json"]
-tracing = ["oopsie-core/tracing", "oopsie-macros/tracing"]
+tracing = ["oopsie-core/tracing"]
 chrono = ["oopsie-core/chrono"]
 jiff = ["oopsie-core/jiff"]
 extras = ["oopsie-core/extras"]

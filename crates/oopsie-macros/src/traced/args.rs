@@ -42,10 +42,10 @@ impl TracedArgs {
     pub fn resolve(&self) -> ResolvedTraceArgs<'_> {
         ResolvedTraceArgs {
             backtrace: self.backtrace.is_enabled(),
-            spantrace: self.spantrace.is_enabled() && cfg!(feature = "tracing"),
+            spantrace: self.spantrace.is_enabled(),
             timestamp: self.timestamp.is_enabled(),
             location: self.location.is_enabled(),
-            packed: self.packed.is_enabled() && cfg!(feature = "tracing"),
+            packed: self.packed.is_enabled(),
             backtrace_boxed: self.trace_boxed(&self.backtrace),
             spantrace_boxed: self.trace_boxed(&self.spantrace),
             backtrace_type: self.backtrace.r#type(),
@@ -149,7 +149,6 @@ mod tests {
         TracedArgs::from_list(&nested).expect("parse traced args list")
     }
 
-    #[cfg(feature = "tracing")]
     #[test]
     fn default_is_packed_and_boxed_with_both_traces() {
         let a = args_list(parse_quote!(traced()));
@@ -159,16 +158,6 @@ mod tests {
         assert!(r.spantrace_boxed);
         assert!(r.backtrace && r.spantrace);
         assert!(!r.timestamp);
-    }
-
-    #[cfg(not(feature = "tracing"))]
-    #[test]
-    fn default_is_backtrace_only_without_tracing() {
-        let a = args_list(parse_quote!(traced()));
-        let r = a.resolve();
-        assert!(r.backtrace);
-        assert!(!r.spantrace);
-        assert!(!r.packed);
     }
 
     #[test]
@@ -183,7 +172,7 @@ mod tests {
     fn boxed_false_is_inline() {
         let a = args(&parse_quote!(traced(boxed = false)));
         let r = a.resolve();
-        assert_eq!(r.packed, cfg!(feature = "tracing"));
+        assert!(r.packed);
         assert!(!r.backtrace_boxed && !r.spantrace_boxed);
     }
 
@@ -192,7 +181,7 @@ mod tests {
         let a = args(&parse_quote!(traced(backtrace(false), timestamp)));
         let r = a.resolve();
         assert!(!r.backtrace);
-        assert_eq!(r.spantrace, cfg!(feature = "tracing"));
+        assert!(r.spantrace);
         assert!(r.timestamp);
     }
 
@@ -211,7 +200,7 @@ mod tests {
         let a = args(&parse_quote!(traced(spantrace(boxed = false))));
         let r = a.resolve();
         assert!(r.backtrace);
-        assert_eq!(r.spantrace, cfg!(feature = "tracing"));
+        assert!(r.spantrace);
         assert!(r.backtrace_boxed);
         assert!(!r.spantrace_boxed);
     }
@@ -225,12 +214,11 @@ mod tests {
         let r = a.resolve();
         assert!(!r.packed);
         assert!(r.backtrace);
-        assert_eq!(r.spantrace, cfg!(feature = "tracing"));
+        assert!(r.spantrace);
         assert!(r.backtrace_boxed);
         assert!(!r.spantrace_boxed);
     }
 
-    #[cfg(feature = "tracing")]
     #[test]
     fn validate_rejects_packed_incoherent_boxing() {
         // Both traces enabled, packed default, boxing disagrees.
@@ -257,7 +245,7 @@ mod tests {
         let r = a.resolve();
         assert!(r.timestamp);
         assert!(r.backtrace);
-        assert_eq!(r.spantrace, cfg!(feature = "tracing"));
+        assert!(r.spantrace);
     }
 
     #[test]
