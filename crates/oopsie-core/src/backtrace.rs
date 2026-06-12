@@ -235,52 +235,70 @@ const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
     "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::Capturable>::",
 ];
 
-/// Splits a symbol into its owning crate and path, across spellings:
+/// A symbol split into its owning crate and path, across spellings:
 /// `std::rt::lang_start`, `std[hash]::rt::lang_start`, and
-/// `<std[hash]::rt::X>::method` all yield `("std", "rt::lang_start…")`.
-/// For `<X as Trait>::method` impl shims whose self type carries no crate of
-/// its own (fn pointers, closures), the trait side owns the symbol.
-fn crate_and_path(name: &str) -> Option<(&str, &str)> {
-    fn scan(s: &str) -> Option<(&str, &str)> {
-        let s = s.strip_prefix('<').unwrap_or(s);
-        let ident_len = s
-            .bytes()
-            .take_while(|&b| b.is_ascii_alphanumeric() || b == b'_')
-            .count();
-        if ident_len == 0 {
-            return None;
-        }
-        let (krate, rest) = s.split_at(ident_len);
-        if let Some(designator) = rest.strip_prefix('[') {
-            let (_, path) = designator.split_once("]::")?;
-            return Some((krate, path));
-        }
-        rest.strip_prefix("::").map(|path| (krate, path))
+/// `<std[hash]::rt::X>::method` all yield crate `"std"`. When the self type
+/// of an `<X as Trait>::method` impl shim carries no crate of its own (fn
+/// pointers, closures), the trait side takes over as the owner.
+struct ParsedSymbol<'a> {
+    name: &'a str,
+    krate: &'a str,
+    path: &'a str,
+}
+
+fn scan_crate(s: &str) -> Option<(&str, &str)> {
+    let s = s.strip_prefix('<').unwrap_or(s);
+    let ident_len = s
+        .bytes()
+        .take_while(|&b| b.is_ascii_alphanumeric() || b == b'_')
+        .count();
+    if ident_len == 0 {
+        return None;
     }
-    scan(name).or_else(|| {
-        if !name.starts_with('<') {
-            return None;
-        }
-        let (_, trait_side) = name.rsplit_once(" as ")?;
-        scan(trait_side)
-    })
+    let (krate, rest) = s.split_at(ident_len);
+    if let Some(designator) = rest.strip_prefix('[') {
+        let (_, path) = designator.split_once("]::")?;
+        return Some((krate, path));
+    }
+    rest.strip_prefix("::").map(|path| (krate, path))
+}
+
+fn impl_trait_side(name: &str) -> Option<(&str, &str)> {
+    if !name.starts_with('<') {
+        return None;
+    }
+    let (_, trait_side) = name.rsplit_once(" as ")?;
+    scan_crate(trait_side)
+}
+
+fn parse_symbol(name: &str) -> Option<ParsedSymbol<'_>> {
+    let (krate, path) = scan_crate(name).or_else(|| impl_trait_side(name))?;
+    Some(ParsedSymbol { name, krate, path })
+}
+
+impl<'a> ParsedSymbol<'a> {
+    /// The trait side of an `<X as Trait>::method` impl shim, parsed on
+    /// demand — most callers never ask.
+    fn trait_crate(&self) -> Option<&'a str> {
+        impl_trait_side(self.name).map(|(krate, _)| krate)
+    }
 }
 
 /// A frame-name pattern set: bare symbols matched as raw prefixes, plus
-/// crate-scoped path prefixes matched after [`crate_and_path`]
-/// normalization. A normalized path is also tried against the bare set —
-/// the same symbol may appear under a crate designator.
+/// crate-scoped path prefixes matched after [`parse_symbol`] normalization.
+/// A normalized path is also tried against the bare set — the same symbol
+/// may appear under a crate designator.
 fn matches_symbol(name: &str, bare: &[&str], scoped: &[(&str, &str)]) -> bool {
     if bare.iter().any(|prefix| name.starts_with(prefix)) {
         return true;
     }
-    let Some((krate, path)) = crate_and_path(name) else {
+    let Some(symbol) = parse_symbol(name) else {
         return false;
     };
     scoped
         .iter()
-        .any(|&(k, p)| krate == k && path.starts_with(p))
-        || bare.iter().any(|prefix| path.starts_with(prefix))
+        .any(|&(k, p)| symbol.krate == k && symbol.path.starts_with(p))
+        || bare.iter().any(|prefix| symbol.path.starts_with(prefix))
 }
 
 /// The panic *raising* runtime that sits directly above the user's `panic!`
@@ -315,8 +333,6 @@ const RUNTIME_INIT_BARE: &[&str] = &[
 const RUNTIME_INIT_SCOPED: &[(&str, &str)] = &[
     ("std", "sys::backtrace::__rust_begin_short_backtrace"),
     ("std", "rt::lang_start"),
-    ("std", "panicking::catch_unwind::"),
-    ("std", "panic::catch_unwind::"),
     ("test", "__rust_begin_short_backtrace"),
 ];
 
@@ -364,8 +380,10 @@ pub fn is_post_panic_code(name: &str, _filename: Option<&path::Path>) -> bool {
 }
 
 /// Check if a frame name matches runtime-entry code below user code
-/// (`lang_start`, `catch_unwind`, the short-backtrace markers), in both
-/// demangled and v0-mangled spellings.
+/// (`lang_start`, the short-backtrace markers), in both demangled and
+/// v0-mangled spellings. `catch_unwind` plumbing is deliberately absent:
+/// per-frame consumers would hide a user's own mid-stack cluster; the
+/// bottom-anchored tail peel covers it via std ownership instead.
 #[inline]
 #[must_use]
 pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
@@ -380,30 +398,23 @@ pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool 
 #[inline]
 #[must_use]
 pub fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
+    // Frames owned by the standard-library crates are never user code; at
+    // the bottom-contiguous tail they are all plumbing, and they are the
+    // peel's common case — checked first. The trait side of an impl shim
+    // counts too: the dispatch shim for a user-crate closure is core's
+    // `FnOnce::call_once` even though the self type carries the user's
+    // crate.
+    let std_owned = |krate: &str| matches!(krate, "std" | "core" | "alloc" | "test");
+    if let Some(symbol) = parse_symbol(name)
+        && (std_owned(symbol.krate) || symbol.trait_crate().is_some_and(std_owned))
+    {
+        return true;
+    }
     if is_runtime_init_code(name, filename) {
         return true;
     }
     // The C entry shim; the user's own Rust `main` demangles crate-qualified.
     if name == "main" {
-        return true;
-    }
-    // Frames owned by the standard-library crates are never user code; at
-    // the bottom-contiguous tail they are all plumbing.
-    let std_owned = |symbol: &str| {
-        crate_and_path(symbol)
-            .is_some_and(|(krate, _)| matches!(krate, "std" | "core" | "alloc" | "test"))
-    };
-    if std_owned(name) {
-        return true;
-    }
-    // `<X as Trait>::m` impl shims count when the trait side is std-owned —
-    // the dispatch shim for a user-crate closure is core's `FnOnce::call_once`
-    // even though the self type carries the user's crate.
-    if name.starts_with('<')
-        && name
-            .rsplit_once(" as ")
-            .is_some_and(|(_, trait_side)| std_owned(trait_side))
-    {
         return true;
     }
     OS_ENTRY_PREFIXES
@@ -885,10 +896,19 @@ mod tests {
         for name in [
             "std[1a2b]::rt::lang_start_internal",
             "test[3c]::__rust_begin_short_backtrace",
-            "std::panic::catch_unwind::{{closure}}",
         ] {
             assert!(is_runtime_init_code(name, None), "should match: {name}");
         }
+        // `catch_unwind` plumbing is std-owned tail material; per-frame
+        // classification must not hide a user-initiated mid-stack cluster.
+        assert!(!is_runtime_init_code(
+            "std::panic::catch_unwind::{{closure}}",
+            None
+        ));
+        assert!(is_runtime_tail_code(
+            "std::panic::catch_unwind::{{closure}}",
+            None
+        ));
         for name in [
             // Scoped paths are crate-owned: a foreign crate's `rt::lang_start`
             // is user code, and the crate ident must compare exactly.
@@ -900,44 +920,54 @@ mod tests {
     }
 
     #[test]
-    fn crate_and_path_across_spellings() {
+    fn parse_symbol_across_spellings() {
+        fn krate_and_path(name: &str) -> Option<(&str, &str)> {
+            parse_symbol(name).map(|s| (s.krate, s.path))
+        }
+        fn owner(name: &str) -> Option<&str> {
+            parse_symbol(name).map(|s| s.krate)
+        }
+        fn trait_crate(name: &str) -> Option<&str> {
+            parse_symbol(name)?.trait_crate()
+        }
+
         assert_eq!(
-            crate_and_path("std::rt::lang_start"),
+            krate_and_path("std::rt::lang_start"),
             Some(("std", "rt::lang_start"))
         );
         assert_eq!(
-            crate_and_path("std[1a2b]::rt::lang_start"),
+            krate_and_path("std[1a2b]::rt::lang_start"),
             Some(("std", "rt::lang_start"))
         );
         // The path is the raw remainder — prefix matching tolerates the
         // trailing `>::method` of angle-bracket forms.
         assert_eq!(
-            crate_and_path("<std[1a2b]::sys::thread::Thread>::new"),
+            krate_and_path("<std[1a2b]::sys::thread::Thread>::new"),
             Some(("std", "sys::thread::Thread>::new"))
         );
-        // A crate-carrying self type owns the symbol.
-        assert_eq!(
-            crate_and_path(
-                "<core[9f]::panic::unwind_safe::AssertUnwindSafe<f> as core[9f]::ops::function::FnOnce<()>>::call_once"
-            )
-            .map(|(krate, _)| krate),
-            Some("core")
-        );
+        // A crate-carrying self type owns the symbol; the trait side is
+        // reported alongside it.
+        let assert_unwind_shim = "<core[9f]::panic::unwind_safe::AssertUnwindSafe<f> as core[9f]::ops::function::FnOnce<()>>::call_once";
+        assert_eq!(owner(assert_unwind_shim), Some("core"));
+        assert_eq!(trait_crate(assert_unwind_shim), Some("core"));
+        // A user-crate self type keeps ownership, but the std trait side
+        // stays visible for the tail classifier.
+        let user_closure_shim = "<my::Foo as core[9f]::ops::function::FnOnce<()>>::call_once";
+        assert_eq!(owner(user_closure_shim), Some("my"));
+        assert_eq!(trait_crate(user_closure_shim), Some("core"));
         // A crate-less self type (fn pointer) defers to the trait side.
         assert_eq!(
-            crate_and_path("<fn() -> i32 as core[9f]::ops::function::FnOnce<()>>::call_once")
-                .map(|(krate, _)| krate),
+            owner("<fn() -> i32 as core[9f]::ops::function::FnOnce<()>>::call_once"),
             Some("core")
         );
         // Nested impls: the outermost trait (last ` as `) owns the symbol.
-        assert_eq!(
-            crate_and_path("<<a::A as b::B>::C as d::D>::m").map(|(krate, _)| krate),
-            Some("d")
-        );
-        assert_eq!(crate_and_path("main_loop"), None);
-        assert_eq!(crate_and_path("rust_begin_unwind"), None);
-        assert_eq!(crate_and_path("std"), None);
-        assert_eq!(crate_and_path("corey::parse"), Some(("corey", "parse")));
+        assert_eq!(owner("<<a::A as b::B>::C as d::D>::m"), Some("d"));
+        // Non-shim symbols report no trait side.
+        assert_eq!(trait_crate("std::rt::lang_start"), None);
+        assert!(parse_symbol("main_loop").is_none());
+        assert!(parse_symbol("rust_begin_unwind").is_none());
+        assert!(parse_symbol("std").is_none());
+        assert_eq!(krate_and_path("corey::parse"), Some(("corey", "parse")));
     }
 
     #[test]
