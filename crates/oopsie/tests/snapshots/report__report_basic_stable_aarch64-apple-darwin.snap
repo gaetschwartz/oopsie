@@ -5,11 +5,9 @@ expression: report
 Error[report::TestError]: Test error: something failed
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ... 8 frames hidden ...
-  1: report::TestOopsie<__T0>::build::h[HASH]
+   ... 9 frames hidden ...
+  1: report::test_report_basic::h[HASH]
            at tests/report.rs:[LOC]
-  2: report::test_report_basic::h[HASH]
-           at tests/report.rs:[LOC]
-  3: report::test_report_basic::{{closure}}::h[HASH]
+  2: report::test_report_basic::{{closure}}::h[HASH]
            at tests/report.rs:[LOC]
    ... 22 frames hidden ...

@@ -7,11 +7,9 @@ Error[report::ErrorWithHelp]: Something went wrong: connection refused
   help: Try restarting the service
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ... 8 frames hidden ...
-  1: report::ErrorWithHelpOopsie<__T0>::build::h[HASH]
+   ... 9 frames hidden ...
+  1: report::test_report_with_help::h[HASH]
            at tests/report.rs:[LOC]
-  2: report::test_report_with_help::h[HASH]
-           at tests/report.rs:[LOC]
-  3: report::test_report_with_help::{{closure}}::h[HASH]
+  2: report::test_report_with_help::{{closure}}::h[HASH]
            at tests/report.rs:[LOC]
    ... 22 frames hidden ...

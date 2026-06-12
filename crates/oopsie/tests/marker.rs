@@ -246,3 +246,24 @@ fn report_run_leaves_no_marker_on_a_clean_thread() {
     .join()
     .unwrap();
 }
+
+#[test]
+fn generated_selector_frames_are_hidden() {
+    common::force_backtrace();
+    let err = KaboomOopsie {
+        message: "generated frames",
+    }
+    .build();
+    let rendered = Report::from_std(err).no_colors().to_string();
+
+    // The first rendered frame is the caller, not the generated selector glue.
+    let first = rendered
+        .lines()
+        .find(|line| line.trim_start().starts_with("1:"))
+        .expect("a first frame");
+    assert!(
+        first.contains("generated_selector_frames_are_hidden"),
+        "{rendered}"
+    );
+    assert!(!rendered.contains("KaboomOopsie"), "{rendered}");
+}

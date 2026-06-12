@@ -35,6 +35,23 @@ pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     }
 }
 
+/// Register the invocation site in the renderer's generated-frame registry.
+/// All tokens are call_site-spanned, so `file!()`/`line!()` resolve to the
+/// user's attribute — the same location macro-generated frames carry.
+fn gen_site_registration(oopsie_path: &syn::Path) -> TokenStream2 {
+    quote! {
+        const _: () = {
+            #[#oopsie_path::__private::linkme::distributed_slice(#oopsie_path::__private::GENERATED_SITES)]
+            #[linkme(crate = #oopsie_path::__private::linkme)]
+            static SITE: #oopsie_path::__private::GeneratedSite = #oopsie_path::__private::GeneratedSite {
+                krate: ::core::env!("CARGO_CRATE_NAME"),
+                file: ::core::file!(),
+                line: ::core::line!(),
+            };
+        };
+    }
+}
+
 /// Reject generic types up-front so users get a clear error instead of an
 /// `E0107` originating inside macro-generated code. The selector struct,
 /// `Contextual` impl, and `transparent` `From` impl would all need to thread
@@ -126,6 +143,7 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
         .map(|c| gen_size_assertion(&input.ident, c));
 
     let keyword_docs = crate::keyword_docs::gen_keyword_docs(input, &path);
+    let site_registration = gen_site_registration(&path);
 
     Ok(quote! {
         #wrapped_selectors
@@ -133,6 +151,7 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
         #error
         #size_assert
         #keyword_docs
+        #site_registration
     })
 }
 
@@ -166,6 +185,7 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
     };
 
     let keyword_docs = crate::keyword_docs::gen_keyword_docs(input, &path);
+    let site_registration = gen_site_registration(&path);
 
     Ok(quote! {
         #wrapped_selector
@@ -173,6 +193,7 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
         #error
         #size_assert
         #keyword_docs
+        #site_registration
     })
 }
 

@@ -291,6 +291,53 @@ fn is_backtrace_capture_code(name: &str, filename: Option<&path::Path>) -> bool 
     false
 }
 
+/// Frames emitted by `#[oopsie]` expansions resolve to the macro invocation
+/// site; the registry of those sites classifies them like capture machinery.
+fn is_generated_site_frame(frame: &BacktraceFrame) -> bool {
+    let Some(name) = frame.name.as_deref() else {
+        return false;
+    };
+    let Some(symbol) = parse_symbol(name) else {
+        return false;
+    };
+    let Some(line) = frame.lineno else {
+        return false;
+    };
+    let Some(filename) = frame.filename.as_deref() else {
+        return false;
+    };
+    oopsie_core::__private::GENERATED_SITES.iter().any(|site| {
+        matches_site(
+            symbol.krate,
+            line,
+            filename,
+            site.krate,
+            site.file,
+            site.line,
+        )
+    })
+}
+
+fn matches_site(
+    frame_krate: &str,
+    frame_line: u32,
+    frame_file: &path::Path,
+    site_krate: &str,
+    site_file: &str,
+    site_line: u32,
+) -> bool {
+    if frame_krate != site_krate || frame_line != site_line {
+        return false;
+    }
+    let frame_file = frame_file.to_string_lossy();
+    frame_file.as_ref() == site_file
+        || (frame_file.ends_with(site_file)
+            && frame_file
+                .as_bytes()
+                .get(frame_file.len() - site_file.len() - 1)
+                .is_some_and(|&b| b == b'/' || b == b'\\'))
+}
+
 /// Check if a frame name matches panic-runtime code that sits above the user's
 /// `panic!` site (`core::panicking`, `std::panicking`, unwind entry points),
 /// in both demangled and v0-mangled spellings.
@@ -374,6 +421,7 @@ pub fn error_backtrace_frame_filter(frames: &mut [Option<&BacktraceFrame>]) {
                 .name
                 .as_ref()
                 .is_some_and(|name| is_backtrace_capture_code(name, frame.filename.as_deref()))
+                || is_generated_site_frame(frame)
         })
     });
     if let Some(top) = top_cutoff_idx {
@@ -1083,6 +1131,67 @@ mod tests {
         // A user path merely containing "backtrace" must not match.
         let user_file = std::path::Path::new("/home/u/my_backtrace_tool/src/lib.rs");
         assert!(!is_backtrace_capture_code("any::name", Some(user_file)));
+    }
+
+    #[test]
+    fn matches_site_path_forms() {
+        // Absolute DWARF path vs the compiler-relative `file!()`.
+        assert!(matches_site(
+            "myapp",
+            17,
+            std::path::Path::new("/home/u/project/src/lib.rs"),
+            "myapp",
+            "src/lib.rs",
+            17
+        ));
+        // Full equality (trim-paths builds emit the relative path verbatim).
+        assert!(matches_site(
+            "myapp",
+            17,
+            std::path::Path::new("src/lib.rs"),
+            "myapp",
+            "src/lib.rs",
+            17
+        ));
+        // Suffix match must land on a separator boundary.
+        assert!(!matches_site(
+            "myapp",
+            17,
+            std::path::Path::new("/home/u/notsrc/lib.rs"),
+            "myapp",
+            "src/lib.rs",
+            17
+        ));
+        // Windows separator before the suffix.
+        assert!(matches_site(
+            "myapp",
+            17,
+            std::path::Path::new(r"C:\project\src/lib.rs"),
+            "myapp",
+            "src/lib.rs",
+            17
+        ));
+    }
+
+    #[test]
+    fn matches_site_rejects_crate_and_line_mismatch() {
+        // Same short suffix in a different crate must not collide.
+        assert!(!matches_site(
+            "other_crate",
+            17,
+            std::path::Path::new("/home/u/other/src/lib.rs"),
+            "myapp",
+            "src/lib.rs",
+            17
+        ));
+        assert!(!matches_site(
+            "myapp",
+            18,
+            std::path::Path::new("/home/u/project/src/lib.rs"),
+            "myapp",
+            "src/lib.rs",
+            17
+        ));
     }
 
     #[test]
