@@ -306,7 +306,9 @@ pub use oopsie_core::{OptionalSpanTrace, SpanTrace};
 mod generated;
 
 pub mod __private {
+    #[cfg(feature = "fancy")]
     pub use crate::generated::{GENERATED_SITES, GeneratedSite};
+    #[cfg(feature = "fancy")]
     pub use linkme;
     pub use oopsie_core::__private::*;
 

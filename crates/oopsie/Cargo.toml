@@ -27,14 +27,14 @@ unstable = [
     "unstable-try-trait-v2",
     "oopsie-core/unstable",
 ]
-fancy = ["dep:owo-colors"]
+fancy = ["dep:owo-colors", "dep:linkme"]
 serde = ["oopsie-core/serde", "dep:serde_json"]
 tracing = ["oopsie-core/tracing", "oopsie-macros/tracing"]
 chrono = ["oopsie-core/chrono"]
 
 [dependencies]
 backtrace = "0.3.76"
-linkme = "0.3.36"
+linkme = { version = "0.3.36", optional = true }
 oopsie-core = { workspace = true }
 oopsie-macros = { workspace = true }
 owo-colors = { version = "4", optional = true }

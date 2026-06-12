@@ -36,19 +36,12 @@ pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
 }
 
 /// Register the invocation site in the renderer's generated-frame registry.
-/// All tokens are call_site-spanned, so `file!()`/`line!()` resolve to the
-/// user's attribute — the same location macro-generated frames carry.
+/// The call is call_site-spanned, anchoring the registration macro's location
+/// builtins at the user's attribute; it expands to nothing unless oopsie's
+/// `fancy` feature is enabled.
 fn gen_site_registration(oopsie_path: &syn::Path) -> TokenStream2 {
     quote! {
-        const _: () = {
-            #[#oopsie_path::__private::linkme::distributed_slice(#oopsie_path::__private::GENERATED_SITES)]
-            #[linkme(crate = #oopsie_path::__private::linkme)]
-            static SITE: #oopsie_path::__private::GeneratedSite = #oopsie_path::__private::GeneratedSite {
-                krate: ::core::env!("CARGO_CRATE_NAME"),
-                file: ::core::file!(),
-                line: ::core::line!(),
-            };
-        };
+        #oopsie_path::__register_generated_site!();
     }
 }
 
