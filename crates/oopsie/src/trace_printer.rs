@@ -143,6 +143,191 @@ impl Default for TraceTheme {
 // Frame filtering
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// Prefixes for backtrace capture frames that should be skipped.
+const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
+    "std::backtrace_rs::backtrace::",
+    "<std::backtrace::Backtrace>::create",
+    "<std::backtrace::Backtrace as oopsie_core::Capturable>::",
+    "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::Capturable>::",
+];
+
+/// A symbol split into its owning crate and path, across spellings:
+/// `std::rt::lang_start`, `std[hash]::rt::lang_start`, and
+/// `<std[hash]::rt::X>::method` all yield crate `"std"`. When the self type
+/// of an `<X as Trait>::method` impl shim carries no crate of its own (fn
+/// pointers, closures), the trait side takes over as the owner.
+struct ParsedSymbol<'a> {
+    name: &'a str,
+    krate: &'a str,
+    path: &'a str,
+}
+
+fn scan_crate(s: &str) -> Option<(&str, &str)> {
+    let s = s.strip_prefix('<').unwrap_or(s);
+    let ident_len = s
+        .bytes()
+        .take_while(|&b| b.is_ascii_alphanumeric() || b == b'_')
+        .count();
+    if ident_len == 0 {
+        return None;
+    }
+    let (krate, rest) = s.split_at(ident_len);
+    if let Some(designator) = rest.strip_prefix('[') {
+        let (_, path) = designator.split_once("]::")?;
+        return Some((krate, path));
+    }
+    rest.strip_prefix("::").map(|path| (krate, path))
+}
+
+fn impl_trait_side(name: &str) -> Option<(&str, &str)> {
+    if !name.starts_with('<') {
+        return None;
+    }
+    let (_, trait_side) = name.rsplit_once(" as ")?;
+    scan_crate(trait_side)
+}
+
+fn parse_symbol(name: &str) -> Option<ParsedSymbol<'_>> {
+    let (krate, path) = scan_crate(name).or_else(|| impl_trait_side(name))?;
+    Some(ParsedSymbol { name, krate, path })
+}
+
+impl<'a> ParsedSymbol<'a> {
+    /// The trait side of an `<X as Trait>::method` impl shim, parsed on
+    /// demand — most callers never ask.
+    fn trait_crate(&self) -> Option<&'a str> {
+        impl_trait_side(self.name).map(|(krate, _)| krate)
+    }
+}
+
+/// A frame-name pattern set: bare symbols matched as raw prefixes, plus
+/// crate-scoped path prefixes matched after [`parse_symbol`] normalization.
+/// A normalized path is also tried against the bare set — the same symbol
+/// may appear under a crate designator.
+fn matches_symbol(name: &str, bare: &[&str], scoped: &[(&str, &str)]) -> bool {
+    if bare.iter().any(|prefix| name.starts_with(prefix)) {
+        return true;
+    }
+    let Some(symbol) = parse_symbol(name) else {
+        return false;
+    };
+    scoped
+        .iter()
+        .any(|&(k, p)| symbol.krate == k && symbol.path.starts_with(p))
+        || bare.iter().any(|prefix| symbol.path.starts_with(prefix))
+}
+
+/// The panic *raising* runtime that sits directly above the user's `panic!`
+/// site: the `core`/`std` panic machinery and unwind entry points.
+const POST_PANIC_BARE: &[&str] = &[
+    "rust_begin_unwind",
+    "__rust_start_panic",
+    "__rust_end_short_backtrace",
+];
+
+/// Deliberately excludes `std::panicking::catch_unwind` (and its `try`/`do_call`
+/// helpers): those frames sit at the *bottom* of the stack, below `main`, where
+/// the runtime catches the unwind. Matching them would let a reverse search for
+/// the panic boundary be dragged all the way down, trimming user code.
+const POST_PANIC_SCOPED: &[(&str, &str)] = &[
+    ("core", "panicking::"),
+    ("std", "panicking::panic"),
+    ("std", "panicking::begin_panic"),
+    ("std", "panicking::rust_panic"),
+    ("std", "sys::backtrace::__rust_end_short_backtrace"),
+];
+
+/// Runtime-entry frames below user code, recognized anywhere in a trace
+/// (see also [`is_runtime_tail_code`]).
+const RUNTIME_INIT_BARE: &[&str] = &[
+    "__rust_begin_short_backtrace",
+    "__rustc",
+    "__libc_start",
+    "__scrt_common_main",
+];
+
+const RUNTIME_INIT_SCOPED: &[(&str, &str)] = &[
+    ("std", "sys::backtrace::__rust_begin_short_backtrace"),
+    ("std", "rt::lang_start"),
+    ("test", "__rust_begin_short_backtrace"),
+];
+
+/// OS / C-runtime entry symbols at the very bottom of a stack, recognized
+/// only by the bottom-anchored tail peel.
+const OS_ENTRY_PREFIXES: &[&str] = &[
+    "_main",
+    "___rust_try",
+    "__rust_try",
+    "_start",
+    "start_thread",
+    "__clone",
+    "clone3",
+    "__pthread",
+    "RtlUserThreadStart",
+    "BaseThreadInitThunk",
+    "invoke_main",
+    "mainCRTStartup",
+];
+
+/// Check if a frame name matches backtrace capture code.
+fn is_backtrace_capture_code(name: &str, filename: Option<&path::Path>) -> bool {
+    if BACKTRACE_CAPTURE_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+        || filename.is_some_and(|f| f.starts_with(oopsie_core::__private::CORE_SRC_PATH))
+    {
+        return true;
+    }
+
+    false
+}
+
+/// Check if a frame name matches panic-runtime code that sits above the user's
+/// `panic!` site (`core::panicking`, `std::panicking`, unwind entry points),
+/// in both demangled and v0-mangled spellings.
+fn is_post_panic_code(name: &str, _filename: Option<&path::Path>) -> bool {
+    matches_symbol(name, POST_PANIC_BARE, POST_PANIC_SCOPED)
+}
+
+/// Check if a frame name matches runtime-entry code below user code
+/// (`lang_start`, the short-backtrace markers), in both demangled and
+/// v0-mangled spellings. `catch_unwind` plumbing is deliberately absent:
+/// per-frame consumers would hide a user's own mid-stack cluster; the
+/// bottom-anchored tail peel covers it via std ownership instead.
+fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
+    matches_symbol(name, RUNTIME_INIT_BARE, RUNTIME_INIT_SCOPED)
+}
+
+/// Like [`is_runtime_init_code`], plus matching that is only safe when
+/// anchored at the bottom of the stack: frames owned by the standard-library
+/// crates, the C `main` shim, and OS entry symbols. A mid-stack frame must
+/// never be classified by these rules — the bottom peel stops at the first
+/// miss, which is what bounds them.
+fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
+    // Frames owned by the standard-library crates are never user code; at
+    // the bottom-contiguous tail they are all plumbing, and they are the
+    // peel's common case — checked first. The trait side of an impl shim
+    // counts too: the dispatch shim for a user-crate closure is core's
+    // `FnOnce::call_once` even though the self type carries the user's
+    // crate.
+    let std_owned = |krate: &str| matches!(krate, "std" | "core" | "alloc" | "test");
+    if let Some(symbol) = parse_symbol(name)
+        && (std_owned(symbol.krate) || symbol.trait_crate().is_some_and(std_owned))
+    {
+        return true;
+    }
+    if is_runtime_init_code(name, filename) {
+        return true;
+    }
+    // The C entry shim; the user's own Rust `main` demangles crate-qualified.
+    if name == "main" {
+        return true;
+    }
+    OS_ENTRY_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+}
+
 /// Default frame filter for error backtraces.
 ///
 /// This filter:
@@ -157,9 +342,7 @@ pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
     while keep > 0 {
         let frame = frames[keep - 1];
         let internal = match frame.name.as_ref() {
-            Some(name) => {
-                oopsie_core::__private::is_runtime_tail_code(name, frame.filename.as_deref())
-            }
+            Some(name) => is_runtime_tail_code(name, frame.filename.as_deref()),
             // Unresolvable frames are runtime/shim detail (`__rust_try` etc.).
             None => true,
         };
@@ -176,9 +359,10 @@ pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
     let top_cutoff_idx = frames
         .iter()
         .rposition(|frame| {
-            frame.name.as_ref().is_some_and(|name| {
-                oopsie_core::__private::is_backtrace_capture_code(name, frame.filename.as_deref())
-            })
+            frame
+                .name
+                .as_ref()
+                .is_some_and(|name| is_backtrace_capture_code(name, frame.filename.as_deref()))
         })
         .map(|idx| idx + 1);
     if let Some(top) = top_cutoff_idx {
@@ -198,9 +382,10 @@ pub fn post_panic_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
     let top_cutoff_idx = frames
         .iter()
         .rposition(|frame| {
-            frame.name.as_ref().is_some_and(|name| {
-                oopsie_core::__private::is_post_panic_code(name, frame.filename.as_deref())
-            })
+            frame
+                .name
+                .as_ref()
+                .is_some_and(|name| is_post_panic_code(name, frame.filename.as_deref()))
         })
         .map(|idx| idx + 1);
     if let Some(top) = top_cutoff_idx {
@@ -809,6 +994,303 @@ mod tests {
             let mut frames: Vec<&BacktraceFrame> = vec![&only];
             filter(&mut frames);
             assert_eq!(frames.len(), 1);
+        }
+    }
+
+    #[test]
+    fn test_is_backtrace_capture_code() {
+        assert!(is_backtrace_capture_code(
+            "std::backtrace_rs::backtrace::libunwind::trace",
+            None
+        ));
+        assert!(!is_backtrace_capture_code("my_crate::do_stuff", None));
+    }
+
+    #[test]
+    fn test_is_runtime_init_code() {
+        assert!(is_runtime_init_code(
+            "std::rt::lang_start_internal::something",
+            None
+        ));
+        assert!(is_runtime_init_code(
+            "__rust_begin_short_backtrace<fn(), ()>",
+            None
+        ));
+        assert!(!is_runtime_init_code("my_crate::main_logic", None));
+        // A bare `main` prefix would match (and hide) the user's own entry point.
+        assert!(!is_runtime_init_code("main", None));
+        assert!(!is_runtime_init_code("my_app::main", None));
+    }
+
+    #[test]
+    fn test_is_runtime_init_code_bracket_form() {
+        // v0-mangled `crate[hash]::path` spellings.
+        assert!(is_runtime_init_code(
+            "test[a1b2c3d4]::__rust_begin_short_backtrace",
+            None
+        ));
+        assert!(is_runtime_init_code(
+            "std[a1b2c3d4]::sys::backtrace::__rust_begin_short_backtrace",
+            None
+        ));
+        // A user symbol inside the bracket form is kept.
+        assert!(!is_runtime_init_code(
+            "std[a1b2c3d4]::collections::HashMap::insert",
+            None
+        ));
+        // Scoped paths are crate-owned and never match under a foreign crate;
+        // bare reserved symbols match under any crate designator.
+        assert!(!is_runtime_init_code(
+            "mycrate[a1b2c3d4]::rt::lang_start",
+            None
+        ));
+        assert!(is_runtime_init_code(
+            "mycrate[a1b2c3d4]::__rust_begin_short_backtrace",
+            None
+        ));
+    }
+
+    #[test]
+    fn test_is_post_panic_code() {
+        assert!(is_post_panic_code("core::panicking::panic_fmt", None));
+        assert!(is_post_panic_code(
+            "std::panicking::begin_panic_handler::{{closure}}",
+            None
+        ));
+        assert!(is_post_panic_code("rust_begin_unwind", None));
+        assert!(is_post_panic_code(
+            "std::sys::backtrace::__rust_end_short_backtrace::<…>",
+            None
+        ));
+        // `catch_unwind` sits below `main`, not above the panic site, and must
+        // NOT be treated as panic-raising plumbing.
+        assert!(!is_post_panic_code(
+            "std::panicking::catch_unwind::do_call",
+            None
+        ));
+        // User code and the user's own panic call site are kept.
+        assert!(!is_post_panic_code("my_app::do_work", None));
+        assert!(!is_post_panic_code("my_app::main", None));
+    }
+
+    #[test]
+    fn test_is_post_panic_code_bracket_form() {
+        // v0-mangled `crate[hash]::path` form for the panic runtime.
+        assert!(is_post_panic_code(
+            "std[a1b2c3d4]::panicking::begin_panic_handler",
+            None
+        ));
+        assert!(is_post_panic_code(
+            "core[a1b2c3d4]::panicking::panic_fmt",
+            None
+        ));
+        assert!(is_post_panic_code(
+            "std[a1b2c3d4]::sys::backtrace::__rust_end_short_backtrace",
+            None
+        ));
+        // The unwind entry is emitted under the `__rustc` pseudo-crate.
+        assert!(is_post_panic_code(
+            "__rustc[a1b2c3d4]::rust_begin_unwind",
+            None
+        ));
+        // `catch_unwind` in bracket form is still excluded.
+        assert!(!is_post_panic_code(
+            "std[a1b2c3d4]::panicking::catch_unwind::do_call",
+            None
+        ));
+        // A user symbol inside the bracket form is kept.
+        assert!(!is_post_panic_code(
+            "std[a1b2c3d4]::collections::HashMap::insert",
+            None
+        ));
+    }
+
+    #[test]
+    fn pin_post_panic_spellings() {
+        for name in [
+            "__rustc[1a2b]::rust_begin_unwind",
+            "std[1a2b]::panicking::begin_panic_handler",
+            "core[9f]::panicking::panic_fmt",
+            "std[1a2b]::sys::backtrace::__rust_end_short_backtrace",
+            "core::panicking::panic_fmt",
+            "std::panicking::rust_panic_with_hook",
+        ] {
+            assert!(is_post_panic_code(name, None), "should match: {name}");
+        }
+        for name in [
+            // The deliberate exclusion: catch_unwind sits below `main`.
+            "std::panicking::catch_unwind::do_call",
+            "my_crate::panicking::panic_like",
+        ] {
+            assert!(!is_post_panic_code(name, None), "must not match: {name}");
+        }
+    }
+
+    #[test]
+    fn pin_runtime_init_spellings() {
+        for name in [
+            "std[1a2b]::rt::lang_start_internal",
+            "test[3c]::__rust_begin_short_backtrace",
+        ] {
+            assert!(is_runtime_init_code(name, None), "should match: {name}");
+        }
+        // `catch_unwind` plumbing is std-owned tail material; per-frame
+        // classification must not hide a user-initiated mid-stack cluster.
+        assert!(!is_runtime_init_code(
+            "std::panic::catch_unwind::{{closure}}",
+            None
+        ));
+        assert!(is_runtime_tail_code(
+            "std::panic::catch_unwind::{{closure}}",
+            None
+        ));
+        for name in [
+            // Scoped paths are crate-owned: a foreign crate's `rt::lang_start`
+            // is user code, and the crate ident must compare exactly.
+            "my_crate::rt::lang_start",
+            "std_extras::rt::lang_start",
+        ] {
+            assert!(!is_runtime_init_code(name, None), "must not match: {name}");
+        }
+    }
+
+    #[test]
+    fn parse_symbol_across_spellings() {
+        fn krate_and_path(name: &str) -> Option<(&str, &str)> {
+            parse_symbol(name).map(|s| (s.krate, s.path))
+        }
+        fn owner(name: &str) -> Option<&str> {
+            parse_symbol(name).map(|s| s.krate)
+        }
+        fn trait_crate(name: &str) -> Option<&str> {
+            parse_symbol(name)?.trait_crate()
+        }
+
+        assert_eq!(
+            krate_and_path("std::rt::lang_start"),
+            Some(("std", "rt::lang_start"))
+        );
+        assert_eq!(
+            krate_and_path("std[1a2b]::rt::lang_start"),
+            Some(("std", "rt::lang_start"))
+        );
+        // The path is the raw remainder — prefix matching tolerates the
+        // trailing `>::method` of angle-bracket forms.
+        assert_eq!(
+            krate_and_path("<std[1a2b]::sys::thread::Thread>::new"),
+            Some(("std", "sys::thread::Thread>::new"))
+        );
+        // A crate-carrying self type owns the symbol; the trait side is
+        // reported alongside it.
+        let assert_unwind_shim = "<core[9f]::panic::unwind_safe::AssertUnwindSafe<f> as core[9f]::ops::function::FnOnce<()>>::call_once";
+        assert_eq!(owner(assert_unwind_shim), Some("core"));
+        assert_eq!(trait_crate(assert_unwind_shim), Some("core"));
+        // A user-crate self type keeps ownership, but the std trait side
+        // stays visible for the tail classifier.
+        let user_closure_shim = "<my::Foo as core[9f]::ops::function::FnOnce<()>>::call_once";
+        assert_eq!(owner(user_closure_shim), Some("my"));
+        assert_eq!(trait_crate(user_closure_shim), Some("core"));
+        // A crate-less self type (fn pointer) defers to the trait side.
+        assert_eq!(
+            owner("<fn() -> i32 as core[9f]::ops::function::FnOnce<()>>::call_once"),
+            Some("core")
+        );
+        // Nested impls: the outermost trait (last ` as `) owns the symbol.
+        assert_eq!(owner("<<a::A as b::B>::C as d::D>::m"), Some("d"));
+        // Non-shim symbols report no trait side.
+        assert_eq!(trait_crate("std::rt::lang_start"), None);
+        assert!(parse_symbol("main_loop").is_none());
+        assert!(parse_symbol("rust_begin_unwind").is_none());
+        assert!(parse_symbol("std").is_none());
+        assert_eq!(krate_and_path("corey::parse"), Some(("corey", "parse")));
+    }
+
+    #[test]
+    fn scoped_tables_match_all_spellings() {
+        type Classifier = fn(&str, Option<&std::path::Path>) -> bool;
+        for (table, classify) in [
+            (RUNTIME_INIT_SCOPED, is_runtime_init_code as Classifier),
+            (POST_PANIC_SCOPED, is_post_panic_code as Classifier),
+        ] {
+            for &(krate, path) in table {
+                for name in [
+                    format!("{krate}::{path}x"),
+                    format!("{krate}[abc123]::{path}x"),
+                    format!("<{krate}[abc123]::{path}x>::m"),
+                ] {
+                    assert!(classify(&name, None), "should match: {name}");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn runtime_tail_recognizes_test_thread_tail_spellings() {
+        for name in [
+            "__pthread_cond_wait",
+            "<std[1a2b]::sys::thread::unix::Thread>::new::thread_start",
+            "<alloc[9f]::boxed::Box<dyn core[9f]::ops::function::FnOnce<(), Output = ()> + core[9f]::marker::Send> as core[9f]::ops::function::FnOnce<()>>::call_once",
+            "<std[1a2b]::thread::lifecycle::spawn_unchecked<f, ()>::{closure#1} as core[9f]::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}",
+            "std[1a2b]::thread::lifecycle::spawn_unchecked::<f, ()>::{closure#1}",
+            "<core[9f]::panic::unwind_safe::AssertUnwindSafe<f> as core[9f]::ops::function::FnOnce<()>>::call_once",
+            "test[3c]::run_test_in_process",
+            "test[3c]::run_test::{closure#0}",
+            "std::thread::lifecycle::spawn_unchecked",
+            "std::sys::pal::unix::thread::Thread::new::thread_start",
+            "_start",
+            "start_thread",
+            "__clone",
+            "clone3",
+            "RtlUserThreadStart",
+            "BaseThreadInitThunk",
+            "invoke_main",
+            "mainCRTStartup",
+            "__rust_try",
+            "main",
+        ] {
+            assert!(is_runtime_tail_code(name, None), "should match: {name}");
+        }
+    }
+
+    #[test]
+    fn runtime_tail_hides_user_closure_dispatch_shims() {
+        // The self type carries the user's crate, but the dispatched method
+        // is core's `FnOnce::call_once` — still tail plumbing.
+        assert!(is_runtime_tail_code(
+            "<my_app[1a2b]::main::{closure#0} as core[9f]::ops::function::FnOnce<()>>::call_once",
+            None
+        ));
+    }
+
+    #[test]
+    fn runtime_tail_spares_user_spellings() {
+        for name in [
+            "my_crate::run_tests",
+            "my_crate::test::run_testish",
+            "<my_crate::Foo as my_crate::Bar>::call_me",
+            "<my_crate::Foo as my_crate::Bar>::call_once",
+            "testing::utils::run",
+            "corey::parse",
+            "my_crate::sys::thread_pool::spawn",
+            "my_crate::thread::worker",
+            "main_loop",
+            "mainframe::connect",
+        ] {
+            assert!(!is_runtime_tail_code(name, None), "must not match: {name}");
+        }
+    }
+
+    #[test]
+    fn tail_only_rules_do_not_classify_per_frame_internal() {
+        for name in ["std::thread::sleep", "std::sys::pal::unix::futex", "main"] {
+            assert!(
+                !is_runtime_init_code(name, None),
+                "leaked into per-frame: {name}"
+            );
+            assert!(
+                is_runtime_tail_code(name, None),
+                "missing from tail: {name}"
+            );
         }
     }
 }

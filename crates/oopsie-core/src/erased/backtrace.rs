@@ -158,15 +158,14 @@ mod tests {
 
         let erased = ErasedBacktrace::from_backtrace(&bt);
 
-        // The capture path itself runs through internal machinery, so a raw
-        // snapshot must contain at least one internal frame — proving filtering
-        // is deferred to render time rather than applied here.
+        // The capture path itself runs through this crate, so a raw snapshot
+        // must retain its frame — proving filtering is deferred to render
+        // time rather than applied here.
         assert!(
             erased.frames().iter().any(|fr| {
-                crate::__private::is_internal_frame(
-                    fr.name.as_deref(),
-                    fr.filename.as_deref().map(std::path::Path::new),
-                )
+                fr.filename
+                    .as_deref()
+                    .is_some_and(|f| f.starts_with(crate::__private::CORE_SRC_PATH))
             }),
             "from_backtrace should retain raw internal frames, not strip them at capture"
         );
