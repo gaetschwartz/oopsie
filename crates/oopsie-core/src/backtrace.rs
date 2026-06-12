@@ -857,6 +857,46 @@ mod tests {
     }
 
     #[test]
+    fn pin_post_panic_spellings() {
+        for name in [
+            "__rustc[1a2b]::rust_begin_unwind",
+            "std[1a2b]::panicking::begin_panic_handler",
+            "core[9f]::panicking::panic_fmt",
+            "std[1a2b]::sys::backtrace::__rust_end_short_backtrace",
+            "core::panicking::panic_fmt",
+            "std::panicking::rust_panic_with_hook",
+        ] {
+            assert!(is_post_panic_code(name, None), "should match: {name}");
+        }
+        for name in [
+            // The deliberate exclusion: catch_unwind sits below `main`.
+            "std::panicking::catch_unwind::do_call",
+            "my_crate::panicking::panic_like",
+        ] {
+            assert!(!is_post_panic_code(name, None), "must not match: {name}");
+        }
+    }
+
+    #[test]
+    fn pin_runtime_init_spellings() {
+        for name in [
+            "std[1a2b]::rt::lang_start_internal",
+            "test[3c]::__rust_begin_short_backtrace",
+            "std::panic::catch_unwind::{{closure}}",
+        ] {
+            assert!(is_runtime_init_code(name, None), "should match: {name}");
+        }
+        for name in [
+            // Scoped paths are crate-owned: a foreign crate's `rt::lang_start`
+            // is user code, and the crate ident must compare exactly.
+            "my_crate::rt::lang_start",
+            "std_extras::rt::lang_start",
+        ] {
+            assert!(!is_runtime_init_code(name, None), "must not match: {name}");
+        }
+    }
+
+    #[test]
     fn is_internal_frame_drops_oopsie_core_src_path() {
         // Capture frames live in oopsie-core's own `src/`; matching them by
         // path lets the renderer sweep them even when their symbol names
