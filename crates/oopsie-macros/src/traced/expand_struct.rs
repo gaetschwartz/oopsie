@@ -39,6 +39,7 @@ pub fn expand_struct(
         spantrace: !packed && resolved.spantrace && !existence.has_spantrace,
         timestamp: resolved.timestamp && !existence.has_timestamp,
         traces: packed,
+        location: resolved.location && !existence.has_location,
     };
 
     inject_fields(&mut input.fields, &config, &to_inject)?;

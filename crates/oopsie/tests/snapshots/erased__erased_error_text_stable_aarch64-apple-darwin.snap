@@ -5,6 +5,7 @@ expression: error.to_text()
 Error[erased::common::MyError::Inner]:
 
   × Inner error happened
+  at crates/oopsie/tests/common/mod.rs:[LOC]
   ╰─▶ Error: Inner function failed (foo=true, name=Alice)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

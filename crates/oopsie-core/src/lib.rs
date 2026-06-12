@@ -91,6 +91,7 @@ pub mod __private {
         fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace>;
         #[cfg(feature = "tracing")]
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace>;
+        fn fwd_location(&self) -> Option<&'static std::panic::Location<'static>>;
     }
 
     impl<'a, T: crate::Diagnostic + ?Sized> DiagForwardExt<'a> for DiagProbe<'a, T> {
@@ -111,6 +112,10 @@ pub mod __private {
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace> {
             self.0.oopsie_spantrace()
         }
+        #[inline]
+        fn fwd_location(&self) -> Option<&'static std::panic::Location<'static>> {
+            self.0.oopsie_location()
+        }
     }
 
     /// Low-priority: source doesn't implement `Diagnostic` → nothing to forward.
@@ -130,6 +135,10 @@ pub mod __private {
         #[cfg(feature = "tracing")]
         #[inline]
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace> {
+            None
+        }
+        #[inline]
+        fn fwd_location(&self) -> Option<&'static std::panic::Location<'static>> {
             None
         }
     }

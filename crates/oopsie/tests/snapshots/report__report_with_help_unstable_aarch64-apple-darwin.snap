@@ -3,6 +3,7 @@ source: crates/oopsie/tests/report.rs
 expression: report.to_string()
 ---
 Error[report::ErrorWithHelp]: Something went wrong: connection refused
+  at crates/oopsie/tests/report.rs:[LOC]
 
   help: Try restarting the service
 

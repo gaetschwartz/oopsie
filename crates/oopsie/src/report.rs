@@ -195,6 +195,23 @@ impl<E: Diagnostic> Report<E> {
         }
         writeln!(f, ": {err}")?;
 
+        // Caller location, directly under the header so it reads even with
+        // backtraces disabled.
+        if let Some(location) = err.oopsie_location() {
+            let at = format!(
+                "{}:{}:{}",
+                location.file(),
+                location.line(),
+                location.column()
+            );
+            writeln!(
+                f,
+                "  {} {}",
+                style!("at", S.dimmed(), c),
+                style!(at, S.dimmed(), c)
+            )?;
+        }
+
         // Write error chain
         let mut source = err.source();
         let mut depth = 0_usize;

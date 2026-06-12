@@ -25,6 +25,10 @@ pub(super) struct FieldInjectorConfig {
     pub traces_type: TokenStream2,
     pub traces_attrs: TokenStream2,
 
+    pub location_ident: syn::Ident,
+    pub location_type: TokenStream2,
+    pub location_attrs: TokenStream2,
+
     pub code_type: TokenStream2,
 }
 
@@ -38,6 +42,7 @@ impl FieldInjectorConfig {
         let spantrace_ident = format_ident!("__oopsie_spantrace");
         let traces_ident = format_ident!("__oopsie_traces");
         let timestamp_ident = format_ident!("__oopsie_timestamp");
+        let location_ident = format_ident!("__oopsie_location");
 
         // Element types: honor `type =` overrides, else the oopsie defaults.
         let backtrace_elem = resolved
@@ -84,6 +89,10 @@ impl FieldInjectorConfig {
         let backtrace_attrs = quote! { #[oopsie(backtrace)] };
         let spantrace_attrs = quote! { #[oopsie(spantrace)] };
         let traces_attrs = quote! { #[oopsie(traces)] };
+        // Inline and unboxed: a `&'static Location` is `Copy` and pointer-sized,
+        // so it stays reachable without touching any boxed trace slot.
+        let location_type = quote! { &'static ::core::panic::Location<'static> };
+        let location_attrs = quote! { #[oopsie(location)] };
         let code_type = code
             .opt_settings()
             .and_then(|s| s.r#type.clone())
@@ -102,6 +111,9 @@ impl FieldInjectorConfig {
             traces_ident,
             traces_type,
             traces_attrs,
+            location_ident,
+            location_type,
+            location_attrs,
             code_type,
         }
     }
@@ -118,6 +130,7 @@ pub(super) struct FieldExistence {
     pub has_spantrace: bool,
     pub has_timestamp: bool,
     pub has_traces: bool,
+    pub has_location: bool,
 }
 
 /// Tracks which fields should be injected.
@@ -130,6 +143,7 @@ pub(super) struct FieldsToInject {
     pub spantrace: bool,
     pub timestamp: bool,
     pub traces: bool,
+    pub location: bool,
 }
 
 #[cfg(test)]

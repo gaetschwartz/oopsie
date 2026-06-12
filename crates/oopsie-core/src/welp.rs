@@ -53,10 +53,11 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 ///
 /// # Layout
 ///
-/// `Welp` is a small enum — both variants carry `Box<str>` + a boxed
-/// `(Backtrace, _)` captured at construction, where the second slot is the
-/// span-trace under the `tracing` feature and is otherwise empty; `Sourced`
-/// additionally carries the wrapped `Box<dyn Error>`.
+/// `Welp` is a small enum — both variants carry `Box<str>`, a boxed
+/// `(Backtrace, _)` captured at construction (the second slot is the span-trace
+/// under the `tracing` feature and is otherwise empty), and an inline
+/// `&'static Location` of the call site; `Sourced` additionally carries the
+/// wrapped `Box<dyn Error>`.
 ///
 /// A `Sourced` `Welp`'s [`Diagnostic`] accessors prefer the source's traces
 /// (reached via the Provider API under the
@@ -70,10 +71,12 @@ enum WelpRepr {
         message: Box<str>,
         source: BoxError,
         traces: Box<(Backtrace, MaybeSpanTrace)>,
+        location: &'static std::panic::Location<'static>,
     },
     Traced {
         message: Box<str>,
         traces: Box<(Backtrace, MaybeSpanTrace)>,
+        location: &'static std::panic::Location<'static>,
     },
 }
 
@@ -87,10 +90,12 @@ impl Welp {
     /// let err = Welp::new(format!("port {} out of range", 70_000));
     /// assert_eq!(err.to_string(), "port 70000 out of range");
     /// ```
+    #[track_caller]
     pub fn new(message: impl Into<String>) -> Self {
         Self(WelpRepr::Traced {
             message: message.into().into_boxed_str(),
             traces: Box::new((Backtrace::capture(), capture_maybe_spantrace())),
+            location: std::panic::Location::caller(),
         })
     }
 
@@ -110,6 +115,7 @@ impl Welp {
     /// assert_eq!(err.to_string(), "could not write");
     /// assert!(std::error::Error::source(&err).is_some());
     /// ```
+    #[track_caller]
     pub fn wrap<E>(source: E, message: impl Into<String>) -> Self
     where
         E: StdError + Send + Sync + 'static,
@@ -123,6 +129,7 @@ impl Welp {
             message: message.into().into_boxed_str(),
             source: Box::new(source),
             traces: Box::new((Backtrace::capture(), capture_maybe_spantrace())),
+            location: std::panic::Location::caller(),
         })
     }
 
@@ -142,11 +149,13 @@ impl Welp {
     /// assert_eq!(err.to_string(), "could not write");
     /// assert!(std::error::Error::source(&err).is_some());
     /// ```
+    #[track_caller]
     pub fn wrap_boxed(source: BoxError, message: impl Into<String>) -> Self {
         Self(WelpRepr::Sourced {
             message: message.into().into_boxed_str(),
             source,
             traces: Box::new((Backtrace::capture(), capture_maybe_spantrace())),
+            location: std::panic::Location::caller(),
         })
     }
 
@@ -231,6 +240,14 @@ impl Diagnostic for Welp {
             WelpRepr::Traced { traces, .. } => Some(&traces.1),
         }
     }
+
+    fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        match &self.0 {
+            WelpRepr::Sourced { location, .. } | WelpRepr::Traced { location, .. } => {
+                Some(location)
+            }
+        }
+    }
 }
 
 /// Extension trait on [`Result`] for attaching a string message that produces
@@ -273,7 +290,12 @@ where
 {
     #[inline]
     fn welp_context(self, message: impl Into<String>) -> Result<T, Welp> {
-        self.map_err(|e| Welp::wrap(e, message))
+        // Build directly (no `map_err` closure) so `Welp::wrap`'s
+        // `#[track_caller]` reports the `.welp_context` call site.
+        match self {
+            Ok(value) => Ok(value),
+            Err(e) => Err(Welp::wrap(e, message)),
+        }
     }
 
     #[inline]
@@ -282,10 +304,13 @@ where
         S: Into<String>,
         F: FnOnce(&E) -> S,
     {
-        self.map_err(|e| {
-            let msg = f(&e);
-            Welp::wrap(e, msg)
-        })
+        match self {
+            Ok(value) => Ok(value),
+            Err(e) => {
+                let msg = f(&e);
+                Err(Welp::wrap(e, msg))
+            }
+        }
     }
 }
 
@@ -324,7 +349,12 @@ pub trait WelpOptionExt<T>: Sized {
 impl<T> WelpOptionExt<T> for Option<T> {
     #[inline]
     fn welp_context(self, message: impl Into<String>) -> Result<T, Welp> {
-        self.ok_or_else(|| Welp::new(message))
+        // Build directly (no `ok_or_else` closure) so `Welp::new`'s
+        // `#[track_caller]` reports the `.welp_context` call site.
+        match self {
+            Some(value) => Ok(value),
+            None => Err(Welp::new(message)),
+        }
     }
 
     #[inline]
@@ -333,7 +363,10 @@ impl<T> WelpOptionExt<T> for Option<T> {
         S: Into<String>,
         F: FnOnce() -> S,
     {
-        self.ok_or_else(|| Welp::new(f()))
+        match self {
+            Some(value) => Ok(value),
+            None => Err(Welp::new(f())),
+        }
     }
 }
 
@@ -375,6 +408,20 @@ mod tests {
     fn new_has_no_source() {
         let err = Welp::new("oops");
         assert!(StdError::source(&err).is_none());
+    }
+
+    #[test]
+    fn captures_location_at_call_site() {
+        let new_line = line!() + 1;
+        let traced = Welp::new("solo");
+        let loc = traced.oopsie_location().expect("traced location");
+        assert!(loc.file().ends_with("welp.rs"));
+        assert_eq!(loc.line(), new_line);
+
+        let wrap_line = line!() + 1;
+        let sourced = Welp::wrap(std::io::Error::other("x"), "outer");
+        let loc = sourced.oopsie_location().expect("sourced location");
+        assert_eq!(loc.line(), wrap_line);
     }
 
     #[test]
@@ -632,4 +679,12 @@ mod tests {
         assert_sync::<Welp>();
         assert_static::<Welp>();
     };
+
+    #[test]
+    fn welp_size_is_pinned() {
+        // `Sourced` dominates: boxed message + boxed source + boxed traces + the
+        // inline `&'static Location`, four pointers with no spare niche for the
+        // discriminant.
+        assert_eq!(std::mem::size_of::<Welp>(), 48);
+    }
 }

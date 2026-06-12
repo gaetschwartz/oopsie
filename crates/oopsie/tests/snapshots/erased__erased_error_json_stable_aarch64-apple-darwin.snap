@@ -10,6 +10,11 @@ expression: error
   "diagnostics": {
     "code": "erased::common::MyError::Inner"
   },
+  "location": {
+    "file": "crates/oopsie/tests/common/mod.rs",
+    "line": 42,
+    "column": 69
+  },
   "spantrace": {
     "spans": [
       {

@@ -5,7 +5,7 @@ use syn::{Fields, FieldsNamed, parse_quote, token};
 
 use super::config::{FieldExistence, FieldInjectorConfig, FieldsToInject};
 use super::field_detect::{
-    is_backtrace_type, is_spantrace_type, is_timestamp_type, is_traces_type,
+    is_backtrace_type, is_location_type, is_spantrace_type, is_timestamp_type, is_traces_type,
 };
 
 /// Check which fields already exist in a `Fields` collection.
@@ -44,6 +44,9 @@ pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type)
         }
         if is_injected_timestamp || is_timestamp_type(&field.ty) || field.ty == *timestamp_type {
             existence.has_timestamp = true;
+        }
+        if is_location_type(&field.ty) {
+            existence.has_location = true;
         }
     }
     existence
@@ -94,6 +97,9 @@ fn inject_into_named(
         traces_ident,
         traces_type,
         traces_attrs,
+        location_ident,
+        location_type,
+        location_attrs,
         ..
     } = config;
 
@@ -116,6 +122,11 @@ fn inject_into_named(
         fields
             .named
             .push(parse_quote! { #timestamp_attrs #timestamp_ident: #timestamp_type });
+    }
+    if to_inject.location {
+        fields
+            .named
+            .push(parse_quote! { #location_attrs #location_ident: #location_type });
     }
 }
 
@@ -177,6 +188,9 @@ mod tests {
             traces_ident: format_ident!("__oopsie_traces"),
             traces_type: quote! { ::std::boxed::Box<(Backtrace, SpanTrace)> },
             traces_attrs: quote! { #[oopsie(traces)] },
+            location_ident: format_ident!("__oopsie_location"),
+            location_type: quote! { &'static ::core::panic::Location<'static> },
+            location_attrs: quote! { #[oopsie(location)] },
             code_type: quote! { ErrorCode },
         }
     }
@@ -244,6 +258,7 @@ mod tests {
             spantrace: false,
             timestamp: false,
             traces: false,
+            location: false,
         };
         inject_fields(&mut fields, &config, &to_inject).unwrap();
         assert!(matches!(fields, syn::Fields::Named(_)));
@@ -258,6 +273,7 @@ mod tests {
             spantrace: false,
             timestamp: false,
             traces: false,
+            location: false,
         };
         assert!(inject_fields(&mut fields, &config, &to_inject).is_err());
     }
@@ -331,6 +347,7 @@ mod tests {
             spantrace: false,
             timestamp: false,
             traces: true,
+            location: false,
         };
         inject_fields(&mut fields, &config, &to_inject).unwrap();
         let rendered = quote! { #fields }.to_string();

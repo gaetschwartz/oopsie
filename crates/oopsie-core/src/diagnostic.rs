@@ -23,6 +23,12 @@ pub trait Diagnostic: std::error::Error {
         None
     }
 
+    /// Returns the caller location captured when this error was created.
+    #[inline]
+    fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
     /// Returns the error code associated with this error.
     #[inline]
     fn oopsie_error_code(&self) -> Option<ErrorCode> {
@@ -46,6 +52,11 @@ impl<T: Diagnostic> Diagnostic for Box<T> {
     #[inline]
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         (**self).oopsie_spantrace()
+    }
+
+    #[inline]
+    fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        (**self).oopsie_location()
     }
 
     #[inline]

@@ -51,6 +51,9 @@ pub struct ErasedError {
     #[serde(default)]
     diagnostics: Diagnostics,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    location: Option<ErasedLocation>,
+
     spantrace: Option<ErasedSpanTrace>,
 
     backtrace: Option<ErasedBacktrace>,
@@ -114,6 +117,55 @@ pub struct Diagnostics {
     help: Option<HelpText>,
 }
 
+/// Transported caller-location snapshot: the `file:line:column` of the call
+/// site where the error was built, captured from `Diagnostic::oopsie_location`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ErasedLocation {
+    file: Box<str>,
+    line: u32,
+    column: u32,
+}
+
+impl ErasedLocation {
+    /// The source file of the call site.
+    #[must_use]
+    #[inline]
+    pub fn file(&self) -> &str {
+        &self.file
+    }
+
+    /// The line within the source file.
+    #[must_use]
+    #[inline]
+    pub const fn line(&self) -> u32 {
+        self.line
+    }
+
+    /// The column within the line.
+    #[must_use]
+    #[inline]
+    pub const fn column(&self) -> u32 {
+        self.column
+    }
+}
+
+impl fmt::Display for ErasedLocation {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}:{}:{}", self.file, self.line, self.column)
+    }
+}
+
+impl From<&'static std::panic::Location<'static>> for ErasedLocation {
+    fn from(location: &'static std::panic::Location<'static>) -> Self {
+        Self {
+            file: location.file().into(),
+            line: location.line(),
+            column: location.column(),
+        }
+    }
+}
+
 impl Diagnostics {
     #[must_use]
     #[inline]
@@ -174,6 +226,7 @@ impl ErasedError {
             code: err.oopsie_error_code(),
             help: err.oopsie_help_text(),
         };
+        let location = err.oopsie_location().map(ErasedLocation::from);
         #[cfg(feature = "tracing")]
         let spantrace = err
             .oopsie_spantrace()
@@ -192,6 +245,7 @@ impl ErasedError {
             message,
             source_chain,
             diagnostics,
+            location,
             spantrace,
             backtrace,
             source: OnceLock::new(),
@@ -217,6 +271,13 @@ impl ErasedError {
     #[inline]
     pub const fn diagnostics(&self) -> &Diagnostics {
         &self.diagnostics
+    }
+
+    /// The captured caller-location snapshot, if one was transported.
+    #[must_use]
+    #[inline]
+    pub const fn location(&self) -> Option<&ErasedLocation> {
+        self.location.as_ref()
     }
 
     /// The captured span trace snapshot, if one was transported.
@@ -250,6 +311,10 @@ impl ErasedError {
         }
 
         writeln!(f, "\n  \u{00d7} {}", self.message)?;
+
+        if let Some(location) = &self.location {
+            writeln!(f, "  at {location}")?;
+        }
 
         // Write source chain with box-drawing characters
         let chain_len = self.source_chain.len();
@@ -428,6 +493,44 @@ mod tests {
     }
 
     #[test]
+    fn location_is_captured_and_survives_round_trip() {
+        #[derive(Debug)]
+        struct WithLoc(&'static std::panic::Location<'static>);
+        impl fmt::Display for WithLoc {
+            fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                f.write_str("located")
+            }
+        }
+        impl std::error::Error for WithLoc {}
+        impl crate::Diagnostic for WithLoc {
+            fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+                Some(self.0)
+            }
+        }
+
+        let here = std::panic::Location::caller();
+        let erased = ErasedError::from_error(WithLoc(here));
+        let loc = erased.location().expect("location captured");
+        assert_eq!(loc.file(), here.file());
+        assert_eq!(loc.line(), here.line());
+        assert_eq!(loc.column(), here.column());
+
+        let json = serde_json::to_string(&erased).unwrap();
+        let restored: ErasedError = serde_json::from_str(&json).unwrap();
+        let restored_loc = restored.location().expect("location survives round-trip");
+        assert_eq!(restored_loc.file(), here.file());
+        assert_eq!(restored_loc.line(), here.line());
+        assert_eq!(restored_loc.column(), here.column());
+
+        // A plain error has no location.
+        let plain = ErasedError::from_error(ChainedError {
+            msg: "plain",
+            source: None,
+        });
+        assert!(plain.location().is_none());
+    }
+
+    #[test]
     fn test_from_error_ref_preserves_message_and_chain() {
         let error = ChainedError {
             msg: "outer error",
@@ -453,6 +556,7 @@ mod tests {
             message: "something broke".into(),
             source_chain: vec!["inner cause".into()],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -483,6 +587,7 @@ mod tests {
             message: "x".into(),
             source_chain: vec![],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -501,6 +606,7 @@ mod tests {
             message: "top".into(),
             source_chain: vec!["only cause".into()],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -526,6 +632,7 @@ mod tests {
             message: "top".into(),
             source_chain: vec!["middle".into(), "root".into()],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -551,6 +658,7 @@ mod tests {
             message: "top".into(),
             source_chain: vec!["first".into(), "second".into(), "third".into()],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -577,6 +685,7 @@ mod tests {
             message: "top".into(),
             source_chain: vec!["only cause".into()],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -599,6 +708,7 @@ mod tests {
             message: "top".into(),
             source_chain: vec!["middle".into(), "root".into()],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -621,6 +731,7 @@ mod tests {
             message: "top".into(),
             source_chain: vec!["first".into(), "second".into(), "third".into()],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -646,6 +757,7 @@ mod tests {
                 code: Some("app::code".into()),
                 help: Some("try again".into()),
             },
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -672,6 +784,7 @@ mod tests {
                 code: Some("app::db::timeout".into()),
                 help: Some("retry later".into()),
             },
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -702,6 +815,7 @@ mod tests {
                 code: Some("app::db::timeout".into()),
                 help: None,
             },
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -721,6 +835,7 @@ mod tests {
             message: "plain".into(),
             source_chain: vec![],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -798,6 +913,7 @@ mod tests {
             message: "plain error".into(),
             source_chain: vec![],
             diagnostics: Diagnostics::default(),
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),
@@ -867,6 +983,7 @@ mod tests {
                 code: Some("app::clone".into()),
                 help: Some("check again".into()),
             },
+            location: None,
             spantrace: None,
             backtrace: None,
             source: OnceLock::new(),

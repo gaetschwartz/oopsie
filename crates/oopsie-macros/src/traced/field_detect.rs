@@ -75,6 +75,17 @@ pub fn is_timestamp_type(ty: &syn::Type) -> bool {
     is_ident_type(ty, "SystemTime") || is_ident_type(ty, "DateTime")
 }
 
+/// `true` for a reference whose referent's last path segment is `Location` —
+/// the injectable caller-location shape (`&'static Location<'static>`). Peels
+/// one reference layer, then applies the same last-segment heuristic as
+/// `is_backtrace_type`.
+pub fn is_location_type(ty: &syn::Type) -> bool {
+    let syn::Type::Reference(reference) = peel_groups(ty) else {
+        return false;
+    };
+    is_ident_type(peel_groups(&reference.elem), "Location")
+}
+
 fn is_ident_type(ty: &syn::Type, ident: &str) -> bool {
     let syn::Type::Path(type_path) = ty else {
         return false;
@@ -304,6 +315,38 @@ mod tests {
     fn traces_type_not_tuple() {
         let ty: syn::Type = parse_quote!(Backtrace);
         assert!(!is_traces_type(&ty));
+    }
+
+    // is_location_type tests
+
+    #[test]
+    fn location_type_static_ref() {
+        let ty: syn::Type = parse_quote!(&'static Location<'static>);
+        assert!(is_location_type(&ty));
+    }
+
+    #[test]
+    fn location_type_qualified() {
+        let ty: syn::Type = parse_quote!(&'static ::core::panic::Location<'static>);
+        assert!(is_location_type(&ty));
+    }
+
+    #[test]
+    fn location_type_plain_ref() {
+        let ty: syn::Type = parse_quote!(&Location);
+        assert!(is_location_type(&ty));
+    }
+
+    #[test]
+    fn location_type_not_reference() {
+        let ty: syn::Type = parse_quote!(Location);
+        assert!(!is_location_type(&ty));
+    }
+
+    #[test]
+    fn location_type_wrong_referent() {
+        let ty: syn::Type = parse_quote!(&'static str);
+        assert!(!is_location_type(&ty));
     }
 
     // peel_groups tests

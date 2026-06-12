@@ -581,6 +581,8 @@ pub struct FieldAttrs {
     #[darling(default)]
     pub traces: bool,
     #[darling(default)]
+    pub location: bool,
+    #[darling(default)]
     pub help: bool,
 }
 
@@ -693,13 +695,13 @@ impl FieldAttrs {
 
         let mut result = Self::from_attributes(&field.attrs).map_err(syn::Error::from)?;
 
-        // `backtrace` / `spantrace` / `traces` flags imply `capture`; an
-        // explicit opt-out alongside them is contradictory.
-        if result.backtrace || result.spantrace || result.traces {
+        // `backtrace` / `spantrace` / `traces` / `location` flags imply
+        // `capture`; an explicit opt-out alongside them is contradictory.
+        if result.backtrace || result.spantrace || result.traces || result.location {
             if matches!(result.capture, crate::utils::BetterFlag::Disabled) {
                 return Err(syn::Error::new_spanned(
                     field,
-                    "`capture(false)` cannot be combined with `backtrace`/`spantrace`/`traces`",
+                    "`capture(false)` cannot be combined with `backtrace`/`spantrace`/`traces`/`location`",
                 ));
             }
             result.capture = crate::utils::BetterFlag::Enabled;
@@ -720,7 +722,8 @@ impl FieldAttrs {
         if matches!(result.capture, crate::utils::BetterFlag::Default)
             && (crate::traced::field_detect::is_backtrace_type(&field.ty)
                 || crate::traced::field_detect::is_spantrace_type(&field.ty)
-                || crate::traced::field_detect::is_traces_type(&field.ty))
+                || crate::traced::field_detect::is_traces_type(&field.ty)
+                || crate::traced::field_detect::is_location_type(&field.ty))
         {
             result.capture = crate::utils::BetterFlag::Enabled;
         }
@@ -1278,6 +1281,9 @@ pub struct CategorizedFields {
     /// Field holding the packed `(Backtrace, SpanTrace)` pair (via
     /// `#[oopsie(traces)]` or tuple-type detection).
     pub traces_field: Option<Ident>,
+    /// Field holding the captured caller location (via `#[oopsie(location)]` or
+    /// `&'static Location<'static>` type detection).
+    pub location_field: Option<Ident>,
     /// Field identified as help (via `#[oopsie(help)]`).
     pub help_field: Option<Ident>,
 }
@@ -1335,7 +1341,9 @@ fn field_cfg_attrs(field: &syn::Field) -> Vec<syn::Attribute> {
 impl CategorizedFields {
     /// Categorize fields of a variant/struct into source, auto, and user fields.
     pub fn from_fields(fields: &syn::Fields) -> syn::Result<Self> {
-        use crate::traced::field_detect::{is_backtrace_type, is_spantrace_type, is_traces_type};
+        use crate::traced::field_detect::{
+            is_backtrace_type, is_location_type, is_spantrace_type, is_traces_type,
+        };
 
         let mut source = None;
         let mut auto_fields = Vec::new();
@@ -1344,6 +1352,7 @@ impl CategorizedFields {
         let mut backtrace_field = None;
         let mut spantrace_field = None;
         let mut traces_field = None;
+        let mut location_field = None;
         let mut help_field = None;
 
         let named = match fields {
@@ -1357,6 +1366,7 @@ impl CategorizedFields {
                     backtrace_field,
                     spantrace_field,
                     traces_field,
+                    location_field,
                     help_field,
                 });
             }
@@ -1403,6 +1413,12 @@ impl CategorizedFields {
                     "`#[oopsie(traces)]` requires a field of type `(Backtrace, SpanTrace)`",
                 ));
             }
+            if attrs.location && !is_location_type(&field.ty) {
+                return Err(syn::Error::new_spanned(
+                    field,
+                    "`#[oopsie(location)]` requires a field of type `&'static Location<'static>`",
+                ));
+            }
             let is_traces = attrs.traces || is_traces_type(&field.ty);
             if (attrs.backtrace || is_backtrace_type(&field.ty)) && backtrace_field.is_none() {
                 backtrace_field = Some(ident.clone());
@@ -1412,6 +1428,9 @@ impl CategorizedFields {
             }
             if is_traces && traces_field.is_none() {
                 traces_field = Some(ident.clone());
+            }
+            if (attrs.location || is_location_type(&field.ty)) && location_field.is_none() {
+                location_field = Some(ident.clone());
             }
             if attrs.help {
                 if help_field.is_some() {
@@ -1477,6 +1496,7 @@ impl CategorizedFields {
             backtrace_field,
             spantrace_field,
             traces_field,
+            location_field,
             help_field,
         })
     }

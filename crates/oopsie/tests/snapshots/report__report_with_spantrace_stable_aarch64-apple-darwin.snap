@@ -3,6 +3,7 @@ source: crates/oopsie/tests/report.rs
 expression: report
 ---
 Error[report::common::MyError::Inner]: Inner error happened
+  at crates/oopsie/tests/common/mod.rs:[LOC]
   ╰─▶ Error: Inner function failed (foo=true, name=Alice)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

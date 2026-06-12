@@ -1,12 +1,12 @@
-Injects trace-capture fields into every variant (or the struct): a backtrace and
-a span trace, both enabled by default. The nested options tune each part —
-mentioning one never disables the others — and `traced(false)` opts the type out
-entirely. With `traced` active, an auto-generated error code is also attached to
-each variant unless the nested `code` option disables it.
+Injects trace-capture fields into every variant (or the struct): a backtrace, a
+span trace, and the caller location, all enabled by default. The nested options
+tune each part — mentioning one never disables the others — and `traced(false)`
+opts the type out entirely. With `traced` active, an auto-generated error code is
+also attached to each variant unless the nested `code` option disables it.
 
 Forms: `traced`, `traced = true`, `traced = false`, `traced(true)`, `traced(false)`,
 `traced(enabled = ...)`,
-`traced(backtrace(...), spantrace(...), timestamp(...), packed = ..., boxed = ..., code(...))`.
+`traced(backtrace(...), spantrace(...), timestamp(...), location = ..., packed = ..., boxed = ..., code(...))`.
 
 ### Example
 ```

@@ -149,6 +149,16 @@ impl Capturable for &'static Location<'static> {
     fn capture() -> Self {
         Location::caller()
     }
+
+    #[track_caller]
+    #[inline]
+    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
+        // Capture eagerly so `#[track_caller]` resolves to this call's caller; a
+        // fn-pointer passed to `unwrap_or_else` would lose that and report a
+        // stdlib frame instead.
+        let here = Location::caller();
+        source.oopsie_location().unwrap_or(here)
+    }
 }
 
 #[cfg(feature = "chrono")]
@@ -798,6 +808,46 @@ mod tests {
         const fn is_send_sync<T: Send + Sync>() {}
         is_send_sync::<Box<dyn StdError + Send + Sync + 'static>>();
     };
+
+    #[derive(Debug)]
+    struct WithLoc(&'static std::panic::Location<'static>);
+
+    impl fmt::Display for WithLoc {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("with loc")
+        }
+    }
+
+    impl StdError for WithLoc {}
+
+    impl crate::Diagnostic for WithLoc {
+        fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+            Some(self.0)
+        }
+    }
+
+    #[test]
+    fn location_captures_caller_and_extracts_from_source() {
+        // `capture` records the call site.
+        let line = line!() + 1;
+        let loc = <&'static std::panic::Location<'static> as Capturable>::capture();
+        assert!(loc.file().ends_with("traits.rs"));
+        assert_eq!(loc.line(), line);
+
+        // `capture_or_extract` prefers a source that exposes a location.
+        let src = WithLoc(std::panic::Location::caller());
+        let extracted =
+            <&'static std::panic::Location<'static> as Capturable>::capture_or_extract(&src);
+        assert!(
+            std::ptr::eq(extracted, src.0),
+            "must reuse the source's location"
+        );
+
+        // A source with no location falls back to a fresh capture.
+        let fresh =
+            <&'static std::panic::Location<'static> as Capturable>::capture_or_extract(&DiagOnly);
+        assert!(fresh.file().ends_with("traits.rs"));
+    }
 
     #[test]
     fn system_time_captures_now_and_never_extracts() {

@@ -38,6 +38,7 @@ pub fn expand_enum(
             spantrace: !packed && resolved.spantrace && !existence.has_spantrace,
             timestamp: resolved.timestamp && !existence.has_timestamp,
             traces: packed,
+            location: resolved.location && !existence.has_location,
         };
 
         // An explicit discriminant requires a fieldless variant; injecting trace
@@ -48,7 +49,8 @@ pub fn expand_enum(
             && (to_inject.backtrace
                 || to_inject.spantrace
                 || to_inject.timestamp
-                || to_inject.traces)
+                || to_inject.traces
+                || to_inject.location)
         {
             return Err(syn::Error::new_spanned(
                 disc,

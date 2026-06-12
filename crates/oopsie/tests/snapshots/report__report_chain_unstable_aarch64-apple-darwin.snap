@@ -3,6 +3,7 @@ source: crates/oopsie/tests/report.rs
 expression: report
 ---
 Error[report::OuterError]: Outer error
+  at crates/oopsie/tests/report.rs:[LOC]
   ╰─▶ Test error: root cause
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

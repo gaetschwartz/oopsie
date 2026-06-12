@@ -41,6 +41,25 @@ fn trace_accessor_body(
     }
 }
 
+/// Build the body of the `oopsie_location` accessor. Location has no
+/// Provider-API path: the origin-most value is captured at construction (the
+/// `CaptureProbe` extracts the source's via `capture_or_extract`), so a layer's
+/// own field already holds the deepest location. A `transparent` layer keeps no
+/// own location and forwards to the source on stable via `DiagProbe` (`probe`),
+/// preferring it over any own field so the origin-most still wins. Returns
+/// `None` when the layer has neither.
+fn location_accessor_body(
+    own: Option<TokenStream2>,
+    probe: Option<TokenStream2>,
+) -> Option<TokenStream2> {
+    match (own, probe) {
+        (Some(own), Some(probe)) => Some(quote! { #probe.or(::core::option::Option::Some(#own)) }),
+        (Some(own), None) => Some(quote! { ::core::option::Option::Some(#own) }),
+        (None, Some(probe)) => Some(probe),
+        (None, None) => None,
+    }
+}
+
 /// The provider-API trace lookup, with the (transparent-only) stable `DiagProbe`
 /// forwarder OR-ed in after it when present.
 fn provider_then_probe(
@@ -111,6 +130,7 @@ pub fn gen_enum_error(
     // Diagnostic arms
     let mut bt_arms = Vec::new();
     let mut st_arms = Vec::new();
+    let mut loc_arms = Vec::new();
     let mut code_arms = Vec::new();
     let mut help_arms = Vec::new();
     let mut accessor_uses_source = false;
@@ -287,6 +307,24 @@ pub fn gen_enum_error(
             accessor_uses_source |= source_ident.is_some();
         }
 
+        // Location: the origin-most location is captured at construction (the
+        // `CaptureProbe` extracts the source's via `capture_or_extract`), so the
+        // accessor returns this layer's own field. A `transparent` layer has no
+        // own field, so it forwards to the source on stable via `DiagProbe`.
+        let loc_own = categorized
+            .location_field
+            .as_ref()
+            .map(|lf| quote! { *#lf });
+        let loc_source = source_ident.filter(|_| variant_attrs.transparent);
+        let loc_probe = loc_source.map(|s| gen_diag_forward(s, "fwd_location", oopsie_path));
+        if let Some(body) = location_accessor_body(loc_own, loc_probe) {
+            let binds = accessor_pattern_binds(categorized.location_field.as_ref(), loc_source);
+            loc_arms.push(quote! {
+                #(#cfg_attrs)*
+                Self::#variant_ident { #(#binds,)* .. } => #body,
+            });
+        }
+
         // Error code: user-specified, then auto-generated from provide attrs,
         // then (for `transparent`) forwarded from the source.
         if let Some(code) = &variant_attrs.code {
@@ -441,6 +479,19 @@ pub fn gen_enum_error(
         }
     };
 
+    let loc_method = if loc_arms.is_empty() {
+        quote! {}
+    } else {
+        quote! {
+            fn oopsie_location(&self) -> ::core::option::Option<&'static ::core::panic::Location<'static>> {
+                match self {
+                    #(#loc_arms)*
+                    _ => ::core::option::Option::None,
+                }
+            }
+        }
+    };
+
     let code_method = if code_arms.is_empty() {
         quote! {}
     } else {
@@ -494,6 +545,7 @@ pub fn gen_enum_error(
         impl #impl_generics #oopsie_path::Diagnostic for #enum_ident #ty_generics #where_clause {
             #bt_method
             #st_method
+            #loc_method
             #code_method
             #help_method
         }
@@ -696,6 +748,22 @@ pub fn gen_struct_error(
             Some(_) | None => quote! {},
         };
 
+    let loc_own = categorized
+        .location_field
+        .as_ref()
+        .map(|lf| quote! { self.#lf });
+    let loc_probe = struct_source
+        .filter(|_| variant_attrs.transparent)
+        .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_location", oopsie_path));
+    let loc_method = match location_accessor_body(loc_own, loc_probe) {
+        Some(body) => quote! {
+            fn oopsie_location(&self) -> ::core::option::Option<&'static ::core::panic::Location<'static>> {
+                #body
+            }
+        },
+        None => quote! {},
+    };
+
     let code_method = if let Some(code) = &variant_attrs.code {
         if code.is_static() {
             let lit = code.static_lit()?;
@@ -815,6 +883,7 @@ pub fn gen_struct_error(
         impl #impl_generics #oopsie_path::Diagnostic for #struct_ident #ty_generics #where_clause {
             #bt_method
             #st_method
+            #loc_method
             #code_method
             #help_method
         }

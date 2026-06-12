@@ -81,6 +81,12 @@ enum KitchenSinkError {
         #[oopsie(help)]
         hint: String,
     },
+
+    #[oopsie("location keyword")]
+    Located {
+        #[oopsie(location)]
+        at: &'static std::panic::Location<'static>,
+    },
 }
 
 // ---- Struct: container and variant keywords mixed in one `#[oopsie(...)]`
@@ -106,6 +112,7 @@ struct StructSinkError {
         backtrace(r#type = "::oopsie::Backtrace", boxed = true, enabled = true),
         spantrace(enabled = true),
         timestamp(chrono = false, provide = true, enabled = true),
+        location = true,
         packed = false,
         boxed = true,
         code(r#type = ::oopsie::ErrorCode)

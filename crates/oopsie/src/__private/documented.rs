@@ -176,6 +176,9 @@ pub mod field {
     )]
     pub fn traces() {}
 
+    #[doc = include_str!("keyword_docs/field/location.md")]
+    pub fn location() {}
+
     #[doc = include_str!("keyword_docs/field/help.md")]
     pub fn help() {}
 }
@@ -242,6 +245,11 @@ pub mod traced {
 
     #[doc = include_str!("keyword_docs/traced/chrono.md")]
     pub fn chrono(enabled: bool) {
+        _ = enabled;
+    }
+
+    #[doc = include_str!("keyword_docs/traced/location.md")]
+    pub fn location(enabled: bool) {
         _ = enabled;
     }
 

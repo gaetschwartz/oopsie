@@ -3,6 +3,7 @@ source: crates/oopsie/tests/report.rs
 expression: report
 ---
 Error[report::TestError]: Test error: something failed
+  at crates/oopsie/tests/report.rs:[LOC]
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 8 frames hidden ...
