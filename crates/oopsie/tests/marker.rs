@@ -10,6 +10,7 @@
 
 mod common;
 
+use oopsie::Diagnostic as _;
 use oopsie::{Report, oopsie};
 
 #[oopsie(traced)]
@@ -61,7 +62,6 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
             message: "in thread",
         }
         .build();
-        use oopsie::Diagnostic as _;
         let bt = err
             .oopsie_backtrace()
             .expect("traced error has a backtrace");
@@ -92,7 +92,6 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
 
 #[test]
 fn mid_stack_catch_unwind_user_frames_survive() {
-    common::force_backtrace();
     fn supervisor() -> KaboomError {
         std::panic::catch_unwind(|| {
             KaboomOopsie {
@@ -102,6 +101,7 @@ fn mid_stack_catch_unwind_user_frames_survive() {
         })
         .unwrap()
     }
+    common::force_backtrace();
     let rendered = Report::from_std(supervisor()).no_colors().to_string();
 
     // The old drain-from-anywhere rule ate every frame below catch_unwind.
@@ -155,7 +155,6 @@ fn marker_from_another_thread_never_applies() {
     .join()
     .unwrap();
 
-    use oopsie::Diagnostic as _;
     let bt = err
         .oopsie_backtrace()
         .expect("traced error has a backtrace");
@@ -172,7 +171,6 @@ fn report_run_restores_previous_marker_on_return() {
         message: "after run",
     }
     .build();
-    use oopsie::Diagnostic as _;
     let bt = err
         .oopsie_backtrace()
         .expect("traced error has a backtrace");
@@ -193,7 +191,6 @@ fn report_run_restores_previous_marker_on_unwind() {
         message: "after unwound run",
     }
     .build();
-    use oopsie::Diagnostic as _;
     let bt = err
         .oopsie_backtrace()
         .expect("traced error has a backtrace");
