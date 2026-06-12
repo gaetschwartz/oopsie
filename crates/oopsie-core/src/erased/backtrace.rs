@@ -6,12 +6,14 @@ use serde::{Deserialize, Serialize};
 
 /// A serializable, type-erased representation of a backtrace.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ErasedBacktrace {
     frames: Box<[ErasedFrame]>,
 }
 
 /// A single frame in an erased backtrace.
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ErasedFrame {
     pub name: Option<Box<str>>,
     pub filename: Option<Box<str>>,

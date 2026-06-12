@@ -21,28 +21,43 @@ const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 /// error context including backtrace, spantrace, and source chain.
 ///
 /// This type is designed for API error responses where the original error
-/// cannot be directly serialized.
+/// cannot be directly serialized. Construct one with [`from_error`] or
+/// [`from_error_ref`], or by deserializing a transported payload; read its
+/// contents through the accessor methods.
+///
+/// The captured backtrace and span trace are exposed via [`backtrace`] and
+/// [`spantrace`] as [`ErasedBacktrace`] / [`ErasedSpanTrace`] snapshots. They
+/// are *not* surfaced through the [`Diagnostic`] impl: those accessors return
+/// references to live [`Backtrace`]/[`SpanTrace`] values, which a transported
+/// snapshot cannot reconstruct. Re-erasing an `ErasedError` (via
+/// [`from_error_ref`]) preserves the message, source chain, code, and help, but
+/// the trace snapshots stay reachable only through this type's own accessors.
+///
+/// [`from_error`]: ErasedError::from_error
+/// [`from_error_ref`]: ErasedError::from_error_ref
+/// [`backtrace`]: ErasedError::backtrace
+/// [`spantrace`]: ErasedError::spantrace
+/// [`Diagnostic`]: crate::Diagnostic
+/// [`Backtrace`]: crate::Backtrace
+/// [`SpanTrace`]: crate::SpanTrace
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+#[non_exhaustive]
 pub struct ErasedError {
-    /// Primary error message (Display representation).
-    pub message: Box<str>,
+    message: Box<str>,
 
-    /// Error source chain (Display representation of each cause).
     #[serde(default)]
-    pub source_chain: Vec<Box<str>>,
+    source_chain: Vec<Box<str>>,
 
-    /// Diagnostic metadata (code, help).
     #[serde(default)]
-    pub diagnostics: Diagnostics,
+    diagnostics: Diagnostics,
 
-    /// Serialized span trace.
-    pub spantrace: Option<ErasedSpanTrace>,
+    spantrace: Option<ErasedSpanTrace>,
 
-    /// Serialized backtrace.
-    pub backtrace: Option<ErasedBacktrace>,
+    backtrace: Option<ErasedBacktrace>,
 
-    /// Snapshot of `source_chain` taken on the first `Error::source()` call;
-    /// later mutations of the pub field are not reflected here.
+    /// Source-chain re-materialization, populated lazily on the first
+    /// `Error::source()` call. `source_chain` is immutable after construction,
+    /// so this snapshot can never go stale.
     #[serde(skip)]
     source: OnceLock<Option<Box<ChainNode>>>,
 }
@@ -89,12 +104,14 @@ impl std::error::Error for ChainNode {
     }
 }
 
+/// Transported diagnostic metadata (error code and help text).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct Diagnostics {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub code: Option<ErrorCode>,
+    code: Option<ErrorCode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub help: Option<HelpText>,
+    help: Option<HelpText>,
 }
 
 impl Diagnostics {
@@ -179,6 +196,41 @@ impl ErasedError {
             backtrace,
             source: OnceLock::new(),
         }
+    }
+
+    /// The primary error message (the original error's `Display`).
+    #[must_use]
+    #[inline]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
+
+    /// The `Display` of each transported cause, outermost first.
+    #[must_use]
+    #[inline]
+    pub fn source_chain(&self) -> &[Box<str>] {
+        &self.source_chain
+    }
+
+    /// The transported diagnostic metadata (error code and help text).
+    #[must_use]
+    #[inline]
+    pub const fn diagnostics(&self) -> &Diagnostics {
+        &self.diagnostics
+    }
+
+    /// The captured span trace snapshot, if one was transported.
+    #[must_use]
+    #[inline]
+    pub const fn spantrace(&self) -> Option<&ErasedSpanTrace> {
+        self.spantrace.as_ref()
+    }
+
+    /// The captured backtrace snapshot, if one was transported.
+    #[must_use]
+    #[inline]
+    pub const fn backtrace(&self) -> Option<&ErasedBacktrace> {
+        self.backtrace.as_ref()
     }
 
     pub fn write_json<W: io::Write>(&self, f: &mut W) -> Result<(), serde_json::Error> {

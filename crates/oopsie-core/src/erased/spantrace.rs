@@ -68,12 +68,14 @@ impl From<&tracing::Level> for TracingLevel {
 
 /// A serializable, type-erased representation of a span trace.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ErasedSpanTrace {
     spans: Vec<ErasedSpan>,
 }
 
 /// A single span in an erased span trace.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ErasedSpan {
     pub metadata: ErasedMetadata,
     pub fields: Box<str>,
@@ -81,6 +83,7 @@ pub struct ErasedSpan {
 
 /// Serializable metadata from a tracing span.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct ErasedMetadata {
     name: Box<str>,
     target: Box<str>,

@@ -58,10 +58,10 @@ fn test_help_extraction() {
     let erased = ErasedError::from_error(error);
 
     assert_eq!(
-        erased.diagnostics.help(),
+        erased.diagnostics().help(),
         Some("Try restarting the service")
     );
-    assert!(erased.diagnostics.code().is_some());
+    assert!(erased.diagnostics().code().is_some());
 }
 
 #[test]
@@ -69,8 +69,8 @@ fn test_code_only_extraction() {
     let error = error_with_code_only_oopsies::ErrorWithCodeOnly { message: "timeout" }.build();
     let erased = ErasedError::from_error(error);
 
-    assert!(erased.diagnostics.code().is_some());
-    assert_eq!(erased.diagnostics.help(), None);
+    assert!(erased.diagnostics().code().is_some());
+    assert_eq!(erased.diagnostics().help(), None);
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn test_extract_error_code_returns_some_for_oopsie_errors() {
     let error = error_with_help_oopsies::ErrorWithHelp { message: "test" }.build();
     let erased = ErasedError::from_error(error);
     assert!(
-        erased.diagnostics.code().is_some(),
+        erased.diagnostics().code().is_some(),
         "oopsie errors with help should have an error code"
     );
 }
@@ -127,7 +127,7 @@ fn test_diagnostics_is_not_none_when_code_present() {
     .build();
     let erased = ErasedError::from_error(error);
     assert!(
-        !erased.diagnostics.is_none(),
+        !erased.diagnostics().is_none(),
         "Diagnostics with a code should not be is_none()"
     );
 }
@@ -206,16 +206,16 @@ fn test_erased_frame_display_name_without_location() {
 fn test_erased_error_clone() {
     let original = ErasedError::from_error(common::make_error());
     let cloned = original.clone();
-    assert_eq!(original.message, cloned.message);
-    assert_eq!(original.source_chain, cloned.source_chain);
+    assert_eq!(original.message(), cloned.message());
+    assert_eq!(original.source_chain(), cloned.source_chain());
     assert_eq!(
-        original.diagnostics.code(),
-        cloned.diagnostics.code(),
+        original.diagnostics().code(),
+        cloned.diagnostics().code(),
         "cloned diagnostics code must match"
     );
     assert_eq!(
-        original.diagnostics.help(),
-        cloned.diagnostics.help(),
+        original.diagnostics().help(),
+        cloned.diagnostics().help(),
         "cloned diagnostics help must match"
     );
 }
@@ -377,7 +377,7 @@ fn test_round_trip_through_json_renders_in_report() {
     .build();
     let erased = ErasedError::from_error(error);
     let code = erased
-        .diagnostics
+        .diagnostics()
         .code()
         .expect("oopsie errors carry a code")
         .to_owned();
@@ -408,14 +408,17 @@ fn test_unknown_span_level_does_not_reject_payload() {
         r#"{"message":"m","spantrace":{"spans":[{"metadata":{"name":"s","target":"t","level":"FATAL"},"fields":""}]},"backtrace":null}"#,
     )
     .expect("one unknown span level must not drop the whole error");
-    assert!(erased.spantrace.is_some());
+    assert!(erased.spantrace().is_some());
 }
 
 #[cfg(feature = "tracing")]
 #[test]
 fn test_round_trip_source_chain_survives_report_and_reerasure() {
     let erased = ErasedError::from_error(common::make_error());
-    assert!(!erased.source_chain.is_empty(), "fixture must have a cause");
+    assert!(
+        !erased.source_chain().is_empty(),
+        "fixture must have a cause"
+    );
 
     let json = serde_json::to_string(&erased).unwrap();
     let roundtripped: ErasedError = serde_json::from_str(&json).unwrap();
@@ -425,14 +428,14 @@ fn test_round_trip_source_chain_survives_report_and_reerasure() {
 
     // Re-erasure reproduces the transported chain.
     let reerased = ErasedError::from_error_ref(&roundtripped);
-    assert_eq!(reerased.source_chain, roundtripped.source_chain);
+    assert_eq!(reerased.source_chain(), roundtripped.source_chain());
 
     // Report's source walk renders the cause line.
     #[cfg(feature = "fancy")]
     {
         let rendered = oopsie::Report::new(roundtripped).to_string();
         assert!(
-            rendered.contains(&format!("╰─▶ {}", erased.source_chain[0])),
+            rendered.contains(&format!("╰─▶ {}", erased.source_chain()[0])),
             "Report must render the transported cause, got:\n{rendered}"
         );
     }
@@ -476,8 +479,8 @@ fn from_error_ref_terminates_on_cyclic_source() {
 
     let erased = ErasedError::from_error_ref(&Cyclic);
     assert!(
-        erased.source_chain.len() <= 256,
+        erased.source_chain().len() <= 256,
         "source chain must be bounded on a cyclic source(), got {}",
-        erased.source_chain.len()
+        erased.source_chain().len()
     );
 }
