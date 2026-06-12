@@ -1,0 +1,29 @@
+error[E0277]: `Missing<String>` cannot build an error from a source of type `std::io::Error`
+  --> tests/compile-fail/stable/contextual_leaf_on_result.rs:19:28
+   |
+19 |       let _ = opened.context(config_oopsies::Missing {
+   |  ____________________-------_^
+   | |                    |
+   | |                    required by a bound introduced by this call
+20 | |         key: "host".to_owned(),
+21 | |     });
+   | |_____^ selector does not accept a `std::io::Error` source
+   |
+   = note: a sourced selector (its variant has a `source` field) only builds from that field's exact type — `.context(...)` on a `Result` requires the selector's source type to match the `Result`'s error type
+   = note: a leaf selector (no `source` field) builds from `NoSource`: attach it with `Option::context`, `.fail()`, or `.build()`, not from a `Result`'s error
+help: the trait `Contextual<std::io::Error>` is not implemented for `Missing<String>`
+      but trait `Contextual<NoSource>` is implemented for it
+  --> tests/compile-fail/stable/contextual_leaf_on_result.rs:8:17
+   |
+ 8 | #[derive(Debug, Oopsie)]
+   |                 ^^^^^^
+   = help: for that trait implementation, expected `NoSource`, found `std::io::Error`
+note: required by a bound in `oopsie::ResultExt::context`
+  --> $WORKSPACE/crates/oopsie-core/src/traits.rs
+   |
+   |     fn context<C>(self, context: C) -> Result<T, C::Destination>
+   |        ------- required by a bound in this associated function
+   |     where
+   |         C: Contextual<E>;
+   |            ^^^^^^^^^^^^^ required by this bound in `ResultExt::context`
+   = note: this error originates in the derive macro `Oopsie` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -8,6 +8,15 @@ use std::{panic::Location, rc::Rc, sync::Arc};
 /// names it directly — [`ResultExt::context`] and [`OptionExt::context`] drive
 /// it. Reach for it only when building an error outside a `Result`/`Option`,
 /// e.g. `selector.build_error(source)`.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` cannot build an error from a source of type `{E}`",
+    label = "selector does not accept a `{E}` source",
+    note = "a sourced selector (its variant has a `source` field) only builds from that field's exact \
+            type — `.context(...)` on a `Result` requires the selector's source type to match the \
+            `Result`'s error type",
+    note = "a leaf selector (no `source` field) builds from `NoSource`: attach it with `Option::context`, \
+            `.fail()`, or `.build()`, not from a `Result`'s error"
+)]
 pub trait Contextual<E> {
     /// The destination error type being built by this context selector.
     type Destination;
