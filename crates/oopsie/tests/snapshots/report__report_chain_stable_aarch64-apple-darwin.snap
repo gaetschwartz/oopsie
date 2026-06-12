@@ -6,9 +6,11 @@ Error[report::OuterError]: Outer error
   ╰─▶ Test error: root cause
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ... 9 frames hidden ...
-  1: report::test_report_chain::h[HASH]
-           at tests/report.rs:[LOC]
-  2: report::test_report_chain::{{closure}}::h[HASH]
-           at tests/report.rs:[LOC]
+   ... 8 frames hidden ...
+  1: report::test_oopsies::Test<__T0>::build::h[HASH]
+           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
+  2: report::test_report_chain::h[HASH]
+           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
+  3: report::test_report_chain::{{closure}}::h[HASH]
+           at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
    ... 22 frames hidden ...

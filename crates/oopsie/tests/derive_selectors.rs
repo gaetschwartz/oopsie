@@ -113,20 +113,20 @@ fn multi_field_selector() {
 #[test]
 fn struct_leaf_build_fail() {
     // ParseError uses #[oopsie(suffix)], so selector is ParseOopsie ("Error" stripped).
-    let err = ParseOopsie {
+    let err = parse_oopsies::ParseOopsie {
         msg: "unexpected token",
     }
     .build();
     assert_eq!(err.msg, "unexpected token");
 
-    let result: Result<(), ParseError> = ParseOopsie { msg: "bad" }.fail();
+    let result: Result<(), ParseError> = parse_oopsies::ParseOopsie { msg: "bad" }.fail();
     assert!(result.is_err());
 }
 
 #[test]
 fn struct_source_build_error() {
     let io_err = io::Error::new(io::ErrorKind::NotFound, "file missing");
-    let err: WrapError = WrapOopsie {
+    let err: WrapError = wrap_oopsies::WrapOopsie {
         detail: "while reading",
     }
     .build_error(io_err);
@@ -341,4 +341,88 @@ fn capture_false_keeps_backtrace_field_on_selector() {
     }
     .build();
     assert_eq!(e.to_string(), "snap");
+}
+
+// ---- Struct module-form selectors (default) ----
+
+// A plain struct with no container attributes: selector lives in the
+// auto-named module and carries the `Error`-stripped name, matching enums.
+#[derive(Debug, Oopsie)]
+#[oopsie("load failed: {what}")]
+struct LoadError {
+    what: String,
+}
+
+#[test]
+fn struct_default_module_form() {
+    let err = load_oopsies::Load { what: "config" }.build();
+    assert_eq!(err.to_string(), "load failed: config");
+    assert_eq!(err.what, "config");
+}
+
+// A traced struct also lands in module form; the injected backtrace stays
+// auto-captured and absent from the selector's fields.
+#[oopsie::oopsie(traced)]
+#[oopsie("decode failed: {stage}")]
+struct DecodeError {
+    stage: String,
+}
+
+#[test]
+fn struct_traced_default_module_form() {
+    let err = decode_oopsies::Decode { stage: "header" }.fail::<()>();
+    let err = err.unwrap_err();
+    assert_eq!(err.to_string(), "decode failed: header");
+    assert!(oopsie::Diagnostic::oopsie_backtrace(&err).is_some());
+}
+
+// `module(false)` keeps the selector bare at item scope; the `Error`-stripped
+// name doesn't collide with the type.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+#[oopsie("flat: {detail}")]
+struct FlatError {
+    detail: String,
+}
+
+#[test]
+fn struct_module_false_bare_selector() {
+    let err = Flat { detail: "x" }.build();
+    assert_eq!(err.to_string(), "flat: x");
+}
+
+// `suffix` distinguishes the selector from the type name, which is what lets a
+// non-`Error`-suffixed struct opt back into a bare `module(false)` selector
+// without colliding with itself.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false), suffix)]
+#[oopsie("widget broke: {part}")]
+struct Widget {
+    part: String,
+}
+
+#[test]
+fn struct_suffix_disambiguates_bare_selector() {
+    let err = WidgetOopsie { part: "gear" }.build();
+    assert_eq!(err.to_string(), "widget broke: gear");
+}
+
+// A `pub(crate)` struct's module-wrapped selector must reach back to crate
+// scope through the same visibility lift enums use.
+mod restricted {
+    #[expect(
+        clippy::redundant_pub_crate,
+        reason = "pub(crate) is the point: it exercises the restricted-visibility lift path"
+    )]
+    #[derive(Debug, oopsie::Oopsie)]
+    #[oopsie("scoped: {what}")]
+    pub(crate) struct ScopedError {
+        pub(crate) what: String,
+    }
+}
+
+#[test]
+fn struct_pub_crate_vis_lifted_into_module() {
+    let err = restricted::scoped_oopsies::Scoped { what: "y" }.build();
+    assert_eq!(err.to_string(), "scoped: y");
 }

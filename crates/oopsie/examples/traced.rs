@@ -22,7 +22,7 @@ pub struct LoadError {
 }
 
 fn load(index: u32) -> Result<(), LoadError> {
-    LoadOopsie { index }.fail()
+    load_oopsies::Load { index }.fail()
 }
 
 fn deep_call(index: u32) -> Result<(), LoadError> {

@@ -71,7 +71,7 @@ fn size_range_passes() {
 // ---- Struct with size constraint ----
 
 #[derive(Debug, Oopsie)]
-#[oopsie(module(false), size(..=256))]
+#[oopsie(size(..=256))]
 #[oopsie("struct error: {message}")]
 struct StructWithSize {
     message: String,
@@ -106,7 +106,7 @@ fn size_exact_realistic_passes() {
 // bound that still compiles (the generated `<= 24` assertion holds).
 
 #[derive(Debug, Oopsie)]
-#[oopsie(module(false), size(..=24))]
+#[oopsie(size(..=24))]
 #[oopsie("tight: {detail}")]
 struct TightUpperBound {
     detail: String,

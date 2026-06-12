@@ -35,8 +35,7 @@ pub struct ConnError {
 
 #[test]
 fn traced_struct_basic() {
-    // The derive defaults to suffix="Oopsie" for structs, so selector is ConnOopsie.
-    let err = ConnOopsie { reason: "refused" }.build();
+    let err = conn_oopsies::Conn { reason: "refused" }.build();
     assert_eq!(err.reason, "refused");
 }
 
@@ -154,7 +153,7 @@ pub struct PreExistingBtStructError {
 
 #[test]
 fn traced_struct_does_not_duplicate_backtrace() {
-    let err = PreExistingBtStructOopsie { msg: "struct bt" }.build();
+    let err = pre_existing_bt_struct_oopsies::PreExistingBtStruct { msg: "struct bt" }.build();
     assert_eq!(err.msg, "struct bt");
 }
 
@@ -347,14 +346,14 @@ pub struct InlineStructError {
 #[cfg(feature = "tracing")]
 #[test]
 fn layout_struct_default_packed_exposes_both_traces() {
-    let e = PackedStructOopsie { info: "x" }.build();
+    let e = packed_struct_oopsies::PackedStruct { info: "x" }.build();
     assert_both_traces(&e);
 }
 
 #[cfg(feature = "tracing")]
 #[test]
 fn layout_struct_separate_inline_exposes_both_traces() {
-    let e = InlineStructOopsie { info: "x" }.build();
+    let e = inline_struct_oopsies::InlineStruct { info: "x" }.build();
     assert_both_traces(&e);
 }
 
@@ -369,7 +368,7 @@ pub struct WrongTypedBacktraceError {
 #[cfg(feature = "tracing")]
 #[test]
 fn wrong_typed_backtrace_field_is_ordinary_and_real_backtrace_injected() {
-    let e = WrongTypedBacktraceOopsie {
+    let e = wrong_typed_backtrace_oopsies::WrongTypedBacktrace {
         backtrace: "external textual backtrace",
         info: "x",
     }
@@ -632,6 +631,7 @@ fn chrono_timestamp_compiles_without_direct_dep_path() {
 #[test]
 fn wrongly_typed_timestamp_named_field_does_not_suppress_injection() {
     #[oopsie(traced(timestamp))]
+    #[oopsie(module(false), suffix)]
     pub struct TsNamed {
         timestamp: u64,
     }

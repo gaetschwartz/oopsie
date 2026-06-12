@@ -24,7 +24,7 @@ pub struct QueryError {
 
 #[instrument]
 fn run_query(query: &str) -> Result<(), QueryError> {
-    QueryOopsie { query }.fail()
+    query_oopsies::Query { query }.fail()
 }
 
 #[instrument]

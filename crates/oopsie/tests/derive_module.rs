@@ -144,7 +144,7 @@ pub struct QueryError {
 
 #[test]
 fn struct_module_wraps_selector() {
-    let err = query_oopsies::QueryOopsie { what: "join" }.build();
+    let err = query_oopsies::Query { what: "join" }.build();
     assert_eq!(err.to_string(), "query failed: join");
 }
 
@@ -157,20 +157,20 @@ pub struct ParseError;
 
 #[test]
 fn struct_auto_module_name() {
-    let err = parse_oopsies::ParseOopsie.build();
+    let err = parse_oopsies::Parse.build();
     assert_eq!(err.to_string(), "parse failed");
 }
 
-// Test 8: struct default (no module attr) still works at top level.
-// This guards the unchanged default behavior: selectors at same scope.
+// Test 8: struct default (no module attr) — structs default to module form
+// just like enums. FlatStructError → strip "Error" → "FlatStruct" → snake_case
+// → "flat_struct" → module `flat_struct_oopsies`, selector `FlatStruct`.
 #[derive(Debug, Oopsie)]
 #[oopsie("flat struct error")]
 pub struct FlatStructError;
 
 #[test]
 fn struct_default_no_module() {
-    // FlatStructOopsie is directly accessible, no module prefix.
-    let err = FlatStructOopsie.build();
+    let err = flat_struct_oopsies::FlatStruct.build();
     assert_eq!(err.to_string(), "flat struct error");
 }
 
@@ -192,7 +192,7 @@ mod crate_vis {
 
 #[test]
 fn restricted_vis_struct_module_selector_reachable_crate_wide() {
-    let err = crate_vis::scoped_oopsies::ScopedOopsie { what: "x" }.build();
+    let err = crate_vis::scoped_oopsies::Scoped { what: "x" }.build();
     assert_eq!(err.to_string(), "scoped: x");
 }
 

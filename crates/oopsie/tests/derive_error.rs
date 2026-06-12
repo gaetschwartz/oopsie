@@ -57,7 +57,9 @@ fn source_returns_none_leaf() {
 #[test]
 fn struct_source_some() {
     let io_err = io::Error::new(io::ErrorKind::AddrInUse, "in use");
-    let err: StructWithSource = StructWithSourceOopsie { detail: "binding" }.build_error(io_err);
+    let err: StructWithSource =
+        struct_with_source_oopsies::StructWithSourceOopsie { detail: "binding" }
+            .build_error(io_err);
     let src = err.source();
     assert!(src.is_some());
     assert_eq!(src.unwrap().to_string(), "in use");
@@ -65,7 +67,7 @@ fn struct_source_some() {
 
 #[test]
 fn struct_source_none() {
-    let err = StructNoSourceOopsie {
+    let err = struct_no_source_oopsies::StructNoSourceOopsie {
         reason: "just because",
     }
     .build();
@@ -458,7 +460,7 @@ pub struct AttrStructWithBt {
 fn struct_provide_backtrace() {
     // Empty traces are withheld from provide(), so capture must succeed.
     oopsie_core::test_utils::force_backtrace();
-    let err = AttrStructWithBtOopsie { msg: "test" }.build();
+    let err = attr_struct_with_bt_oopsies::AttrStructWithBt { msg: "test" }.build();
     let bt = core::error::request_ref::<oopsie::Backtrace>(&err);
     assert!(
         bt.is_some(),
@@ -530,7 +532,7 @@ struct StructDynamicHelp {
 #[test]
 fn struct_dynamic_help_field_provider_matches_accessor() {
     use oopsie::Diagnostic as _;
-    let err = StructDynamicHelpOopsie {
+    let err = struct_dynamic_help_oopsies::StructDynamicHelpOopsie {
         suggestion: "try a shorter name".to_owned(),
     }
     .build();
@@ -618,7 +620,7 @@ struct StructInlineHelp {
 #[test]
 fn struct_inline_capture_help_renders_field() {
     use oopsie::Diagnostic as _;
-    let err = StructInlineHelpOopsie {
+    let err = struct_inline_help_oopsies::StructInlineHelpOopsie {
         path: "/etc/hosts".to_owned(),
     }
     .build();
@@ -878,7 +880,7 @@ struct StructCodeInterp {
 #[test]
 fn struct_code_inline_capture_renders_value() {
     use oopsie::Diagnostic as _;
-    let err = StructCodeInterpOopsie {
+    let err = struct_code_interp_oopsies::StructCodeInterpOopsie {
         kind: "fs".to_owned(),
     }
     .build();
@@ -891,7 +893,7 @@ fn struct_code_inline_capture_renders_value() {
 #[test]
 fn struct_code_inline_capture_accessor_and_provider_agree() {
     use oopsie::Diagnostic as _;
-    let err = StructCodeInterpOopsie {
+    let err = struct_code_interp_oopsies::StructCodeInterpOopsie {
         kind: "mem".to_owned(),
     }
     .build();
@@ -957,7 +959,7 @@ fn error_code_ref_provide_returns_owned_clone() {
 #[test]
 fn struct_error_code_provide_can_reference_fields() {
     use oopsie::Diagnostic as _;
-    let err = StructFieldCodeOopsie {
+    let err = struct_field_code_oopsies::StructFieldCodeOopsie {
         kind: "fs".to_owned(),
     }
     .build();
@@ -968,7 +970,7 @@ fn struct_error_code_provide_can_reference_fields() {
 #[test]
 fn struct_error_code_ref_provide_returns_owned_clone() {
     use oopsie::Diagnostic as _;
-    let err = StructRefCodeOopsie {
+    let err = struct_ref_code_oopsies::StructRefCodeOopsie {
         code: oopsie::ErrorCode::from("ref::struct"),
     }
     .build();

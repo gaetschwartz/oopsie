@@ -96,7 +96,7 @@ fn bench_wrap(c: &mut Criterion) {
         b.iter(|| {
             black_box(oopsie::ResultExt::context(
                 io_err(),
-                OopsieErrOopsie { ctx: "op" },
+                oopsie_err_oopsies::OopsieErr { ctx: "op" },
             ))
         });
     });
@@ -139,7 +139,8 @@ fn bench_render(c: &mut Criterion) {
     let mut group = c.benchmark_group("render_error");
 
     let oopsie_report = Report::new(
-        oopsie::ResultExt::context(io_err(), OopsieErrOopsie { ctx: "render" }).unwrap_err(),
+        oopsie::ResultExt::context(io_err(), oopsie_err_oopsies::OopsieErr { ctx: "render" })
+            .unwrap_err(),
     )
     .no_colors();
     group.bench_function("oopsie", |b| {
@@ -194,7 +195,8 @@ fn bench_colored(c: &mut Criterion) {
     let mut group = c.benchmark_group("render_colored");
 
     let oopsie_report = Report::new(
-        oopsie::ResultExt::context(io_err(), OopsieErrOopsie { ctx: "render" }).unwrap_err(),
+        oopsie::ResultExt::context(io_err(), oopsie_err_oopsies::OopsieErr { ctx: "render" })
+            .unwrap_err(),
     )
     .force_colors();
     group.bench_function("oopsie", |b| {
@@ -232,7 +234,7 @@ fn bench_traced(c: &mut Criterion) {
     let mut group = c.benchmark_group("render_traced");
 
     let oopsie_report = Report::new(
-        oopsie::ResultExt::context(io_err(), TracedOopsie { ctx: "render" }).unwrap_err(),
+        oopsie::ResultExt::context(io_err(), traced_oopsies::Traced { ctx: "render" }).unwrap_err(),
     )
     .no_colors();
     group.bench_function("oopsie", |b| {
@@ -270,7 +272,7 @@ fn bench_traced_colored(c: &mut Criterion) {
     let mut group = c.benchmark_group("render_traced_colored");
 
     let oopsie_report = Report::new(
-        oopsie::ResultExt::context(io_err(), TracedOopsie { ctx: "render" }).unwrap_err(),
+        oopsie::ResultExt::context(io_err(), traced_oopsies::Traced { ctx: "render" }).unwrap_err(),
     )
     .force_colors();
     group.bench_function("oopsie", |b| {

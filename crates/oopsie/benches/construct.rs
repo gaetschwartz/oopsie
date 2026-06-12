@@ -26,17 +26,17 @@ fn bench_construct(c: &mut Criterion) {
     let mut group = c.benchmark_group("construct");
 
     group.bench_function("plain", |b| {
-        b.iter(|| black_box(PlainOopsie { code: 1u32 }.build()));
+        b.iter(|| black_box(plain_oopsies::Plain { code: 1u32 }.build()));
     });
 
     set_override(RustBacktrace::Disabled);
     group.bench_function("traced_backtrace_disabled", |b| {
-        b.iter(|| black_box(TracedOopsie { code: 1u32 }.build()));
+        b.iter(|| black_box(traced_oopsies::Traced { code: 1u32 }.build()));
     });
 
     set_override(RustBacktrace::Enabled);
     group.bench_function("traced_backtrace_enabled", |b| {
-        b.iter(|| black_box(TracedOopsie { code: 1u32 }.build()));
+        b.iter(|| black_box(traced_oopsies::Traced { code: 1u32 }.build()));
     });
 
     group.finish();

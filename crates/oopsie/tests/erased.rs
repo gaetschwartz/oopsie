@@ -51,7 +51,7 @@ fn test_erased_error_json() {
 
 #[test]
 fn test_help_extraction() {
-    let error = ErrorWithHelpOopsie {
+    let error = error_with_help_oopsies::ErrorWithHelp {
         message: "connection refused",
     }
     .build();
@@ -66,7 +66,7 @@ fn test_help_extraction() {
 
 #[test]
 fn test_code_only_extraction() {
-    let error = ErrorWithCodeOnlyOopsie { message: "timeout" }.build();
+    let error = error_with_code_only_oopsies::ErrorWithCodeOnly { message: "timeout" }.build();
     let erased = ErasedError::from_error(error);
 
     assert!(erased.diagnostics.code().is_some());
@@ -75,7 +75,7 @@ fn test_code_only_extraction() {
 
 #[test]
 fn test_format_short_includes_help() {
-    let error = ErrorWithHelpOopsie {
+    let error = error_with_help_oopsies::ErrorWithHelp {
         message: "connection refused",
     }
     .build();
@@ -100,7 +100,7 @@ fn test_extract_backtrace_returns_some_when_provided() {
 
 #[test]
 fn test_extract_error_code_returns_some_for_oopsie_errors() {
-    let error = ErrorWithHelpOopsie { message: "test" }.build();
+    let error = error_with_help_oopsies::ErrorWithHelp { message: "test" }.build();
     let erased = ErasedError::from_error(error);
     assert!(
         erased.diagnostics.code().is_some(),
@@ -121,7 +121,7 @@ fn test_diagnostics_is_none_for_default() {
 
 #[test]
 fn test_diagnostics_is_not_none_when_code_present() {
-    let error = ErrorWithCodeOnlyOopsie {
+    let error = error_with_code_only_oopsies::ErrorWithCodeOnly {
         message: "has code",
     }
     .build();
@@ -136,7 +136,7 @@ fn test_diagnostics_is_not_none_when_code_present() {
 
 #[test]
 fn test_write_text_contains_message_and_help() {
-    let error = ErrorWithHelpOopsie {
+    let error = error_with_help_oopsies::ErrorWithHelp {
         message: "text output test",
     }
     .build();
@@ -158,7 +158,7 @@ fn test_write_text_contains_message_and_help() {
 
 #[test]
 fn test_write_json_output_is_valid_json_with_expected_fields() {
-    let error = ErrorWithHelpOopsie {
+    let error = error_with_help_oopsies::ErrorWithHelp {
         message: "json output test",
     }
     .build();
@@ -371,7 +371,7 @@ fn test_tracing_level_bidirectional_conversion() {
 #[cfg(feature = "fancy")]
 #[test]
 fn test_round_trip_through_json_renders_in_report() {
-    let error = ErrorWithHelpOopsie {
+    let error = error_with_help_oopsies::ErrorWithHelp {
         message: "connection refused",
     }
     .build();
@@ -443,7 +443,7 @@ fn test_round_trip_source_chain_survives_report_and_reerasure() {
 // embedding error's report.
 #[test]
 fn test_display_stays_single_line_after_round_trip() {
-    let error = ErrorWithHelpOopsie { message: "boom" }.build();
+    let error = error_with_help_oopsies::ErrorWithHelp { message: "boom" }.build();
     let erased = ErasedError::from_error(error);
     let displayed = erased.to_string();
     assert_eq!(displayed, "Something went wrong: boom");

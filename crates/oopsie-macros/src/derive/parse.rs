@@ -123,39 +123,23 @@ pub enum SuffixSetting {
 }
 
 impl EnumContainerAttrsInner {
-    /// Resolve the suffix setting with defaults for the given item kind.
-    /// - Enums: default → `Off` (selector name = variant name)
-    /// - Structs: default → `Custom("Oopsie")` (e.g. `ConnOopsie`)
-    pub fn effective_suffix(&self, is_enum: bool) -> SuffixSetting {
+    /// Resolve the suffix setting. Both enums and structs default to `Off`
+    /// (selector name = variant/struct name with a trailing `Error` stripped).
+    pub fn effective_suffix(&self) -> SuffixSetting {
         use crate::utils::MaybeAloneOopsieValue as M;
         match &self.suffix {
-            None => {
-                if is_enum {
-                    SuffixSetting::Off
-                } else {
-                    SuffixSetting::Custom("Oopsie".into())
-                }
-            }
+            None | Some(M::Bool(false)) => SuffixSetting::Off,
             Some(M::Alone | M::Bool(true)) => SuffixSetting::Custom("Oopsie".into()),
-            Some(M::Bool(false)) => SuffixSetting::Off,
             Some(M::Value(s)) => SuffixSetting::Custom(s.clone()),
         }
     }
 
-    /// Resolve the module setting with defaults for the given item kind.
-    /// - Enums: default → `On(None)` (auto-named module)
-    /// - Structs: default → `Off`
-    pub fn effective_module(&self, is_enum: bool) -> ModuleSetting {
+    /// Resolve the module setting. Both enums and structs default to `On(None)`
+    /// (auto-named module).
+    pub fn effective_module(&self) -> ModuleSetting {
         use crate::utils::MaybeAloneOopsieValue as M;
         match &self.module {
-            None => {
-                if is_enum {
-                    ModuleSetting::On(None)
-                } else {
-                    ModuleSetting::Off
-                }
-            }
-            Some(M::Alone | M::Bool(true)) => ModuleSetting::On(None),
+            None | Some(M::Alone | M::Bool(true)) => ModuleSetting::On(None),
             Some(M::Bool(false)) => ModuleSetting::Off,
             Some(M::Value(name)) => ModuleSetting::On(Some(name.clone())),
         }

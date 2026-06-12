@@ -132,10 +132,10 @@ struct DynamicSourceError {
 #[test]
 fn struct_from_marks_non_source_field() {
     let io_err = io::Error::new(io::ErrorKind::BrokenPipe, "pipe broke");
-    // Selector is `DynamicSourceOopsie` ("Error" stripped, `Oopsie` suffix).
+    // Selector is `dynamic_source_oopsies::DynamicSource` ("Error" stripped, no suffix).
     // `inner` is the marked source, so it is NOT a selector user-field; only
     // `context` is, and it takes the source via `build_error`.
-    let err: DynamicSourceError = DynamicSourceOopsie {
+    let err: DynamicSourceError = dynamic_source_oopsies::DynamicSource {
         context: "while syncing".to_owned(),
     }
     .build_error(io_err);
@@ -158,7 +158,7 @@ fn struct_from_with_transform() {
     let io_err = io::Error::new(io::ErrorKind::NotFound, "not found");
     // The selector's `build_error` accepts the pre-transform `io::Error` and
     // applies `Box::new` internally.
-    let err: StructTransformError = StructTransformOopsie.build_error(io_err);
+    let err: StructTransformError = struct_transform_oopsies::StructTransform.build_error(io_err);
     assert_eq!(err.to_string(), "struct transform: not found");
     let src = err.source().expect("should have a source");
     assert_eq!(src.to_string(), "not found");
@@ -177,7 +177,7 @@ fn struct_auto_box_source() {
     let io_err = io::Error::new(io::ErrorKind::PermissionDenied, "denied");
     // Auto-box: the field is `Box<io::Error>` (T: Sized), so the selector
     // accepts the unwrapped `io::Error` and boxes it internally.
-    let err: StructAutoBoxError = StructAutoBoxOopsie.build_error(io_err);
+    let err: StructAutoBoxError = struct_auto_box_oopsies::StructAutoBox.build_error(io_err);
     assert_eq!(err.to_string(), "struct auto-box: denied");
     let src = err.source().expect("should have a source");
     assert_eq!(src.to_string(), "denied");

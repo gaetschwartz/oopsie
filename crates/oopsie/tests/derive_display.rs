@@ -5,6 +5,7 @@
 #![allow(
     unused,
     clippy::all,
+    non_camel_case_types,
     reason = "derive-macro test fixtures intentionally trip style lints"
 )]
 
@@ -76,7 +77,7 @@ fn enum_no_display_fallback() {
 
 #[test]
 fn struct_field_interpolation() {
-    let err = ParseErrOopsie {
+    let err = parse_err_oopsies::ParseErrOopsie {
         msg: "unexpected EOF",
     }
     .build();
@@ -85,7 +86,7 @@ fn struct_field_interpolation() {
 
 #[test]
 fn struct_no_display_fallback() {
-    let err = BareStructOopsie { value: 99i32 }.build();
+    let err = bare_struct_oopsies::BareStructOopsie { value: 99i32 }.build();
     assert_eq!(format!("{err}"), "BareStruct");
 }
 
@@ -302,18 +303,14 @@ fn raw_ident_variant_default_display_drops_prefix() {
 
 // A struct named with a raw ident (`r#struct`) must not leak `r#` in default
 // Display either; its selector strips the prefix before suffixing.
-#[test]
-#[expect(
-    non_camel_case_types,
-    reason = "the raw-identifier struct under test is intentionally keyword-shaped"
-)]
-fn raw_ident_struct_default_display_drops_prefix() {
-    #[derive(Debug, Oopsie)]
-    #[oopsie(suffix)]
-    struct r#struct {
-        value: i32,
-    }
+#[derive(Debug, Oopsie)]
+#[oopsie(suffix)]
+struct r#struct {
+    value: i32,
+}
 
-    let err = structOopsie { value: 7i32 }.build();
+#[test]
+fn raw_ident_struct_default_display_drops_prefix() {
+    let err = struct_oopsies::structOopsie { value: 7i32 }.build();
     assert_eq!(format!("{err}"), "struct");
 }

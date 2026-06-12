@@ -138,7 +138,7 @@ pub fn gen_enum_selectors(resolved: &ResolvedEnum, oopsie_path: &syn::Path) -> V
     let container = resolved.container;
     let enum_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let wrapped_in_module = matches!(container.effective_module(true), ModuleSetting::On(_));
+    let wrapped_in_module = matches!(container.effective_module(), ModuleSetting::On(_));
     let vis = resolve_selector_vis(container.visibility(), &input.vis, wrapped_in_module);
 
     let mut selectors = Vec::new();
@@ -289,11 +289,18 @@ pub fn gen_struct_selector(
     let input = resolved.input;
     let attrs = resolved.attrs;
     let struct_ident = &input.ident;
-    let wrapped_in_module = matches!(
-        attrs.container.effective_module(false),
-        ModuleSetting::On(_)
-    );
+    let wrapped_in_module = matches!(attrs.container.effective_module(), ModuleSetting::On(_));
     let vis = resolve_selector_vis(attrs.visibility(), &input.vis, wrapped_in_module);
+    // The selector and the error type can share a name (struct not ending in
+    // `Error`, default `Off` suffix). Inside the generated module the selector
+    // would then shadow the `use super::*`-imported type, so every reference to
+    // the destination type goes through `super::`. A `transparent` struct emits
+    // its `From` impl unwrapped, so it always names the type directly.
+    let dest_ty: TokenStream2 = if wrapped_in_module {
+        quote! { super::#struct_ident }
+    } else {
+        quote! { #struct_ident }
+    };
     // Variant-level fields are inlined on `StructAttrs` (darling allows only
     // one flatten per derive); aliasing makes downstream field access read
     // naturally as `variant_attrs.transparent` etc.
@@ -340,7 +347,7 @@ pub fn gen_struct_selector(
         });
     }
 
-    let selector_ident = selector_name(struct_ident, &attrs.container.effective_suffix(false))?;
+    let selector_ident = selector_name(struct_ident, &attrs.container.effective_suffix())?;
     let has_source = categorized.source.is_some();
     let user_fields = &categorized.user_fields;
 
@@ -371,7 +378,7 @@ pub fn gen_struct_selector(
     let methods = if has_source {
         gen_build_error_struct(
             &selector_ident,
-            struct_ident,
+            &dest_ty,
             categorized,
             &generic_params,
             &where_clauses,
@@ -381,6 +388,7 @@ pub fn gen_struct_selector(
         gen_build_fail_struct(
             &selector_ident,
             struct_ident,
+            &dest_ty,
             categorized,
             &generic_params,
             &where_clauses,
@@ -588,10 +596,12 @@ fn gen_build_fail(
     }
 }
 
-/// Generate `Contextual` impl for a struct with source.
+/// Generate `Contextual` impl for a struct with source. `dest_ty` is the path to
+/// the destination type as seen from the selector's scope (`super::`-qualified
+/// when wrapped in a module, where a same-named selector would shadow it).
 fn gen_build_error_struct(
     selector_ident: &Ident,
-    struct_ident: &Ident,
+    dest_ty: &TokenStream2,
     categorized: &CategorizedFields,
     generic_params: &TokenStream2,
     where_clauses: &TokenStream2,
@@ -628,15 +638,15 @@ fn gen_build_error_struct(
         impl #generic_params #oopsie_path::Contextual<#source_type> for #selector_ident #generic_params
         #where_clauses
         {
-            type Destination = #struct_ident;
+            type Destination = #dest_ty;
 
             #[track_caller]
-            fn build_error(self, source: #source_type) -> #struct_ident {
+            fn build_error(self, source: #source_type) -> #dest_ty {
                 // Capture probes borrow `&source` before `source_assign` moves
                 // it (see the enum path).
                 #(#auto_inits)*
                 #source_assign
-                #struct_ident {
+                #dest_ty {
                     #(#user_inits,)*
                     #source_ident,
                     #(#auto_names)*
@@ -646,10 +656,12 @@ fn gen_build_error_struct(
     }
 }
 
-/// Generate `build()` and `fail()` for a leaf struct (no source).
+/// Generate `build()` and `fail()` for a leaf struct (no source). See
+/// `gen_build_error_struct` for the `dest_ty` qualification.
 fn gen_build_fail_struct(
     selector_ident: &Ident,
     struct_ident: &Ident,
+    dest_ty: &TokenStream2,
     categorized: &CategorizedFields,
     generic_params: &TokenStream2,
     where_clauses: &TokenStream2,
@@ -663,10 +675,10 @@ fn gen_build_fail_struct(
         impl #generic_params #oopsie_path::Contextual<#oopsie_path::NoSource> for #selector_ident #generic_params
         #where_clauses
         {
-            type Destination = #struct_ident;
+            type Destination = #dest_ty;
 
             #[track_caller]
-            fn build_error(self, _: #oopsie_path::NoSource) -> #struct_ident {
+            fn build_error(self, _: #oopsie_path::NoSource) -> #dest_ty {
                 self.build()
             }
         }
@@ -681,9 +693,9 @@ fn gen_build_fail_struct(
             #[doc = #build_doc]
             #[must_use]
             #[track_caller]
-            pub fn build(self) -> #struct_ident {
+            pub fn build(self) -> #dest_ty {
                 #(#auto_inits)*
-                #struct_ident {
+                #dest_ty {
                     #(#user_inits,)*
                     #(#auto_names)*
                 }
@@ -691,7 +703,7 @@ fn gen_build_fail_struct(
 
             #[doc = #fail_doc]
             #[track_caller]
-            pub fn fail<__T>(self) -> ::core::result::Result<__T, #struct_ident> {
+            pub fn fail<__T>(self) -> ::core::result::Result<__T, #dest_ty> {
                 ::core::result::Result::Err(self.build())
             }
         }

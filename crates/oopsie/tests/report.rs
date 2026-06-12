@@ -45,7 +45,7 @@ fn test_report_basic() {
         RustBacktrace::Enabled,
         "backtrace override should be enabled for deterministic snapshots"
     );
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "something failed",
     }
     .build();
@@ -60,11 +60,11 @@ fn test_report_basic() {
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_chain() {
     common::force_backtrace();
-    let inner = TestOopsie {
+    let inner = test_oopsies::Test {
         message: "root cause",
     }
     .build();
-    let outer: OuterError = OuterOopsie.build_error(inner);
+    let outer: OuterError = outer_oopsies::Outer.build_error(inner);
     let report = Report::new(outer).no_colors();
 
     redact!(backtrace, {
@@ -76,7 +76,7 @@ fn test_report_chain() {
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_colored() {
     common::force_backtrace();
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "colored test",
     }
     .build();
@@ -96,7 +96,7 @@ fn test_report_colored() {
 #[test]
 fn test_report_colored_emits_ansi() {
     common::force_backtrace();
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "colored test",
     }
     .build();
@@ -151,7 +151,7 @@ fn report_follows_global_theme() {
 
 #[test]
 fn test_report_from() {
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "from test",
     }
     .build();
@@ -170,7 +170,7 @@ pub struct ErrorWithHelp {
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_help() {
     common::force_backtrace();
-    let error = ErrorWithHelpOopsie {
+    let error = error_with_help_oopsies::ErrorWithHelp {
         message: "connection refused",
     }
     .build();
@@ -242,7 +242,7 @@ fn test_report_colored_spantrace_renders_frames() {
 
 #[test]
 fn test_error_returns_some_when_err() {
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "accessor test",
     }
     .build();
@@ -258,7 +258,7 @@ fn test_error_returns_none_when_ok() {
 
 #[test]
 fn test_into_error_returns_some_when_err() {
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "into_error test",
     }
     .build();
@@ -278,7 +278,7 @@ fn test_into_error_returns_none_when_ok() {
 
 #[test]
 fn test_debug_fmt_non_empty() {
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "debug test",
     }
     .build();
@@ -304,7 +304,7 @@ fn test_termination_report_ok() {
 
 #[test]
 fn test_termination_report_error() {
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "termination test",
     }
     .build();
@@ -323,7 +323,7 @@ fn test_report_run_ok() {
 #[test]
 fn test_report_run_err() {
     let report = Report::run(|| {
-        Err(TestOopsie {
+        Err(test_oopsies::Test {
             message: "run failed",
         }
         .build())
@@ -411,7 +411,7 @@ fn run_nested_restores_prior_hook() {
 
 #[test]
 fn test_no_colors_never_no_ansi() {
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "no_colors test",
     }
     .build();
@@ -737,7 +737,7 @@ fn test_report_backtrace_full_renders_without_hidden_notice() {
     common::force_backtrace();
 
     oopsie::backtrace::set_override(RustBacktrace::Full);
-    let error = TestOopsie {
+    let error = test_oopsies::Test {
         message: "full backtrace",
     }
     .build();
@@ -767,7 +767,7 @@ fn test_report_backtrace_full_renders_without_hidden_notice() {
 fn test_report_from_residual_question_mark() {
     fn fallible(fail: bool) -> Result<u8, TestError> {
         if fail {
-            TestOopsie {
+            test_oopsies::Test {
                 message: "residual failure",
             }
             .fail()
@@ -834,7 +834,7 @@ fn test_report_transparent_forwards_code_and_help() {
     // Per the no-renderer-change decision, the delegated headline equals the
     // immediate source's message, so it shows both as the headline and as the
     // first `╰─▶` chain entry.
-    let leaf = LeafOopsie { what: "disk" }.build();
+    let leaf = Leaf { what: "disk" }.build();
     let root: TransparentRootError = TransparentRootError::from(leaf);
     let report = Report::new(root).no_colors();
     let rendered = strip_ansi(&report.to_string());
@@ -901,7 +901,7 @@ impl oopsie::Diagnostic for PlainWrapper {}
 fn report_does_not_search_chain_for_traces() {
     common::force_backtrace();
 
-    let traced = TestOopsie { message: "root" }.build();
+    let traced = test_oopsies::Test { message: "root" }.build();
     let rendered = Report::new(PlainWrapper(traced)).no_colors().to_string();
 
     assert!(rendered.contains("╰─▶"), "chain messages still render");
