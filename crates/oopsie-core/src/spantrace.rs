@@ -1,13 +1,15 @@
 //! SpanTrace wrapper with `Capturable` support.
 
-use std::{collections::VecDeque, fmt};
+use std::fmt;
 
 /// A wrapper around `tracing_error::SpanTrace`.
+#[cfg(feature = "tracing")]
 #[derive(Debug, Clone)]
 pub struct SpanTrace {
     inner: tracing_error::SpanTrace,
 }
 
+#[cfg(feature = "tracing")]
 impl SpanTrace {
     #[must_use]
     #[inline]
@@ -53,30 +55,33 @@ impl SpanTrace {
 
 // Span fields carry no stable identity, so only debug builds keep them around to
 // tighten equality; release builds drop them and compare callsites alone.
-#[cfg(debug_assertions)]
+#[cfg(all(feature = "tracing", debug_assertions))]
 #[inline]
 fn capture_fields(fields: &str) -> String {
     fields.to_owned()
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(all(feature = "tracing", not(debug_assertions)))]
 #[inline]
 fn capture_fields(_fields: &str) {}
 
-#[cfg(debug_assertions)]
+#[cfg(all(feature = "tracing", debug_assertions))]
 #[inline]
 fn fields_eq(stored: &str, current: &str) -> bool {
     stored == current
 }
 
-#[cfg(not(debug_assertions))]
+#[cfg(all(feature = "tracing", not(debug_assertions)))]
 #[inline]
 fn fields_eq(_stored: &(), _current: &str) -> bool {
     true
 }
 
+#[cfg(feature = "tracing")]
 impl PartialEq for SpanTrace {
     fn eq(&self, other: &Self) -> bool {
+        use std::collections::VecDeque;
+
         let a = &self.inner;
         let b = &other.inner;
 
@@ -99,10 +104,49 @@ impl PartialEq for SpanTrace {
     }
 }
 
+#[cfg(feature = "tracing")]
 impl fmt::Display for SpanTrace {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self.inner, f)
+    }
+}
+
+/// A no-op span trace stub: the type stays present without the `tracing`
+/// feature so the captured-spantrace surface is unconditional, but capture is
+/// inert and the trace is never considered present.
+#[cfg(not(feature = "tracing"))]
+#[derive(Clone, Debug)]
+pub struct SpanTrace;
+
+#[cfg(not(feature = "tracing"))]
+impl SpanTrace {
+    #[must_use]
+    #[inline]
+    pub const fn capture() -> Self {
+        Self
+    }
+
+    #[must_use]
+    #[inline]
+    pub const fn is_captured(&self) -> bool {
+        false
+    }
+}
+
+#[cfg(not(feature = "tracing"))]
+impl PartialEq for SpanTrace {
+    #[inline]
+    fn eq(&self, _other: &Self) -> bool {
+        true
+    }
+}
+
+#[cfg(not(feature = "tracing"))]
+impl fmt::Display for SpanTrace {
+    #[inline]
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
     }
 }
 
@@ -148,9 +192,20 @@ impl OptionalSpanTrace {
     }
 
     /// Returns the inner `Option<SpanTrace>`.
+    // The real `SpanTrace`'s destructor isn't const-evaluable, so only the
+    // featureless stub variant can be a `const fn`.
+    #[cfg(feature = "tracing")]
     #[must_use]
     #[inline]
     pub fn into_inner(self) -> Option<SpanTrace> {
+        self.0
+    }
+
+    /// Returns the inner `Option<SpanTrace>`.
+    #[cfg(not(feature = "tracing"))]
+    #[must_use]
+    #[inline]
+    pub const fn into_inner(self) -> Option<SpanTrace> {
         self.0
     }
 
@@ -190,9 +245,10 @@ impl crate::Capturable for OptionalSpanTrace {
     #[inline]
     fn capture() -> Self {
         let trace = SpanTrace::capture();
-        match trace.status() {
-            tracing_error::SpanTraceStatus::CAPTURED => Self(Some(trace)),
-            _ => Self(None),
+        if trace.is_captured() {
+            Self(Some(trace))
+        } else {
+            Self(None)
         }
     }
 
@@ -202,9 +258,7 @@ impl crate::Capturable for OptionalSpanTrace {
             // Keep the source's trace only if capture actually succeeded; an
             // Empty/Unsupported trace must not flip `is_some()` to true (the
             // type's documented invariant) — fall back to a fresh capture.
-            Some(trace) if matches!(trace.status(), tracing_error::SpanTraceStatus::CAPTURED) => {
-                Self::some(trace.clone())
-            }
+            Some(trace) if trace.is_captured() => Self::some(trace.clone()),
             _ => <Self as crate::Capturable>::capture(),
         }
     }
@@ -232,13 +286,13 @@ mod tests {
     #[test]
     fn test_span_trace_capture() {
         let trace = SpanTrace::capture();
-        let _ = trace.status();
+        let _ = trace.is_captured();
     }
 
     #[test]
     fn test_generate_implicit_data() {
         let trace: SpanTrace = Capturable::capture();
-        let _ = trace.status();
+        let _ = trace.is_captured();
     }
 
     #[test]
@@ -247,6 +301,7 @@ mod tests {
         let _ = trace;
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn test_into_span_trace_tracing_returns_some() {
         let tracing = SpanTrace::capture();
@@ -335,6 +390,7 @@ mod tests {
         assert!(opt.is_some());
     }
 
+    #[cfg(feature = "tracing")]
     fn with_error_subscriber<R>(f: impl FnOnce() -> R) -> R {
         use tracing_subscriber::prelude::*;
         let subscriber =
@@ -345,18 +401,22 @@ mod tests {
     // Fixed callsites shared across captures: a depth-3 stack leaf -> mid -> root.
     // Same source location => same `&'static Metadata`, so two captures through
     // the same functions yield identical stacks.
+    #[cfg(feature = "tracing")]
     fn leaf() -> SpanTrace {
         let _g = tracing::info_span!("leaf").entered();
         SpanTrace::capture()
     }
+    #[cfg(feature = "tracing")]
     fn mid() -> SpanTrace {
         let _g = tracing::info_span!("mid").entered();
         leaf()
     }
+    #[cfg(feature = "tracing")]
     fn via_root_a() -> SpanTrace {
         let _g = tracing::info_span!("root_a").entered();
         mid()
     }
+    #[cfg(feature = "tracing")]
     fn via_root_b() -> SpanTrace {
         let _g = tracing::info_span!("root_b").entered();
         mid()
@@ -365,11 +425,13 @@ mod tests {
     // A single fixed callsite that records a field value. Two captures through
     // this function share the same `&'static Metadata` (same source location),
     // so they differ ONLY in the recorded value of `x`.
+    #[cfg(feature = "tracing")]
     fn via_field(x: u32) -> SpanTrace {
         let _g = tracing::info_span!("field_span", x).entered();
         SpanTrace::capture()
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn identical_depth3_stacks_are_equal() {
         let (a, b) = with_error_subscriber(|| (via_root_a(), via_root_a()));
@@ -378,6 +440,7 @@ mod tests {
         assert_eq!(a, a.clone());
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn depth3_stacks_differing_only_at_root_are_unequal() {
         // Shared leaf+mid callsites, divergent root: the case a leaf-only or
@@ -386,12 +449,14 @@ mod tests {
         assert_ne!(a, b);
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn shorter_stack_is_not_equal_to_deeper_one() {
         let (deep, shallow) = with_error_subscriber(|| (via_root_a(), leaf()));
         assert_ne!(deep, shallow);
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn empty_span_traces_are_equal() {
         // Without a subscriber, captures are uncaptured/empty; equality must be
@@ -402,6 +467,7 @@ mod tests {
         assert_eq!(a, a.clone());
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn same_callsite_differing_field_values() {
         // Both captures go through the *same* `info_span!` callsite, so the
@@ -473,6 +539,7 @@ mod tests {
         assert!(opt.is_none());
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn span_trace_capture_or_extract_recaptures_over_empty_source_trace() {
         // Source captured with no subscriber → empty trace.
@@ -487,6 +554,7 @@ mod tests {
         assert!(extracted.is_captured());
     }
 
+    #[cfg(feature = "tracing")]
     #[test]
     fn span_trace_capture_or_extract_keeps_captured_source_trace() {
         let (src_trace, extracted) = with_error_subscriber(|| {
@@ -496,5 +564,41 @@ mod tests {
         });
         assert!(extracted.is_captured());
         assert_eq!(extracted, src_trace);
+    }
+
+    #[cfg(not(feature = "tracing"))]
+    mod stub {
+        use super::*;
+
+        #[test]
+        fn capture_is_inert() {
+            assert!(!SpanTrace::capture().is_captured());
+        }
+
+        #[test]
+        fn display_is_empty() {
+            assert!(SpanTrace::capture().to_string().is_empty());
+        }
+
+        #[test]
+        fn equality_is_reflexive() {
+            let a = SpanTrace::capture();
+            assert_eq!(a, a.clone());
+            assert_eq!(SpanTrace::capture(), SpanTrace::capture());
+        }
+
+        #[test]
+        fn capture_or_extract_yields_stub() {
+            let extracted = <SpanTrace as crate::Capturable>::capture_or_extract(
+                &DiagSourceWithEmptyTrace(SpanTrace::capture()),
+            );
+            assert!(!extracted.is_captured());
+        }
+
+        #[test]
+        fn optional_capture_is_none() {
+            let opt: OptionalSpanTrace = Capturable::capture();
+            assert!(opt.is_none());
+        }
     }
 }

@@ -1,8 +1,6 @@
 //! Simple trait for errors that expose diagnostic data.
 
-#[cfg(feature = "tracing")]
-use crate::SpanTrace;
-use crate::{Backtrace, ErrorCode, HelpText};
+use crate::{Backtrace, ErrorCode, HelpText, SpanTrace};
 
 /// Trait for errors that expose diagnostic data.
 ///
@@ -17,7 +15,6 @@ pub trait Diagnostic: std::error::Error {
     }
 
     /// Returns the span trace captured when this error was created.
-    #[cfg(feature = "tracing")]
     #[inline]
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         None
@@ -59,7 +56,6 @@ impl<T: Diagnostic> Diagnostic for Box<T> {
         (**self).oopsie_backtrace()
     }
 
-    #[cfg(feature = "tracing")]
     #[inline]
     fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
         (**self).oopsie_spantrace()
@@ -88,31 +84,24 @@ impl<T: Diagnostic> Diagnostic for Box<T> {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "tracing")]
     use super::*;
-    #[cfg(feature = "tracing")]
     use crate::Capturable;
-    #[cfg(feature = "tracing")]
     use std::fmt;
 
-    #[cfg(feature = "tracing")]
     #[derive(Debug)]
     struct Src {
         backtrace: Backtrace,
         spantrace: SpanTrace,
     }
 
-    #[cfg(feature = "tracing")]
     impl fmt::Display for Src {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             f.write_str("src")
         }
     }
 
-    #[cfg(feature = "tracing")]
     impl std::error::Error for Src {}
 
-    #[cfg(feature = "tracing")]
     impl Diagnostic for Src {
         fn oopsie_backtrace(&self) -> Option<&Backtrace> {
             Some(&self.backtrace)
@@ -123,7 +112,6 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "tracing")]
     #[test]
     fn box_delegates_diagnostic_accessors() {
         let src = Src {
@@ -135,7 +123,6 @@ mod tests {
         assert!(boxed.oopsie_spantrace().is_some());
     }
 
-    #[cfg(feature = "tracing")]
     #[test]
     fn box_diagnostic_extraction_reuses_source_frames() {
         use crate::{RustBacktrace, with_rust_backtrace_override};

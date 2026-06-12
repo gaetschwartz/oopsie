@@ -16,8 +16,8 @@
 //! `oopsie` centers on a single attribute macro:
 //!
 //! **[`#[oopsie]`](oopsie)** — generates context selectors, `Display`, `Debug`, and `Error`
-//! impls for your error type. Pass `traced` to also capture a backtrace (and a span-trace
-//! when the `tracing` feature is enabled).
+//! impls for your error type. Pass `traced` to also capture a backtrace and, with the
+//! `tracing` feature, a span-trace.
 //!
 //! # Quick start
 //!
@@ -55,8 +55,8 @@
 //!
 //! # Diagnostics
 //!
-//! Pass `traced` to automatically capture a backtrace field (and a span-trace when
-//! the `tracing` feature is enabled):
+//! Pass `traced` to automatically capture a backtrace field and, with the
+//! `tracing` feature, a span-trace:
 //!
 //! ```
 //! #[oopsie::oopsie(traced)]
@@ -327,10 +327,9 @@ pub use oopsie_core::extras;
 pub use oopsie_core::start_marker;
 pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, Chain, Contextual, Diagnostic, ErrorChainExt, ErrorCode,
-    HelpText, NoSource, OptionExt, ResultExt, RustBacktrace, Welp, WelpOptionExt, WelpResultExt,
+    HelpText, NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace, Welp,
+    WelpOptionExt, WelpResultExt,
 };
-#[cfg(feature = "tracing")]
-pub use oopsie_core::{OptionalSpanTrace, SpanTrace};
 
 /// Thread-local control over backtrace capture.
 ///
