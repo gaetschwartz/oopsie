@@ -268,7 +268,15 @@ e.g. API error responses."
 #![doc = include_str!("__private/keyword_docs/field/provide.md")]
 #![doc = include_str!("__private/keyword_docs/field/backtrace.md")]
 #![doc = include_str!("__private/keyword_docs/field/spantrace.md")]
+#![cfg_attr(
+    feature = "tracing",
+    doc = include_str!("__private/keyword_docs/field/spantrace_example.md")
+)]
 #![doc = include_str!("__private/keyword_docs/field/traces.md")]
+#![cfg_attr(
+    feature = "tracing",
+    doc = include_str!("__private/keyword_docs/field/traces_example.md")
+)]
 #![doc = include_str!("__private/keyword_docs/field/help.md")]
 
 // Re-export the proc-macro attribute and derive.

@@ -163,9 +163,17 @@ pub mod field {
     pub fn backtrace() {}
 
     #[doc = include_str!("keyword_docs/field/spantrace.md")]
+    #[cfg_attr(
+        feature = "tracing",
+        doc = include_str!("keyword_docs/field/spantrace_example.md")
+    )]
     pub fn spantrace() {}
 
     #[doc = include_str!("keyword_docs/field/traces.md")]
+    #[cfg_attr(
+        feature = "tracing",
+        doc = include_str!("keyword_docs/field/traces_example.md")
+    )]
     pub fn traces() {}
 
     #[doc = include_str!("keyword_docs/field/help.md")]
@@ -204,6 +212,10 @@ pub mod traced {
     }
 
     #[doc = include_str!("keyword_docs/traced/spantrace.md")]
+    #[cfg_attr(
+        feature = "tracing",
+        doc = include_str!("keyword_docs/traced/spantrace_example.md")
+    )]
     pub fn spantrace(settings: Settings) {
         _ = settings;
     }
