@@ -1,0 +1,7 @@
+---
+source: crates/oopsie/tests/report.rs
+expression: report
+---
+Error: connection reset by peer
+  at crates/oopsie/tests/report.rs:[LOC]
+  ╰─▶ connection reset by peer

@@ -910,3 +910,27 @@ fn report_does_not_search_chain_for_traces() {
         "no chain search for traces:\n{rendered}"
     );
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Message-free `.welp()` conversion (F3)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// `.welp()` delegates `Display` to the source and keeps the source reachable
+/// through `source()`. The headline therefore equals the source's message, and
+/// the chain renders that same message again as its first entry — the doubled
+/// top line is the deliberate eyre-compatible trade-off, pinned visibly here.
+/// Backtraces are disabled so the render is deterministic and the doubled line
+/// is the whole story.
+#[test]
+fn test_report_welp_message_free_wraps_io_error() {
+    use oopsie::WelpResultExt as _;
+
+    oopsie::backtrace::set_override(RustBacktrace::Disabled);
+    let result: Result<(), std::io::Error> = Err(std::io::Error::other("connection reset by peer"));
+    let welp = result.welp().unwrap_err();
+    let report = Report::new(welp).no_colors();
+
+    insta::with_settings!({ filters => vec![(r"report\.rs:\d+:\d+", "report.rs:[LOC]")] }, {
+        insta::assert_snapshot!(snap_name!("report_welp_message_free"), report);
+    });
+}

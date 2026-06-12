@@ -192,6 +192,18 @@ fn welp_context_captures_location() {
     assert_eq!(loc.line(), line);
 }
 
+#[test]
+fn welp_captures_location_at_call_site() {
+    use oopsie::WelpResultExt as _;
+
+    let result: Result<(), std::io::Error> = Err(std::io::Error::other("io"));
+    let line = line!() + 1;
+    let err = result.welp().unwrap_err();
+    let loc = oopsie::Diagnostic::oopsie_location(&err).expect("welp location");
+    assert!(loc.file().ends_with("traced_location.rs"));
+    assert_eq!(loc.line(), line);
+}
+
 // ─── ErasedError round-trip ───
 
 #[cfg(feature = "serde")]

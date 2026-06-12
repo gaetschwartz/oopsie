@@ -1,19 +1,20 @@
-#![allow(
-    clippy::print_stdout,
-    clippy::print_stderr,
-    reason = "examples print to demonstrate library output"
-)]
-//! `Welp` — a string-shaped escape hatch when a structured error is overkill.
+//! `Welp` — a string-shaped escape hatch when a structured error is overkill,
+//! and `Report<Welp>` as the catch-all `main` story.
 //!
-//! Run with: `cargo run --example welp`
+//! Run with: `cargo run --example welp` (exits non-zero on error).
 
 use oopsie::prelude::*;
 
 fn read_config(path: &str) -> Result<String, Welp> {
-    std::fs::read_to_string(path).welp_context("could not read config")
+    // `.welp()?` converts the foreign `io::Error` with no invented message —
+    // the kind of `?`-style conversion anyhow/eyre give you for free.
+    let raw = std::fs::read_to_string(path).welp()?;
+    Ok(raw)
 }
 
 fn parse_port(value: &str) -> Result<u16, Welp> {
+    // `.welp_context(...)` instead, when a message adds information the source
+    // doesn't already carry.
     value
         .trim()
         .parse::<u16>()
@@ -22,24 +23,21 @@ fn parse_port(value: &str) -> Result<u16, Welp> {
 
 fn validate(port: u16) -> Result<(), Welp> {
     if port < 1024 {
+        // `Welp::new` builds a fresh message error with no source.
         return Err(Welp::new(format!("port {port} is privileged")));
     }
     Ok(())
 }
 
-fn main() {
-    // `welp_context` wraps the underlying error as a source.
-    if let Err(err) = read_config("/nonexistent/app.toml") {
-        println!("{err}");
-        println!("{err:?}");
-    }
+fn run() -> Result<(), Welp> {
+    let raw = read_config("/nonexistent/app.toml")?;
+    let port = parse_port(&raw)?;
+    validate(port)?;
+    Ok(())
+}
 
-    if let Err(err) = parse_port("65536") {
-        println!("{err}");
-    }
-
-    // `Welp::new` builds a fresh message error with no source.
-    if let Err(err) = validate(80) {
-        println!("{err}");
-    }
+// `Report<Welp>` is the blessed catch-all: any function in the program can
+// return `Result<_, Welp>` and bubble foreign errors up with `.welp()?`.
+fn main() -> Report<Welp> {
+    Report::run(run)
 }

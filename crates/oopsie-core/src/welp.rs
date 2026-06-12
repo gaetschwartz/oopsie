@@ -44,6 +44,8 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 ///   when the `tracing` feature is enabled).
 /// - [`Welp::wrap`] — wrap an existing error with a string message.
 /// - [`Welp::wrap_boxed`] — same, for an already-boxed `dyn Error`.
+/// - [`Welp::from_error`] — wrap an existing error with *no* message; its
+///   `Display` delegates to the source.
 ///
 /// # Adding context to a `Result` / `Option`
 ///
@@ -51,13 +53,24 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 /// `oopsie::prelude`) and use [`welp_context`](WelpResultExt::welp_context) /
 /// [`with_welp_context`](WelpResultExt::with_welp_context).
 ///
+/// Use [`welp`](WelpResultExt::welp) for the message-free conversion — the
+/// `?`-style escape hatch `anyhow`/`eyre` give you for free. `result.welp()?`
+/// turns any foreign `Error` into a `Welp` without inventing a string;
+/// `result.welp_context("…")?` is for when a message genuinely adds information
+/// the source doesn't already carry. Together they make
+/// `fn main() -> Report<Welp>` (with `Welp` from the prelude) the catch-all
+/// top-level error story.
+///
 /// # Layout
 ///
-/// `Welp` is a small enum — both variants carry `Box<str>`, a boxed
-/// `(Backtrace, _)` captured at construction (the second slot is the span-trace
-/// under the `tracing` feature and is otherwise empty), and an inline
-/// `&'static Location` of the call site; `Sourced` additionally carries the
-/// wrapped `Box<dyn Error>`.
+/// `Welp` is a small enum. Every variant carries a boxed `(Backtrace, _)`
+/// captured at construction (the second slot is the span-trace under the
+/// `tracing` feature and is otherwise empty) and an inline `&'static Location`
+/// of the call site. `Traced` adds a `Box<str>` message; `Sourced` adds an
+/// optional `Box<str>` message and the wrapped `Box<dyn Error>`. The
+/// message-free form ([`from_error`](Self::from_error) /
+/// [`welp`](WelpResultExt::welp)) is a `Sourced` with no message, whose
+/// `Display` delegates to the source.
 ///
 /// A `Sourced` `Welp`'s [`Diagnostic`] accessors prefer the source's traces
 /// (reached via the Provider API under the
@@ -68,7 +81,10 @@ pub struct Welp(WelpRepr);
 
 enum WelpRepr {
     Sourced {
-        message: Box<str>,
+        // `None` is the message-free form (`from_error` / `.welp()`): `Display`
+        // delegates to `source`. The `Box<str>` data pointer's null niche
+        // absorbs the `Option` tag, so this stays one machine word.
+        message: Option<Box<str>>,
         source: BoxError,
         traces: Box<(Backtrace, MaybeSpanTrace)>,
         location: &'static std::panic::Location<'static>,
@@ -126,7 +142,7 @@ impl Welp {
         // not per instantiation). The origin trace is reached at accessor
         // time instead, through the source-first Provider lookup.
         Self(WelpRepr::Sourced {
-            message: message.into().into_boxed_str(),
+            message: Some(message.into().into_boxed_str()),
             source: Box::new(source),
             traces: Box::new((Backtrace::capture(), capture_maybe_spantrace())),
             location: std::panic::Location::caller(),
@@ -152,19 +168,60 @@ impl Welp {
     #[track_caller]
     pub fn wrap_boxed(source: BoxError, message: impl Into<String>) -> Self {
         Self(WelpRepr::Sourced {
-            message: message.into().into_boxed_str(),
+            message: Some(message.into().into_boxed_str()),
             source,
             traces: Box::new((Backtrace::capture(), capture_maybe_spantrace())),
             location: std::panic::Location::caller(),
         })
     }
 
-    /// The message attached to this error.
+    /// Wrap an existing error with no user message: this `Welp`'s [`Display`]
+    /// delegates to the source's, and the source stays reachable through
+    /// [`Error::source`]. Use it for the message-free `?`-style conversion of a
+    /// foreign error; reach for [`wrap`](Self::wrap) when a string context adds
+    /// information.
+    ///
+    /// Captures a backtrace (and a span-trace under the `tracing` feature) at
+    /// the call site; like [`wrap`](Self::wrap), the [`Diagnostic`] accessors
+    /// surface the source's captured traces (via the Provider API under the
+    /// `unstable-error-generic-member-access` feature) when it has them, so the
+    /// origin-most trace wins.
+    ///
+    /// [`Display`]: fmt::Display
+    /// [`Error::source`]: StdError::source
+    ///
+    /// ```
+    /// use oopsie_core::Welp;
+    ///
+    /// let err = Welp::from_error(std::io::Error::other("disk full"));
+    /// assert_eq!(err.to_string(), "disk full");
+    /// assert!(std::error::Error::source(&err).is_some());
+    /// ```
+    #[track_caller]
+    pub fn from_error<E>(source: E) -> Self
+    where
+        E: StdError + Send + Sync + 'static,
+    {
+        Self(WelpRepr::Sourced {
+            message: None,
+            source: Box::new(source),
+            traces: Box::new((Backtrace::capture(), capture_maybe_spantrace())),
+            location: std::panic::Location::caller(),
+        })
+    }
+
+    /// The user message attached to this error, or `None` when it carries none
+    /// (a `Welp` from [`from_error`](Self::from_error) / [`welp`] delegates its
+    /// [`Display`] to the wrapped source instead of owning a message).
+    ///
+    /// [`welp`]: WelpResultExt::welp
+    /// [`Display`]: fmt::Display
     #[must_use]
     #[inline]
-    pub fn message(&self) -> &str {
+    pub fn message(&self) -> Option<&str> {
         match &self.0 {
-            WelpRepr::Sourced { message, .. } | WelpRepr::Traced { message, .. } => message,
+            WelpRepr::Sourced { message, .. } => message.as_deref(),
+            WelpRepr::Traced { message, .. } => Some(message),
         }
     }
 }
@@ -172,7 +229,9 @@ impl Welp {
 impl fmt::Debug for Welp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut dbg = f.debug_struct("Welp");
-        dbg.field("message", &self.message());
+        if let Some(message) = self.message() {
+            dbg.field("message", &message);
+        }
         match &self.0 {
             WelpRepr::Sourced { source, .. } => {
                 dbg.field("source", source);
@@ -186,7 +245,20 @@ impl fmt::Debug for Welp {
 impl fmt::Display for Welp {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.message())
+        match &self.0 {
+            // No message is the delegating form: render the source as if it
+            // were the top error.
+            WelpRepr::Sourced {
+                message: None,
+                source,
+                ..
+            } => source.fmt(f),
+            WelpRepr::Sourced {
+                message: Some(message),
+                ..
+            }
+            | WelpRepr::Traced { message, .. } => f.write_str(message),
+        }
     }
 }
 
@@ -264,6 +336,15 @@ impl Diagnostic for Welp {
 /// }
 /// ```
 pub trait WelpResultExt<T, E>: Sized {
+    /// Convert the error into a [`Welp`] with no user message — the kind of
+    /// message-free `?`-style conversion `anyhow`/`eyre` give you for free. The
+    /// resulting `Welp`'s [`Display`](std::fmt::Display) delegates to the
+    /// source's, and the source stays reachable through
+    /// [`Error::source`](std::error::Error::source). Reach for
+    /// [`welp_context`](Self::welp_context) instead when a string adds
+    /// information the source doesn't already carry.
+    fn welp(self) -> Result<T, Welp>;
+
     /// Wrap the error in a [`Welp`] with the given message.
     ///
     /// Note: the `message` argument is evaluated at the call site per Rust's
@@ -289,6 +370,18 @@ where
     E: StdError + Send + Sync + 'static,
 {
     #[inline]
+    #[track_caller]
+    fn welp(self) -> Result<T, Welp> {
+        // Build directly (no `map_err` closure) so `Welp::from_error`'s
+        // `#[track_caller]` reports the `.welp` call site.
+        match self {
+            Ok(value) => Ok(value),
+            Err(e) => Err(Welp::from_error(e)),
+        }
+    }
+
+    #[inline]
+    #[track_caller]
     fn welp_context(self, message: impl Into<String>) -> Result<T, Welp> {
         // Build directly (no `map_err` closure) so `Welp::wrap`'s
         // `#[track_caller]` reports the `.welp_context` call site.
@@ -385,7 +478,7 @@ mod tests {
     #[test]
     fn new_captures_message() {
         let err = Welp::new("hello");
-        assert_eq!(err.message(), "hello");
+        assert_eq!(err.message(), Some("hello"));
         assert_eq!(err.to_string(), "hello");
     }
 
@@ -450,6 +543,80 @@ mod tests {
             StdError::source(&err).expect("source missing").to_string(),
             "disk full"
         );
+    }
+
+    #[test]
+    fn from_error_delegates_display_to_source() {
+        let err = Welp::from_error(std::io::Error::other("disk full"));
+        assert_eq!(err.to_string(), "disk full");
+        assert!(err.message().is_none());
+        let source = StdError::source(&err).expect("source missing");
+        assert_eq!(source.to_string(), "disk full");
+    }
+
+    #[test]
+    fn from_error_source_downcasts_to_original() {
+        let err = Welp::from_error(std::io::Error::new(std::io::ErrorKind::NotFound, "missing"));
+        let io = StdError::source(&err)
+            .and_then(|s| s.downcast_ref::<std::io::Error>())
+            .expect("source is the original io::Error");
+        assert_eq!(io.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn welp_on_ok_is_passthrough() {
+        let r: Result<i32, std::io::Error> = Ok(42);
+        assert_eq!(r.welp().unwrap(), 42);
+    }
+
+    #[test]
+    fn welp_on_err_delegates_display_and_keeps_source() {
+        let r: Result<i32, std::io::Error> = Err(std::io::Error::other("io fail"));
+        let err = r.welp().unwrap_err();
+        assert_eq!(err.to_string(), "io fail");
+        assert!(err.message().is_none());
+        assert_eq!(StdError::source(&err).unwrap().to_string(), "io fail");
+    }
+
+    #[test]
+    fn welp_captures_location_at_call_site() {
+        let call_line = line!() + 2;
+        let r: Result<i32, std::io::Error> = Err(std::io::Error::other("x"));
+        let err = r.welp().unwrap_err();
+        let loc = err.oopsie_location().expect("welp location");
+        assert!(loc.file().ends_with("welp.rs"));
+        assert_eq!(loc.line(), call_line);
+    }
+
+    #[cfg(feature = "tracing")]
+    #[test]
+    fn welp_extracts_origin_trace_from_diagnostic_source() {
+        // The inner traces must actually capture (live span + backtraces
+        // enabled), otherwise the skip-empty fallback surfaces the wrap-site
+        // traces and the ptr-eq checks below are vacuous.
+        let outer = with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            with_error_subscriber(|| {
+                let _g = tracing::info_span!("origin").entered();
+                let inner: Result<(), Welp> = Err(Welp::new("inner"));
+                inner.welp().unwrap_err()
+            })
+        });
+        let bt = outer.oopsie_backtrace().expect("backtrace");
+        assert!(!bt.frames().is_empty());
+        #[cfg(feature = "unstable-error-generic-member-access")]
+        {
+            let source = StdError::source(&outer)
+                .and_then(|s| s.downcast_ref::<Welp>())
+                .expect("source is the inner Welp");
+            let inner_bt = source.oopsie_backtrace().expect("inner backtrace");
+            assert!(
+                std::ptr::eq(
+                    std::ptr::from_ref::<Backtrace>(bt),
+                    std::ptr::from_ref::<Backtrace>(inner_bt)
+                ),
+                "outer should surface the source's (origin-most) backtrace"
+            );
+        }
     }
 
     #[test]
@@ -684,7 +851,9 @@ mod tests {
     fn welp_size_is_pinned() {
         // `Sourced` dominates: boxed message + boxed source + boxed traces + the
         // inline `&'static Location`, four pointers with no spare niche for the
-        // discriminant.
+        // discriminant. The message-free form reuses `Sourced` with a `None`
+        // message — the `Box<str>` null niche absorbs the `Option` tag — so it
+        // adds no width.
         assert_eq!(std::mem::size_of::<Welp>(), 48);
     }
 }
