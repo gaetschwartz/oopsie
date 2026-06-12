@@ -235,46 +235,89 @@ const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
     "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::Capturable>::",
 ];
 
-/// Prefixes for the panic *raising* runtime that sits directly above the user's
-/// `panic!` site: the `core`/`std` panic machinery and unwind entry points.
-///
+/// Splits a symbol into its owning crate and path, across spellings:
+/// `std::rt::lang_start`, `std[hash]::rt::lang_start`, and
+/// `<std[hash]::rt::X>::method` all yield `("std", "rt::lang_start…")`.
+/// For `<X as Trait>::method` impl shims whose self type carries no crate of
+/// its own (fn pointers, closures), the trait side owns the symbol.
+fn crate_and_path(name: &str) -> Option<(&str, &str)> {
+    fn scan(s: &str) -> Option<(&str, &str)> {
+        let s = s.strip_prefix('<').unwrap_or(s);
+        let ident_len = s
+            .bytes()
+            .take_while(|&b| b.is_ascii_alphanumeric() || b == b'_')
+            .count();
+        if ident_len == 0 {
+            return None;
+        }
+        let (krate, rest) = s.split_at(ident_len);
+        if let Some(designator) = rest.strip_prefix('[') {
+            let (_, path) = designator.split_once("]::")?;
+            return Some((krate, path));
+        }
+        rest.strip_prefix("::").map(|path| (krate, path))
+    }
+    scan(name).or_else(|| {
+        if !name.starts_with('<') {
+            return None;
+        }
+        let (_, trait_side) = name.rsplit_once(" as ")?;
+        scan(trait_side)
+    })
+}
+
+/// A frame-name pattern set: bare symbols matched as raw prefixes, plus
+/// crate-scoped path prefixes matched after [`crate_and_path`]
+/// normalization. A normalized path is also tried against the bare set —
+/// the same symbol may appear under a crate designator.
+fn matches_symbol(name: &str, bare: &[&str], scoped: &[(&str, &str)]) -> bool {
+    if bare.iter().any(|prefix| name.starts_with(prefix)) {
+        return true;
+    }
+    let Some((krate, path)) = crate_and_path(name) else {
+        return false;
+    };
+    scoped
+        .iter()
+        .any(|&(k, p)| krate == k && path.starts_with(p))
+        || bare.iter().any(|prefix| path.starts_with(prefix))
+}
+
+/// The panic *raising* runtime that sits directly above the user's `panic!`
+/// site: the `core`/`std` panic machinery and unwind entry points.
+const POST_PANIC_BARE: &[&str] = &[
+    "rust_begin_unwind",
+    "__rust_start_panic",
+    "__rust_end_short_backtrace",
+];
+
 /// Deliberately excludes `std::panicking::catch_unwind` (and its `try`/`do_call`
 /// helpers): those frames sit at the *bottom* of the stack, below `main`, where
 /// the runtime catches the unwind. Matching them would let a reverse search for
 /// the panic boundary be dragged all the way down, trimming user code.
-const POST_PANIC_PREFIXES: &[&str] = &[
-    "core::panicking::",
-    "std::panicking::panic",
-    "std::panicking::begin_panic",
-    "std::panicking::rust_panic",
-    "std::sys::backtrace::__rust_end_short_backtrace",
-    "rust_begin_unwind",
-    "__rust_start_panic",
+const POST_PANIC_SCOPED: &[(&str, &str)] = &[
+    ("core", "panicking::"),
+    ("std", "panicking::panic"),
+    ("std", "panicking::begin_panic"),
+    ("std", "panicking::rust_panic"),
+    ("std", "sys::backtrace::__rust_end_short_backtrace"),
 ];
 
-/// Crate-less tail forms of [`POST_PANIC_PREFIXES`], matched after a v0-mangled
-/// `crate[hash]::` segment (and an inner `sys::backtrace::`) is peeled off.
-fn is_post_panic_tail(tail: &str) -> bool {
-    tail.starts_with("panicking::panic")
-        || tail.starts_with("panicking::begin_panic")
-        || tail.starts_with("panicking::rust_panic")
-        || tail.starts_with("__rust_end_short_backtrace")
-        || tail.starts_with("rust_begin_unwind")
-        || tail.starts_with("__rust_start_panic")
-}
-
-/// Prefixes for runtime-entry frames below user code, recognized anywhere in
-/// a trace (see also [`is_runtime_tail_code`]).
-const RUNTIME_INIT_PREFIXES: &[&str] = &[
-    "std::sys::backtrace::__rust_begin_short_backtrace",
-    "test::__rust_begin_short_backtrace",
+/// Runtime-entry frames below user code, recognized anywhere in a trace
+/// (see also [`is_runtime_tail_code`]).
+const RUNTIME_INIT_BARE: &[&str] = &[
     "__rust_begin_short_backtrace",
-    "std::rt::lang_start",
-    "std::panicking::catch_unwind::",
-    "std::panic::catch_unwind::",
     "__rustc",
     "__libc_start",
     "__scrt_common_main",
+];
+
+const RUNTIME_INIT_SCOPED: &[(&str, &str)] = &[
+    ("std", "sys::backtrace::__rust_begin_short_backtrace"),
+    ("std", "rt::lang_start"),
+    ("std", "panicking::catch_unwind::"),
+    ("std", "panic::catch_unwind::"),
+    ("test", "__rust_begin_short_backtrace"),
 ];
 
 /// OS / C-runtime entry symbols at the very bottom of a stack, recognized
@@ -312,77 +355,28 @@ pub fn is_backtrace_capture_code(name: &str, filename: Option<&path::Path>) -> b
 }
 
 /// Check if a frame name matches panic-runtime code that sits above the user's
-/// `panic!` site (`core::panicking`, `std::panicking`, unwind entry points).
+/// `panic!` site (`core::panicking`, `std::panicking`, unwind entry points),
+/// in both demangled and v0-mangled spellings.
 #[inline]
 #[must_use]
 pub fn is_post_panic_code(name: &str, _filename: Option<&path::Path>) -> bool {
-    if POST_PANIC_PREFIXES
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
-    {
-        return true;
-    }
-
-    // Newer std renders internal frames as `crate[hash]::path` (v0 mangling)
-    // rather than the demangled `crate::path`. The unwind entry in particular
-    // shows up as `__rustc[hash]::rust_begin_unwind`. Strip the bracket segment
-    // and match the tail against the crate-less prefix forms.
-    if let Some(rest) = name
-        .strip_prefix("std[")
-        .or_else(|| name.strip_prefix("core["))
-        .or_else(|| name.strip_prefix("__rustc["))
-        && let Some((_, tail)) = rest.split_once("]::")
-    {
-        let tail = tail.strip_prefix("sys::backtrace::").unwrap_or(tail);
-        return is_post_panic_tail(tail);
-    }
-
-    false
+    matches_symbol(name, POST_PANIC_BARE, POST_PANIC_SCOPED)
 }
 
-/// Check if a frame name matches runtime initialization code, including the
-/// v0-mangled `crate[hash]::path` spelling: an optional leading `<` and the
-/// `std[`/`test[` crate designator are peeled, an inner `sys::backtrace::`
-/// segment is stripped, and list entries are also tried with their
-/// `std::`/`test::` module prefix removed (the peeled tail lacks it).
+/// Check if a frame name matches runtime-entry code below user code
+/// (`lang_start`, `catch_unwind`, the short-backtrace markers), in both
+/// demangled and v0-mangled spellings.
 #[inline]
 #[must_use]
 pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
-    if RUNTIME_INIT_PREFIXES
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
-    {
-        return true;
-    }
-
-    // Allow one leading `<` before the crate designator so angle-bracket
-    // wrapped v0 symbols like `<std[hash]::sys::…>::method` are peeled too.
-    let bare = name.strip_prefix('<').unwrap_or(name);
-    if let Some(rest) = bare
-        .strip_prefix("std[")
-        .or_else(|| bare.strip_prefix("test["))
-        && let Some((_, mut tail)) = rest.split_once("]::")
-    {
-        tail = tail.strip_prefix("sys::backtrace::").unwrap_or(tail);
-        return RUNTIME_INIT_PREFIXES.iter().any(|prefix| {
-            tail.starts_with(prefix)
-                || prefix
-                    .strip_prefix("std::")
-                    .is_some_and(|p| tail.starts_with(p))
-                || prefix
-                    .strip_prefix("test::")
-                    .is_some_and(|p| tail.starts_with(p))
-        });
-    }
-
-    false
+    matches_symbol(name, RUNTIME_INIT_BARE, RUNTIME_INIT_SCOPED)
 }
 
 /// Like [`is_runtime_init_code`], plus matching that is only safe when
 /// anchored at the bottom of the stack: frames owned by the standard-library
-/// crates, core-trait impl shims, the C `main` shim, and OS entry symbols. A
-/// mid-stack frame must never be classified by these rules — the bottom peel
-/// stops at the first miss, which is what bounds them.
+/// crates, the C `main` shim, and OS entry symbols. A mid-stack frame must
+/// never be classified by these rules — the bottom peel stops at the first
+/// miss, which is what bounds them.
 #[inline]
 #[must_use]
 pub fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
@@ -395,15 +389,21 @@ pub fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
     }
     // Frames owned by the standard-library crates are never user code; at
     // the bottom-contiguous tail they are all plumbing.
-    let bare = name.strip_prefix('<').unwrap_or(name);
-    if ["std", "core", "alloc", "test"].iter().any(|krate| {
-        bare.strip_prefix(krate)
-            .is_some_and(|rest| rest.starts_with("::") || rest.starts_with('['))
-    }) {
+    let std_owned = |symbol: &str| {
+        crate_and_path(symbol)
+            .is_some_and(|(krate, _)| matches!(krate, "std" | "core" | "alloc" | "test"))
+    };
+    if std_owned(name) {
         return true;
     }
-    // `<… as core…>::…` impl shims (fn-pointer and boxed FnOnce dispatch).
-    if name.starts_with('<') && name.contains(" as core") {
+    // `<X as Trait>::m` impl shims count when the trait side is std-owned —
+    // the dispatch shim for a user-crate closure is core's `FnOnce::call_once`
+    // even though the self type carries the user's crate.
+    if name.starts_with('<')
+        && name
+            .rsplit_once(" as ")
+            .is_some_and(|(_, trait_side)| std_owned(trait_side))
+    {
         return true;
     }
     OS_ENTRY_PREFIXES
@@ -778,9 +778,7 @@ mod tests {
 
     #[test]
     fn test_is_runtime_init_code_bracket_form() {
-        // v0-mangled `crate[hash]::path` form: the `crate[hash]` segment is
-        // stripped and an inner `sys::backtrace::` prefix is peeled before
-        // matching against the runtime-init prefixes.
+        // v0-mangled `crate[hash]::path` spellings.
         assert!(is_runtime_init_code(
             "test[a1b2c3d4]::__rust_begin_short_backtrace",
             None
@@ -794,8 +792,13 @@ mod tests {
             "std[a1b2c3d4]::collections::HashMap::insert",
             None
         ));
-        // Only `std[`/`test[` get the bracket treatment.
+        // Scoped paths are crate-owned and never match under a foreign crate;
+        // bare reserved symbols match under any crate designator.
         assert!(!is_runtime_init_code(
+            "mycrate[a1b2c3d4]::rt::lang_start",
+            None
+        ));
+        assert!(is_runtime_init_code(
             "mycrate[a1b2c3d4]::__rust_begin_short_backtrace",
             None
         ));
@@ -897,6 +900,66 @@ mod tests {
     }
 
     #[test]
+    fn crate_and_path_across_spellings() {
+        assert_eq!(
+            crate_and_path("std::rt::lang_start"),
+            Some(("std", "rt::lang_start"))
+        );
+        assert_eq!(
+            crate_and_path("std[1a2b]::rt::lang_start"),
+            Some(("std", "rt::lang_start"))
+        );
+        // The path is the raw remainder — prefix matching tolerates the
+        // trailing `>::method` of angle-bracket forms.
+        assert_eq!(
+            crate_and_path("<std[1a2b]::sys::thread::Thread>::new"),
+            Some(("std", "sys::thread::Thread>::new"))
+        );
+        // A crate-carrying self type owns the symbol.
+        assert_eq!(
+            crate_and_path(
+                "<core[9f]::panic::unwind_safe::AssertUnwindSafe<f> as core[9f]::ops::function::FnOnce<()>>::call_once"
+            )
+            .map(|(krate, _)| krate),
+            Some("core")
+        );
+        // A crate-less self type (fn pointer) defers to the trait side.
+        assert_eq!(
+            crate_and_path("<fn() -> i32 as core[9f]::ops::function::FnOnce<()>>::call_once")
+                .map(|(krate, _)| krate),
+            Some("core")
+        );
+        // Nested impls: the outermost trait (last ` as `) owns the symbol.
+        assert_eq!(
+            crate_and_path("<<a::A as b::B>::C as d::D>::m").map(|(krate, _)| krate),
+            Some("d")
+        );
+        assert_eq!(crate_and_path("main_loop"), None);
+        assert_eq!(crate_and_path("rust_begin_unwind"), None);
+        assert_eq!(crate_and_path("std"), None);
+        assert_eq!(crate_and_path("corey::parse"), Some(("corey", "parse")));
+    }
+
+    #[test]
+    fn scoped_tables_match_all_spellings() {
+        type Classifier = fn(&str, Option<&std::path::Path>) -> bool;
+        for (table, classify) in [
+            (RUNTIME_INIT_SCOPED, is_runtime_init_code as Classifier),
+            (POST_PANIC_SCOPED, is_post_panic_code as Classifier),
+        ] {
+            for &(krate, path) in table {
+                for name in [
+                    format!("{krate}::{path}x"),
+                    format!("{krate}[abc123]::{path}x"),
+                    format!("<{krate}[abc123]::{path}x>::m"),
+                ] {
+                    assert!(classify(&name, None), "should match: {name}");
+                }
+            }
+        }
+    }
+
+    #[test]
     fn is_internal_frame_drops_oopsie_core_src_path() {
         // Capture frames live in oopsie-core's own `src/`; matching them by
         // path lets the renderer sweep them even when their symbol names
@@ -956,6 +1019,16 @@ mod tests {
         ] {
             assert!(is_runtime_tail_code(name, None), "should match: {name}");
         }
+    }
+
+    #[test]
+    fn runtime_tail_hides_user_closure_dispatch_shims() {
+        // The self type carries the user's crate, but the dispatched method
+        // is core's `FnOnce::call_once` — still tail plumbing.
+        assert!(is_runtime_tail_code(
+            "<my_app[1a2b]::main::{closure#0} as core[9f]::ops::function::FnOnce<()>>::call_once",
+            None
+        ));
     }
 
     #[test]
