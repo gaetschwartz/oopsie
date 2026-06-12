@@ -20,7 +20,7 @@ pub struct KaboomError {
 }
 
 fn fail_deep() -> Result<(), KaboomError> {
-    Err(KaboomOopsie {
+    Err(kaboom_oopsies::Kaboom {
         message: "deep failure",
     }
     .build())
@@ -62,7 +62,7 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
     let rendered = std::thread::spawn(|| {
         common::force_backtrace();
         oopsie::start_marker!();
-        let err = KaboomOopsie {
+        let err = kaboom_oopsies::Kaboom {
             message: "in thread",
         }
         .build();
@@ -73,7 +73,7 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
             bt.marker_hidden_frames().is_some(),
             "exclusive marker must produce a cut on its own thread"
         );
-        Report::from_std(err).no_colors().to_string()
+        Report::new(err).no_colors().to_string()
     })
     .join()
     .unwrap();
@@ -98,7 +98,7 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
 fn mid_stack_catch_unwind_user_frames_survive() {
     fn supervisor() -> KaboomError {
         std::panic::catch_unwind(|| {
-            KaboomOopsie {
+            kaboom_oopsies::Kaboom {
                 message: "inside supervised section",
             }
             .build()
@@ -106,7 +106,7 @@ fn mid_stack_catch_unwind_user_frames_survive() {
         .unwrap()
     }
     common::force_backtrace();
-    let rendered = Report::from_std(supervisor()).no_colors().to_string();
+    let rendered = Report::new(supervisor()).no_colors().to_string();
 
     // The old drain-from-anywhere rule ate every frame below catch_unwind.
     assert!(
@@ -121,7 +121,7 @@ fn report_run_mid_stack_catch_unwind_survives_with_marker() {
     let report = Report::run(|| -> Result<(), KaboomError> {
         fn supervised() -> Result<(), KaboomError> {
             std::panic::catch_unwind(|| {
-                Err(KaboomOopsie {
+                Err(kaboom_oopsies::Kaboom {
                     message: "inside guarded section",
                 }
                 .build())
@@ -155,7 +155,7 @@ fn marker_from_another_thread_never_applies() {
     oopsie::start_marker!();
     let err = std::thread::spawn(|| {
         common::force_backtrace();
-        KaboomOopsie {
+        kaboom_oopsies::Kaboom {
             message: "cross-thread",
         }
         .build()
@@ -175,7 +175,7 @@ fn report_run_restores_previous_marker_on_return() {
     oopsie::start_marker!();
     let _ = Report::run(fail_deep);
     // The original marker still applies to captures after `run` returns.
-    let err = KaboomOopsie {
+    let err = kaboom_oopsies::Kaboom {
         message: "after run",
     }
     .build();
@@ -195,7 +195,7 @@ fn report_run_restores_previous_marker_on_unwind() {
         });
     }));
     assert!(payload.is_err());
-    let err = KaboomOopsie {
+    let err = kaboom_oopsies::Kaboom {
         message: "after unwound run",
     }
     .build();
@@ -207,7 +207,7 @@ fn report_run_restores_previous_marker_on_unwind() {
 
 #[test]
 fn full_backtrace_bypasses_marker_on_error_path() {
-    oopsie::with_rust_backtrace_override(oopsie::RustBacktrace::Full, || {
+    oopsie::backtrace::with_override(oopsie::RustBacktrace::Full, || {
         let rendered = Report::run(fail_deep).no_colors().to_string();
         // `full` shows everything — including frames the marker would hide.
         assert!(
@@ -222,7 +222,7 @@ fn report_run_leaves_no_marker_on_a_clean_thread() {
     std::thread::spawn(|| {
         common::force_backtrace();
         let _ = Report::run(fail_deep);
-        let err = KaboomOopsie {
+        let err = kaboom_oopsies::Kaboom {
             message: "after clean run",
         }
         .build();
@@ -234,7 +234,7 @@ fn report_run_leaves_no_marker_on_a_clean_thread() {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = Report::run(|| -> Result<(), KaboomError> { panic!("boom") });
         }));
-        let err = KaboomOopsie {
+        let err = kaboom_oopsies::Kaboom {
             message: "after unwound clean run",
         }
         .build();
@@ -250,11 +250,11 @@ fn report_run_leaves_no_marker_on_a_clean_thread() {
 #[test]
 fn generated_selector_frames_are_hidden() {
     common::force_backtrace();
-    let err = KaboomOopsie {
+    let err = kaboom_oopsies::Kaboom {
         message: "generated frames",
     }
     .build();
-    let rendered = Report::from_std(err).no_colors().to_string();
+    let rendered = Report::new(err).no_colors().to_string();
 
     // The first rendered frame is the caller, not the generated selector glue.
     let first = rendered
@@ -265,5 +265,5 @@ fn generated_selector_frames_are_hidden() {
         first.contains("generated_selector_frames_are_hidden"),
         "{rendered}"
     );
-    assert!(!rendered.contains("KaboomOopsie"), "{rendered}");
+    assert!(!rendered.contains("kaboom_oopsies"), "{rendered}");
 }
