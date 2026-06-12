@@ -40,12 +40,12 @@ fn lookup(key: &str) -> Result<String, AppError> {
 fn main() {
     // Port 1 has nothing listening, so the io::Error becomes `Connect`.
     if let Err(err) = connect("127.0.0.1:1") {
+        // `.chain()` yields the error first, then each `source()` cause.
         println!("{err}");
-        let mut source = std::error::Error::source(&err);
-        while let Some(cause) = source {
+        for cause in err.chain().skip(1) {
             println!("  caused by: {cause}");
-            source = cause.source();
         }
+        println!("root cause: {}", err.root_cause());
     }
 
     if let Err(err) = lookup("api_token") {

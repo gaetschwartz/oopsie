@@ -224,6 +224,90 @@ impl Welp {
             WelpRepr::Traced { message, .. } => Some(message),
         }
     }
+
+    /// Borrow the wrapped source as `&E` when it is exactly that type.
+    ///
+    /// Inspects the *direct* source only, not the whole chain. A `Welp` with no
+    /// source ([`new`](Self::new) / [`welp_context`](crate::WelpResultExt::welp_context)
+    /// on an `Option`) returns `None`. To search the whole chain, compose with
+    /// [`chain`](crate::ErrorChainExt::chain):
+    ///
+    /// ```
+    /// use oopsie_core::{ErrorChainExt as _, Welp};
+    /// use std::error::Error as _;
+    ///
+    /// let inner = std::io::Error::other("disk full");
+    /// let err = Welp::wrap(Welp::wrap(inner, "mid"), "outer");
+    ///
+    /// // The direct source is the middle `Welp`, not the io::Error.
+    /// assert!(err.downcast_ref::<std::io::Error>().is_none());
+    ///
+    /// // Reach the buried io::Error by walking the chain.
+    /// let io = err
+    ///     .chain()
+    ///     .find_map(|e| e.downcast_ref::<std::io::Error>())
+    ///     .expect("io::Error is somewhere in the chain");
+    /// assert_eq!(io.to_string(), "disk full");
+    /// ```
+    #[must_use]
+    #[inline]
+    pub fn downcast_ref<E: StdError + 'static>(&self) -> Option<&E> {
+        match &self.0 {
+            WelpRepr::Sourced { source, .. } => source.downcast_ref::<E>(),
+            WelpRepr::Traced { .. } => None,
+        }
+    }
+
+    /// Mutably borrow the wrapped source as `&mut E` when it is exactly that
+    /// type. Like [`downcast_ref`](Self::downcast_ref), inspects the direct
+    /// source only.
+    #[must_use]
+    #[inline]
+    pub fn downcast_mut<E: StdError + 'static>(&mut self) -> Option<&mut E> {
+        match &mut self.0 {
+            WelpRepr::Sourced { source, .. } => source.downcast_mut::<E>(),
+            WelpRepr::Traced { .. } => None,
+        }
+    }
+
+    /// Consume this `Welp` and recover the wrapped source as `E` when it is
+    /// exactly that type, returning the `Welp` unchanged otherwise.
+    ///
+    /// Targets the *direct* source only. A message-free [`Welp`] is the source's
+    /// transparent wrapper, so this recovers the original foreign error:
+    ///
+    /// ```
+    /// use oopsie_core::{Welp, WelpResultExt as _};
+    ///
+    /// let r: Result<(), std::io::Error> = Err(std::io::Error::other("disk full"));
+    /// let welp = r.welp().unwrap_err();
+    /// let io: std::io::Error = welp.downcast().expect("source is an io::Error");
+    /// assert_eq!(io.to_string(), "disk full");
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(self)` — message, location, and captured traces intact —
+    /// when there is no source or it is not of type `E`.
+    pub fn downcast<E: StdError + 'static>(self) -> Result<E, Self> {
+        match self.0 {
+            WelpRepr::Sourced {
+                message,
+                source,
+                traces,
+                location,
+            } => match source.downcast::<E>() {
+                Ok(source) => Ok(*source),
+                Err(source) => Err(Self(WelpRepr::Sourced {
+                    message,
+                    source,
+                    traces,
+                    location,
+                })),
+            },
+            traced @ WelpRepr::Traced { .. } => Err(Self(traced)),
+        }
+    }
 }
 
 impl fmt::Debug for Welp {
@@ -693,6 +777,88 @@ mod tests {
             .with_welp_context(|| format!("missing key {}", "host"))
             .unwrap_err();
         assert_eq!(err.to_string(), "missing key host");
+    }
+
+    #[test]
+    fn chain_walks_welp_and_its_sources_self_first() {
+        use crate::ErrorChainExt as _;
+
+        let err = Welp::wrap(
+            Welp::wrap(std::io::Error::other("disk full"), "mid"),
+            "outer",
+        );
+        let messages: Vec<String> = err.chain().map(ToString::to_string).collect();
+        assert_eq!(messages, ["outer", "mid", "disk full"]);
+        assert_eq!(err.root_cause().to_string(), "disk full");
+    }
+
+    #[test]
+    fn downcast_ref_hits_matching_direct_source() {
+        let err = Welp::wrap(std::io::Error::other("disk full"), "outer");
+        let io = err.downcast_ref::<std::io::Error>().expect("source is io");
+        assert_eq!(io.to_string(), "disk full");
+    }
+
+    #[test]
+    fn downcast_ref_misses_on_wrong_type_and_traced() {
+        let sourced = Welp::wrap(std::io::Error::other("x"), "outer");
+        assert!(sourced.downcast_ref::<std::fmt::Error>().is_none());
+
+        let traced = Welp::new("solo");
+        assert!(traced.downcast_ref::<std::io::Error>().is_none());
+    }
+
+    #[test]
+    fn downcast_mut_borrows_matching_source() {
+        let mut err = Welp::wrap(std::io::Error::other("x"), "outer");
+        assert!(err.downcast_mut::<std::io::Error>().is_some());
+        assert!(err.downcast_mut::<std::fmt::Error>().is_none());
+    }
+
+    #[test]
+    fn downcast_recovers_matching_source() {
+        let err = Welp::wrap(
+            std::io::Error::new(std::io::ErrorKind::NotFound, "missing"),
+            "outer",
+        );
+        let io: std::io::Error = err.downcast().expect("source is io");
+        assert_eq!(io.kind(), std::io::ErrorKind::NotFound);
+    }
+
+    #[test]
+    fn downcast_only_targets_the_direct_source() {
+        // The direct source is the middle `Welp`; the io::Error is one layer
+        // deeper and must not be reached by a direct downcast.
+        let err = Welp::wrap(Welp::wrap(std::io::Error::other("x"), "mid"), "outer");
+        let err = err
+            .downcast::<std::io::Error>()
+            .expect_err("io is not the direct source");
+        assert!(err.downcast_ref::<Welp>().is_some());
+    }
+
+    #[test]
+    fn downcast_err_preserves_message_location_and_traces() {
+        let line = line!() + 1;
+        let err = Welp::wrap(std::io::Error::other("inner"), "outer");
+        let recovered = err
+            .downcast::<std::fmt::Error>()
+            .expect_err("wrong target type");
+        assert_eq!(recovered.message(), Some("outer"));
+        assert_eq!(recovered.to_string(), "outer");
+        let loc = recovered.oopsie_location().expect("location preserved");
+        assert_eq!(loc.line(), line);
+        assert!(recovered.oopsie_backtrace().is_some());
+        // The original source survives the failed round-trip.
+        assert_eq!(StdError::source(&recovered).unwrap().to_string(), "inner");
+    }
+
+    #[test]
+    fn downcast_on_traced_returns_self() {
+        let err = Welp::new("solo");
+        let recovered = err
+            .downcast::<std::io::Error>()
+            .expect_err("traced has no source");
+        assert_eq!(recovered.message(), Some("solo"));
     }
 
     #[test]

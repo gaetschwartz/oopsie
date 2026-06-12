@@ -326,8 +326,8 @@ pub use oopsie_macros::oopsie;
 pub use oopsie_core::extras;
 pub use oopsie_core::start_marker;
 pub use oopsie_core::{
-    AsErrorSource, Backtrace, Capturable, Contextual, Diagnostic, ErrorCode, HelpText, NoSource,
-    OptionExt, ResultExt, RustBacktrace, Welp, WelpOptionExt, WelpResultExt,
+    AsErrorSource, Backtrace, Capturable, Chain, Contextual, Diagnostic, ErrorChainExt, ErrorCode,
+    HelpText, NoSource, OptionExt, ResultExt, RustBacktrace, Welp, WelpOptionExt, WelpResultExt,
 };
 #[cfg(feature = "tracing")]
 pub use oopsie_core::{OptionalSpanTrace, SpanTrace};
@@ -408,7 +408,8 @@ pub mod prelude {
     #[cfg(feature = "fancy")]
     pub use crate::Report;
     pub use crate::{
-        Contextual, Diagnostic, OptionExt, ResultExt, Welp, WelpOptionExt, WelpResultExt,
+        Contextual, Diagnostic, ErrorChainExt, OptionExt, ResultExt, Welp, WelpOptionExt,
+        WelpResultExt,
     };
 }
 

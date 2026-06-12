@@ -13,6 +13,7 @@
 )]
 
 mod backtrace;
+mod chain;
 mod diagnostic;
 #[cfg(feature = "serde")]
 pub mod erased;
@@ -33,6 +34,7 @@ pub use backtrace::{
     Backtrace, RustBacktrace, clear_rust_backtrace_override, rust_backtrace, rust_panic_backtrace,
     set_rust_backtrace_override, with_rust_backtrace_override,
 };
+pub use chain::{Chain, ErrorChainExt};
 pub use diagnostic::Diagnostic;
 /// Private helpers used by macro-generated code. Not part of the public API.
 #[doc(hidden)]
