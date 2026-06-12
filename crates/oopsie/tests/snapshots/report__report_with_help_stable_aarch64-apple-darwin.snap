@@ -14,6 +14,4 @@ Error[report::ErrorWithHelp]: Something went wrong: connection refused
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
   3: report::test_report_with_help::{{closure}}::h[HASH]
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  4: core::ops::function::FnOnce::call_once::h[HASH]
-           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-   ... 21 frames hidden ...
+   ... 22 frames hidden ...

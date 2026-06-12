@@ -12,6 +12,4 @@ Error[report::TestError]: Test error: something failed
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
   3: report::test_report_basic::{{closure}}::h[HASH]
            at [WORKSPACE]/crates/oopsie/tests/report.rs:[LOC]
-  4: core::ops::function::FnOnce::call_once::h[HASH]
-           at [STDLIB]/library/core/src/ops/function.rs:[LOC]
-   ... 21 frames hidden ...
+   ... 22 frames hidden ...

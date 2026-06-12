@@ -81,22 +81,27 @@ impl<E: Diagnostic> Report<E> {
     /// installed by other means *while* a `run` is in flight is overwritten by
     /// that restore.
     ///
-    /// For the duration of `func` the thread's trace marker is set to this
-    /// call, so rendered traces stop at the `run` boundary; the previous
-    /// marker is restored afterwards. A `start_marker!` set inside `func`
-    /// does not outlive it.
+    /// For the duration of `func` the thread's trace marker is set inside
+    /// this call, so rendered traces end at the `run` closure boundary; the
+    /// previous marker is restored afterwards. A `start_marker!` set inside
+    /// `func` does not outlive it.
     #[must_use]
     pub fn run<F>(func: F) -> Self
     where
         F: FnOnce() -> Result<(), E>,
     {
         crate::panic_hook::acquire_hook();
-        let prev_marker = oopsie_core::__private::set_inclusive_marker();
         // `set_hook` panics on a panicking thread, so restoring from a `Drop`
         // guard would abort during unwind. Catch the unwind instead: the hook
         // has already rendered the panic by then, and `resume_unwind` doesn't
         // re-run it.
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(func));
+        let mut prev_marker = None;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // Set inside the unwind boundary so its plumbing sits below the
+            // marker and lands in the frozen suffix.
+            prev_marker = oopsie_core::__private::set_marker();
+            func()
+        }));
         oopsie_core::__private::restore_marker(prev_marker);
         crate::panic_hook::release_hook();
         let result = match result {

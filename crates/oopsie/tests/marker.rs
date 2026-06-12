@@ -35,12 +35,12 @@ fn report_run_hides_its_own_plumbing_and_the_runtime_tail() {
         rendered.contains("fail_deep"),
         "user frame missing\n{rendered}"
     );
-    // Inclusive marker hides Report::run's own frame, data-driven.
+    // The exclusive boundary keeps run's closure visible as the bottom frame.
     assert!(
-        !rendered.contains("::report::"),
-        "Report::run frame leaked\n{rendered}"
+        rendered.contains("::report::"),
+        "run boundary frame missing\n{rendered}"
     );
-    // The catch_unwind cluster between closure and run must be peeled.
+    // The catch_unwind cluster between closure and run lands in the frozen suffix.
     assert!(
         !rendered.contains("catch_unwind"),
         "catch_unwind cluster leaked\n{rendered}"
@@ -136,8 +136,8 @@ fn report_run_mid_stack_catch_unwind_survives_with_marker() {
         "user frame below mid-stack catch_unwind was over-trimmed\n{rendered}"
     );
     assert!(
-        !rendered.contains("::report::"),
-        "Report::run frame leaked\n{rendered}"
+        rendered.contains("::report::"),
+        "run boundary frame missing\n{rendered}"
     );
 }
 
@@ -204,10 +204,10 @@ fn report_run_restores_previous_marker_on_unwind() {
 fn full_backtrace_bypasses_marker_on_error_path() {
     oopsie::with_rust_backtrace_override(oopsie::RustBacktrace::Full, || {
         let rendered = Report::run(fail_deep).no_colors().to_string();
-        // `full` shows everything — including the run frame the marker hides.
+        // `full` shows everything — including frames the marker would hide.
         assert!(
-            rendered.contains("::report::"),
-            "full mode must not strip Report::run\n{rendered}"
+            rendered.contains("catch_unwind"),
+            "full mode must show the unwind plumbing the marker hides\n{rendered}"
         );
     });
 }

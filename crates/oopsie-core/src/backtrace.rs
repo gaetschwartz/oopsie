@@ -5,7 +5,6 @@ use std::sync::{Arc, LazyLock};
 use std::{env, fmt, path};
 
 use crate::Capturable as _;
-use crate::marker::FrameLike;
 
 /// Whether backtrace capture is enabled, and how verbosely it should render.
 ///
@@ -265,7 +264,7 @@ fn is_post_panic_tail(tail: &str) -> bool {
 }
 
 /// Prefixes for runtime-entry frames below user code, recognized anywhere in
-/// a trace (see also [`RUNTIME_TAIL_PREFIXES`]).
+/// a trace (see also [`is_runtime_tail_code`]).
 const RUNTIME_INIT_PREFIXES: &[&str] = &[
     "std::sys::backtrace::__rust_begin_short_backtrace",
     "test::__rust_begin_short_backtrace",
@@ -278,16 +277,9 @@ const RUNTIME_INIT_PREFIXES: &[&str] = &[
     "__scrt_common_main",
 ];
 
-/// Additional prefixes recognized only by the bottom-anchored tail peel
-/// ([`is_runtime_tail_code`]): too broad for per-frame internal-frame
-/// classification, safe when matching is anchored at the bottom of the stack.
-const RUNTIME_TAIL_PREFIXES: &[&str] = &[
-    "std::panicking::try",
-    "<std::panic::AssertUnwindSafe<",
-    "std::sys::",
-    "std::thread::",
-    "test::run_test",
-    "__pthread",
+/// OS / C-runtime entry symbols at the very bottom of a stack, recognized
+/// only by the bottom-anchored tail peel.
+const OS_ENTRY_PREFIXES: &[&str] = &[
     "_main",
     "___rust_try",
     "__rust_try",
@@ -295,6 +287,7 @@ const RUNTIME_TAIL_PREFIXES: &[&str] = &[
     "start_thread",
     "__clone",
     "clone3",
+    "__pthread",
     "RtlUserThreadStart",
     "BaseThreadInitThunk",
     "invoke_main",
@@ -347,13 +340,18 @@ pub fn is_post_panic_code(name: &str, _filename: Option<&path::Path>) -> bool {
     false
 }
 
-/// Match `name` against `prefixes`, including the v0-mangled
-/// `crate[hash]::path` spelling: an optional leading `<` and the
+/// Check if a frame name matches runtime initialization code, including the
+/// v0-mangled `crate[hash]::path` spelling: an optional leading `<` and the
 /// `std[`/`test[` crate designator are peeled, an inner `sys::backtrace::`
 /// segment is stripped, and list entries are also tried with their
 /// `std::`/`test::` module prefix removed (the peeled tail lacks it).
-fn matches_runtime_prefixes(name: &str, prefixes: &[&str]) -> bool {
-    if prefixes.iter().any(|prefix| name.starts_with(prefix)) {
+#[inline]
+#[must_use]
+pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
+    if RUNTIME_INIT_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
+    {
         return true;
     }
 
@@ -366,7 +364,7 @@ fn matches_runtime_prefixes(name: &str, prefixes: &[&str]) -> bool {
         && let Some((_, mut tail)) = rest.split_once("]::")
     {
         tail = tail.strip_prefix("sys::backtrace::").unwrap_or(tail);
-        return prefixes.iter().any(|prefix| {
+        return RUNTIME_INIT_PREFIXES.iter().any(|prefix| {
             tail.starts_with(prefix)
                 || prefix
                     .strip_prefix("std::")
@@ -380,18 +378,11 @@ fn matches_runtime_prefixes(name: &str, prefixes: &[&str]) -> bool {
     false
 }
 
-/// Check if a frame name matches runtime initialization code.
-#[inline]
-#[must_use]
-pub fn is_runtime_init_code(name: &str, _filename: Option<&path::Path>) -> bool {
-    matches_runtime_prefixes(name, RUNTIME_INIT_PREFIXES)
-}
-
 /// Like [`is_runtime_init_code`], plus matching that is only safe when
-/// anchored at the bottom of the stack: broad std/test/OS prefixes, the C
-/// `main` shim, and `FnOnce` dispatch shims. A mid-stack frame must never be
-/// classified by these rules — the bottom peel stops at the first miss, which
-/// is what bounds them.
+/// anchored at the bottom of the stack: frames owned by the standard-library
+/// crates, core-trait impl shims, the C `main` shim, and OS entry symbols. A
+/// mid-stack frame must never be classified by these rules — the bottom peel
+/// stops at the first miss, which is what bounds them.
 #[inline]
 #[must_use]
 pub fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
@@ -402,12 +393,22 @@ pub fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
     if name == "main" {
         return true;
     }
-    // `<… as …FnOnce…>::call_once` dispatch shims (AssertUnwindSafe, boxed
-    // closures, vtable shims).
-    if name.starts_with('<') && name.contains("::call_once") {
+    // Frames owned by the standard-library crates are never user code; at
+    // the bottom-contiguous tail they are all plumbing.
+    let bare = name.strip_prefix('<').unwrap_or(name);
+    if ["std", "core", "alloc", "test"].iter().any(|krate| {
+        bare.strip_prefix(krate)
+            .is_some_and(|rest| rest.starts_with("::") || rest.starts_with('['))
+    }) {
         return true;
     }
-    matches_runtime_prefixes(name, RUNTIME_TAIL_PREFIXES)
+    // `<… as core…>::…` impl shims (fn-pointer and boxed FnOnce dispatch).
+    if name.starts_with('<') && name.contains(" as core") {
+        return true;
+    }
+    OS_ENTRY_PREFIXES
+        .iter()
+        .any(|prefix| name.starts_with(prefix))
 }
 
 impl fmt::Debug for Backtrace {
@@ -487,53 +488,17 @@ impl Backtrace {
     }
 
     /// Number of trailing frames hidden by this trace's marker: the suffix
-    /// shared with the marker stack, plus the boundary frame for inclusive
-    /// markers — counted in rendered (symbol-level) frames. `None` when no
-    /// marker was set on the capturing thread, the stacks share no frames
-    /// (e.g. the marker came from another thread), the cut would hide every
-    /// frame, or none of the hidden frames carry symbols.
+    /// shared with the marker stack, counted in rendered (symbol-level)
+    /// frames. `None` when no marker was set on the capturing thread, the
+    /// stacks share no frames (e.g. the marker came from another thread), the
+    /// cut would hide every frame, or none of the hidden frames carry symbols.
     ///
-    /// Forces symbol resolution, like [`frames`](Self::frames); deciding the
-    /// boundary frame of an inclusive marker may resolve one further address.
+    /// Forces symbol resolution, like [`frames`](Self::frames).
     #[must_use]
     pub fn marker_hidden_frames(&self) -> Option<usize> {
         let marker = self.marker.as_ref()?;
         let frames = self.frames();
-        let mut cut = marker.cut_len(frames);
-        // On platforms where symbol_address() == ip() (e.g. Apple), cut_len's
-        // inclusive extension cannot fire via symbol address. Extend by one
-        // more frame when the divergent frames resolve to the same mangled name.
-        if marker.is_inclusive()
-            && cut > 0
-            && cut < frames.len().saturating_sub(1) // leave at least one frame above the cut
-            && cut < marker.frames().len()
-        {
-            let trace_div = frames.len() - 1 - cut;
-            let marker_div = marker.frames().len() - 1 - cut;
-            if FrameLike::symbol_address(&frames[trace_div])
-                != FrameLike::symbol_address(&marker.frames()[marker_div])
-            {
-                // Compare the outermost symbol on both sides: inline expansion
-                // lists symbols innermost-first, and only the last one names
-                // the physical enclosing function.
-                let trace_divergent_name = frames[trace_div]
-                    .symbols()
-                    .last()
-                    .and_then(backtrace::BacktraceSymbol::name);
-                let marker_divergent_ip = marker.frames()[marker_div].ip();
-
-                let mut outermost_matches = false;
-                backtrace::resolve(marker_divergent_ip as *mut _, |sym| {
-                    outermost_matches = trace_divergent_name
-                        .as_ref()
-                        .zip(sym.name())
-                        .is_some_and(|(t, s)| t.as_bytes() == s.as_bytes());
-                });
-                if outermost_matches {
-                    cut += 1;
-                }
-            }
-        }
+        let cut = marker.cut_len(frames);
         if cut == 0 || cut >= frames.len() {
             return None;
         }
@@ -959,6 +924,9 @@ mod tests {
             "my_crate::run_tests",
             "my_crate::test::run_testish",
             "<my_crate::Foo as my_crate::Bar>::call_me",
+            "<my_crate::Foo as my_crate::Bar>::call_once",
+            "testing::utils::run",
+            "corey::parse",
             "my_crate::sys::thread_pool::spawn",
             "my_crate::thread::worker",
             "main_loop",
@@ -1023,7 +991,7 @@ mod tests {
                 let prev = crate::marker::current();
                 scopeguard(prev)
             };
-            crate::__private::set_start_marker();
+            let _ = crate::__private::set_marker();
             let bt = <Backtrace as crate::Capturable>::capture();
             let hidden = bt
                 .marker_hidden_frames()
@@ -1049,7 +1017,7 @@ mod tests {
     #[test]
     fn marker_does_not_cross_threads() {
         crate::with_rust_backtrace_override(RustBacktrace::Enabled, || {
-            crate::__private::set_start_marker();
+            let _ = crate::__private::set_marker();
             let bt = std::thread::spawn(|| {
                 crate::with_rust_backtrace_override(RustBacktrace::Enabled, || {
                     <Backtrace as crate::Capturable>::capture()

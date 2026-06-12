@@ -125,7 +125,7 @@ fn panic_child_in_run() {
 }
 
 #[test]
-fn report_run_panic_backtrace_has_no_run_or_runtime_frames() {
+fn report_run_panic_backtrace_ends_at_run_boundary() {
     let stderr = run_panicking_child(
         "panic_child_in_run",
         &[("NO_COLOR", "1"), ("RUST_BACKTRACE", "1")],
@@ -139,10 +139,9 @@ fn report_run_panic_backtrace_has_no_run_or_runtime_frames() {
         stderr.contains("panic_child_in_run"),
         "panic site frame missing\n{stderr}"
     );
-    // Inclusive marker: Report::run's own frame and everything below it.
     assert!(
-        !stderr.contains("::report::"),
-        "Report::run frame leaked\n{stderr}"
+        stderr.contains("::report::"),
+        "run boundary frame missing\n{stderr}"
     );
     assert!(
         !stderr.contains("lang_start"),
@@ -163,7 +162,7 @@ fn full_backtrace_still_bypasses_marker_stripping() {
 
     // `full` shows everything — including frames the marker would hide.
     assert!(
-        stderr.contains("::report::"),
-        "full mode must not strip Report::run\n{stderr}"
+        stderr.contains("catch_unwind"),
+        "full mode must show the unwind plumbing the marker hides\n{stderr}"
     );
 }

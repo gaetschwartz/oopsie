@@ -187,7 +187,7 @@ pub mod __private {
         source_trace::<crate::SpanTrace>(source).filter(|st| st.is_captured())
     }
 
-    pub use crate::marker::{TraceMarker, restore_marker, set_inclusive_marker, set_start_marker};
+    pub use crate::marker::{TraceMarker, restore_marker, set_marker};
 
     #[cfg(feature = "chrono")]
     pub use chrono;
