@@ -549,12 +549,16 @@ fn test_trace_printer_with_filter_and_theme_custom_filter() {
     // Custom filter: drop any frame whose name starts with "drop::".
     let printer = TracePrinter::with_filter_and_theme(
         |frames| {
-            frames.retain(|frame| {
-                frame
-                    .name
-                    .as_deref()
-                    .is_none_or(|name| !name.starts_with("drop::"))
-            });
+            for slot in frames.iter_mut() {
+                if slot.is_some_and(|frame| {
+                    frame
+                        .name
+                        .as_deref()
+                        .is_some_and(|name| name.starts_with("drop::"))
+                }) {
+                    *slot = None;
+                }
+            }
         },
         TraceTheme::PLAIN,
     );
@@ -566,8 +570,15 @@ fn test_trace_printer_with_filter_and_theme_custom_filter() {
         !output.contains("drop::beta"),
         "custom filter should remove `drop::beta`, got:\n{output}"
     );
-    // One of three frames removed -> hidden notice with count 1.
-    assert!(output.contains("... 1 frames hidden ..."), "got:\n{output}");
+    // One of three frames removed -> hidden notice with count 1, rendered
+    // at the gap's position, between the two kept frames.
+    let alpha = output.find("keep::alpha").unwrap();
+    let notice = output.find("... 1 frames hidden ...").unwrap();
+    let gamma = output.find("keep::gamma").unwrap();
+    assert!(
+        alpha < notice && notice < gamma,
+        "notice must sit at the gap, got:\n{output}"
+    );
 }
 
 /// `add_frame_filter` composes ON TOP of the existing filter — both the
@@ -584,12 +595,16 @@ fn test_trace_printer_add_frame_filter_composes() {
     // Start from the default filter (which trims the capture + runtime frames),
     // then add a second filter removing `drop::` frames.
     let printer = TracePrinter::new().plain().add_frame_filter(|frames| {
-        frames.retain(|frame| {
-            frame
-                .name
-                .as_deref()
-                .is_none_or(|name| !name.starts_with("drop::"))
-        });
+        for slot in frames.iter_mut() {
+            if slot.is_some_and(|frame| {
+                frame
+                    .name
+                    .as_deref()
+                    .is_some_and(|name| name.starts_with("drop::"))
+            }) {
+                *slot = None;
+            }
+        }
     });
     let output = render_backtrace(&printer, &provider);
 

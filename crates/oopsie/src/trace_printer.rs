@@ -346,36 +346,40 @@ fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
 ///    the cost is that an unrecognized tail spelling leaks frames instead
 ///    of hiding user code.
 /// 2. Skips frames from the top that are backtrace capture machinery.
-pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
+pub fn error_backtrace_frame_filter(frames: &mut [Option<&BacktraceFrame>]) {
+    let internal = |frame: &BacktraceFrame| match frame.name.as_ref() {
+        Some(name) => is_runtime_tail_code(name, frame.filename.as_deref()),
+        // Unresolvable frames are runtime/shim detail (`__rust_try` etc.).
+        None => true,
+    };
+    // Bottom peel; a slot already hidden by an earlier filter keeps the
+    // contiguous run going.
     let mut keep = frames.len();
     while keep > 0 {
-        let frame = frames[keep - 1];
-        let internal = match frame.name.as_ref() {
-            Some(name) => is_runtime_tail_code(name, frame.filename.as_deref()),
-            // Unresolvable frames are runtime/shim detail (`__rust_try` etc.).
-            None => true,
-        };
-        if !internal {
-            break;
+        match frames[keep - 1] {
+            Some(frame) if !internal(frame) => break,
+            _ => keep -= 1,
         }
-        keep -= 1;
     }
     // A fully symbol-stripped trace would peel to nothing; show it instead.
     if keep > 0 {
-        frames.truncate(keep);
+        for slot in &mut frames[keep..] {
+            *slot = None;
+        }
     }
 
-    let top_cutoff_idx = frames
-        .iter()
-        .rposition(|frame| {
+    let top_cutoff_idx = frames.iter().rposition(|slot| {
+        slot.is_some_and(|frame| {
             frame
                 .name
                 .as_ref()
                 .is_some_and(|name| is_backtrace_capture_code(name, frame.filename.as_deref()))
         })
-        .map(|idx| idx + 1);
+    });
     if let Some(top) = top_cutoff_idx {
-        frames.drain(..top);
+        for slot in &mut frames[..=top] {
+            *slot = None;
+        }
     }
 }
 
@@ -387,18 +391,19 @@ pub fn error_backtrace_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
 /// call site becomes the first frame. It does not touch the bottom of the
 /// stack — pair it with [`error_backtrace_frame_filter`] (see
 /// [`panic_frame_filter`]) to also trim the runtime-init tail.
-pub fn post_panic_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
-    let top_cutoff_idx = frames
-        .iter()
-        .rposition(|frame| {
+pub fn post_panic_frame_filter(frames: &mut [Option<&BacktraceFrame>]) {
+    let top_cutoff_idx = frames.iter().rposition(|slot| {
+        slot.is_some_and(|frame| {
             frame
                 .name
                 .as_ref()
                 .is_some_and(|name| is_post_panic_code(name, frame.filename.as_deref()))
         })
-        .map(|idx| idx + 1);
+    });
     if let Some(top) = top_cutoff_idx {
-        frames.drain(..top);
+        for slot in &mut frames[..=top] {
+            *slot = None;
+        }
     }
 }
 
@@ -408,7 +413,7 @@ pub fn post_panic_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
 /// ([`post_panic_frame_filter`]) and then the runtime-init tail below `main`
 /// ([`error_backtrace_frame_filter`]). The top trim runs first so the unwind
 /// entry frame never reaches the bottom peel.
-pub fn panic_frame_filter(frames: &mut Vec<&BacktraceFrame>) {
+pub fn panic_frame_filter(frames: &mut [Option<&BacktraceFrame>]) {
     post_panic_frame_filter(frames);
     error_backtrace_frame_filter(frames);
 }
@@ -440,7 +445,7 @@ fn split_function_hash(name: &str) -> (&str, Option<&str>) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A closure that filters backtrace frames in-place.
-type FrameFilterBox = BoxOrBorrow<'static, dyn Fn(&mut Vec<&BacktraceFrame>)>;
+type FrameFilterBox = BoxOrBorrow<'static, dyn Fn(&mut [Option<&BacktraceFrame>])>;
 
 /// Renders backtraces and span traces with colors.
 pub struct TracePrinter {
@@ -470,7 +475,7 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub fn with_filter_and_theme(
-        filter: impl Fn(&mut Vec<&BacktraceFrame>) + 'static,
+        filter: impl Fn(&mut [Option<&BacktraceFrame>]) + 'static,
         theme: TraceTheme,
     ) -> Self {
         Self {
@@ -484,7 +489,7 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn with_filter_and_theme_const(
-        filter: &'static (dyn Fn(&mut Vec<&BacktraceFrame>) + 'static),
+        filter: &'static (dyn Fn(&mut [Option<&BacktraceFrame>]) + 'static),
         theme: TraceTheme,
     ) -> Self {
         Self {
@@ -498,7 +503,7 @@ impl TracePrinter {
     #[must_use]
     pub fn add_frame_filter(
         mut self,
-        filter: impl Fn(&mut Vec<&BacktraceFrame>) + 'static,
+        filter: impl Fn(&mut [Option<&BacktraceFrame>]) + 'static,
     ) -> Self {
         self.frame_filter =
             overlay_frame_filters(self.frame_filter, BoxOrBorrow::Box(Box::new(filter)));
@@ -530,42 +535,15 @@ impl TracePrinter {
         bt: &impl BacktraceProvider,
     ) -> fmt::Result {
         let all_frames = bt.frames();
-        let total_count = all_frames.len();
 
-        let mut filtered: Vec<&BacktraceFrame> = all_frames.iter().collect();
+        let mut filtered: Vec<_> = all_frames.iter().map(Some).collect();
         (self.frame_filter)(&mut filtered);
-
-        // Split the hidden count by which end frames were trimmed from, so the
-        // notice renders where the gap actually is. Kept frames still point into
-        // `all_frames`, so the last one's original index gives the bottom count;
-        // any remainder (including holes a custom filter punches) goes on top.
-        let total_hidden = total_count - filtered.len();
-        let bottom_hidden = match filtered.last() {
-            Some(last) => {
-                let last_idx = all_frames
-                    .iter()
-                    .rposition(|frame| std::ptr::eq(frame, *last))
-                    .unwrap_or(total_count - 1);
-                total_count - 1 - last_idx
-            }
-            None => 0,
-        };
-        let top_hidden = total_hidden - bottom_hidden;
 
         writeln!(
             f,
             "{}",
             format_args!("{:━^80}", " BACKTRACE ").style(self.theme.header)
         )?;
-
-        if top_hidden > 0 {
-            writeln!(
-                f,
-                "{}",
-                format_args!("   ... {top_hidden} frames hidden ...")
-                    .style(self.theme.frames_hidden)
-            )?;
-        }
 
         // Read per render: the working directory is mutable process state,
         // and a failed read (deleted cwd, sandbox) just disables shortening.
@@ -575,20 +553,36 @@ impl TracePrinter {
             None
         };
 
-        for (i, frame) in filtered.iter().enumerate() {
-            self.write_backtrace_frame(f, i + 1, frame, cwd.as_deref())?;
+        // Masked slots render as a count exactly where the gap sits — top,
+        // middle, or bottom runs alike.
+        let mut hidden_run = 0_usize;
+        let mut number = 0_usize;
+        for slot in &filtered {
+            match slot {
+                Some(frame) => {
+                    if hidden_run > 0 {
+                        self.write_hidden_notice(f, hidden_run)?;
+                        hidden_run = 0;
+                    }
+                    number += 1;
+                    self.write_backtrace_frame(f, number, frame, cwd.as_deref())?;
+                }
+                None => hidden_run += 1,
+            }
         }
-
-        if bottom_hidden > 0 {
-            writeln!(
-                f,
-                "{}",
-                format_args!("   ... {bottom_hidden} frames hidden ...")
-                    .style(self.theme.frames_hidden)
-            )?;
+        if hidden_run > 0 {
+            self.write_hidden_notice(f, hidden_run)?;
         }
 
         Ok(())
+    }
+
+    fn write_hidden_notice(&self, f: &mut fmt::Formatter<'_>, count: usize) -> fmt::Result {
+        writeln!(
+            f,
+            "{}",
+            format_args!("   ... {count} frames hidden ...").style(self.theme.frames_hidden)
+        )
     }
 
     /// Render a single backtrace frame.
@@ -758,24 +752,26 @@ impl<T: ?Sized> Deref for BoxOrBorrow<'_, T> {
 }
 
 /// A frame filter that keeps every frame.
-const fn noop_frame_filter(_frames: &mut Vec<&BacktraceFrame>) {}
+const fn noop_frame_filter(_frames: &mut [Option<&BacktraceFrame>]) {}
 
 /// Frame filter dropping the trailing `cut` rendered frames — the tail
 /// [`Backtrace::marker_hidden_frames`] attributes to the marker. Never
 /// empties the list.
 ///
 /// [`Backtrace::marker_hidden_frames`]: oopsie_core::Backtrace::marker_hidden_frames
-pub fn marker_strip_filter(cut: usize) -> impl Fn(&mut Vec<&BacktraceFrame>) {
-    move |frames: &mut Vec<&BacktraceFrame>| {
+pub fn marker_strip_filter(cut: usize) -> impl Fn(&mut [Option<&BacktraceFrame>]) {
+    move |frames: &mut [Option<&BacktraceFrame>]| {
         let keep = frames.len().saturating_sub(cut);
         if keep > 0 {
-            frames.truncate(keep);
+            for slot in &mut frames[keep..] {
+                *slot = None;
+            }
         }
     }
 }
 
 fn overlay_frame_filters(under: FrameFilterBox, above: FrameFilterBox) -> FrameFilterBox {
-    BoxOrBorrow::Box(Box::new(move |frames: &mut Vec<&BacktraceFrame>| {
+    BoxOrBorrow::Box(Box::new(move |frames: &mut [Option<&BacktraceFrame>]| {
         under.as_ref()(frames);
         above.as_ref()(frames);
     }))
@@ -788,6 +784,14 @@ fn overlay_frame_filters(under: FrameFilterBox, above: FrameFilterBox) -> FrameF
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn kept_names<'a>(frames: &[Option<&'a BacktraceFrame>]) -> Vec<&'a str> {
+        frames
+            .iter()
+            .flatten()
+            .map(|frame| frame.name.as_deref().unwrap_or("<unknown>"))
+            .collect()
+    }
 
     fn make_frame(name: Option<impl Into<String>>, lineno: Option<u32>) -> BacktraceFrame {
         BacktraceFrame {
@@ -806,12 +810,13 @@ mod tests {
         let app2 = make_frame(Some("my_crate::function_b"), None);
         let runtime = make_frame(Some("std::rt::lang_start_internal::invoke"), None);
 
-        let mut frames: Vec<&BacktraceFrame> = vec![&capture, &app1, &app2, &runtime];
+        let mut frames: Vec<Option<&BacktraceFrame>> =
+            vec![Some(&capture), Some(&app1), Some(&app2), Some(&runtime)];
         error_backtrace_frame_filter(&mut frames);
 
-        assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
-        assert_eq!(frames[1].name.as_deref(), Some("my_crate::function_b"));
+        assert_eq!(kept_names(&frames).len(), 2);
+        assert_eq!(kept_names(&frames)[0], "my_crate::function_a");
+        assert_eq!(kept_names(&frames)[1], "my_crate::function_b");
     }
 
     #[test]
@@ -819,12 +824,12 @@ mod tests {
         let app1 = make_frame(Some("my_crate::function_a"), None);
         let app2 = make_frame(Some("my_crate::function_b"), None);
 
-        let mut frames: Vec<&BacktraceFrame> = vec![&app1, &app2];
+        let mut frames: Vec<Option<&BacktraceFrame>> = vec![Some(&app1), Some(&app2)];
         error_backtrace_frame_filter(&mut frames);
 
-        assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
-        assert_eq!(frames[1].name.as_deref(), Some("my_crate::function_b"));
+        assert_eq!(kept_names(&frames).len(), 2);
+        assert_eq!(kept_names(&frames)[0], "my_crate::function_a");
+        assert_eq!(kept_names(&frames)[1], "my_crate::function_b");
     }
 
     #[test]
@@ -833,11 +838,12 @@ mod tests {
         let capture2 = make_frame(Some("std::backtrace_rs::backtrace::libunwind::trace"), None);
         let app = make_frame(Some("my_crate::function_a"), None);
 
-        let mut frames: Vec<&BacktraceFrame> = vec![&capture1, &capture2, &app];
+        let mut frames: Vec<Option<&BacktraceFrame>> =
+            vec![Some(&capture1), Some(&capture2), Some(&app)];
         error_backtrace_frame_filter(&mut frames);
 
-        assert_eq!(frames.len(), 1);
-        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
+        assert_eq!(kept_names(&frames).len(), 1);
+        assert_eq!(kept_names(&frames)[0], "my_crate::function_a");
     }
 
     #[test]
@@ -857,19 +863,19 @@ mod tests {
         let user_site = make_frame(Some("my_crate::do_work"), None);
         let user_main = make_frame(Some("my_crate::main"), None);
 
-        let mut frames: Vec<&BacktraceFrame> = vec![
-            &hook,
-            &rust_panic,
-            &begin,
-            &panic_fmt,
-            &user_site,
-            &user_main,
+        let mut frames: Vec<Option<&BacktraceFrame>> = vec![
+            Some(&hook),
+            Some(&rust_panic),
+            Some(&begin),
+            Some(&panic_fmt),
+            Some(&user_site),
+            Some(&user_main),
         ];
         post_panic_frame_filter(&mut frames);
 
-        assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].name.as_deref(), Some("my_crate::do_work"));
-        assert_eq!(frames[1].name.as_deref(), Some("my_crate::main"));
+        assert_eq!(kept_names(&frames).len(), 2);
+        assert_eq!(kept_names(&frames)[0], "my_crate::do_work");
+        assert_eq!(kept_names(&frames)[1], "my_crate::main");
     }
 
     #[test]
@@ -878,11 +884,11 @@ mod tests {
         let app1 = make_frame(Some("my_crate::function_a"), None);
         let app2 = make_frame(Some("my_crate::function_b"), None);
 
-        let mut frames: Vec<&BacktraceFrame> = vec![&app1, &app2];
+        let mut frames: Vec<Option<&BacktraceFrame>> = vec![Some(&app1), Some(&app2)];
         post_panic_frame_filter(&mut frames);
 
-        assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
+        assert_eq!(kept_names(&frames).len(), 2);
+        assert_eq!(kept_names(&frames)[0], "my_crate::function_a");
     }
 
     #[test]
@@ -902,14 +908,21 @@ mod tests {
         );
         let main_c = make_frame(Some("_main"), None);
 
-        let mut frames: Vec<&BacktraceFrame> = vec![
-            &capture, &unwind, &panic_fmt, &user_site, &user_main, &begin, &catch, &main_c,
+        let mut frames: Vec<Option<&BacktraceFrame>> = vec![
+            Some(&capture),
+            Some(&unwind),
+            Some(&panic_fmt),
+            Some(&user_site),
+            Some(&user_main),
+            Some(&begin),
+            Some(&catch),
+            Some(&main_c),
         ];
         panic_frame_filter(&mut frames);
 
-        assert_eq!(frames.len(), 2);
-        assert_eq!(frames[0].name.as_deref(), Some("my_crate::parse_header"));
-        assert_eq!(frames[1].name.as_deref(), Some("my_crate::main"));
+        assert_eq!(kept_names(&frames).len(), 2);
+        assert_eq!(kept_names(&frames)[0], "my_crate::parse_header");
+        assert_eq!(kept_names(&frames)[1], "my_crate::main");
     }
 
     #[test]
@@ -935,15 +948,17 @@ mod tests {
         let supervisor = make_frame(Some("my_crate::supervisor"), None);
         let runtime = make_frame(Some("std::rt::lang_start_internal"), None);
 
-        let mut frames: Vec<&BacktraceFrame> = vec![&app_top, &catch, &supervisor, &runtime];
+        let mut frames: Vec<Option<&BacktraceFrame>> = vec![
+            Some(&app_top),
+            Some(&catch),
+            Some(&supervisor),
+            Some(&runtime),
+        ];
         error_backtrace_frame_filter(&mut frames);
 
         // The contiguous peel stops at `supervisor`; only the true tail goes.
         assert_eq!(
-            frames
-                .iter()
-                .map(|f| f.name.as_deref().unwrap())
-                .collect::<Vec<_>>(),
+            kept_names(&frames),
             [
                 "my_crate::inner_work",
                 "std::panic::catch_unwind::do_call",
@@ -958,11 +973,12 @@ mod tests {
         let runtime = make_frame(Some("std::rt::lang_start"), None);
         let nameless = make_frame(None::<String>, None);
 
-        let mut frames: Vec<&BacktraceFrame> = vec![&app, &runtime, &nameless];
+        let mut frames: Vec<Option<&BacktraceFrame>> =
+            vec![Some(&app), Some(&runtime), Some(&nameless)];
         error_backtrace_frame_filter(&mut frames);
 
-        assert_eq!(frames.len(), 1);
-        assert_eq!(frames[0].name.as_deref(), Some("my_crate::function_a"));
+        assert_eq!(kept_names(&frames).len(), 1);
+        assert_eq!(kept_names(&frames)[0], "my_crate::function_a");
     }
 
     #[test]
@@ -970,11 +986,11 @@ mod tests {
         let a = make_frame(None::<String>, None);
         let b = make_frame(None::<String>, None);
 
-        let mut frames: Vec<&BacktraceFrame> = vec![&a, &b];
+        let mut frames: Vec<Option<&BacktraceFrame>> = vec![Some(&a), Some(&b)];
         error_backtrace_frame_filter(&mut frames);
 
         // A fully symbol-stripped trace must not be trimmed to nothing.
-        assert_eq!(frames.len(), 2);
+        assert_eq!(kept_names(&frames).len(), 2);
     }
 
     #[test]
@@ -1008,11 +1024,12 @@ mod tests {
         let tail2 = make_frame_at(8, "std::rt::deeper");
 
         let filter = marker_strip_filter(2);
-        let mut frames: Vec<&BacktraceFrame> = vec![&a, &b, &c, &tail1, &tail2];
+        let mut frames: Vec<Option<&BacktraceFrame>> =
+            vec![Some(&a), Some(&b), Some(&c), Some(&tail1), Some(&tail2)];
         filter(&mut frames);
 
         assert_eq!(
-            frames.iter().map(|f| f.ip).collect::<Vec<_>>(),
+            frames.iter().flatten().map(|f| f.ip).collect::<Vec<_>>(),
             [1, 7, 2],
             "the cut is positional; frames above it survive regardless of ip"
         );
@@ -1075,9 +1092,9 @@ mod tests {
         // A cut at or beyond the rendered length must leave the list intact.
         for cut in [1, 2, usize::MAX] {
             let filter = marker_strip_filter(cut);
-            let mut frames: Vec<&BacktraceFrame> = vec![&only];
+            let mut frames: Vec<Option<&BacktraceFrame>> = vec![Some(&only)];
             filter(&mut frames);
-            assert_eq!(frames.len(), 1);
+            assert_eq!(kept_names(&frames).len(), 1);
         }
     }
 
