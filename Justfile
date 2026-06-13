@@ -1,64 +1,63 @@
-# Run cargo check for both stable and nightly toolchains.
-# `+stable` overrides the rust-toolchain.toml pin so the no-feature build
-# matches what CI's `Test (stable)` job runs; the feature build needs
-# nightly so it uses the pinned channel.
-check:
-    cargo +stable check --workspace --no-default-features
-    cargo +stable check --workspace --no-default-features --features serde
-    cargo +stable check --workspace --no-default-features --features tracing
-    cargo +stable check --workspace --no-default-features --features serde,tracing
-    cargo +stable check --workspace --no-default-features --features chrono
-    cargo +stable check --workspace --no-default-features --features fancy,tracing
-    cargo +stable check --workspace --no-default-features --features fancy,serde,tracing,chrono
-    cargo check --workspace --features unstable,fancy,serde,tracing,chrono
-    cargo +stable check -p oopsie --no-default-features --lib
-    cargo +stable check -p oopsie-core --no-default-features --lib
+# Powerset sweeps for the *-full recipes. Stable excludes every nightly-only
+# feature (can't compile them) plus the empty `default`; nightly instead pins
+# `unstable` on for all combos, dropping the sub-features it already implies.
+stable_powerset := "--feature-powerset --exclude-features default,unstable,unstable-error-generic-member-access,unstable-try-trait-v2"
+nightly_powerset := "--feature-powerset --exclude-features default,unstable-error-generic-member-access,unstable-try-trait-v2 -F unstable"
 
-# Run clippy across the same feature combos as CI's Lints job: deny every
-# warning across the whole workspace and all targets. Uses the pinned toolchain.
-clippy:
-    cargo +stable clippy --workspace --all-targets --no-default-features -- -D warnings
-    cargo +stable clippy --workspace --all-targets --no-default-features --features serde -- -D warnings
-    cargo +stable clippy --workspace --all-targets --no-default-features --features tracing -- -D warnings
-    cargo +stable clippy --workspace --all-targets --no-default-features --features serde,tracing -- -D warnings
-    cargo +stable clippy --workspace --all-targets --no-default-features --features chrono -- -D warnings
-    cargo +stable clippy --workspace --all-targets --no-default-features --features fancy,tracing -- -D warnings
-    cargo +stable clippy --workspace --all-targets --no-default-features --features fancy,serde,tracing,chrono -- -D warnings
-    cargo clippy --workspace --all-targets --features unstable,fancy,serde,tracing,chrono -- -D warnings
+# Run `cargo <cmd>` on both stable and nightly. First arg "1" sweeps the feature
+# powerset of every workspace package; "0" runs default features only.
+[positional-arguments]
+_cargo full *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shift
+    if [ "{{ full }}" = "1" ]; then
+        cargo +stable hack {{ stable_powerset }} "$@"
+        cargo hack {{ nightly_powerset }} "$@"
+    else
+        cargo +stable "$@"
+        cargo "$@"
+    fi
 
-# Run doctests for all workspace crates across the same feature combos used by
-# the other recipes.
-doctest:
-    cargo +stable test --doc --workspace --no-default-features
-    cargo +stable test --doc --workspace --no-default-features --features serde
-    cargo +stable test --doc --workspace --no-default-features --features tracing
-    cargo +stable test --doc --workspace --no-default-features --features serde,tracing
-    cargo +stable test --doc --workspace --no-default-features --features chrono
-    cargo +stable test --doc --workspace --no-default-features --features fancy,serde,tracing,chrono
-    cargo test --doc --workspace --features unstable,fancy,serde,tracing,chrono
+# Type-check the whole feature powerset on stable + nightly.
+check-full: (_cargo "1" "check" "--workspace")
+# Type-check default features on stable + nightly.
+check: (_cargo "0" "check" "--workspace")
 
-# Run tests for both stable and nightly toolchains.
-nextest *ARGS:
-    cargo +stable nextest run --workspace --no-default-features {{ ARGS }}
-    cargo +stable nextest run --workspace --no-default-features --features serde {{ ARGS }}
-    cargo +stable nextest run --workspace --no-default-features --features tracing {{ ARGS }}
-    cargo +stable nextest run --workspace --no-default-features --features serde,tracing {{ ARGS }}
-    cargo +stable nextest run --workspace --no-default-features --features chrono {{ ARGS }}
-    cargo +stable nextest run --workspace --no-default-features --features fancy,tracing {{ ARGS }}
+# Lint the whole feature powerset on stable + nightly, denying warnings.
+clippy-full: (_cargo "1" "clippy" "--workspace" "--all-targets" "--" "-D" "warnings")
+# Lint default features on stable + nightly, denying warnings.
+clippy: (_cargo "0" "clippy" "--workspace" "--all-targets" "--" "-D" "warnings")
+
+# Run doctests across the whole feature powerset on stable + nightly.
+doctest-full: (_cargo "1" "test" "--doc" "--workspace")
+# Run doctests for default features on stable + nightly.
+doctest: (_cargo "0" "test" "--doc" "--workspace")
+
+# The two snapshot-bearing combos: stable + nightly, full feature set, with the
+# env-gated backtrace snapshot tests switched on. Every other combo leaves them
+# skipped, so these are the only place snapshots actually run.
+_nextest-snapshots *ARGS:
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo nextest run --workspace --features unstable,fancy,serde,tracing,chrono {{ ARGS }}
-    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run -p oopsie -F chrono {{ ARGS }}
 
+# Run the snapshot-bearing combos — the meaningful everyday test.
+nextest *ARGS: (_nextest-snapshots ARGS)
+
+# Run the feature powerset (snapshots skip), then the snapshot-bearing combos.
+nextest-full *ARGS: (_nextest-snapshots ARGS)
+    cargo +stable hack {{ stable_powerset }} nextest run --workspace {{ ARGS }}
+    cargo hack {{ nightly_powerset }} nextest run --workspace {{ ARGS }}
+
+# Run the snapshot-bearing test combos plus doctests.
 test *ARGS: (nextest ARGS) doctest
 
-# Re-run the full test suite, overwriting trybuild stderr (stable-only,
-# since nightly diagnostics use wider span underlines that don't match
-# stable's renderer) and insta snapshots.
+# Run the whole feature powerset, then doctests for every combo.
+test-full *ARGS: (nextest-full ARGS) doctest-full
+
+# Trybuild stderr is overwritten on stable only — nightly's wider diagnostic
+# span underlines don't match the stored stable form.
+# Re-bless insta snapshots + trybuild stderr for the two blessed combos.
 test-bless *ARGS:
-    cargo +stable nextest run --workspace --no-default-features --no-fail-fast {{ ARGS }} || true
-    cargo +stable nextest run --workspace --no-default-features --features serde --no-fail-fast {{ ARGS }} || true
-    cargo +stable nextest run --workspace --no-default-features --features tracing --no-fail-fast {{ ARGS }} || true
-    cargo +stable nextest run --workspace --no-default-features --features serde,tracing --no-fail-fast {{ ARGS }} || true
-    cargo +stable nextest run --workspace --no-default-features --features chrono --no-fail-fast {{ ARGS }} || true
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 INSTA_UPDATE=always TRYBUILD=overwrite cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 INSTA_UPDATE=always cargo nextest run --workspace --features unstable,fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true

@@ -54,9 +54,10 @@ MSRV: 1.89. Development uses the nightly pinned in `rust-toolchain.toml`.
 ## Development
 
 ```sh
-just test        # full matrix: stable/default + nightly/--features unstable, then doctests
+just test        # fast loop: the two snapshot-bearing combos (stable + nightly) + doctests
+just test-full   # whole feature powerset, then doctests for every combo
 just test-bless  # re-bless insta snapshots and trybuild stderr
-just clippy      # lints exactly as CI runs them (-D warnings)
+just clippy      # lint default features (-D warnings); clippy-full sweeps the powerset
 ```
 
 Snapshot tests are only valid for the two blessed combos — **stable + default
