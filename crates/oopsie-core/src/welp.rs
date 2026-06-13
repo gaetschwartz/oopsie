@@ -471,6 +471,7 @@ where
     }
 
     #[inline]
+    #[track_caller]
     fn with_welp_context<S, F>(self, f: F) -> Result<T, Welp>
     where
         S: Into<String>,
@@ -520,6 +521,7 @@ pub trait WelpOptionExt<T>: Sized {
 
 impl<T> WelpOptionExt<T> for Option<T> {
     #[inline]
+    #[track_caller]
     fn welp_context(self, message: impl Into<String>) -> Result<T, Welp> {
         // Build directly (no `ok_or_else` closure) so `Welp::new`'s
         // `#[track_caller]` reports the `.welp_context` call site.
@@ -530,6 +532,7 @@ impl<T> WelpOptionExt<T> for Option<T> {
     }
 
     #[inline]
+    #[track_caller]
     fn with_welp_context<S, F>(self, f: F) -> Result<T, Welp>
     where
         S: Into<String>,
@@ -997,11 +1000,11 @@ mod tests {
 
     #[test]
     fn welp_size_is_pinned() {
-        // `Sourced` dominates: boxed message + boxed source + boxed traces + the
-        // inline `&'static Location`, four pointers with no spare niche for the
-        // discriminant. The message-free form reuses `Sourced` with a `None`
-        // message — the `Box<str>` null niche absorbs the `Option` tag — so it
-        // adds no width.
+        // `Sourced` dominates: fat `Box<str>` message + fat `Box<dyn Error>`
+        // source + thin boxed traces + the inline `&'static Location` — six
+        // words, with no spare niche for the discriminant. The message-free form
+        // reuses `Sourced` with a `None` message — the `Box<str>` null niche
+        // absorbs the `Option` tag — so it adds no width.
         assert_eq!(std::mem::size_of::<Welp>(), 48);
     }
 }

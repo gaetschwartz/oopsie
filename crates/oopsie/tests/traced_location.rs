@@ -40,6 +40,14 @@ pub struct NoLocationError {
     what: String,
 }
 
+#[oopsie(traced)]
+pub enum AppError {
+    #[oopsie("leaf variant: {what}")]
+    Leaf { what: String },
+    #[oopsie("wrap variant")]
+    Wrap { source: std::io::Error },
+}
+
 #[test]
 fn location_captured_at_build_call_site() {
     let line = line!() + 1;
@@ -202,6 +210,102 @@ fn welp_captures_location_at_call_site() {
     let loc = oopsie::Diagnostic::oopsie_location(&err).expect("welp location");
     assert!(loc.file().ends_with("traced_location.rs"));
     assert_eq!(loc.line(), line);
+}
+
+#[test]
+fn welp_result_with_context_captures_call_site() {
+    use oopsie::WelpResultExt as _;
+
+    let result: Result<(), std::io::Error> = Err(std::io::Error::other("io"));
+    let f = |e: &std::io::Error| format!("ctx: {e}");
+    let line = line!() + 1;
+    let err = result.with_welp_context(f).unwrap_err();
+    let loc = oopsie::Diagnostic::oopsie_location(&err).expect("welp location");
+    assert!(loc.file().ends_with("traced_location.rs"));
+    assert_eq!(loc.line(), line);
+}
+
+#[test]
+fn welp_option_context_captures_call_site() {
+    use oopsie::WelpOptionExt as _;
+
+    let opt: Option<()> = None;
+    let line = line!() + 1;
+    let err = opt.welp_context("missing").unwrap_err();
+    let loc = oopsie::Diagnostic::oopsie_location(&err).expect("welp location");
+    assert!(loc.file().ends_with("traced_location.rs"));
+    assert_eq!(loc.line(), line);
+}
+
+#[test]
+fn welp_option_with_context_captures_call_site() {
+    use oopsie::WelpOptionExt as _;
+
+    let opt: Option<()> = None;
+    let line = line!() + 1;
+    let err = opt.with_welp_context(|| "missing".to_owned()).unwrap_err();
+    let loc = oopsie::Diagnostic::oopsie_location(&err).expect("welp location");
+    assert!(loc.file().ends_with("traced_location.rs"));
+    assert_eq!(loc.line(), line);
+}
+
+// ─── enum-variant selectors ───
+
+#[test]
+fn enum_leaf_selector_captures_build_call_site() {
+    let line = line!() + 1;
+    let err = app_oopsies::Leaf { what: "x" }.build();
+    let loc = err.oopsie_location().expect("location captured");
+    assert!(loc.file().ends_with("traced_location.rs"));
+    assert_eq!(loc.line(), line, "line should be the .build() call site");
+}
+
+#[test]
+fn enum_sourced_selector_captures_context_call_site() {
+    let result: Result<(), std::io::Error> = Err(std::io::Error::other("io"));
+    let line = line!() + 1;
+    let err = result.context(app_oopsies::Wrap).unwrap_err();
+    let loc = err.oopsie_location().expect("location captured");
+    assert_eq!(
+        loc.line(),
+        line,
+        "line should be the .context(...) call site"
+    );
+}
+
+// ─── remaining context ext methods ───
+
+#[test]
+fn result_with_context_captures_call_site() {
+    let result: Result<(), std::io::Error> = Err(std::io::Error::other("io"));
+    let mk = |_: &std::io::Error| io_wrap_oopsies::IoWrap;
+    let line = line!() + 1;
+    let err = result.with_context(mk).unwrap_err();
+    let loc = err.oopsie_location().expect("location captured");
+    assert_eq!(loc.line(), line, "line should be the .with_context site");
+}
+
+#[test]
+fn option_context_captures_call_site() {
+    use oopsie::OptionExt as _;
+
+    let opt: Option<()> = None;
+    let line = line!() + 1;
+    let err = opt.context(leaf_oopsies::Leaf { what: "x" }).unwrap_err();
+    let loc = err.oopsie_location().expect("location captured");
+    assert_eq!(loc.line(), line, "line should be the .context site");
+}
+
+#[test]
+fn option_with_context_captures_call_site() {
+    use oopsie::OptionExt as _;
+
+    let opt: Option<()> = None;
+    let mk = || leaf_oopsies::Leaf { what: "x" };
+    let line = line!() + 1;
+    let err = opt.with_context(mk).unwrap_err();
+    let loc = err.oopsie_location().expect("location captured");
+    assert_eq!(loc.line(), line, "line should be the .with_context site");
 }
 
 // ─── ErasedError round-trip ───
