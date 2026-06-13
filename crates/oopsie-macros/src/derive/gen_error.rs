@@ -464,8 +464,9 @@ pub fn gen_enum_error(
         quote! {}
     };
 
-    // Consumer-side cfg, not the tracing desync class: `Error::provide` is
-    // rustc's unstable API, gated by the consumer's own nightly feature.
+    // `Error::provide` only compiles when the consumer enables the
+    // `error_generic_member_access` language feature, so it can't be emitted
+    // unconditionally (no stub is possible for a language feature).
     let provide_method =
         if provide_arms.is_empty() || !cfg!(feature = "unstable-error-generic-member-access") {
             quote! {}
@@ -721,8 +722,9 @@ pub fn gen_struct_error(
         quote! { let Self { #(#provide_field_binds)* .. } = self; }
     };
 
-    // Consumer-side cfg, not the tracing desync class: `Error::provide` is
-    // rustc's unstable API, gated by the consumer's own nightly feature.
+    // `Error::provide` only compiles when the consumer enables the
+    // `error_generic_member_access` language feature, so it can't be emitted
+    // unconditionally (no stub is possible for a language feature).
     let provide_method =
         if provide_stmts.is_empty() || !cfg!(feature = "unstable-error-generic-member-access") {
             quote! {}

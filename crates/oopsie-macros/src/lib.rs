@@ -14,9 +14,9 @@ pub(crate) mod utils;
 ///
 /// This is the engine the [`#[oopsie]`](macro@oopsie) attribute drives, and the
 /// attribute is the canonical entry point. On top of this derive the attribute
-/// also derives `Debug` for you and, with `traced`, injects the backtrace and
-/// span-trace fields. Reach for the derive directly only when you want to supply
-/// those pieces yourself; otherwise prefer the attribute.
+/// also derives `Debug` for you and, with `traced`, injects the backtrace,
+/// span-trace, and caller-location fields. Reach for the derive directly only
+/// when you want to supply those pieces yourself; otherwise prefer the attribute.
 ///
 /// # What gets generated
 ///
@@ -120,7 +120,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | Option | Effect |
 /// |--------|--------|
 /// | `backtrace` | Enable/tune the captured backtrace (default on) |
-/// | `spantrace` | Enable/tune the captured span trace (default on; requires the `tracing` feature) |
+/// | `spantrace` | Enable/tune the captured span trace (default on; captures nothing without the `tracing` feature) |
 /// | `timestamp` | Inject an auto-captured timestamp field (default off) |
 /// | `packed` | Store both traces as one `(Backtrace, SpanTrace)` field |
 /// | `boxed` | Box the injected trace field(s) |
