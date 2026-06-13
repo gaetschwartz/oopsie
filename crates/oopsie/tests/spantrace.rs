@@ -101,7 +101,7 @@ fn captured_spantrace_status_is_captured_within_span() {
 // Extraction path vs fresh-capture path
 //
 // When the wrapped source implements `Diagnostic`, the generated capture code
-// routes through `CaptureExt::capture_or_extract` and REUSES the source's
+// routes through `Capturable::capture_or_extract` and REUSES the source's
 // backtrace (preserving the original call site). When the source does NOT
 // implement `Diagnostic` (e.g. `io::Error`), it falls back to a FRESH capture
 // at the wrap site. These two paths are observably different in the captured

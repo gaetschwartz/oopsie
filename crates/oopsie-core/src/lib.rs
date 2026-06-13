@@ -16,6 +16,8 @@ mod backtrace;
 mod diagnostic;
 #[cfg(feature = "serde")]
 pub mod erased;
+#[cfg(feature = "extras")]
+pub mod extras;
 mod marker;
 #[cfg(feature = "tracing")]
 mod spantrace;
@@ -32,7 +34,6 @@ pub use backtrace::{
     set_rust_backtrace_override, with_rust_backtrace_override,
 };
 pub use diagnostic::Diagnostic;
-
 /// Private helpers used by macro-generated code. Not part of the public API.
 #[doc(hidden)]
 pub mod __private {
@@ -47,13 +48,13 @@ pub mod __private {
 
     /// High-priority: source implements `Diagnostic` → try extraction.
     pub trait CaptureFromExt {
-        fn resolve<C: crate::CaptureExt>(&self) -> C;
+        fn resolve<C: crate::Capturable>(&self) -> C;
     }
 
     impl<T: crate::Diagnostic> CaptureFromExt for CaptureProbe<'_, T> {
         #[inline]
         #[track_caller]
-        fn resolve<C: crate::CaptureExt>(&self) -> C {
+        fn resolve<C: crate::Capturable>(&self) -> C {
             C::capture_or_extract(self.0)
         }
     }

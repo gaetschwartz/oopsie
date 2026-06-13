@@ -99,7 +99,7 @@ impl<'a> PanicReport<'a> {
     fn new(info: &'a PanicHookInfo<'a>) -> Self {
         let backtrace_setting = oopsie_core::rust_panic_backtrace();
         let backtrace =
-            oopsie_core::with_rust_backtrace_override(backtrace_setting, || Backtrace::capture());
+            oopsie_core::with_rust_backtrace_override(backtrace_setting, Backtrace::capture);
         #[cfg(feature = "tracing")]
         let span_trace = {
             let captured = SpanTrace::capture();

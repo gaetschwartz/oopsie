@@ -64,7 +64,7 @@ mod tests {
     #[cfg(feature = "tracing")]
     use super::*;
     #[cfg(feature = "tracing")]
-    use crate::traits::Capturable as _;
+    use crate::Capturable;
     #[cfg(feature = "tracing")]
     use std::fmt;
 
@@ -111,7 +111,7 @@ mod tests {
     #[cfg(feature = "tracing")]
     #[test]
     fn box_diagnostic_extraction_reuses_source_frames() {
-        use crate::{CaptureExt, RustBacktrace, with_rust_backtrace_override};
+        use crate::{RustBacktrace, with_rust_backtrace_override};
 
         with_rust_backtrace_override(RustBacktrace::Enabled, || {
             let src = Src {
@@ -124,7 +124,7 @@ mod tests {
                 "backtrace must be enabled for this test to be probative"
             );
             let boxed = Box::new(src);
-            let extracted = <(Backtrace, SpanTrace) as CaptureExt>::capture_or_extract(&boxed);
+            let extracted = <(Backtrace, SpanTrace) as Capturable>::capture_or_extract(&boxed);
             assert_eq!(extracted.0.frames().len(), expected_frames);
         });
     }

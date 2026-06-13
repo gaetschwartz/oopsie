@@ -10,7 +10,6 @@ pub struct SpanTrace {
 
 impl SpanTrace {
     #[must_use]
-    #[track_caller]
     #[inline]
     pub fn capture() -> Self {
         Self {
@@ -108,14 +107,11 @@ impl fmt::Display for SpanTrace {
 }
 
 impl crate::Capturable for SpanTrace {
-    #[track_caller]
     #[inline]
     fn capture() -> Self {
         Self::capture()
     }
-}
 
-impl crate::CaptureExt for SpanTrace {
     #[inline]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
         match source.oopsie_spantrace() {
@@ -191,7 +187,6 @@ impl fmt::Display for OptionalSpanTrace {
 }
 
 impl crate::Capturable for OptionalSpanTrace {
-    #[track_caller]
     #[inline]
     fn capture() -> Self {
         let trace = SpanTrace::capture();
@@ -200,9 +195,7 @@ impl crate::Capturable for OptionalSpanTrace {
             _ => Self(None),
         }
     }
-}
 
-impl crate::CaptureExt for OptionalSpanTrace {
     #[inline]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
         match source.oopsie_spantrace() {
@@ -450,10 +443,7 @@ mod tests {
 
     #[test]
     fn optional_span_trace_captures_from_diagnostic_source() {
-        // Regression: `OptionalSpanTrace` must implement `CaptureExt` so the
-        // macro's `resolve::<OptionalSpanTrace>()` path compiles for variants
-        // whose source implements `Diagnostic`.
-        let opt = <OptionalSpanTrace as crate::CaptureExt>::capture_or_extract(&DiagSource);
+        let opt = <OptionalSpanTrace as crate::Capturable>::capture_or_extract(&DiagSource);
         assert!(opt.is_none());
     }
 
@@ -479,7 +469,7 @@ mod tests {
         // Extracting it must not flip `is_some()` to true (the type invariant).
         let src = DiagSourceWithEmptyTrace(SpanTrace::capture());
         assert!(!src.0.is_captured(), "precondition: source trace is empty");
-        let opt = <OptionalSpanTrace as crate::CaptureExt>::capture_or_extract(&src);
+        let opt = <OptionalSpanTrace as crate::Capturable>::capture_or_extract(&src);
         assert!(opt.is_none());
     }
 
@@ -492,7 +482,7 @@ mod tests {
         // must win over the source's empty trace.
         let extracted = with_error_subscriber(|| {
             let _g = tracing::info_span!("wrap_site").entered();
-            <SpanTrace as crate::CaptureExt>::capture_or_extract(&src)
+            <SpanTrace as crate::Capturable>::capture_or_extract(&src)
         });
         assert!(extracted.is_captured());
     }
@@ -501,7 +491,7 @@ mod tests {
     fn span_trace_capture_or_extract_keeps_captured_source_trace() {
         let (src_trace, extracted) = with_error_subscriber(|| {
             let src = DiagSourceWithEmptyTrace(leaf());
-            let t = <SpanTrace as crate::CaptureExt>::capture_or_extract(&src);
+            let t = <SpanTrace as crate::Capturable>::capture_or_extract(&src);
             (src.0, t)
         });
         assert!(extracted.is_captured());

@@ -96,7 +96,7 @@ fn multiple_auto_fields() {
 // ---- Test 5: OptionalSpanTrace capture field with a Diagnostic source ----
 //
 // Regression: when the source implements `Diagnostic`, the generated capture
-// path resolves through `CaptureExt`, which `OptionalSpanTrace` must implement.
+// path resolves through `Capturable`, which `OptionalSpanTrace` must implement.
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]

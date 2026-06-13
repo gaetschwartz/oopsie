@@ -31,6 +31,8 @@ fancy = ["dep:owo-colors", "dep:linkme"]
 serde = ["oopsie-core/serde", "dep:serde_json"]
 tracing = ["oopsie-core/tracing", "oopsie-macros/tracing"]
 chrono = ["oopsie-core/chrono"]
+jiff = ["oopsie-core/jiff"]
+extras = ["oopsie-core/extras"]
 
 [dependencies]
 backtrace = "0.3.76"

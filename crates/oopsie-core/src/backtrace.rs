@@ -4,8 +4,6 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock};
 use std::{env, fmt};
 
-use crate::Capturable as _;
-
 /// Whether backtrace capture is enabled, and how verbosely it should render.
 ///
 /// Resolved once from the environment (see [`rust_backtrace`]) following the
@@ -195,9 +193,7 @@ impl crate::Capturable for Backtrace {
             }
         }
     }
-}
 
-impl crate::CaptureExt for Backtrace {
     #[inline]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
         match source.oopsie_backtrace() {
@@ -331,7 +327,7 @@ mod helper {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{CaptureExt, Diagnostic};
+    use crate::{Capturable, Diagnostic};
 
     #[derive(Debug)]
     struct ErrorWithBacktrace {
@@ -444,7 +440,7 @@ mod tests {
             "precondition: source bt empty"
         );
         let extracted = with_rust_backtrace_override(RustBacktrace::Enabled, || {
-            <Backtrace as CaptureExt>::capture_or_extract(&src)
+            <Backtrace as Capturable>::capture_or_extract(&src)
         });
         assert!(!extracted.frames().is_empty());
     }
@@ -504,12 +500,6 @@ mod tests {
         // Verify that Backtrace implements Capturable
         const fn is_capturable<T: crate::Capturable>() {}
         is_capturable::<Backtrace>();
-    };
-
-    const _: () = {
-        // Verify that Backtrace implements CaptureExt
-        const fn is_capture_ext<T: CaptureExt>() {}
-        is_capture_ext::<Backtrace>();
     };
 
     #[test]

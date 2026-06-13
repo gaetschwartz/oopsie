@@ -1,4 +1,5 @@
 use core::error;
+use std::{panic::Location, rc::Rc, sync::Arc};
 
 /// Builds a target error from a context selector and a source error of type `E`.
 ///
@@ -16,16 +17,37 @@ pub trait Contextual<E> {
     fn build_error(self, source: E) -> Self::Destination;
 }
 
-/// A type that can auto-capture diagnostic data at the point of error construction.
+/// A value that fills itself in when an error is constructed.
 ///
-/// Implemented by [`Backtrace`](crate::Backtrace) and `SpanTrace` (when the `tracing` feature
-/// is enabled) so they can be filled automatically. Mark a field with `#[oopsie(capture)]` to
-/// have it populated via this trait when the error is constructed — the field will not appear in
-/// the context selector and will not need to be supplied by the caller.
+/// A field marked `#[oopsie(capture)]` is populated by calling [`capture`](Self::capture) at
+/// construction time, so it is dropped from the context selector and never supplied by the
+/// caller. The library implements `Capturable` for backtraces, span-traces (with the `tracing`
+/// feature), timestamps, the caller [`Location`], and the environment
+/// snapshots in [`extras`](crate::extras). Implement it for your own type to capture anything
+/// else, such as a request or thread id.
+///
+/// It also covers `Box`, `Rc`, `Arc`, and tuples, so one field can wrap or combine several
+/// captured values.
 pub trait Capturable {
-    /// Capture diagnostic data at the current call site.
+    /// Capture a fresh value at the point the error is constructed.
     #[track_caller]
     fn capture() -> Self;
+
+    /// Capture for an error that wraps `source`, reusing equivalent data already on `source`
+    /// when that is more useful than a fresh capture.
+    ///
+    /// The default ignores `source` and calls [`capture`](Self::capture); trace types override
+    /// it so wrapping another diagnostic preserves the source's original call site instead of
+    /// recording the wrap site. Rarely called or overridden by hand.
+    #[track_caller]
+    #[inline]
+    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self
+    where
+        Self: Sized,
+    {
+        let _ = source;
+        Self::capture()
+    }
 }
 
 impl<T: Capturable> Capturable for Box<T> {
@@ -34,76 +56,113 @@ impl<T: Capturable> Capturable for Box<T> {
     fn capture() -> Self {
         Self::new(T::capture())
     }
-}
 
-impl<A: Capturable, B: Capturable> Capturable for (A, B) {
     #[track_caller]
     #[inline]
-    fn capture() -> Self {
-        (A::capture(), B::capture())
-    }
-}
-
-/// Extension of [`Capturable`] that tries to reuse traces from a source error.
-///
-/// When an error with a source implements [`Diagnostic`](crate::Diagnostic), this trait
-/// extracts the existing backtrace/spantrace rather than capturing a new one, which
-/// preserves the original call site. Falls back to [`Capturable::capture`] otherwise.
-#[doc(hidden)]
-pub trait CaptureExt: Capturable {
-    #[track_caller]
-    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self
-    where
-        Self: Sized;
-}
-
-impl<T: CaptureExt> CaptureExt for Box<T> {
-    #[track_caller]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
         Self::new(T::capture_or_extract(source))
     }
 }
 
-impl<A: CaptureExt, B: CaptureExt> CaptureExt for (A, B) {
+impl<T: Capturable> Capturable for Rc<T> {
     #[track_caller]
+    #[inline]
+    fn capture() -> Self {
+        Self::new(T::capture())
+    }
+
+    #[track_caller]
+    #[inline]
     fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
-        (A::capture_or_extract(source), B::capture_or_extract(source))
+        Self::new(T::capture_or_extract(source))
     }
 }
 
-impl Capturable for std::time::SystemTime {
+impl<T: Capturable> Capturable for Arc<T> {
     #[track_caller]
+    #[inline]
+    fn capture() -> Self {
+        Self::new(T::capture())
+    }
+
+    #[track_caller]
+    #[inline]
+    fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
+        Self::new(T::capture_or_extract(source))
+    }
+}
+
+macro_rules! impl_capturable_tuples {
+    // entry: kick off with an empty accumulator
+    ($($name:ident),* $(,)?) => {
+        impl_capturable_tuples!(@acc [] $($name,)*);
+    };
+    // move one ident into the accumulator, emit for the accumulator + it
+    (@acc [$($acc:ident,)*] $head:ident, $($rest:ident,)*) => {
+        impl_capturable_tuples!(@impl $($acc,)* $head,);
+        impl_capturable_tuples!(@acc [$($acc,)* $head,] $($rest,)*);
+    };
+    // remaining list empty: done
+    (@acc [$($acc:ident,)*]) => {};
+    (@impl $($name:ident,)+) => {
+        impl<$($name: Capturable),+> Capturable for ($($name,)+) {
+            #[track_caller]
+            #[inline]
+            fn capture() -> Self {
+                ($($name::capture(),)+)
+            }
+            #[track_caller]
+            #[inline]
+            fn capture_or_extract(source: &dyn crate::Diagnostic) -> Self {
+                ($($name::capture_or_extract(source),)+)
+            }
+        }
+    };
+}
+impl_capturable_tuples!(A, B, C, D, E, F, G, H, I);
+
+impl Capturable for std::time::SystemTime {
     #[inline]
     fn capture() -> Self {
         Self::now()
     }
 }
 
-impl CaptureExt for std::time::SystemTime {
-    // A timestamp records when *this* layer was built; never inherit the
-    // source's construction time.
-    #[track_caller]
+impl Capturable for std::time::Instant {
     #[inline]
-    fn capture_or_extract(_source: &dyn crate::Diagnostic) -> Self {
+    fn capture() -> Self {
         Self::now()
+    }
+}
+impl Capturable for &'static Location<'static> {
+    #[inline]
+    #[track_caller]
+    fn capture() -> Self {
+        Location::caller()
     }
 }
 
 #[cfg(feature = "chrono")]
 impl Capturable for chrono::DateTime<chrono::Local> {
-    #[track_caller]
     #[inline]
     fn capture() -> Self {
         chrono::Local::now()
     }
 }
 
-#[cfg(feature = "chrono")]
-impl CaptureExt for chrono::DateTime<chrono::Local> {
-    #[track_caller]
+#[cfg(feature = "jiff")]
+impl Capturable for jiff::Timestamp {
     #[inline]
-    fn capture_or_extract(_source: &dyn crate::Diagnostic) -> Self {
-        chrono::Local::now()
+    fn capture() -> Self {
+        Self::now()
+    }
+}
+
+#[cfg(feature = "jiff")]
+impl Capturable for jiff::Zoned {
+    #[inline]
+    fn capture() -> Self {
+        Self::now()
     }
 }
 
@@ -117,18 +176,6 @@ impl CaptureExt for chrono::DateTime<chrono::Local> {
 pub struct NoSource;
 
 /// Normalize any source-error value to a `&(dyn Error + 'static)`.
-///
-/// `#[derive(Oopsie)]` calls `source.as_error_source()` when emitting
-/// `Error::source` for a variant with a `source` field. Method resolution
-/// plus autoderef pick the right impl regardless of whether the field is
-/// `MyError`, `Box<MyError>`, or `Box<dyn Error + Send + Sync + 'static>`.
-///
-/// The explicit `dyn Error + …` impls exist because the blanket
-/// `impl<T: Error + 'static> AsErrorSource for T` can't reach the autoderef
-/// target of `Box<dyn Error + Send + Sync>` — that target is `?Sized` and the
-/// blanket implicitly requires `Sized`. Without those impls the boxed-dyn
-/// case fails to typecheck because stdlib's `impl<E: Error> Error for Box<E>`
-/// also requires `E: Sized`.
 pub trait AsErrorSource {
     /// Borrow this value as a `&(dyn Error + 'static)`.
     fn as_error_source(&self) -> &(dyn error::Error + 'static);
@@ -220,7 +267,13 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
     where
         C: Contextual<E>,
     {
-        self.map_err(|error| context.build_error(error))
+        // Call `build_error` directly (not inside a `map_err` closure) so
+        // `#[track_caller]` forwards the caller's `Location` through to any
+        // captured location field.
+        match self {
+            Ok(value) => Ok(value),
+            Err(error) => Err(context.build_error(error)),
+        }
     }
 
     #[inline]
@@ -230,7 +283,13 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
         F: FnOnce(&E) -> C,
         C: Contextual<E>,
     {
-        self.map_err(|error| context(&error).build_error(error))
+        match self {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                let selector = context(&error);
+                Err(selector.build_error(error))
+            }
+        }
     }
 
     #[inline]
@@ -292,7 +351,10 @@ impl<T> OptionExt<T> for Option<T> {
     where
         C: Contextual<NoSource>,
     {
-        self.ok_or_else(|| context.build_error(NoSource))
+        match self {
+            Some(value) => Ok(value),
+            None => Err(context.build_error(NoSource)),
+        }
     }
 
     #[inline]
@@ -302,7 +364,10 @@ impl<T> OptionExt<T> for Option<T> {
         F: FnOnce() -> C,
         C: Contextual<NoSource>,
     {
-        self.ok_or_else(|| context().build_error(NoSource))
+        match self {
+            Some(value) => Ok(value),
+            None => Err(context().build_error(NoSource)),
+        }
     }
 }
 
@@ -311,6 +376,7 @@ mod tests {
     use super::*;
     use std::error::Error as StdError;
     use std::fmt;
+    use std::time::SystemTime;
 
     #[derive(Debug)]
     struct DiagOnly;
@@ -502,7 +568,7 @@ mod tests {
     #[test]
     fn tuple_capture_ext_extracts_both_from_source() {
         use crate::{
-            Backtrace, CaptureExt, Diagnostic, RustBacktrace, SpanTrace,
+            Backtrace, Capturable, Diagnostic, RustBacktrace, SpanTrace,
             with_rust_backtrace_override,
         };
         use std::fmt;
@@ -537,7 +603,7 @@ mod tests {
                 source_frames > 0,
                 "backtrace must be enabled for this test to be probative"
             );
-            let extracted = <(Backtrace, SpanTrace) as CaptureExt>::capture_or_extract(&src);
+            let extracted = <(Backtrace, SpanTrace) as Capturable>::capture_or_extract(&src);
             // The extracted backtrace must reuse the source's frame count, proving
             // extraction (not a fresh capture).
             assert_eq!(extracted.0.frames().len(), source_frames);
@@ -546,9 +612,9 @@ mod tests {
 
     #[cfg(feature = "tracing")]
     const _: () = {
-        const fn is_capture_ext<T: CaptureExt>() {}
-        is_capture_ext::<Box<(crate::Backtrace, crate::SpanTrace)>>();
-        is_capture_ext::<(crate::Backtrace, crate::SpanTrace)>();
+        const fn is_capturable<T: Capturable>() {}
+        is_capturable::<Box<(crate::Backtrace, crate::SpanTrace)>>();
+        is_capturable::<(crate::Backtrace, crate::SpanTrace)>();
     };
 
     // Destination error whose source is a type-erased boxed error, exercising
@@ -726,10 +792,48 @@ mod tests {
 
     #[test]
     fn system_time_captures_now_and_never_extracts() {
-        let before = std::time::SystemTime::now();
-        let captured = <std::time::SystemTime as Capturable>::capture();
+        let before = SystemTime::now();
+        let captured = <SystemTime as Capturable>::capture();
         assert!(captured >= before);
-        let extracted = <std::time::SystemTime as CaptureExt>::capture_or_extract(&DiagOnly);
+        let extracted = <SystemTime as Capturable>::capture_or_extract(&DiagOnly);
         assert!(extracted >= before);
+    }
+
+    #[test]
+    fn location_captures() {
+        let location = <&'static Location<'static> as Capturable>::capture();
+        let expected_line = line!() - 1; // capture() is 1 line above
+        assert_eq!(location.line(), expected_line);
+        assert_eq!(location.file(), file!());
+    }
+
+    #[test]
+    fn location_captures_nested() {
+        #[track_caller]
+        fn capture_location() -> &'static Location<'static> {
+            <&'static Location<'static> as Capturable>::capture()
+        }
+        let location = capture_location();
+        let expected_line = line!() - 1; // capture() is 1 line above
+        assert_eq!(location.line(), expected_line);
+        assert_eq!(location.file(), file!());
+    }
+
+    #[test]
+    fn complex_location_captures() {
+        type Loc = &'static Location<'static>;
+        type LocTimeLoc = (Loc, SystemTime, Loc);
+        let location =
+            <(Box<LocTimeLoc>, Rc<LocTimeLoc>, Arc<LocTimeLoc>) as Capturable>::capture();
+        let expected_line = line!() - 1; // capture() is 1 line above
+        let expected_col = 3 * 4 + 1; // column of the first `location` in the tuple
+        let (box_loc, rc_loc, arc_loc) = location;
+        for (loc1, _, loc2) in [&*box_loc, &*rc_loc, &*arc_loc] {
+            for loc in [loc1, loc2] {
+                assert_eq!(loc.file(), file!());
+                assert_eq!(loc.line(), expected_line);
+                assert_eq!(loc.column(), expected_col);
+            }
+        }
     }
 }

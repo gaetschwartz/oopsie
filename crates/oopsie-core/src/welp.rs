@@ -87,7 +87,6 @@ impl Welp {
     /// let err = Welp::new(format!("port {} out of range", 70_000));
     /// assert_eq!(err.to_string(), "port 70000 out of range");
     /// ```
-    #[track_caller]
     pub fn new(message: impl Into<String>) -> Self {
         Self(WelpRepr::Traced {
             message: message.into().into_boxed_str(),
@@ -111,7 +110,6 @@ impl Welp {
     /// assert_eq!(err.to_string(), "could not write");
     /// assert!(std::error::Error::source(&err).is_some());
     /// ```
-    #[track_caller]
     pub fn wrap<E>(source: E, message: impl Into<String>) -> Self
     where
         E: StdError + Send + Sync + 'static,
@@ -144,7 +142,6 @@ impl Welp {
     /// assert_eq!(err.to_string(), "could not write");
     /// assert!(std::error::Error::source(&err).is_some());
     /// ```
-    #[track_caller]
     pub fn wrap_boxed(source: BoxError, message: impl Into<String>) -> Self {
         Self(WelpRepr::Sourced {
             message: message.into().into_boxed_str(),
@@ -275,13 +272,11 @@ where
     E: StdError + Send + Sync + 'static,
 {
     #[inline]
-    #[track_caller]
     fn welp_context(self, message: impl Into<String>) -> Result<T, Welp> {
         self.map_err(|e| Welp::wrap(e, message))
     }
 
     #[inline]
-    #[track_caller]
     fn with_welp_context<S, F>(self, f: F) -> Result<T, Welp>
     where
         S: Into<String>,
@@ -328,13 +323,11 @@ pub trait WelpOptionExt<T>: Sized {
 
 impl<T> WelpOptionExt<T> for Option<T> {
     #[inline]
-    #[track_caller]
     fn welp_context(self, message: impl Into<String>) -> Result<T, Welp> {
         self.ok_or_else(|| Welp::new(message))
     }
 
     #[inline]
-    #[track_caller]
     fn with_welp_context<S, F>(self, f: F) -> Result<T, Welp>
     where
         S: Into<String>,
