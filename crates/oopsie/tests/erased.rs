@@ -29,6 +29,13 @@ pub struct ErrorWithCodeOnly {
     message: String,
 }
 
+#[oopsie(traced)]
+#[oopsie("Exit-coded error: {message}")]
+#[oopsie(exit_code = 78)]
+pub struct ErrorWithExitCode {
+    message: String,
+}
+
 #[cfg(feature = "tracing")]
 #[test]
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
@@ -71,6 +78,23 @@ fn test_code_only_extraction() {
 
     assert!(erased.diagnostics().code().is_some());
     assert_eq!(erased.diagnostics().help(), None);
+}
+
+#[test]
+fn test_exit_code_survives_erasure_and_round_trip() {
+    use oopsie::Diagnostic as _;
+
+    let error = error_with_exit_code_oopsies::ErrorWithExitCode { message: "boom" }.build();
+    let erased = ErasedError::from_error(error);
+
+    let expected = std::num::NonZeroU8::new(78).unwrap();
+    assert_eq!(erased.diagnostics().exit_code(), Some(expected));
+    // Surfaced through the `Diagnostic` impl too, so a re-wrap/Report keeps it.
+    assert_eq!(erased.oopsie_exit_code(), Some(expected));
+
+    let json = serde_json::to_string(&erased).unwrap();
+    let restored: ErasedError = serde_json::from_str(&json).unwrap();
+    assert_eq!(restored.diagnostics().exit_code(), Some(expected));
 }
 
 #[test]

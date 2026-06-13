@@ -7,6 +7,7 @@ pub use spantrace::{ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel};
 
 use std::fmt;
 use std::io;
+use std::num::NonZeroU8;
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
@@ -30,8 +31,9 @@ const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 /// are *not* surfaced through the [`Diagnostic`] impl: those accessors return
 /// references to live [`Backtrace`]/[`SpanTrace`] values, which a transported
 /// snapshot cannot reconstruct. Re-erasing an `ErasedError` (via
-/// [`from_error_ref`]) preserves the message, source chain, code, and help, but
-/// the trace snapshots stay reachable only through this type's own accessors.
+/// [`from_error_ref`]) preserves the message, source chain, code, help, and exit
+/// code, but the trace snapshots stay reachable only through this type's own
+/// accessors.
 ///
 /// [`from_error`]: ErasedError::from_error
 /// [`from_error_ref`]: ErasedError::from_error_ref
@@ -107,7 +109,7 @@ impl std::error::Error for ChainNode {
     }
 }
 
-/// Transported diagnostic metadata (error code and help text).
+/// Transported diagnostic metadata (error code, help text, and exit code).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct Diagnostics {
@@ -115,6 +117,8 @@ pub struct Diagnostics {
     code: Option<ErrorCode>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     help: Option<HelpText>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    exit_code: Option<NonZeroU8>,
 }
 
 /// Transported caller-location snapshot: the `file:line:column` of the call
@@ -170,7 +174,7 @@ impl Diagnostics {
     #[must_use]
     #[inline]
     pub const fn is_none(&self) -> bool {
-        self.code.is_none() && self.help.is_none()
+        self.code.is_none() && self.help.is_none() && self.exit_code.is_none()
     }
     #[must_use]
     #[inline]
@@ -181,6 +185,11 @@ impl Diagnostics {
     #[inline]
     pub fn help(&self) -> Option<&str> {
         self.help.as_deref()
+    }
+    #[must_use]
+    #[inline]
+    pub const fn exit_code(&self) -> Option<NonZeroU8> {
+        self.exit_code
     }
 }
 
@@ -225,6 +234,7 @@ impl ErasedError {
         let diagnostics = Diagnostics {
             code: err.oopsie_error_code(),
             help: err.oopsie_help_text(),
+            exit_code: err.oopsie_exit_code(),
         };
         let location = err.oopsie_location().map(ErasedLocation::from);
         #[cfg(feature = "tracing")]
@@ -420,6 +430,10 @@ impl crate::Diagnostic for ErasedError {
     fn oopsie_help_text(&self) -> Option<HelpText> {
         self.diagnostics.help.clone()
     }
+
+    fn oopsie_exit_code(&self) -> Option<NonZeroU8> {
+        self.diagnostics.exit_code
+    }
 }
 
 #[cfg(test)]
@@ -436,6 +450,7 @@ mod tests {
         let with_both = Diagnostics {
             code: Some("test::code".into()),
             help: Some("try this".into()),
+            exit_code: None,
         };
         assert!(!with_both.is_none());
         assert_eq!(with_both.code(), Some("test::code"));
@@ -444,6 +459,7 @@ mod tests {
         let code_only = Diagnostics {
             code: Some("test::code".into()),
             help: None,
+            exit_code: None,
         };
         assert!(!code_only.is_none());
         assert_eq!(code_only.help(), None);
@@ -756,6 +772,7 @@ mod tests {
             diagnostics: Diagnostics {
                 code: Some("app::code".into()),
                 help: Some("try again".into()),
+                exit_code: None,
             },
             location: None,
             spantrace: None,
@@ -783,6 +800,7 @@ mod tests {
             diagnostics: Diagnostics {
                 code: Some("app::db::timeout".into()),
                 help: Some("retry later".into()),
+                exit_code: None,
             },
             location: None,
             spantrace: None,
@@ -814,6 +832,7 @@ mod tests {
             diagnostics: Diagnostics {
                 code: Some("app::db::timeout".into()),
                 help: None,
+                exit_code: None,
             },
             location: None,
             spantrace: None,
@@ -982,6 +1001,7 @@ mod tests {
             diagnostics: Diagnostics {
                 code: Some("app::clone".into()),
                 help: Some("check again".into()),
+                exit_code: None,
             },
             location: None,
             spantrace: None,
