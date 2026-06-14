@@ -105,19 +105,6 @@ pub struct TraceTheme {
 }
 
 impl TraceTheme {
-    /// The default color theme used for trace rendering.
-    pub const DEFAULT: Self = Self {
-        frame_number: Style::new().dimmed(),
-        function_name: Style::new().bright_red(),
-        function_hash: Style::new().bright_black(),
-        file_path: Style::new().purple(),
-        line_number: Style::new().purple(),
-        separator: Style::new().dimmed(),
-        fields: Style::new().bright_cyan(),
-        header: Style::new().red(),
-        frames_hidden: Style::new().cyan(),
-    };
-
     /// A theme that applies no styling — an empty `Style` emits no ANSI codes,
     /// so this renders identically to the colored path minus the colors.
     pub const PLAIN: Self = Self {
@@ -491,20 +478,24 @@ type FrameFilterBox = BoxOrBorrow<'static, dyn Fn(&mut [Option<&BacktraceFrame>]
 
 /// Renders backtraces and span traces with colors.
 pub struct TracePrinter {
-    theme: TraceTheme,
+    /// An explicit theme, or `None` to follow the current global theme
+    /// ([`get_theme`](crate::get_theme)) resolved at render time.
+    theme: Option<TraceTheme>,
     frame_filter: FrameFilterBox,
     strip_cwd: bool,
 }
 
 impl TracePrinter {
-    /// Default `TracePrinter` with the default theme and frame filter.
+    /// Default `TracePrinter` with the standard frame filter, following the
+    /// current global theme.
     #[must_use]
     #[inline]
     pub const fn new() -> Self {
         Self::with_const_filter(&error_backtrace_frame_filter)
     }
 
-    /// Create a new `TracePrinter` with the default theme and no frame filtering.
+    /// Create a new `TracePrinter` with no frame filtering, following the
+    /// current global theme.
     ///
     /// Every captured frame is rendered. Used to honor `RUST_BACKTRACE=full`.
     #[must_use]
@@ -513,13 +504,14 @@ impl TracePrinter {
         Self::with_const_filter(&noop_frame_filter).absolute_paths()
     }
 
-    /// Create a new `TracePrinter` with a custom frame filter and theme.
+    /// Create a new `TracePrinter` with a custom frame filter, following the
+    /// current global theme.
     #[must_use]
     #[inline]
     pub fn with_filter(filter: impl Fn(&mut [Option<&BacktraceFrame>]) + 'static) -> Self {
         Self {
             frame_filter: BoxOrBorrow::Box(Box::new(filter)),
-            theme: TraceTheme::DEFAULT,
+            theme: None,
             strip_cwd: true,
         }
     }
@@ -532,7 +524,7 @@ impl TracePrinter {
     ) -> Self {
         Self {
             frame_filter: BoxOrBorrow::Borrow(filter),
-            theme: TraceTheme::DEFAULT,
+            theme: None,
             strip_cwd: true,
         }
     }
@@ -558,11 +550,11 @@ impl TracePrinter {
         self
     }
 
-    /// Set a custom color theme for rendering.
+    /// Pin an explicit color theme, overriding the global default.
     #[must_use]
     #[inline]
     pub const fn with_theme(mut self, theme: TraceTheme) -> Self {
-        self.theme = theme;
+        self.theme = Some(theme);
         self
     }
 
@@ -570,8 +562,15 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn plain(mut self) -> Self {
-        self.theme = TraceTheme::PLAIN;
+        self.theme = Some(TraceTheme::PLAIN);
         self
+    }
+
+    /// The theme to render with: the pinned one, else the current global
+    /// theme's trace styles.
+    fn resolved_theme(&self) -> TraceTheme {
+        self.theme
+            .unwrap_or_else(|| crate::theme::get_theme().trace())
     }
 
     /// Render a colored backtrace.
@@ -581,6 +580,7 @@ impl TracePrinter {
         bt: &impl BacktraceProvider,
     ) -> fmt::Result {
         let all_frames = bt.frames();
+        let theme = self.resolved_theme();
 
         let mut filtered: Vec<_> = all_frames.iter().map(Some).collect();
         (self.frame_filter)(&mut filtered);
@@ -588,7 +588,7 @@ impl TracePrinter {
         writeln!(
             f,
             "{}",
-            format_args!("{:━^80}", " BACKTRACE ").style(self.theme.header)
+            format_args!("{:━^80}", " BACKTRACE ").style(theme.header)
         )?;
 
         // Read per render: the working directory is mutable process state,
@@ -607,55 +607,59 @@ impl TracePrinter {
             match slot {
                 Some(frame) => {
                     if hidden_run > 0 {
-                        self.write_hidden_notice(f, hidden_run)?;
+                        Self::write_hidden_notice(f, hidden_run, &theme)?;
                         hidden_run = 0;
                     }
                     number += 1;
-                    self.write_backtrace_frame(f, number, frame, cwd.as_deref())?;
+                    Self::write_backtrace_frame(f, number, frame, cwd.as_deref(), &theme)?;
                 }
                 None => hidden_run += 1,
             }
         }
         if hidden_run > 0 {
-            self.write_hidden_notice(f, hidden_run)?;
+            Self::write_hidden_notice(f, hidden_run, &theme)?;
         }
 
         Ok(())
     }
 
-    fn write_hidden_notice(&self, f: &mut fmt::Formatter<'_>, count: usize) -> fmt::Result {
+    fn write_hidden_notice(
+        f: &mut fmt::Formatter<'_>,
+        count: usize,
+        theme: &TraceTheme,
+    ) -> fmt::Result {
         writeln!(
             f,
             "{}",
-            format_args!("   ... {count} frames hidden ...").style(self.theme.frames_hidden)
+            format_args!("   ... {count} frames hidden ...").style(theme.frames_hidden)
         )
     }
 
     /// Render a single backtrace frame.
     fn write_backtrace_frame(
-        &self,
         f: &mut fmt::Formatter<'_>,
         number: usize,
         frame: &BacktraceFrame,
         cwd: Option<&path::Path>,
+        theme: &TraceTheme,
     ) -> fmt::Result {
         // Frame number: right-aligned in 3 chars
         write!(
             f,
             "{}{}",
-            format_args!("{number:>3}").style(self.theme.frame_number),
-            ": ".style(self.theme.separator)
+            format_args!("{number:>3}").style(theme.frame_number),
+            ": ".style(theme.separator)
         )?;
 
         // Function name
         if let Some(name) = &frame.name {
             let (base, hash) = split_function_hash(name);
-            write!(f, "{}", base.style(self.theme.function_name))?;
+            write!(f, "{}", base.style(theme.function_name))?;
             if let Some(h) = hash {
-                write!(f, "{}", h.style(self.theme.function_hash))?;
+                write!(f, "{}", h.style(theme.function_hash))?;
             }
         } else {
-            write!(f, "{}", "<unknown>".style(self.theme.function_name))?;
+            write!(f, "{}", "<unknown>".style(theme.function_name))?;
         }
         writeln!(f)?;
 
@@ -667,21 +671,13 @@ impl TracePrinter {
             write!(
                 f,
                 "           {}{}",
-                "at ".style(self.theme.separator),
-                display_path.display().style(self.theme.file_path)
+                "at ".style(theme.separator),
+                display_path.display().style(theme.file_path)
             )?;
             if let Some(lineno) = frame.lineno {
-                write!(
-                    f,
-                    "{}",
-                    format_args!(":{lineno}").style(self.theme.line_number)
-                )?;
+                write!(f, "{}", format_args!(":{lineno}").style(theme.line_number))?;
                 if let Some(colno) = frame.colno {
-                    write!(
-                        f,
-                        "{}",
-                        format_args!(":{colno}").style(self.theme.line_number)
-                    )?;
+                    write!(f, "{}", format_args!(":{colno}").style(theme.line_number))?;
                 }
             }
             writeln!(f)?;
@@ -696,18 +692,19 @@ impl TracePrinter {
         f: &mut fmt::Formatter<'_>,
         st: &impl SpanTraceProvider,
     ) -> fmt::Result {
+        let theme = self.resolved_theme();
         // Header
         writeln!(
             f,
             "{}",
-            format_args!("{:━^80}", " SPANTRACE ").style(self.theme.header)
+            format_args!("{:━^80}", " SPANTRACE ").style(theme.header)
         )?;
 
         let mut index = 1usize;
         let mut err = Ok(());
 
         st.with_spans(&mut |meta, fields| {
-            if let Err(e) = self.write_span_frame(f, index, meta, fields) {
+            if let Err(e) = Self::write_span_frame(f, index, meta, fields, &theme) {
                 err = Err(e);
                 return false;
             }
@@ -720,46 +717,42 @@ impl TracePrinter {
 
     /// Render a single span trace frame.
     fn write_span_frame(
-        &self,
         f: &mut fmt::Formatter<'_>,
         index: usize,
         meta: &SpanMetadata,
         fields: &str,
+        theme: &TraceTheme,
     ) -> fmt::Result {
         // Frame number
         write!(
             f,
             "{}",
-            format_args!("{index:>3}").style(self.theme.frame_number)
+            format_args!("{index:>3}").style(theme.frame_number)
         )?;
-        write!(f, "{}", ": ".style(self.theme.separator))?;
+        write!(f, "{}", ": ".style(theme.separator))?;
 
         // target::name
         write!(
             f,
             "{}",
-            format_args!("{}::{}", meta.target, meta.name).style(self.theme.function_name)
+            format_args!("{}::{}", meta.target, meta.name).style(theme.function_name)
         )?;
         writeln!(f)?;
 
         // Fields line (only if non-empty)
         if !fields.is_empty() {
             write!(f, "           ")?; // 11 spaces
-            write!(f, "{}", "with ".style(self.theme.separator))?;
-            writeln!(f, "{}", fields.style(self.theme.fields))?;
+            write!(f, "{}", "with ".style(theme.separator))?;
+            writeln!(f, "{}", fields.style(theme.fields))?;
         }
 
         // File location
         if let Some(file) = &meta.file {
             write!(f, "           ")?; // 11 spaces
-            write!(f, "{}", "at ".style(self.theme.separator))?;
-            write!(f, "{}", file.style(self.theme.file_path))?;
+            write!(f, "{}", "at ".style(theme.separator))?;
+            write!(f, "{}", file.style(theme.file_path))?;
             if let Some(line) = meta.line {
-                write!(
-                    f,
-                    "{}",
-                    format_args!(":{line}").style(self.theme.line_number)
-                )?;
+                write!(f, "{}", format_args!(":{line}").style(theme.line_number))?;
             }
             writeln!(f)?;
         }

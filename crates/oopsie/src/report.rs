@@ -11,6 +11,7 @@ use crate::ColorConfig;
 use crate::Diagnostic;
 
 use crate::color::style;
+use crate::theme::{Theme, get_theme};
 use crate::trace_printer::{TracePrinter, error_backtrace_frame_filter, marker_strip_filter};
 
 /// A wrapper around an error that provides rich, colorized output.
@@ -27,6 +28,9 @@ use crate::trace_printer::{TracePrinter, error_backtrace_frame_filter, marker_st
 pub struct Report<E> {
     res: Result<(), E>,
     color_config: ColorConfig,
+    /// Per-report theme; `None` falls back to the process-global [`get_theme`]
+    /// at render time.
+    theme_override: Option<Theme>,
     /// Resolved once at construction so repeated rendering never re-symbolicates.
     /// `None` when there is no error or the captured backtrace is empty.
     backtrace: Option<oopsie_core::Backtrace>,
@@ -54,6 +58,7 @@ impl<E: Diagnostic> Report<E> {
             backtrace: Self::resolve_backtrace(&res),
             res,
             color_config: ColorConfig::Auto,
+            theme_override: None,
         }
     }
 
@@ -64,6 +69,7 @@ impl<E: Diagnostic> Report<E> {
         Self {
             res: Ok(()),
             color_config: ColorConfig::Auto,
+            theme_override: None,
             backtrace: None,
         }
     }
@@ -110,6 +116,7 @@ impl<E: Diagnostic> Report<E> {
             backtrace: Self::resolve_backtrace(&result),
             res: result,
             color_config: ColorConfig::Auto,
+            theme_override: None,
         }
     }
 
@@ -122,6 +129,7 @@ impl<E: Diagnostic> Report<E> {
             backtrace: Self::resolve_backtrace(&res),
             res,
             color_config,
+            theme_override: None,
         }
     }
 
@@ -139,6 +147,21 @@ impl<E: Diagnostic> Report<E> {
     pub const fn force_colors(mut self) -> Self {
         self.color_config = ColorConfig::Always;
         self
+    }
+
+    /// Render this report with an explicit [`Theme`], overriding the
+    /// process-global default set by [`set_theme`](crate::set_theme).
+    #[must_use]
+    #[inline]
+    pub const fn with_theme(mut self, theme: Theme) -> Self {
+        self.theme_override = Some(theme);
+        self
+    }
+
+    /// The theme to render with: the per-report override, else the global.
+    #[inline]
+    fn resolved_theme(&self) -> Theme {
+        self.theme_override.unwrap_or_else(get_theme)
     }
 
     /// Get a reference to the wrapped error.
@@ -164,6 +187,7 @@ impl<E: Diagnostic> Report<E> {
         const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 
         let c = self.color_config.should_colorize();
+        let theme = self.resolved_theme();
 
         let Err(err) = &self.res else { return Ok(()) };
 
@@ -171,15 +195,15 @@ impl<E: Diagnostic> Report<E> {
         let help_text = err.oopsie_help_text();
 
         // Write main error
-        write!(f, "{}", style!("Error", S.red().bold(), c))?;
+        write!(f, "{}", style!("Error", theme.error_title(), c))?;
 
         if let Some(code) = error_code {
             write!(
                 f,
                 "{}{}{}",
-                style!("[", S.dimmed(), c),
-                style!(code, S.dimmed().blue(), c),
-                style!("]", S.dimmed(), c)
+                style!("[", theme.delimiter(), c),
+                style!(code, theme.error_code(), c),
+                style!("]", theme.delimiter(), c)
             )?;
         }
         writeln!(f, ": {err}")?;
@@ -192,7 +216,7 @@ impl<E: Diagnostic> Report<E> {
                 writeln!(
                     f,
                     "  {} (source chain truncated)",
-                    style!("╰─▶", S.yellow(), c)
+                    style!("╰─▶", theme.cause(), c)
                 )?;
 
                 break;
@@ -203,7 +227,7 @@ impl<E: Diagnostic> Report<E> {
             } else {
                 "╰─▶"
             };
-            writeln!(f, "  {} {err}", style!(arrow, S.yellow(), c))?;
+            writeln!(f, "  {} {err}", style!(arrow, theme.cause(), c))?;
 
             source = next_source;
             depth += 1;
@@ -211,7 +235,7 @@ impl<E: Diagnostic> Report<E> {
 
         // Write help text if present
         if let Some(help) = help_text {
-            writeln!(f, "\n  {}: {help}", style!("help", S.cyan(), c))?;
+            writeln!(f, "\n  {}: {help}", style!("help", theme.help(), c))?;
         }
 
         Ok(())
@@ -231,10 +255,12 @@ impl<E: Diagnostic> Report<E> {
         }
 
         writeln!(f)?;
-        let mut printer = TracePrinter::new();
-        if !self.color_config.should_colorize() {
-            printer = printer.plain();
-        }
+        let printer = TracePrinter::new();
+        let printer = if self.color_config.should_colorize() {
+            printer.with_theme(self.resolved_theme().trace())
+        } else {
+            printer.plain()
+        };
         printer.write_spantrace(f, span_trace)?;
 
         Ok(())
@@ -260,9 +286,11 @@ impl<E: Diagnostic> Report<E> {
         } else {
             TracePrinter::new()
         };
-        if !self.color_config.should_colorize() {
-            printer = printer.plain();
-        }
+        printer = if self.color_config.should_colorize() {
+            printer.with_theme(self.resolved_theme().trace())
+        } else {
+            printer.plain()
+        };
         printer.write_backtrace(f, backtrace)?;
         Ok(())
     }
@@ -306,6 +334,7 @@ impl<T, E: Diagnostic> core::ops::FromResidual<Result<T, E>> for Report<E> {
             backtrace: Self::resolve_backtrace(&res),
             res,
             color_config: ColorConfig::default(),
+            theme_override: None,
         }
     }
 }

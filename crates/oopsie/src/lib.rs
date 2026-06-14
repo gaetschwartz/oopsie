@@ -374,3 +374,8 @@ pub use panic_hook::install_panic_hook;
 
 #[cfg(feature = "fancy")]
 pub mod trace_printer;
+
+#[cfg(feature = "fancy")]
+mod theme;
+#[cfg(feature = "fancy")]
+pub use theme::{Theme, get_theme, set_theme};

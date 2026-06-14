@@ -8,8 +8,6 @@ use std::fmt;
 use std::panic::PanicHookInfo;
 use std::sync::{Mutex, PoisonError};
 
-use owo_colors::Style;
-
 use oopsie_core::Backtrace;
 use oopsie_core::Capturable as _;
 #[cfg(feature = "tracing")]
@@ -17,12 +15,8 @@ use oopsie_core::SpanTrace;
 
 use crate::ColorConfig;
 use crate::color::style;
+use crate::theme::get_theme;
 use crate::trace_printer::{TracePrinter, marker_strip_filter, panic_frame_filter};
-
-const HEADER_STYLE: Style = Style::new().red().bold();
-const MESSAGE_STYLE: Style = Style::new().bright_cyan();
-const LOCATION_STYLE: Style = Style::new().purple();
-const HINT_STYLE: Style = Style::new().dimmed();
 
 /// Install a process-global panic hook that renders panics with a colored
 /// message, span trace, and backtrace via [`TracePrinter`].
@@ -117,6 +111,7 @@ impl<'a> PanicReport<'a> {
 
     fn write_header(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let c = self.color_config.should_colorize();
+        let theme = get_theme();
         // `PanicHookInfo::payload_as_str` would be cleaner but postdates the
         // crate's MSRV; downcast manually instead.
         let payload = self.info.payload();
@@ -133,14 +128,18 @@ impl<'a> PanicReport<'a> {
             "{}\n\
             Message:  {}\n\
             Location: ",
-            style!("The application panicked (crashed).", HEADER_STYLE, c),
-            style!(message, MESSAGE_STYLE, c)
+            style!(
+                "The application panicked (crashed).",
+                theme.error_title(),
+                c
+            ),
+            style!(message, theme.panic_message(), c)
         )?;
 
         match self.info.location() {
             Some(loc) => {
                 let location = format_args!("{}:{}:{}", loc.file(), loc.line(), loc.column());
-                writeln!(f, "{}", style!(location, LOCATION_STYLE, c))?;
+                writeln!(f, "{}", style!(location, theme.panic_location(), c))?;
             }
             None => writeln!(f, "<unknown>")?,
         }
@@ -155,6 +154,8 @@ impl<'a> PanicReport<'a> {
         };
 
         writeln!(f)?;
+        // The default printer follows the global theme; only the uncolored
+        // case needs an explicit override.
         let mut printer = TracePrinter::new();
         if !self.color_config.should_colorize() {
             printer = printer.plain();
@@ -176,7 +177,7 @@ impl<'a> PanicReport<'a> {
                 "{}",
                 style!(
                     "note: run with `RUST_BACKTRACE=1` to display a backtrace",
-                    HINT_STYLE,
+                    get_theme().hint(),
                     c
                 )
             )?;
@@ -196,7 +197,9 @@ impl<'a> PanicReport<'a> {
         } else {
             TracePrinter::with_filter(panic_frame_filter)
         };
-        if !self.color_config.should_colorize() {
+        // The default printer follows the global theme; only the uncolored
+        // case needs an explicit override.
+        if !c {
             printer = printer.plain();
         }
         printer.write_backtrace(f, &self.backtrace)

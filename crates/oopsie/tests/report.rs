@@ -14,7 +14,9 @@ use std::fmt;
 use std::process::Termination as _;
 
 use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter};
-use oopsie::{Contextual as _, Report, RustBacktrace, oopsie, rust_backtrace};
+use oopsie::{
+    Contextual as _, Report, RustBacktrace, Theme, get_theme, oopsie, rust_backtrace, set_theme,
+};
 use oopsie_core::{redact, snap_name};
 
 #[oopsie(traced)]
@@ -105,12 +107,45 @@ fn test_report_colored_emits_ansi() {
         "force_colors() output should contain ANSI escapes, got: {output:?}"
     );
     assert!(
-        output.contains("\u{1b}[31m"),
-        "expected the red (SGR 31) `Error` header in colored output, got: {output:?}"
+        output.contains("\u{1b}[38;2;243;139;168;1m"),
+        "expected the bold Catppuccin-red `Error` header in colored output, got: {output:?}"
     );
     assert!(
         strip_ansi(&output).contains("Error[report::TestError]: Test error: colored test"),
         "stripping ANSI must leave the rendered text intact"
+    );
+}
+
+/// A per-report `with_theme` override must reach the rendered colors. Rendering
+/// one report (one backtrace) two ways isolates the theme as the only variable.
+#[test]
+fn report_theme_override_changes_output() {
+    let base = Report::from_std(TestOopsie { message: "themed" }.build()).force_colors();
+    let default_render = base.to_string();
+    let nord_render = base.with_theme(Theme::NORD).to_string();
+
+    assert_ne!(
+        default_render, nord_render,
+        "with_theme(NORD) must change the colored output vs the global default"
+    );
+}
+
+/// A report with no override must follow the process-global theme set by
+/// `set_theme`. Re-render the same report under two globals; only color differs.
+#[test]
+fn report_follows_global_theme() {
+    let report = Report::from_std(TestOopsie { message: "themed" }.build()).force_colors();
+
+    let original = get_theme();
+    set_theme(Theme::NORD);
+    let nord_render = report.to_string();
+    set_theme(Theme::CATPPUCCIN_MOCHA);
+    let mocha_render = report.to_string();
+    set_theme(original);
+
+    assert_ne!(
+        nord_render, mocha_render,
+        "set_theme must change a report that carries no per-report override"
     );
 }
 
@@ -198,8 +233,8 @@ fn test_report_colored_spantrace_renders_frames() {
     let after = &raw[span_start..];
     let span_section = after.find("BACKTRACE").map_or(after, |i| &after[..i]);
     assert!(
-        span_section.contains("\u{1b}[91m"),
-        "span frame names should be bright-red (SGR 91) styled"
+        span_section.contains("\u{1b}[38;2;243;139;168m"),
+        "span frame names should be styled with the function-name color"
     );
 }
 
