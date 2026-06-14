@@ -1,0 +1,5 @@
+error: a variant with a `source` field must reference every generic parameter of the error type in its source type or its other fields; parameter `K` is used only by other variants, which would leave this selector's `Contextual` impl unconstrained — split it into its own error type or add `K` to this variant
+  --> tests/compile-fail/sourced_variant_unconstrained_param.rs:12:17
+   |
+12 | enum StoreError<K: std::fmt::Debug, E: std::error::Error + 'static> {
+   |                 ^^^^^^^^^^^^^^^^^^

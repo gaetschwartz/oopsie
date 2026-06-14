@@ -3,7 +3,7 @@
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::ext::IdentExt as _;
-use syn::{GenericParam, Generics, Ident, Visibility};
+use syn::{GenericParam, Generics, Ident, Type, Visibility};
 
 use super::generics::{DeclaredParams, ReferencedParams};
 use super::model::{ResolvedEnum, ResolvedStruct};
@@ -146,9 +146,13 @@ impl SelectorShape<'_> {
 
     /// Impl generics and `where` clause for a sourced `Contextual<Source>` impl:
     /// every error parameter plus the `__T{i}` params, the full error `where`
-    /// clause, and the `Into` bounds. A parameter the source type or a field
-    /// carries is constrained; one carried by neither would be unconstrained,
-    /// which only happens for a parameter no variant field uses.
+    /// clause, and the `Into` bounds. A parameter is constrained only if it
+    /// appears in this impl's source type or in this selector's captured fields;
+    /// the destination is the trait's associated type, so naming a parameter
+    /// there does not constrain it. A parameter constrained by neither (e.g. one
+    /// used only by a sibling variant) leaves the impl ill-formed, so callers
+    /// reject that configuration via [`SelectorShape::unconstrained_error_param`]
+    /// before reaching here.
     fn sourced_impl(&self) -> (TokenStream2, TokenStream2) {
         let mut params: Vec<GenericParam> = self.generics.params.iter().cloned().collect();
         for param in &self.selector_params {
@@ -170,6 +174,28 @@ impl SelectorShape<'_> {
             .collect();
         predicates.extend(self.into_bounds.iter().cloned());
         (impl_generics, render_where(&predicates))
+    }
+
+    /// The first error parameter a sourced `Contextual<source_type>` impl would
+    /// leave unconstrained, if any. A parameter is constrained only when it
+    /// appears in `source_type` or in this selector's captured fields; naming it
+    /// solely in the impl's associated `Destination` (which every parameter does)
+    /// does not count, so rustc would reject the impl with E0207. The selector
+    /// cannot escape to a method generic the way the leaf path does, because
+    /// `build_error` returns the fixed associated `Destination` — so this whole
+    /// configuration is unexpressible and the caller turns it into a clear error.
+    /// Const params trigger the same rule; lifetimes are not handled here.
+    fn unconstrained_error_param(&self, source_type: &Type) -> Option<&GenericParam> {
+        let declared = DeclaredParams::from_generics(self.generics);
+        let mut from_source = ReferencedParams::default();
+        from_source.add_type(source_type, &declared);
+        let constrained = &self.referenced_names | &from_source.names();
+        self.generics.params.iter().find(|param| match param {
+            GenericParam::Type(_) | GenericParam::Const(_) => {
+                !constrained.contains(&super::generics::param_name(param))
+            }
+            GenericParam::Lifetime(_) => false,
+        })
     }
 
     /// The `where` predicates whose subject mentions one of `names`.
@@ -315,7 +341,10 @@ fn lift_into_child_module(vis: &Visibility) -> Visibility {
 }
 
 /// Generate context selectors for all variants of an enum.
-pub fn gen_enum_selectors(resolved: &ResolvedEnum, oopsie_path: &syn::Path) -> Vec<TokenStream2> {
+pub fn gen_enum_selectors(
+    resolved: &ResolvedEnum,
+    oopsie_path: &syn::Path,
+) -> syn::Result<Vec<TokenStream2>> {
     let input = resolved.input;
     let container = resolved.container;
     let enum_ident = &input.ident;
@@ -436,6 +465,7 @@ pub fn gen_enum_selectors(resolved: &ResolvedEnum, oopsie_path: &syn::Path) -> V
 
         // Generate Contextual or build/fail depending on whether there's a source
         let methods_inner = if has_source {
+            reject_unconstrained_sourced(categorized, &shape)?;
             gen_build_error(selector_ident, &dest, categorized, &shape, oopsie_path)
         } else {
             gen_build_fail(selector_ident, &dest, categorized, &shape, oopsie_path)
@@ -459,7 +489,7 @@ pub fn gen_enum_selectors(resolved: &ResolvedEnum, oopsie_path: &syn::Path) -> V
         });
     }
 
-    selectors
+    Ok(selectors)
 }
 
 /// Generate context selector for a struct error.
@@ -576,6 +606,7 @@ pub fn gen_struct_selector(
         generics: &input.generics,
     };
     let methods = if has_source {
+        reject_unconstrained_sourced(categorized, &shape)?;
         gen_build_error(&selector_ident, &dest, categorized, &shape, oopsie_path)
     } else {
         gen_build_fail(&selector_ident, &dest, categorized, &shape, oopsie_path)
@@ -679,6 +710,46 @@ struct Destination<'a> {
     /// The error type's generics, to tell a parameter-typed field (moved as-is)
     /// from an `Into`-converted one (`.into()`).
     generics: &'a syn::Generics,
+}
+
+/// The type spelled in a sourced selector's `Contextual<...>` head — the source
+/// field's declared type, or the pre-transform type for a `from(Type, ..)`
+/// source. Used to decide which error parameters the impl constrains.
+fn sourced_impl_source_type(source_field: &super::parse::SourceField) -> &Type {
+    match &source_field.kind {
+        SourceKind::No | SourceKind::Disabled => {
+            unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
+        }
+        SourceKind::Yes => &source_field.ty,
+        SourceKind::Transformed { source_type, .. } => source_type,
+    }
+}
+
+/// Reject a sourced variant whose `Contextual` impl would leave an error
+/// parameter unconstrained (rustc E0207). Such a parameter is used only by
+/// sibling variants, so it cannot ride this selector's source type or fields nor
+/// move to a method generic (the impl's associated `Destination` is fixed).
+fn reject_unconstrained_sourced(
+    categorized: &CategorizedFields,
+    shape: &SelectorShape,
+) -> syn::Result<()> {
+    let source_field = categorized
+        .source
+        .as_ref()
+        .expect("sourced selector has a source field");
+    if let Some(param) = shape.unconstrained_error_param(sourced_impl_source_type(source_field)) {
+        let name = super::generics::param_name(param);
+        return Err(syn::Error::new_spanned(
+            param,
+            format!(
+                "a variant with a `source` field must reference every generic parameter of the \
+                 error type in its source type or its other fields; parameter `{name}` is used \
+                 only by other variants, which would leave this selector's `Contextual` impl \
+                 unconstrained — split it into its own error type or add `{name}` to this variant"
+            ),
+        ));
+    }
+    Ok(())
 }
 
 /// Generate the `Contextual` impl for a sourced selector.

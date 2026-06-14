@@ -196,6 +196,18 @@ impl ReferencedParams {
         };
         visitor.visit_type(ty);
     }
+
+    /// The names of every referenced parameter (type, const, and lifetime),
+    /// flattened across kinds for membership checks. Lifetimes contribute their
+    /// bare ident (no tick), matching [`param_name`].
+    pub fn names(&self) -> HashSet<String> {
+        self.types
+            .iter()
+            .cloned()
+            .chain(self.consts.iter().cloned())
+            .chain(self.lifetimes.iter().map(|lt| lt.ident.to_string()))
+            .collect()
+    }
 }
 
 /// `syn` visitor recording which of `declared`'s parameters a type references.

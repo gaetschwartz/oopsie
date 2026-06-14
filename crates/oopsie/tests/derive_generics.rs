@@ -227,6 +227,30 @@ mod traced_generics {
     }
 }
 
+// ─── multi-param enum: sourced variant references every parameter ───
+// `Query` carries both params (`E` in its source, `K` in a field), so its
+// `Contextual` impl constrains both — the leaf `Decode` variant infers them.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum CacheError<K: fmt::Debug, E: std::error::Error + 'static> {
+    #[oopsie("query for {key:?} failed")]
+    Query { source: E, key: K },
+    #[oopsie("decode error")]
+    Decode { detail: String },
+}
+
+#[test]
+fn multi_param_sourced_variant_references_all_params() {
+    let io_err = io::Error::new(io::ErrorKind::NotFound, "miss");
+    let err: CacheError<&str, io::Error> = Query { key: "users:7" }.build_error(io_err);
+    assert_eq!(err.to_string(), "query for \"users:7\" failed");
+    assert_eq!(
+        err.source().expect("Query exposes source").to_string(),
+        "miss"
+    );
+}
+
 // ─── generic struct with a source field ───
 
 #[derive(Debug, Oopsie)]

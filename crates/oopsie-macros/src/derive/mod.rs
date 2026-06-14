@@ -124,7 +124,7 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
     reject_size_with_generics(input, attrs.size.as_ref())?;
     let resolved = ResolvedEnum::resolve(input, attrs)?;
     let path = attrs.oopsie_path();
-    let selectors = gen_enum_selectors(&resolved, &path);
+    let selectors = gen_enum_selectors(&resolved, &path)?;
     let display = gen_enum_display(&resolved);
     let error = gen_enum_error(&resolved, &path)?;
 
