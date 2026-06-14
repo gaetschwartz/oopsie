@@ -196,21 +196,28 @@ pub fn gen_enum_error(
 
         // Provide backtrace/spantrace refs from detected fields. An empty
         // trace is never provided, so it cannot shadow a captured one further
-        // out (`Request` is first-wins).
+        // out (`Request` is first-wins). The statement references the field by
+        // name, so a cfg-stripped trace field's stmt must drop with it (the
+        // destructure binding already does).
         if let Some(tf) = &categorized.traces_field {
+            let field_cfg = trace_field_cfg(categorized, Some(tf));
             provide_stmts.push(quote! {
+                #(#field_cfg)*
                 if #tf.0.is_captured() {
                     #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
                 }
             });
             provide_stmts.push(quote! {
+                #(#field_cfg)*
                 if #tf.1.is_captured() {
                     #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
                 }
             });
         } else {
             if let Some(bt_field) = &categorized.backtrace_field {
+                let field_cfg = trace_field_cfg(categorized, Some(bt_field));
                 provide_stmts.push(quote! {
+                    #(#field_cfg)*
                     {
                         let __bt = ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field);
                         if __bt.is_captured() {
@@ -220,7 +227,9 @@ pub fn gen_enum_error(
                 });
             }
             if let Some(st_field) = &categorized.spantrace_field {
+                let field_cfg = trace_field_cfg(categorized, Some(st_field));
                 provide_stmts.push(quote! {
+                    #(#field_cfg)*
                     {
                         let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
                         if __st.is_captured() {
@@ -295,8 +304,13 @@ pub fn gen_enum_error(
             trace_accessor_body(bt_own, src_access.clone(), bt_probe, &bt_fn, oopsie_path)
         {
             let binds = accessor_pattern_binds(bt_bind, source_ident);
+            // A cfg-stripped own-trace field takes its whole arm with it; the
+            // trailing `_ => None` covers the variant then. Auto-injected
+            // (mangled) trace fields carry no user cfg, so this is empty there.
+            let field_cfg = trace_field_cfg(categorized, bt_bind);
             bt_arms.push(quote! {
                 #(#cfg_attrs)*
+                #(#field_cfg)*
                 Self::#variant_ident { #(#binds,)* .. } => #body,
             });
             accessor_uses_source |= source_ident.is_some();
@@ -319,8 +333,10 @@ pub fn gen_enum_error(
             trace_accessor_body(st_own, src_access.clone(), st_probe, &st_fn, oopsie_path)
         {
             let binds = accessor_pattern_binds(st_bind, source_ident);
+            let field_cfg = trace_field_cfg(categorized, st_bind);
             st_arms.push(quote! {
                 #(#cfg_attrs)*
+                #(#field_cfg)*
                 Self::#variant_ident { #(#binds,)* .. } => #body,
             });
             accessor_uses_source |= source_ident.is_some();
@@ -338,8 +354,10 @@ pub fn gen_enum_error(
         let loc_probe = loc_source.map(|s| gen_diag_forward(s, "fwd_location", oopsie_path));
         if let Some(body) = location_accessor_body(loc_own, loc_probe) {
             let binds = accessor_pattern_binds(categorized.location_field.as_ref(), loc_source);
+            let field_cfg = trace_field_cfg(categorized, categorized.location_field.as_ref());
             loc_arms.push(quote! {
                 #(#cfg_attrs)*
+                #(#field_cfg)*
                 Self::#variant_ident { #(#binds,)* .. } => #body,
             });
         }
@@ -657,21 +675,28 @@ pub fn gen_struct_error(
 
     // Provide backtrace/spantrace refs from detected fields. An empty trace
     // is never provided, so it cannot shadow a captured one further out
-    // (`Request` is first-wins).
+    // (`Request` is first-wins). The statement references the field by name, so
+    // a cfg-stripped trace field's stmt must drop with it (the destructure
+    // binding already does).
     if let Some(tf) = &categorized.traces_field {
+        let field_cfg = trace_field_cfg(categorized, Some(tf));
         provide_stmts.push(quote! {
+            #(#field_cfg)*
             if #tf.0.is_captured() {
                 #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
             }
         });
         provide_stmts.push(quote! {
+            #(#field_cfg)*
             if #tf.1.is_captured() {
                 #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
             }
         });
     } else {
         if let Some(bt_field) = &categorized.backtrace_field {
+            let field_cfg = trace_field_cfg(categorized, Some(bt_field));
             provide_stmts.push(quote! {
+                #(#field_cfg)*
                 {
                     let __bt = ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field);
                     if __bt.is_captured() {
@@ -681,7 +706,9 @@ pub fn gen_struct_error(
             });
         }
         if let Some(st_field) = &categorized.spantrace_field {
+            let field_cfg = trace_field_cfg(categorized, Some(st_field));
             provide_stmts.push(quote! {
+                #(#field_cfg)*
                 {
                     let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
                     if __st.is_captured() {
@@ -758,6 +785,17 @@ pub fn gen_struct_error(
     let bt_fn = format_ident!("source_backtrace");
     let st_fn = format_ident!("source_spantrace");
 
+    // The own-trace field whose cfg gates the accessor: the packed `traces`
+    // field if present, else the standalone backtrace/spantrace field.
+    let bt_field_ident = categorized
+        .traces_field
+        .as_ref()
+        .or(categorized.backtrace_field.as_ref());
+    let st_field_ident = categorized
+        .traces_field
+        .as_ref()
+        .or(categorized.spantrace_field.as_ref());
+
     let bt_own = if let Some(tf) = &categorized.traces_field {
         Some(quote! { &self.#tf.0 })
     } else {
@@ -767,21 +805,18 @@ pub fn gen_struct_error(
             }
         })
     };
-    let bt_method = match trace_accessor_body(
+    let bt_sig =
+        quote! { fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> };
+    let bt_method = gen_struct_trace_method(
+        &bt_sig,
+        &struct_use_aes,
+        trace_field_cfg(categorized, bt_field_ident),
         bt_own,
         struct_src_access.clone(),
         bt_probe,
         &bt_fn,
         oopsie_path,
-    ) {
-        Some(body) => quote! {
-            fn oopsie_backtrace(&self) -> ::core::option::Option<&#oopsie_path::Backtrace> {
-                #struct_use_aes
-                #body
-            }
-        },
-        None => quote! {},
-    };
+    );
 
     let st_own = if let Some(tf) = &categorized.traces_field {
         Some(quote! { &self.#tf.1 })
@@ -792,16 +827,18 @@ pub fn gen_struct_error(
             }
         })
     };
-    let st_method =
-        match trace_accessor_body(st_own, struct_src_access, st_probe, &st_fn, oopsie_path) {
-            Some(body) => quote! {
-                fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> {
-                    #struct_use_aes
-                    #body
-                }
-            },
-            None => quote! {},
-        };
+    let st_sig =
+        quote! { fn oopsie_spantrace(&self) -> ::core::option::Option<&#oopsie_path::SpanTrace> };
+    let st_method = gen_struct_trace_method(
+        &st_sig,
+        &struct_use_aes,
+        trace_field_cfg(categorized, st_field_ident),
+        st_own,
+        struct_src_access,
+        st_probe,
+        &st_fn,
+        oopsie_path,
+    );
 
     let loc_own = categorized
         .location_field
@@ -810,12 +847,22 @@ pub fn gen_struct_error(
     let loc_probe = struct_source
         .filter(|_| variant_attrs.transparent)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_location", oopsie_path));
-    let loc_method = match location_accessor_body(loc_own, loc_probe) {
-        Some(body) => quote! {
-            fn oopsie_location(&self) -> ::core::option::Option<&'static ::core::panic::Location<'static>> {
-                #body
+    let loc_sig = quote! {
+        fn oopsie_location(&self) -> ::core::option::Option<&'static ::core::panic::Location<'static>>
+    };
+    let loc_field_cfg = trace_field_cfg(categorized, categorized.location_field.as_ref());
+    let loc_method = match location_accessor_body(loc_own, loc_probe.clone()) {
+        Some(body) => {
+            let full = quote! { #loc_sig { #body } };
+            if has_existence_cfg(loc_field_cfg) {
+                let not_cfg = negated_existence_cfg(loc_field_cfg);
+                let stripped = location_accessor_body(None, loc_probe)
+                    .map(|b| quote! { #not_cfg #loc_sig { #b } });
+                quote! { #(#loc_field_cfg)* #full #stripped }
+            } else {
+                full
             }
-        },
+        }
         None => quote! {},
     };
 
@@ -1100,6 +1147,79 @@ fn collect_provide_field_binds(categorized: &CategorizedFields) -> Vec<TokenStre
         binds.push(quote! { #(#cfg)* #ident, });
     }
     binds
+}
+
+/// The cfg attrs of an optional trace-field ident, or `&[]` when absent. A
+/// stripped trace field's accessor arm / provide stmt must drop with it, so its
+/// cfg rides onto every generated mention exactly as the help field's does.
+fn trace_field_cfg<'a>(
+    categorized: &'a CategorizedFields,
+    ident: Option<&syn::Ident>,
+) -> &'a [syn::Attribute] {
+    ident.map_or(&[], |ident| field_cfg_for(categorized, ident))
+}
+
+/// Whether a field's cfg attrs gate its existence — only `#[cfg(...)]` does;
+/// `#[cfg_attr(...)]` conditionally adds *other* attrs without removing the
+/// field, so it never strips a generated mention.
+fn has_existence_cfg(field_cfg: &[syn::Attribute]) -> bool {
+    field_cfg.iter().any(|a| a.path().is_ident("cfg"))
+}
+
+/// The `not(...)` complement of a field's existence-gating `#[cfg(...)]` preds,
+/// for emitting a struct accessor that runs only when the own trace field is
+/// stripped. Joined with `all(...)` when several `#[cfg]`s gate one field.
+fn negated_existence_cfg(field_cfg: &[syn::Attribute]) -> TokenStream2 {
+    let preds: Vec<TokenStream2> = field_cfg
+        .iter()
+        .filter(|a| a.path().is_ident("cfg"))
+        .filter_map(|a| a.meta.require_list().ok())
+        .map(|list| list.tokens.clone())
+        .collect();
+    match preds.as_slice() {
+        [pred] => quote! { #[cfg(not(#pred))] },
+        preds => quote! { #[cfg(not(all(#(#preds),*)))] },
+    }
+}
+
+/// A struct trace accessor that forwards a cfg-stripped own field's arm to a
+/// source-only body, mirroring the enum's drop-the-arm-fall-through behavior.
+/// With no existence cfg (the common/auto case) it emits exactly the full body,
+/// byte-identical to the pre-cfg path. With one, it gates the full body on the
+/// field's cfg and, when a source/probe path exists, emits the complementary
+/// source-only body so source forwarding survives the field being stripped.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "wraps one accessor's full inputs"
+)]
+fn gen_struct_trace_method(
+    sig: &TokenStream2,
+    use_aes: &TokenStream2,
+    field_cfg: &[syn::Attribute],
+    own: Option<TokenStream2>,
+    source_access: Option<TokenStream2>,
+    probe: Option<TokenStream2>,
+    source_fn: &syn::Ident,
+    oopsie_path: &syn::Path,
+) -> TokenStream2 {
+    let with_body = |body: TokenStream2| quote! { #sig { #use_aes #body } };
+    let full = trace_accessor_body(
+        own,
+        source_access.clone(),
+        probe.clone(),
+        source_fn,
+        oopsie_path,
+    )
+    .map(with_body);
+    if !has_existence_cfg(field_cfg) {
+        return full.unwrap_or_default();
+    }
+    let gated = full.map(|m| quote! { #(#field_cfg)* #m });
+    let not_cfg = negated_existence_cfg(field_cfg);
+    let stripped =
+        trace_accessor_body(None, source_access, probe, source_fn, oopsie_path).map(with_body);
+    let stripped = stripped.map(|m| quote! { #not_cfg #m });
+    quote! { #gated #stripped }
 }
 
 /// The cfg attrs of the categorized field named `ident`, or `&[]` if it is not a

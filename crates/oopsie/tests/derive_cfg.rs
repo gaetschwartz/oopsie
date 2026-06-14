@@ -225,3 +225,195 @@ fn mixed_cfg_kept_variant_display_and_source_work() {
     assert_eq!(err.to_string(), "kept: 3");
     assert!(err.source().is_some());
 }
+
+// ---- cfg-gated EXPLICIT trace FIELDS under the attribute-macro path ----
+//
+// The cfg sits on the trace FIELD (`#[oopsie(backtrace)]` / `spantrace` /
+// `traces` / `location`), inside a kept variant — distinct from a cfg on the
+// whole variant. The attribute macro runs before rustc strips `#[cfg]`, so the
+// field's own cfg must ride onto its generated `Diagnostic` accessor arm (and
+// `provide()` stmt); otherwise the arm names a field rustc later removed and
+// fails with E0026 (enum) / E0609 (struct). The stripped variant has no other
+// own trace, so its arm must drop and fall through to the accessor's
+// `_ => None`. The enabled twin (`cfg(all())` on the field) keeps it.
+
+#[oopsie]
+#[oopsie(module(false), suffix = "Bt")]
+pub enum BacktraceFieldCfgError {
+    #[oopsie("stripped: {keep}")]
+    Stripped {
+        #[cfg(any())]
+        #[oopsie(backtrace)]
+        bt: oopsie::Backtrace,
+        keep: u32,
+    },
+
+    #[oopsie("kept: {keep}")]
+    Kept {
+        #[cfg(all())]
+        #[oopsie(backtrace)]
+        bt: oopsie::Backtrace,
+        keep: u32,
+    },
+}
+
+#[test]
+fn cfg_stripped_backtrace_field_falls_through_to_none() {
+    use oopsie::Diagnostic as _;
+    let err = StrippedBt { keep: 1u32 }.build();
+    assert!(err.oopsie_backtrace().is_none());
+}
+
+#[test]
+fn cfg_kept_backtrace_field_accessor_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = KeptBt { keep: 2u32 }.build();
+    assert!(err.oopsie_backtrace().is_some());
+}
+
+// Packed `traces` field under field-level cfg: same arm/stmt-naming gap.
+#[oopsie]
+#[oopsie(module(false), suffix = "Tr")]
+pub enum TracesFieldCfgError {
+    #[oopsie("stripped: {keep}")]
+    Stripped {
+        #[cfg(any())]
+        #[oopsie(traces)]
+        t: (oopsie::Backtrace, oopsie::SpanTrace),
+        keep: u32,
+    },
+
+    #[oopsie("kept: {keep}")]
+    Kept {
+        #[cfg(all())]
+        #[oopsie(traces)]
+        t: (oopsie::Backtrace, oopsie::SpanTrace),
+        keep: u32,
+    },
+}
+
+#[test]
+fn cfg_stripped_packed_traces_field_falls_through_to_none() {
+    use oopsie::Diagnostic as _;
+    let err = StrippedTr { keep: 1u32 }.build();
+    assert!(err.oopsie_backtrace().is_none());
+    assert!(err.oopsie_spantrace().is_none());
+}
+
+#[test]
+fn cfg_kept_packed_traces_field_accessor_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = KeptTr { keep: 2u32 }.build();
+    assert!(err.oopsie_backtrace().is_some());
+    assert!(err.oopsie_spantrace().is_some());
+}
+
+// Location field under field-level cfg.
+#[oopsie]
+#[oopsie(module(false), suffix = "Loc")]
+pub enum LocationFieldCfgError {
+    #[oopsie("stripped: {keep}")]
+    Stripped {
+        #[cfg(any())]
+        #[oopsie(location)]
+        at: &'static std::panic::Location<'static>,
+        keep: u32,
+    },
+
+    #[oopsie("kept: {keep}")]
+    Kept {
+        #[cfg(all())]
+        #[oopsie(location)]
+        at: &'static std::panic::Location<'static>,
+        keep: u32,
+    },
+}
+
+#[test]
+fn cfg_stripped_location_field_falls_through_to_none() {
+    use oopsie::Diagnostic as _;
+    let err = StrippedLoc { keep: 1u32 }.build();
+    assert!(err.oopsie_location().is_none());
+}
+
+#[test]
+fn cfg_kept_location_field_accessor_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = KeptLoc { keep: 2u32 }.build();
+    assert!(err.oopsie_location().is_some());
+}
+
+// Struct path: the accessor methods name `self.<field>` directly (no match
+// arm), so a stripped own trace field there would be E0609 unless the whole
+// method drops with the field. Selector name is the struct name with a trailing
+// `Error` stripped (default suffix off).
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtStrippedError {
+    #[cfg(any())]
+    #[oopsie(backtrace)]
+    bt: oopsie::Backtrace,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_stripped_backtrace_field_yields_none() {
+    use oopsie::Diagnostic as _;
+    let err = StructBtStripped { keep: 1u32 }.build();
+    assert!(err.oopsie_backtrace().is_none());
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtKeptError {
+    #[cfg(all())]
+    #[oopsie(backtrace)]
+    bt: oopsie::Backtrace,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_kept_backtrace_field_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = StructBtKept { keep: 2u32 }.build();
+    assert!(err.oopsie_backtrace().is_some());
+}
+
+// Spantrace needs the `tracing` feature (its `SpanTrace` capture is gated), so
+// mirror the existing tracing-gated tests.
+#[cfg(feature = "tracing")]
+#[oopsie]
+#[oopsie(module(false), suffix = "St")]
+pub enum SpantraceFieldCfgError {
+    #[oopsie("stripped: {keep}")]
+    Stripped {
+        #[cfg(any())]
+        #[oopsie(spantrace)]
+        st: oopsie::SpanTrace,
+        keep: u32,
+    },
+
+    #[oopsie("kept: {keep}")]
+    Kept {
+        #[cfg(all())]
+        #[oopsie(spantrace)]
+        st: oopsie::SpanTrace,
+        keep: u32,
+    },
+}
+
+#[cfg(feature = "tracing")]
+#[test]
+fn cfg_stripped_spantrace_field_falls_through_to_none() {
+    use oopsie::Diagnostic as _;
+    let err = StrippedSt { keep: 1u32 }.build();
+    assert!(err.oopsie_spantrace().is_none());
+}
+
+#[cfg(feature = "tracing")]
+#[test]
+fn cfg_kept_spantrace_field_accessor_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = KeptSt { keep: 2u32 }.build();
+    assert!(err.oopsie_spantrace().is_some());
+}
