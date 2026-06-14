@@ -10,12 +10,12 @@ use std::{panic::Location, rc::Rc, sync::Arc};
 /// e.g. `selector.build_error(source)`.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot build an error from a source of type `{E}`",
-    label = "selector does not accept a `{E}` source",
-    note = "a sourced selector (its variant has a `source` field) only builds from that field's exact \
-            type — `.context(...)` on a `Result` requires the selector's source type to match the \
-            `Result`'s error type",
-    note = "a leaf selector (no `source` field) builds from `NoSource`: attach it with `Option::context`, \
-            `.fail()`, or `.build()`, not from a `Result`'s error"
+    label = "this selector does not accept a `{E}` source",
+    note = "a selector whose variant has a `source` field builds from that field's exact type — \
+            `.context(...)` on a `Result` requires the selector's source type to match the \
+            `Result`'s error",
+    note = "a selector with no `source` field is a leaf: build it with `.build()` / `.fail()`, or \
+            attach it to an `Option` with `.context(...)` — not to a `Result`'s error"
 )]
 pub trait Contextual<E> {
     /// The destination error type being built by this context selector.
@@ -185,12 +185,10 @@ impl Capturable for jiff::Zoned {
     }
 }
 
-/// Unit source type used by [`OptionExt`] context selectors and leaf errors.
-///
-/// Leaf errors (those with no chained source) take this as the `source`
-/// argument of [`Contextual::build_error`]. You will see it in type signatures
-/// when working with [`OptionExt::context`] or when implementing [`Contextual`]
-/// manually.
+/// The stand-in "source" a leaf selector (one with no `source` field) builds
+/// from. `Option::context` uses it as the source when there is no error value to
+/// attach. You normally reach a leaf error through `.build()` / `.fail()` /
+/// `Option::context`, so you rarely name this directly.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NoSource;
 

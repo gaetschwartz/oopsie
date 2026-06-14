@@ -2,12 +2,12 @@ error[E0277]: `load_oopsies::Read` cannot build an error from a source of type `
   --> tests/compile-fail/stable/contextual_wrong_source_type.rs:18:28
    |
 18 |     let _ = parsed.context(load_oopsies::Read);
-   |                    ------- ^^^^^^^^^^^^^^^^^^ selector does not accept a `ParseIntError` source
+   |                    ------- ^^^^^^^^^^^^^^^^^^ this selector does not accept a `ParseIntError` source
    |                    |
    |                    required by a bound introduced by this call
    |
-   = note: a sourced selector (its variant has a `source` field) only builds from that field's exact type — `.context(...)` on a `Result` requires the selector's source type to match the `Result`'s error type
-   = note: a leaf selector (no `source` field) builds from `NoSource`: attach it with `Option::context`, `.fail()`, or `.build()`, not from a `Result`'s error
+   = note: a selector whose variant has a `source` field builds from that field's exact type — `.context(...)` on a `Result` requires the selector's source type to match the `Result`'s error
+   = note: a selector with no `source` field is a leaf: build it with `.build()` / `.fail()`, or attach it to an `Option` with `.context(...)` — not to a `Result`'s error
 help: the trait `Contextual<ParseIntError>` is not implemented for `load_oopsies::Read`
       but trait `Contextual<std::io::Error>` is implemented for it
   --> tests/compile-fail/stable/contextual_wrong_source_type.rs:8:17

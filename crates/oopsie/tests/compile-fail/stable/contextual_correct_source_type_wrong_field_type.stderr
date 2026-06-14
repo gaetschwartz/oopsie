@@ -1,0 +1,20 @@
+error[E0277]: the trait bound `PathBuf: From<{integer}>` is not satisfied
+  --> tests/compile-fail/stable/contextual_correct_source_type_wrong_field_type.rs:25:17
+   |
+25 |     let _ = err.context(load_oopsies::Read { file: 1 });
+   |                 ^^^^^^^ the trait `From<{integer}>` is not implemented for `PathBuf`
+   |
+   = help: `PathBuf` implements trait `From<T>`:
+             From<&T>
+             From<Box<std::path::Path>>
+             From<Cow<'_, std::path::Path>>
+             From<OsString>
+             From<String>
+   = note: required for `{integer}` to implement `Into<PathBuf>`
+note: required for `load_oopsies::Read<{integer}>` to implement `Contextual<std::io::Error>`
+  --> tests/compile-fail/stable/contextual_correct_source_type_wrong_field_type.rs:8:17
+   |
+ 8 | #[derive(Debug, Oopsie)]
+   |                 ^^^^^^ type parameter would need to implement `Contextual<std::io::Error>`
+   = help: consider manually implementing `Contextual<std::io::Error>` to avoid undesired bounds
+   = note: this error originates in the derive macro `Oopsie` (in Nightly builds, run with -Z macro-backtrace for more info)

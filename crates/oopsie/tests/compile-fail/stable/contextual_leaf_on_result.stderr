@@ -7,10 +7,10 @@ error[E0277]: `Missing<String>` cannot build an error from a source of type `std
    | |                    required by a bound introduced by this call
 20 | |         key: "host".to_owned(),
 21 | |     });
-   | |_____^ selector does not accept a `std::io::Error` source
+   | |_____^ this selector does not accept a `std::io::Error` source
    |
-   = note: a sourced selector (its variant has a `source` field) only builds from that field's exact type — `.context(...)` on a `Result` requires the selector's source type to match the `Result`'s error type
-   = note: a leaf selector (no `source` field) builds from `NoSource`: attach it with `Option::context`, `.fail()`, or `.build()`, not from a `Result`'s error
+   = note: a selector whose variant has a `source` field builds from that field's exact type — `.context(...)` on a `Result` requires the selector's source type to match the `Result`'s error
+   = note: a selector with no `source` field is a leaf: build it with `.build()` / `.fail()`, or attach it to an `Option` with `.context(...)` — not to a `Result`'s error
 help: the trait `Contextual<std::io::Error>` is not implemented for `Missing<String>`
       but trait `Contextual<NoSource>` is implemented for it
   --> tests/compile-fail/stable/contextual_leaf_on_result.rs:8:17

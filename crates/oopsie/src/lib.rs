@@ -154,9 +154,9 @@ e.g. API error responses."
 //! For each variant or struct, `#[oopsie]` generates a **context selector** — a struct
 //! containing all the fields *except* the source error and any `#[oopsie(capture)]` fields.
 //!
-//! Selectors for **leaf** variants (no source) expose `.build()` and `.fail()`
-//! (plus `Contextual<NoSource>` for `Option::context`). Selectors for variants
-//! **with a source** expose `.build_error(source)` via the [`Contextual`] trait.
+//! Selectors for **leaf** variants (no source) expose `.build()` and `.fail()`,
+//! and work with `Option::context`. Selectors for variants **with a source**
+//! expose `.build_error(source)` via the [`Contextual`] trait.
 //! The methods are mutually exclusive — a source selector has no `.build()`.
 //!
 //! All selector fields accept `Into<T>`, so you can pass `"str"` for a `String` field.

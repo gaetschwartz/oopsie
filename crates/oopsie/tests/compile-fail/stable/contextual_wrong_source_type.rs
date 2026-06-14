@@ -14,6 +14,6 @@ enum LoadError {
 fn main() {
     // `Read` builds from an `io::Error`, but this `Result`'s error is a
     // `ParseIntError`: the source types don't match.
-    let parsed: Result<i32, std::num::ParseIntError> = "x".parse();
+    let parsed: Result<i32, std::num::ParseIntError> = ":)".parse();
     let _ = parsed.context(load_oopsies::Read);
 }
