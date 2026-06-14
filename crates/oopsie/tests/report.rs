@@ -14,9 +14,7 @@ use std::fmt;
 use std::process::Termination as _;
 
 use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter};
-use oopsie::{
-    Contextual as _, Report, RustBacktrace, Theme, get_theme, oopsie, set_theme,
-};
+use oopsie::{Contextual as _, Report, RustBacktrace, Theme, get_theme, oopsie, set_theme};
 use oopsie_core::{redact, snap_name};
 
 #[oopsie(traced)]
@@ -120,7 +118,7 @@ fn test_report_colored_emits_ansi() {
 /// one report (one backtrace) two ways isolates the theme as the only variable.
 #[test]
 fn report_theme_override_changes_output() {
-    let base = Report::from_std(TestOopsie { message: "themed" }.build()).force_colors();
+    let base = Report::new(test_oopsies::Test { message: "themed" }.build()).force_colors();
     let default_render = base.to_string();
     let nord_render = base.with_theme(Theme::NORD).to_string();
 
@@ -134,7 +132,7 @@ fn report_theme_override_changes_output() {
 /// `set_theme`. Re-render the same report under two globals; only color differs.
 #[test]
 fn report_follows_global_theme() {
-    let report = Report::from_std(TestOopsie { message: "themed" }.build()).force_colors();
+    let report = Report::new(test_oopsies::Test { message: "themed" }.build()).force_colors();
 
     let original = get_theme();
     set_theme(Theme::NORD);
