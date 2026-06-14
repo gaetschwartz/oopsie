@@ -1,0 +1,25 @@
+{
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        "diagnostics": {
+          "experimental": {
+            "enable": true,
+          },
+        },
+        "check": { "command": "check", "allTargets": false },
+        "cargo": { "features": ["fancy"] },
+        "inlayHints": {
+          "maxLength": null,
+          "lifetimeElisionHints": {
+            "enable": "skip_trivial",
+            "useParameterNames": true,
+          },
+          "closureReturnTypeHints": {
+            "enable": "always",
+          },
+        },
+      },
+    },
+  },
+}
