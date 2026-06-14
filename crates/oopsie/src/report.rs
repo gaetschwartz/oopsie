@@ -11,9 +11,7 @@ use crate::ColorConfig;
 use crate::Diagnostic;
 
 use crate::color::style;
-use crate::trace_printer::{
-    TracePrinter, TraceTheme, error_backtrace_frame_filter, marker_strip_filter,
-};
+use crate::trace_printer::{TracePrinter, error_backtrace_frame_filter, marker_strip_filter};
 
 /// A wrapper around an error that provides rich, colorized output.
 ///
@@ -257,7 +255,7 @@ impl<E: Diagnostic> Report<E> {
         } else if let Some(cut) = backtrace.marker_hidden_frames() {
             // Marker cut first (exact bottom); the name filter then trims the
             // runtime frames left above the cut.
-            TracePrinter::with_filter_and_theme(marker_strip_filter(cut), TraceTheme::DEFAULT)
+            TracePrinter::with_filter(marker_strip_filter(cut))
                 .add_frame_filter(error_backtrace_frame_filter)
         } else {
             TracePrinter::new()

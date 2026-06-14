@@ -17,7 +17,7 @@ use oopsie_core::SpanTrace;
 
 use crate::ColorConfig;
 use crate::color::style;
-use crate::trace_printer::{TracePrinter, TraceTheme, marker_strip_filter, panic_frame_filter};
+use crate::trace_printer::{TracePrinter, marker_strip_filter, panic_frame_filter};
 
 const HEADER_STYLE: Style = Style::new().red().bold();
 const MESSAGE_STYLE: Style = Style::new().bright_cyan();
@@ -192,10 +192,9 @@ impl<'a> PanicReport<'a> {
         } else if let Some(cut) = self.backtrace.marker_hidden_frames() {
             // Marker cut first (exact bottom); panic_frame_filter then trims
             // the panic plumbing on top and the residue left above the cut.
-            TracePrinter::with_filter_and_theme(marker_strip_filter(cut), TraceTheme::DEFAULT)
-                .add_frame_filter(panic_frame_filter)
+            TracePrinter::with_filter(marker_strip_filter(cut)).add_frame_filter(panic_frame_filter)
         } else {
-            TracePrinter::with_filter_and_theme(panic_frame_filter, TraceTheme::DEFAULT)
+            TracePrinter::with_filter(panic_frame_filter)
         };
         if !self.color_config.should_colorize() {
             printer = printer.plain();

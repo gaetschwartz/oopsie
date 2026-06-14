@@ -13,7 +13,7 @@ mod common;
 use std::fmt;
 use std::process::Termination as _;
 
-use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter, TraceTheme};
+use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter};
 use oopsie::{Contextual as _, Report, RustBacktrace, oopsie, rust_backtrace};
 use oopsie_core::{redact, snap_name};
 
@@ -536,10 +536,9 @@ fn test_backtrace_frame_no_colno_renders_only_lineno() {
     );
 }
 
-/// `with_filter_and_theme` installs a fully custom filter (replacing the
-/// default), and the supplied theme is honored.
+/// `with_filter` installs a fully custom filter, replacing the default.
 #[test]
-fn test_trace_printer_with_filter_and_theme_custom_filter() {
+fn test_trace_printer_with_filter_custom_filter() {
     let provider = FixedFrames(vec![
         frame("keep::alpha", Some(1), None),
         frame("drop::beta", Some(2), None),
@@ -547,21 +546,18 @@ fn test_trace_printer_with_filter_and_theme_custom_filter() {
     ]);
 
     // Custom filter: drop any frame whose name starts with "drop::".
-    let printer = TracePrinter::with_filter_and_theme(
-        |frames| {
-            for slot in frames.iter_mut() {
-                if slot.is_some_and(|frame| {
-                    frame
-                        .name
-                        .as_deref()
-                        .is_some_and(|name| name.starts_with("drop::"))
-                }) {
-                    *slot = None;
-                }
+    let printer = TracePrinter::with_filter(|frames| {
+        for slot in frames.iter_mut() {
+            if slot.is_some_and(|frame| {
+                frame
+                    .name
+                    .as_deref()
+                    .is_some_and(|name| name.starts_with("drop::"))
+            }) {
+                *slot = None;
             }
-        },
-        TraceTheme::PLAIN,
-    );
+        }
+    });
     let output = render_backtrace(&printer, &provider);
 
     assert!(output.contains("keep::alpha"), "got:\n{output}");

@@ -91,6 +91,7 @@ impl SpanTraceProvider for crate::SpanTrace {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Color theme for trace rendering.
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TraceTheme {
     pub frame_number: Style,
     pub function_name: Style,
@@ -507,7 +508,7 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn new() -> Self {
-        Self::with_filter_and_theme_const(&error_backtrace_frame_filter, TraceTheme::DEFAULT)
+        Self::with_const_filter(&error_backtrace_frame_filter)
     }
 
     /// Create a new `TracePrinter` with the default theme and no frame filtering.
@@ -516,33 +517,29 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn unfiltered() -> Self {
-        Self::with_filter_and_theme_const(&noop_frame_filter, TraceTheme::DEFAULT).absolute_paths()
+        Self::with_const_filter(&noop_frame_filter).absolute_paths()
     }
 
     /// Create a new `TracePrinter` with a custom frame filter and theme.
     #[must_use]
     #[inline]
-    pub fn with_filter_and_theme(
-        filter: impl Fn(&mut [Option<&BacktraceFrame>]) + 'static,
-        theme: TraceTheme,
-    ) -> Self {
+    pub fn with_filter(filter: impl Fn(&mut [Option<&BacktraceFrame>]) + 'static) -> Self {
         Self {
             frame_filter: BoxOrBorrow::Box(Box::new(filter)),
-            theme,
+            theme: TraceTheme::DEFAULT,
             strip_cwd: true,
         }
     }
 
-    /// `const` version of `[with_filter_and_theme]`.
+    /// Create a new `TracePrinter` with a `const` frame filter.
     #[must_use]
     #[inline]
-    pub const fn with_filter_and_theme_const(
+    pub const fn with_const_filter(
         filter: &'static (dyn Fn(&mut [Option<&BacktraceFrame>]) + 'static),
-        theme: TraceTheme,
     ) -> Self {
         Self {
             frame_filter: BoxOrBorrow::Borrow(filter),
-            theme,
+            theme: TraceTheme::DEFAULT,
             strip_cwd: true,
         }
     }
@@ -565,6 +562,14 @@ impl TracePrinter {
     #[inline]
     pub const fn absolute_paths(mut self) -> Self {
         self.strip_cwd = false;
+        self
+    }
+
+    /// Set a custom color theme for rendering.
+    #[must_use]
+    #[inline]
+    pub const fn with_theme(mut self, theme: TraceTheme) -> Self {
+        self.theme = theme;
         self
     }
 
