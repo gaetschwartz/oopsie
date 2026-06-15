@@ -15,7 +15,9 @@ pub struct TraceMarker {
     pub(crate) ips: Arc<[usize]>,
 }
 
+/// A stack frame exposing its instruction pointer, the value markers compare on.
 pub trait FrameLike {
+    /// The frame's instruction pointer.
     fn ip(&self) -> usize;
 }
 

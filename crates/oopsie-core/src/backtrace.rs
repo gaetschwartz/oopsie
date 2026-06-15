@@ -21,6 +21,9 @@ pub enum RustBacktrace {
 }
 
 impl RustBacktrace {
+    /// The environment-derived setting, or `None` when neither
+    /// `RUST_LIB_BACKTRACE` nor `RUST_BACKTRACE` is set. The environment is
+    /// read once and cached for the life of the process.
     pub fn detect_opt() -> Option<Self> {
         const NONE: u8 = u8::MAX;
         const NOT_SET: u8 = 0;
@@ -170,6 +173,13 @@ enum Inner {
     Disabled(backtrace::Backtrace), // Always empty, used when capture is disabled to avoid the LazyLock indirection.
 }
 
+/// A captured stack backtrace with deferred symbol resolution.
+///
+/// Captured via [`Capturable`](crate::Capturable). When backtrace capture is
+/// disabled (see [`rust_backtrace`]) the capture is empty and records no
+/// frames. Symbols are resolved lazily on first frame access and cached;
+/// clones share one capture, so cloning is a refcount bump and resolution
+/// happens once for all clones.
 #[derive(Clone)]
 pub struct Backtrace {
     inner: Inner,

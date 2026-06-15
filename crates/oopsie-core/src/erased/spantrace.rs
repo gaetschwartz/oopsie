@@ -8,17 +8,25 @@ use serde::{Deserialize, Serialize};
 // TracingLevel
 // ─────────────────────────────────────────────────────────────────────────────
 
+/// The verbosity level of a transported span, mirroring `tracing::Level`.
+///
 /// Unrecognized or unparseable level strings deserialize as
 /// [`UNKNOWN`](Self::UNKNOWN) instead of rejecting the payload.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString, strum::Display, Serialize)]
 #[strum(serialize_all = "SCREAMING_SNAKE_CASE", ascii_case_insensitive)]
 #[repr(u8)]
 pub enum TracingLevel {
+    /// The most verbose level.
     TRACE = 0,
+    /// Debug-level diagnostics.
     DEBUG = 1,
+    /// Informational messages.
     INFO = 2,
+    /// Warnings about recoverable conditions.
     WARN = 3,
+    /// Errors and failures.
     ERROR = 4,
+    /// A level that could not be recognized when deserializing.
     UNKNOWN = 5,
 }
 
@@ -113,36 +121,42 @@ pub struct ErasedMetadata {
 }
 
 impl ErasedMetadata {
+    /// The span's name.
     #[must_use]
     #[inline]
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// The span's target (typically the module path it was created in).
     #[must_use]
     #[inline]
     pub fn target(&self) -> &str {
         &self.target
     }
 
+    /// The span's verbosity level.
     #[must_use]
     #[inline]
     pub const fn level(&self) -> TracingLevel {
         self.level
     }
 
+    /// The module path the span was created in, if recorded.
     #[must_use]
     #[inline]
     pub fn module_path(&self) -> Option<&str> {
         self.module_path.as_deref()
     }
 
+    /// The source file the span was created in, if recorded.
     #[must_use]
     #[inline]
     pub fn file(&self) -> Option<&str> {
         self.file.as_deref()
     }
 
+    /// The line within the source file, if recorded.
     #[must_use]
     #[inline]
     pub const fn line(&self) -> Option<u32> {

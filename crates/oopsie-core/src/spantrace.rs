@@ -11,6 +11,11 @@ pub struct SpanTrace {
 
 #[cfg(feature = "tracing")]
 impl SpanTrace {
+    /// Captures the currently active span stack from the installed subscriber.
+    ///
+    /// Yields an empty trace when no span is active or the subscriber does not
+    /// support span traces; check [`is_captured`](Self::is_captured) to tell the
+    /// two apart.
     #[must_use]
     #[inline]
     pub fn capture() -> Self {
@@ -19,12 +24,14 @@ impl SpanTrace {
         }
     }
 
+    /// Wraps an existing `tracing_error::SpanTrace`.
     #[must_use]
     #[inline]
     pub const fn new(inner: tracing_error::SpanTrace) -> Self {
         Self { inner }
     }
 
+    /// Returns whether this trace was captured, empty, or unsupported.
     #[must_use]
     #[inline]
     pub fn status(&self) -> tracing_error::SpanTraceStatus {
@@ -40,12 +47,14 @@ impl SpanTrace {
         matches!(self.status(), tracing_error::SpanTraceStatus::CAPTURED)
     }
 
+    /// Consumes the wrapper and returns the underlying `tracing_error::SpanTrace`.
     #[must_use]
     #[inline]
     pub fn into_span_trace(self) -> tracing_error::SpanTrace {
         self.inner
     }
 
+    /// Borrows the underlying `tracing_error::SpanTrace`.
     #[inline]
     #[must_use]
     pub const fn as_span_trace(&self) -> &tracing_error::SpanTrace {
@@ -121,12 +130,14 @@ pub struct SpanTrace;
 
 #[cfg(not(feature = "tracing"))]
 impl SpanTrace {
+    /// Returns the inert stub; capture is a no-op without the `tracing` feature.
     #[must_use]
     #[inline]
     pub const fn capture() -> Self {
         Self
     }
 
+    /// Always `false`: the stub never holds a captured trace.
     #[must_use]
     #[inline]
     pub const fn is_captured(&self) -> bool {

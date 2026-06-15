@@ -1,5 +1,6 @@
 //! Core error types and utilities.
 
+#![warn(missing_docs)]
 #![cfg_attr(
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)

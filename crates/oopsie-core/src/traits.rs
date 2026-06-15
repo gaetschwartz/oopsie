@@ -34,7 +34,7 @@ pub trait Contextual<E> {
 /// feature), [`SystemTime`](std::time::SystemTime)/[`Instant`](std::time::Instant) timestamps
 /// (plus `chrono::DateTime<Local>` under the `chrono` feature and `jiff::Timestamp`/`jiff::Zoned`
 /// under the `jiff` feature), the caller [`Location`], and the environment
-/// snapshots in [`extras`](crate::extras). Implement it for your own type to capture anything
+/// snapshots in the `extras` module. Implement it for your own type to capture anything
 /// else, such as a request or thread id.
 ///
 /// It also covers `Box`, `Rc`, `Arc`, and tuples, so one field can wrap or combine several

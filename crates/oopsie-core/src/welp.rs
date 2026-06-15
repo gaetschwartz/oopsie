@@ -214,7 +214,7 @@ impl Welp {
     /// Borrow the wrapped source as `&E` when it is exactly that type.
     ///
     /// Inspects the *direct* source only, not the whole chain. A `Welp` with no
-    /// source ([`new`](Self::new) / [`welp_context`](crate::WelpResultExt::welp_context)
+    /// source ([`new`](Self::new) / [`welp_context`](crate::WelpOptionExt::welp_context)
     /// on an `Option`) returns `None`. To search the whole chain, compose with
     /// [`chain`](crate::ErrorChainExt::chain):
     ///

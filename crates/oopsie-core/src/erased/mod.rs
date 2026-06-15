@@ -174,21 +174,25 @@ impl From<&'static std::panic::Location<'static>> for ErasedLocation {
 }
 
 impl Diagnostics {
+    /// Whether no diagnostic metadata was transported (no code, help, or exit code).
     #[must_use]
     #[inline]
     pub const fn is_none(&self) -> bool {
         self.code.is_none() && self.help.is_none() && self.exit_code.is_none()
     }
+    /// The error code, if one was transported.
     #[must_use]
     #[inline]
     pub fn code(&self) -> Option<&str> {
         self.code.as_deref()
     }
+    /// The help text, if one was transported.
     #[must_use]
     #[inline]
     pub fn help(&self) -> Option<&str> {
         self.help.as_deref()
     }
+    /// The process exit code, if one was transported.
     #[must_use]
     #[inline]
     pub const fn exit_code(&self) -> Option<NonZeroU8> {
@@ -307,6 +311,12 @@ impl ErasedError {
         self.backtrace.as_ref()
     }
 
+    /// Serialize the error as pretty-printed JSON to a writer.
+    ///
+    /// # Errors
+    ///
+    /// Returns the serialization error, including any underlying I/O failure
+    /// from the writer.
     pub fn write_json<W: io::Write>(&self, f: &mut W) -> Result<(), serde_json::Error> {
         use io::Write as _;
         let mut buf = io::BufWriter::new(f);

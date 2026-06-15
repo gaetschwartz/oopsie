@@ -16,6 +16,8 @@ pub mod __private {
     pub use target_triple::TARGET;
 }
 
+/// The toolchain channel (`stable` or `unstable`) embedded in snapshot file
+/// names so toolchain-specific snapshots stay in separate files.
 // Keyed on the granular feature (not the `unstable` umbrella) because the
 // Provider-API trace surfacing it gates is what actually changes snapshot
 // content.
@@ -28,6 +30,8 @@ pub const CHANNEL: &str = if cfg!(feature = "unstable-error-generic-member-acces
 #[cfg(feature = "unstable-error-generic-member-access")]
 const _: () = assert!(matches!(CHANNEL.as_bytes(), b"unstable"));
 
+/// Build a snapshot name from a base label plus the channel and target triple,
+/// keeping platform- and toolchain-specific snapshots in separate files.
 #[macro_export]
 macro_rules! snap_name {
     ($name:literal) => {{
@@ -61,6 +65,9 @@ pub fn force_backtrace() {
     crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);
 }
 
+/// `insta` snapshot redaction profiles that erase build-to-build noise
+/// (compilation hashes, line/column numbers, machine-specific paths) from
+/// backtrace and spantrace snapshots.
 pub mod settings {
     use std::{
         env,
@@ -132,6 +139,8 @@ pub mod settings {
     }
 }
 
+/// Run a block with a named [`settings`] redaction profile bound, so the
+/// snapshots asserted inside it use the shared normalization filters.
 #[macro_export]
 macro_rules! redact {
     ($name:ident, $bl:block) => {
