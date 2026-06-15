@@ -1,5 +1,7 @@
 //! Simple trait for errors that expose diagnostic data.
 
+use std::sync::Arc;
+
 use crate::{Backtrace, ErrorCode, HelpText, SpanTrace};
 
 /// Trait for errors that expose diagnostic data.
@@ -51,6 +53,41 @@ pub trait Diagnostic: std::error::Error {
 }
 
 impl<T: Diagnostic> Diagnostic for Box<T> {
+    #[inline]
+    fn oopsie_backtrace(&self) -> Option<&Backtrace> {
+        (**self).oopsie_backtrace()
+    }
+
+    #[inline]
+    fn oopsie_spantrace(&self) -> Option<&SpanTrace> {
+        (**self).oopsie_spantrace()
+    }
+
+    #[inline]
+    fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        (**self).oopsie_location()
+    }
+
+    #[inline]
+    fn oopsie_error_code(&self) -> Option<ErrorCode> {
+        (**self).oopsie_error_code()
+    }
+
+    #[inline]
+    fn oopsie_help_text(&self) -> Option<HelpText> {
+        (**self).oopsie_help_text()
+    }
+
+    #[inline]
+    fn oopsie_exit_code(&self) -> Option<core::num::NonZeroU8> {
+        (**self).oopsie_exit_code()
+    }
+}
+
+// `Rc<T>` is intentionally absent: `std` provides `Error` for `Box`/`Arc` but
+// not `Rc`, so `Rc<T>` cannot satisfy this trait's `Error` supertrait — and an
+// `Rc` source can't satisfy `Error::source`'s return type either.
+impl<T: Diagnostic> Diagnostic for Arc<T> {
     #[inline]
     fn oopsie_backtrace(&self) -> Option<&Backtrace> {
         (**self).oopsie_backtrace()
@@ -139,6 +176,37 @@ mod tests {
             );
             let boxed = Box::new(src);
             let extracted = <(Backtrace, SpanTrace) as Capturable>::capture_or_extract(&boxed);
+            assert_eq!(extracted.0.frames().len(), expected_frames);
+        });
+    }
+
+    #[test]
+    fn arc_delegates_diagnostic_accessors() {
+        let src = Src {
+            backtrace: Backtrace::capture(),
+            spantrace: SpanTrace::capture(),
+        };
+        let arced = Arc::new(src);
+        assert!(arced.oopsie_backtrace().is_some());
+        assert!(arced.oopsie_spantrace().is_some());
+    }
+
+    #[test]
+    fn arc_diagnostic_extraction_reuses_source_frames() {
+        use crate::{RustBacktrace, with_rust_backtrace_override};
+
+        with_rust_backtrace_override(RustBacktrace::Enabled, || {
+            let src = Src {
+                backtrace: Backtrace::capture(),
+                spantrace: SpanTrace::capture(),
+            };
+            let expected_frames = src.backtrace.frames().len();
+            assert!(
+                expected_frames > 0,
+                "backtrace must be enabled for this test to be probative"
+            );
+            let arced = Arc::new(src);
+            let extracted = <(Backtrace, SpanTrace) as Capturable>::capture_or_extract(&arced);
             assert_eq!(extracted.0.frames().len(), expected_frames);
         });
     }

@@ -626,6 +626,24 @@ mod tests {
     }
 
     #[test]
+    fn wrap_boxed_captures_location_at_call_site() {
+        let boxed: BoxError = Box::new(std::io::Error::other("x"));
+        let wrap_line = line!() + 1;
+        let err = Welp::wrap_boxed(boxed, "outer");
+        let loc = err.oopsie_location().expect("wrap_boxed location");
+        assert!(loc.file().ends_with("welp.rs"));
+        assert_eq!(loc.line(), wrap_line);
+    }
+
+    #[test]
+    fn wrap_boxed_captures_traces_at_wrap_site() {
+        let boxed: BoxError = Box::new(std::io::Error::other("x"));
+        let err = Welp::wrap_boxed(boxed, "msg");
+        assert!(err.oopsie_backtrace().is_some());
+        assert!(err.oopsie_spantrace().is_some());
+    }
+
+    #[test]
     fn from_error_delegates_display_to_source() {
         let err = Welp::from_error(std::io::Error::other("disk full"));
         assert_eq!(err.to_string(), "disk full");

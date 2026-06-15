@@ -26,22 +26,25 @@ const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 /// [`from_error_ref`], or by deserializing a transported payload; read its
 /// contents through the accessor methods.
 ///
-/// The captured backtrace and span trace are exposed via [`backtrace`] and
-/// [`spantrace`] as [`ErasedBacktrace`] / [`ErasedSpanTrace`] snapshots. They
-/// are *not* surfaced through the [`Diagnostic`] impl: those accessors return
-/// references to live [`Backtrace`]/[`SpanTrace`] values, which a transported
-/// snapshot cannot reconstruct. Re-erasing an `ErasedError` (via
+/// The captured backtrace, span trace, and caller location are exposed via
+/// [`backtrace`], [`spantrace`], and [`location`] as [`ErasedBacktrace`] /
+/// [`ErasedSpanTrace`] / [`ErasedLocation`] snapshots. They are *not* surfaced
+/// through the [`Diagnostic`] impl: those accessors return references to live
+/// [`Backtrace`]/[`SpanTrace`] values and a `&'static` [`Location`], which a
+/// transported snapshot cannot reconstruct. Re-erasing an `ErasedError` (via
 /// [`from_error_ref`]) preserves the message, source chain, code, help, and exit
-/// code, but the trace snapshots stay reachable only through this type's own
-/// accessors.
+/// code, but the trace and location snapshots stay reachable only through this
+/// type's own accessors.
 ///
 /// [`from_error`]: ErasedError::from_error
 /// [`from_error_ref`]: ErasedError::from_error_ref
 /// [`backtrace`]: ErasedError::backtrace
 /// [`spantrace`]: ErasedError::spantrace
+/// [`location`]: ErasedError::location
 /// [`Diagnostic`]: crate::Diagnostic
 /// [`Backtrace`]: crate::Backtrace
 /// [`SpanTrace`]: crate::SpanTrace
+/// [`Location`]: std::panic::Location
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
 pub struct ErasedError {
@@ -394,6 +397,11 @@ impl ErasedError {
 
         // Message
         let _ = write!(out, "  \u{00d7} {}", self.message);
+
+        // Location
+        if let Some(location) = &self.location {
+            let _ = write!(out, "\n  at {location}");
+        }
 
         // Source chain
         let chain_len = self.source_chain.len();
@@ -1032,12 +1040,11 @@ mod tests {
         crate::clear_rust_backtrace_override();
 
         let erased = crate::erased::backtrace::ErasedBacktrace::from_backtrace(&bt);
-        // filename is already Box<str> — this compiles only if the type is correct.
         // Verify at least one frame has a non-empty filename string.
         let has_filename = erased
             .frames()
             .iter()
-            .any(|fr| fr.filename.as_deref().is_some_and(|s| !s.is_empty()));
+            .any(|fr| fr.filename().is_some_and(|s| !s.is_empty()));
         assert!(has_filename, "at least one frame should have a filename");
     }
 }

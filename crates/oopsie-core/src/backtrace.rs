@@ -218,6 +218,8 @@ impl fmt::Debug for Backtrace {
 
 impl Backtrace {
     /// Returns a reference to the inner [`backtrace::Backtrace`].
+    ///
+    /// Forces and caches full symbol resolution on first access.
     #[must_use]
     #[inline]
     pub fn as_backtrace(&self) -> &backtrace::Backtrace {
@@ -242,6 +244,8 @@ impl Backtrace {
     }
 
     /// Returns the frames of the backtrace.
+    ///
+    /// Forces and caches full symbol resolution on first access.
     #[must_use]
     #[inline]
     pub fn frames(&self) -> &[backtrace::BacktraceFrame] {

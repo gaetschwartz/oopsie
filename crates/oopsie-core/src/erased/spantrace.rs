@@ -77,8 +77,24 @@ pub struct ErasedSpanTrace {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ErasedSpan {
-    pub metadata: ErasedMetadata,
-    pub fields: Box<str>,
+    metadata: ErasedMetadata,
+    fields: Box<str>,
+}
+
+impl ErasedSpan {
+    /// The span's metadata.
+    #[must_use]
+    #[inline]
+    pub const fn metadata(&self) -> &ErasedMetadata {
+        &self.metadata
+    }
+
+    /// The span's recorded fields, formatted as a single string.
+    #[must_use]
+    #[inline]
+    pub fn fields(&self) -> &str {
+        &self.fields
+    }
 }
 
 /// Serializable metadata from a tracing span.

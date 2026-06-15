@@ -15,10 +15,40 @@ pub struct ErasedBacktrace {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct ErasedFrame {
-    pub name: Option<Box<str>>,
-    pub filename: Option<Box<str>>,
-    pub line: Option<u32>,
-    pub column: Option<u32>,
+    name: Option<Box<str>>,
+    filename: Option<Box<str>>,
+    line: Option<u32>,
+    column: Option<u32>,
+}
+
+impl ErasedFrame {
+    /// The resolved symbol name, if any.
+    #[must_use]
+    #[inline]
+    pub fn name(&self) -> Option<&str> {
+        self.name.as_deref()
+    }
+
+    /// The source file the frame resolved to, if any.
+    #[must_use]
+    #[inline]
+    pub fn filename(&self) -> Option<&str> {
+        self.filename.as_deref()
+    }
+
+    /// The line within the source file, if any.
+    #[must_use]
+    #[inline]
+    pub const fn line(&self) -> Option<u32> {
+        self.line
+    }
+
+    /// The column within the line, if any.
+    #[must_use]
+    #[inline]
+    pub const fn column(&self) -> Option<u32> {
+        self.column
+    }
 }
 
 impl ErasedBacktrace {

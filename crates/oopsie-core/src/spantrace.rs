@@ -170,9 +170,12 @@ impl crate::Capturable for SpanTrace {
 
 /// A wrapper around `Option<SpanTrace>` that implements [`Capturable`](crate::Capturable).
 ///
-/// This type only captures a span trace if the capture was successful
-/// (i.e., there was an active span and the subscriber supports it).
-/// Use this when you want to optionally include span traces.
+/// [`is_some`](Self::is_some) / [`is_none`](Self::is_none) reflect whether a
+/// `SpanTrace` value is present, not whether it was successfully captured: the
+/// [`some`](Self::some) and `From` constructors wrap unconditionally, so a
+/// present trace may still be empty/unsupported. Only the
+/// [`Capturable`](crate::Capturable) construction path enforces
+/// `is_some() == captured`.
 #[derive(Clone, Debug, Default)]
 pub struct OptionalSpanTrace(Option<SpanTrace>);
 
@@ -454,6 +457,8 @@ mod tests {
     fn shorter_stack_is_not_equal_to_deeper_one() {
         let (deep, shallow) = with_error_subscriber(|| (via_root_a(), leaf()));
         assert_ne!(deep, shallow);
+        // Reverse direction exercises the b-longer-than-a frame-walk branch.
+        assert_ne!(shallow, deep);
     }
 
     #[cfg(feature = "tracing")]

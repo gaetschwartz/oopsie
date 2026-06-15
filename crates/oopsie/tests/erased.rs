@@ -280,8 +280,8 @@ fn test_erased_spantrace_and_span_and_metadata_clone() {
     let cloned_span = span.clone();
     assert_eq!(span, cloned_span);
 
-    let metadata = cloned_span.metadata;
-    assert_eq!(span.metadata, metadata);
+    let metadata = cloned_span.metadata().clone();
+    assert_eq!(span.metadata(), &metadata);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

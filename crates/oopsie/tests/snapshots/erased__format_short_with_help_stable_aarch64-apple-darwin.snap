@@ -5,4 +5,5 @@ expression: short
 erased::ErrorWithHelp
 
   × Something went wrong: connection refused
+  at crates/oopsie/tests/erased.rs:[LOC]
   help: Try restarting the service

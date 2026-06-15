@@ -31,7 +31,9 @@ pub trait Contextual<E> {
 /// A field marked `#[oopsie(capture)]` is populated by calling [`capture`](Self::capture) at
 /// construction time, so it is dropped from the context selector and never supplied by the
 /// caller. The library implements `Capturable` for backtraces, span-traces (with the `tracing`
-/// feature), timestamps, the caller [`Location`], and the environment
+/// feature), [`SystemTime`](std::time::SystemTime)/[`Instant`](std::time::Instant) timestamps
+/// (plus `chrono::DateTime<Local>` under the `chrono` feature and `jiff::Timestamp`/`jiff::Zoned`
+/// under the `jiff` feature), the caller [`Location`], and the environment
 /// snapshots in [`extras`](crate::extras). Implement it for your own type to capture anything
 /// else, such as a request or thread id.
 ///
