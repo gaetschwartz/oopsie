@@ -18,6 +18,7 @@ use crate::Backtrace;
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A single frame from a backtrace.
+#[non_exhaustive]
 pub struct BacktraceFrame {
     /// Instruction pointer of the physical frame this symbol belongs to.
     /// Inline expansion gives several rendered frames the same `ip`.
@@ -28,12 +29,53 @@ pub struct BacktraceFrame {
     pub colno: Option<u32>,
 }
 
+impl BacktraceFrame {
+    /// Construct a frame from its resolved symbol parts.
+    #[must_use]
+    #[inline]
+    pub const fn new(
+        ip: usize,
+        name: Option<Box<str>>,
+        filename: Option<Box<path::Path>>,
+        lineno: Option<u32>,
+        colno: Option<u32>,
+    ) -> Self {
+        Self {
+            ip,
+            name,
+            filename,
+            lineno,
+            colno,
+        }
+    }
+}
+
 /// Metadata for a single span in a span trace.
+#[non_exhaustive]
 pub struct SpanMetadata<'a> {
     pub name: &'a str,
     pub target: &'a str,
     pub file: Option<&'a str>,
     pub line: Option<u32>,
+}
+
+impl<'a> SpanMetadata<'a> {
+    /// Construct span metadata from its borrowed parts.
+    #[must_use]
+    #[inline]
+    pub const fn new(
+        name: &'a str,
+        target: &'a str,
+        file: Option<&'a str>,
+        line: Option<u32>,
+    ) -> Self {
+        Self {
+            name,
+            target,
+            file,
+            line,
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,6 +134,7 @@ impl SpanTraceProvider for crate::SpanTrace {
 
 /// Color theme for trace rendering.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct TraceTheme {
     pub frame_number: Style,
     pub function_name: Style,
@@ -261,15 +304,10 @@ const OS_ENTRY_PREFIXES: &[&str] = &[
 
 /// Check if a frame name matches backtrace capture code.
 fn is_backtrace_capture_code(name: &str, filename: Option<&path::Path>) -> bool {
-    if BACKTRACE_CAPTURE_PREFIXES
+    BACKTRACE_CAPTURE_PREFIXES
         .iter()
         .any(|prefix| name.starts_with(prefix))
         || filename.is_some_and(|f| f.starts_with(oopsie_core::__private::CORE_SRC_PATH))
-    {
-        return true;
-    }
-
-    false
 }
 
 /// Frames emitted by `#[oopsie]` expansions resolve to the macro invocation
@@ -573,7 +611,10 @@ impl TracePrinter {
             .unwrap_or_else(|| crate::theme::get_theme().trace())
     }
 
-    /// Render a colored backtrace.
+    /// Render a colored backtrace, including the ` BACKTRACE ` header.
+    ///
+    /// Writes nothing at all when the filter masks every frame, so a degenerate
+    /// trace never leaves a lone banner behind.
     pub fn write_backtrace(
         &self,
         f: &mut fmt::Formatter<'_>,
@@ -584,6 +625,12 @@ impl TracePrinter {
 
         let mut filtered: Vec<_> = all_frames.iter().map(Some).collect();
         (self.frame_filter)(&mut filtered);
+
+        // An all-masked trace would render a lone banner above a hidden-frames
+        // notice and no frames; suppress the whole section instead.
+        if !filtered.iter().any(Option::is_some) {
+            return Ok(());
+        }
 
         writeln!(
             f,
@@ -686,7 +733,10 @@ impl TracePrinter {
         Ok(())
     }
 
-    /// Render a colored span trace.
+    /// Render a colored span trace, including the ` SPANTRACE ` header.
+    ///
+    /// Always writes the header, so callers must pre-check that the provider
+    /// yields at least one span — an empty provider leaves a lone banner.
     pub fn write_spantrace(
         &self,
         f: &mut fmt::Formatter<'_>,

@@ -19,7 +19,7 @@ proc-macro = true
 
 [features]
 default = []
-unstable-error-generic-member-access = ["oopsie/unstable-error-generic-member-access"]
+unstable-error-generic-member-access = []
 unstable = ["unstable-error-generic-member-access"]
 
 [dependencies]

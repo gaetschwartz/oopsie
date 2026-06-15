@@ -3,10 +3,10 @@
 //!
 //! A [`Theme`] is a small named palette; its `const fn` role accessors
 //! ([`Theme::function_name`], [`Theme::line_number`], …) map each part of a
-//! report onto a palette color. Presets ship as associated constants
-//! ([`Theme::CATPPUCCIN_MOCHA`], [`Theme::DRACULA`], [`Theme::NORD`], …); the
-//! active default is read from a process-global slot via [`get_theme`] and
-//! replaced with [`set_theme`].
+//! report onto a palette color. The shipped themes are curated presets, exposed
+//! as associated constants ([`Theme::CATPPUCCIN_MOCHA`], [`Theme::DRACULA`],
+//! [`Theme::NORD`], …); pick one. The active default is read from a
+//! process-global slot via [`get_theme`] and replaced with [`set_theme`].
 
 use std::sync::{PoisonError, RwLock};
 
@@ -17,6 +17,9 @@ use crate::trace_printer::TraceTheme;
 /// A color theme: nine named colors plus the role accessors that paint a
 /// report from them. Just the palette — cheap to copy; styles are derived on
 /// demand by the accessor methods rather than stored.
+///
+/// Choose one of the shipped presets (the associated constants) and install it
+/// with [`set_theme`]; the palette colors are intentionally opaque.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Theme {
     red: (u8, u8, u8),

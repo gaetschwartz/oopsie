@@ -454,23 +454,17 @@ impl BacktraceProvider for FixedFrames {
 }
 
 fn frame(name: &str, lineno: Option<u32>, colno: Option<u32>) -> BacktraceFrame {
-    BacktraceFrame {
-        ip: 0,
-        name: Some(name.into()),
-        filename: Some(std::path::Path::new("src/lib.rs").into()),
+    BacktraceFrame::new(
+        0,
+        Some(name.into()),
+        Some(std::path::Path::new("src/lib.rs").into()),
         lineno,
         colno,
-    }
+    )
 }
 
 fn frame_clone(f: &BacktraceFrame) -> BacktraceFrame {
-    BacktraceFrame {
-        ip: f.ip,
-        name: f.name.clone(),
-        filename: f.filename.clone(),
-        lineno: f.lineno,
-        colno: f.colno,
-    }
+    BacktraceFrame::new(f.ip, f.name.clone(), f.filename.clone(), f.lineno, f.colno)
 }
 
 /// Adapts a `TracePrinter` + provider into a `Display` so we can drive the

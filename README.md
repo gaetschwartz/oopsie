@@ -47,6 +47,8 @@ fn main() -> oopsie::Report<AppError> {
 | `tracing` | no | stable | span-trace capture and the `tracing-subscriber` error layer |
 | `serde` | no | stable | the `erased` module: serialize any error as a type-erased value |
 | `chrono` | no | stable | `chrono::DateTime<Local>` timestamps for `traced(timestamp(chrono = true))`; no direct `chrono` dependency required |
+| `jiff` | no | stable | `jiff::Timestamp` / `jiff::Zoned` timestamp capture |
+| `extras` | no | stable | the `extras` module: environment-snapshot `Capturable` helpers |
 | `unstable` | no | nightly | umbrella for the two features below |
 | `unstable-error-generic-member-access` | no | nightly | trace/diagnostic surfacing through the Provider API |
 | `unstable-try-trait-v2` | no | nightly | `?` converts directly into `Report` |

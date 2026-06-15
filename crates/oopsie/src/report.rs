@@ -10,7 +10,7 @@ use crate::ColorMode;
 
 use crate::Diagnostic;
 
-use crate::color::style;
+use crate::color::{S, style};
 use crate::theme::{Theme, get_theme};
 use crate::trace_printer::{TracePrinter, error_backtrace_frame_filter, marker_strip_filter};
 

@@ -2,7 +2,7 @@
 //! Integration tests for environment-based color detection.
 //!
 //! `detect_env_color_support` is private, reads process-global env, and caches
-//! its result in a `OnceLock` — and `std::env::set_var` is unsafe in edition
+//! its result in an atomic — and `std::env::set_var` is unsafe in edition
 //! 2024 — so it can't be exercised from an in-process unit test. We re-exec
 //! this test binary as a child (the same pattern as `panic_hook.rs`): with
 //! `OOPSIE_COLOR_ENV_TEST_TRIGGER` set, the `color_probe_child` test prints

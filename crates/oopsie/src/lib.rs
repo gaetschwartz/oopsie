@@ -72,6 +72,9 @@
 //! Override it per variant with `#[oopsie(code = "...")]`, or disable it with
 //! `#[oopsie::oopsie(traced, code = false)]`.
 //!
+//! Call [`start_marker!`] early in a thread to hide the setup frames below it
+//! from rendered traces.
+//!
 //! See the [`#[oopsie]` documentation](oopsie) for the full parameter reference.
 //!
 //! # Reporting
@@ -264,6 +267,7 @@ e.g. API error responses."
 //! | `backtrace` | Captured backtrace field |
 //! | `spantrace` | Captured span-trace field |
 //! | `traces` | Packed `(Backtrace, SpanTrace)` field |
+//! | `location` | Captured caller location |
 //! | `help` | Dynamic help from this field's `Display` |
 //!
 //! A field named `source` is auto-detected as the chained source error, and a
@@ -276,6 +280,7 @@ e.g. API error responses."
 #![doc = include_str!("__private/keyword_docs/field/backtrace.md")]
 #![doc = include_str!("__private/keyword_docs/field/spantrace.md")]
 #![doc = include_str!("__private/keyword_docs/field/traces.md")]
+#![doc = include_str!("__private/keyword_docs/field/location.md")]
 #![doc = include_str!("__private/keyword_docs/field/help.md")]
 //!
 //! ## Generic error types
@@ -348,6 +353,7 @@ pub mod backtrace {
 #[doc(hidden)]
 mod generated;
 
+#[doc(hidden)]
 pub mod __private {
     #[cfg(feature = "fancy")]
     pub use crate::generated::{GENERATED_SITES, GeneratedSite};
