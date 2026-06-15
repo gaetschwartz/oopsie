@@ -125,7 +125,7 @@ macro_rules! style {
 }
 
 /// The empty-style sentinel: an `owo_colors::Style` that emits no ANSI codes,
-/// used as the uncolored base by [`style!`].
+/// used as the uncolored base when colorization is off.
 pub const S: owo_colors::Style = owo_colors::Style::new();
 pub(crate) use style;
 

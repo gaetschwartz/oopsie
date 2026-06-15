@@ -15,8 +15,7 @@ use owo_colors::Style;
 use crate::trace_printer::TraceTheme;
 
 /// A color theme: nine named colors plus the role accessors that paint a
-/// report from them. Just the palette — cheap to copy; styles are derived on
-/// demand by the accessor methods rather than stored.
+/// report from them. Small and `Copy`.
 ///
 /// Choose one of the shipped presets (the associated constants) and install it
 /// with [`set_theme`]; the palette colors are intentionally opaque.

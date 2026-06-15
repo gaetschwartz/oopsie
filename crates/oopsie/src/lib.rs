@@ -3,6 +3,7 @@
     feature(error_generic_member_access)
 )]
 #![cfg_attr(feature = "unstable-try-trait-v2", feature(try_trait_v2))]
+#![warn(missing_docs)]
 // Doctests that use `#[oopsie::oopsie]` may generate `fn provide(...)` when the
 // `unstable-error-generic-member-access` feature is active; inject the corresponding
 // language feature flag so they compile under `--features unstable`.
@@ -364,6 +365,12 @@ pub mod __private {
     pub mod documented;
 }
 
+/// Serializable, type-erased representations of errors.
+///
+/// [`ErasedError`](erased::ErasedError) captures an error's message, source chain, code, help, span
+/// trace, and backtrace into owned data that implements `Serialize` /
+/// `Deserialize`, for transporting errors across process boundaries such as API
+/// error responses.
 #[cfg(feature = "serde")]
 pub mod erased {
     pub use oopsie_core::erased::{

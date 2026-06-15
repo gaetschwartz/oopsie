@@ -23,9 +23,13 @@ pub struct BacktraceFrame {
     /// Instruction pointer of the physical frame this symbol belongs to.
     /// Inline expansion gives several rendered frames the same `ip`.
     pub ip: usize,
+    /// Resolved symbol name, demangled when available.
     pub name: Option<Box<str>>,
+    /// Source file the symbol was compiled from.
     pub filename: Option<Box<path::Path>>,
+    /// Line number within [`filename`](Self::filename).
     pub lineno: Option<u32>,
+    /// Column number within [`filename`](Self::filename).
     pub colno: Option<u32>,
 }
 
@@ -53,9 +57,13 @@ impl BacktraceFrame {
 /// Metadata for a single span in a span trace.
 #[non_exhaustive]
 pub struct SpanMetadata<'a> {
+    /// The span's name.
     pub name: &'a str,
+    /// The span's target (typically the module path it was created in).
     pub target: &'a str,
+    /// Source file where the span was created.
     pub file: Option<&'a str>,
+    /// Line number within [`file`](Self::file).
     pub line: Option<u32>,
 }
 
@@ -84,11 +92,15 @@ impl<'a> SpanMetadata<'a> {
 
 /// Trait for types that can provide backtrace frames.
 pub trait BacktraceProvider {
+    /// Resolve the backtrace into rendered frames, top of stack first.
     fn frames(&self) -> Vec<BacktraceFrame>;
 }
 
 /// Trait for types that can provide span trace information.
 pub trait SpanTraceProvider {
+    /// Invoke `f` once per span, from innermost to outermost, passing the
+    /// span's metadata and its formatted fields. Iteration stops early when
+    /// `f` returns `false`.
     fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata<'_>, &str) -> bool);
 }
 
@@ -136,14 +148,23 @@ impl SpanTraceProvider for crate::SpanTrace {
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[non_exhaustive]
 pub struct TraceTheme {
+    /// Style for the per-frame index.
     pub frame_number: Style,
+    /// Style for a frame's function (or `target::name`) symbol.
     pub function_name: Style,
+    /// Style for the `::h…` hash suffix appended to a mangled symbol.
     pub function_hash: Style,
+    /// Style for a frame's source file path.
     pub file_path: Style,
+    /// Style for the `:line[:col]` suffix after a file path.
     pub line_number: Style,
+    /// Style for fixed separators (`: `, `at `, `with `).
     pub separator: Style,
+    /// Style for a span frame's formatted fields.
     pub fields: Style,
+    /// Style for the ` BACKTRACE ` / ` SPANTRACE ` section banner.
     pub header: Style,
+    /// Style for the "… N frames hidden …" notice.
     pub frames_hidden: Style,
 }
 
