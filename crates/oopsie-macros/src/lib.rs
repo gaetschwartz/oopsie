@@ -2,6 +2,17 @@
     feature = "unstable-error-generic-member-access",
     doc(test(attr(feature(error_generic_member_access))))
 )]
+#![warn(missing_docs)]
+//! Procedural macros backing the `oopsie` error-handling crate.
+//!
+//! This crate provides the [`#[oopsie]`](macro@oopsie) attribute — the canonical
+//! way to define an error type — and the underlying [`Oopsie`](macro@oopsie_derive)
+//! derive. Both generate context selectors plus `Display` and `Error` impls; the
+//! attribute additionally derives `Debug` and can inject diagnostic fields such
+//! as backtraces, span traces, timestamps, and caller locations.
+//!
+//! Depend on the `oopsie` facade rather than this crate directly; the macros are
+//! re-exported from there alongside the runtime they expand against.
 
 pub(crate) mod derive;
 pub(crate) mod keyword_docs;
