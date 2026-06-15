@@ -6,8 +6,8 @@ error[E0277]: the trait bound `PathBuf: From<{integer}>` is not satisfied
    |
    = help: `PathBuf` implements trait `From<T>`:
              From<&T>
-             From<Box<std::path::Path>>
-             From<Cow<'_, std::path::Path>>
+             From<Box<Path>>
+             From<Cow<'_, Path>>
              From<OsString>
              From<String>
    = note: required for `{integer}` to implement `Into<PathBuf>`

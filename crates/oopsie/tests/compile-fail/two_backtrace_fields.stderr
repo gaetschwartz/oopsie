@@ -1,0 +1,5 @@
+error: at most one backtrace field per variant/struct
+  --> tests/compile-fail/two_backtrace_fields.rs:16:5
+   |
+16 |     second: oopsie::Backtrace,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^

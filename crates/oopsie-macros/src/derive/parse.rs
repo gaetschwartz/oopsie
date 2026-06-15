@@ -658,7 +658,8 @@ pub enum SourceKind {
 }
 
 /// Inner shape for `from(Type, transform)`. Used only as a parsing helper.
-/// The `comma` field is captured by `derive(Parse)` but never read.
+/// The `#[prefix]` consumes the separating comma before `transform` without
+/// binding it.
 #[derive(derive_syn_parse::Parse)]
 struct SourceKindTransform {
     ty: Type,
@@ -1504,16 +1505,40 @@ impl CategorizedFields {
                 ));
             }
             let is_traces = attrs.traces || is_traces_type(&field.ty);
-            if (attrs.backtrace || is_backtrace_type(&field.ty)) && backtrace_field.is_none() {
+            if attrs.backtrace || is_backtrace_type(&field.ty) {
+                if backtrace_field.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        field,
+                        "at most one backtrace field per variant/struct",
+                    ));
+                }
                 backtrace_field = Some(ident.clone());
             }
-            if (attrs.spantrace || is_spantrace_type(&field.ty)) && spantrace_field.is_none() {
+            if attrs.spantrace || is_spantrace_type(&field.ty) {
+                if spantrace_field.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        field,
+                        "at most one spantrace field per variant/struct",
+                    ));
+                }
                 spantrace_field = Some(ident.clone());
             }
-            if is_traces && traces_field.is_none() {
+            if is_traces {
+                if traces_field.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        field,
+                        "at most one packed `traces` field per variant/struct",
+                    ));
+                }
                 traces_field = Some(ident.clone());
             }
-            if (attrs.location || is_location_type(&field.ty)) && location_field.is_none() {
+            if attrs.location || is_location_type(&field.ty) {
+                if location_field.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        field,
+                        "at most one location field per variant/struct",
+                    ));
+                }
                 location_field = Some(ident.clone());
             }
             if attrs.help {

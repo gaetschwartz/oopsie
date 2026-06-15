@@ -122,6 +122,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | `backtrace` | Enable/tune the captured backtrace (default on) |
 /// | `spantrace` | Enable/tune the captured span trace (default on; captures nothing without the `tracing` feature) |
 /// | `timestamp` | Inject an auto-captured timestamp field (default off) |
+/// | `location` | Inject an auto-captured call-site `Location` field (default on) |
 /// | `packed` | Store both traces as one `(Backtrace, SpanTrace)` field |
 /// | `boxed` | Box the injected trace field(s) |
 /// | `code` | Tune (or disable) the auto error code |
@@ -133,6 +134,7 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/backtrace.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/spantrace.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/timestamp.md")]
+#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/location.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/packed.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/boxed.md")]
 #[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/code.md")]

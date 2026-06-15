@@ -30,6 +30,7 @@ const NESTED_ONLY_KEYS: &[&str] = &[
     "backtrace",
     "spantrace",
     "timestamp",
+    "location",
     "packed",
     "boxed",
     "code",
@@ -377,6 +378,12 @@ mod tests {
     fn top_level_code_points_at_nested_form() {
         let err = expand(quote! { code = false }, quote! { pub struct S { x: u32 } }).unwrap_err();
         assert!(err.to_string().contains("traced(code = false)"), "{err}");
+    }
+
+    #[test]
+    fn top_level_location_points_at_nested_form() {
+        let err = expand(quote! { location }, quote! { pub struct S { x: u32 } }).unwrap_err();
+        assert!(err.to_string().contains("traced(location)"), "{err}");
     }
 
     #[test]
