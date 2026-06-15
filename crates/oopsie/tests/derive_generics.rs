@@ -269,3 +269,81 @@ fn generic_struct_with_source() {
     assert_eq!(err.path, "/etc/conf");
     assert_eq!(err.source().unwrap().to_string(), "nope");
 }
+
+// ─── inter-parameter inline bound: leaf references the dependent param only ───
+// `U: From<T>` names `T` in its bound, but the convert variant's field uses only
+// `U`. The selector carries `U` alone (bound-free struct); `T` rides
+// `build`/`fail` as a method generic, where `U: From<T>` is back in scope. The
+// seed variant keeps `T` non-degenerate so the enum itself is well-formed.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum InlineBoundError<T: fmt::Debug + Clone, U: From<T> + fmt::Debug> {
+    #[oopsie("converted {value:?}")]
+    InlineConvert { value: U },
+    #[oopsie("seed {seed:?}")]
+    InlineSeed { seed: T },
+}
+
+#[test]
+fn inline_inter_parameter_bound_leaf() {
+    // `T = u8`, `U = u16`; `U: From<T>` is satisfied, supplied as method generic.
+    let err: InlineBoundError<u8, u16> = InlineConvert { value: 300u16 }.build();
+    assert_eq!(err.to_string(), "converted 300");
+    assert!(matches!(err, InlineBoundError::InlineConvert { value } if value == 300));
+    // `fail` returns the same destination through its `Err` arm.
+    let res: Result<(), InlineBoundError<u8, u16>> = InlineConvert { value: 7u16 }.fail();
+    assert_eq!(res.unwrap_err().to_string(), "converted 7");
+}
+
+// ─── inter-parameter where-clause bound: same shape via a `where` clause ───
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum WhereBoundError<T, U>
+where
+    T: fmt::Debug + Clone,
+    U: From<T> + fmt::Debug,
+{
+    #[oopsie("converted {value:?}")]
+    WhereConvert { value: U },
+    #[oopsie("seed {seed:?}")]
+    WhereSeed { seed: T },
+}
+
+#[test]
+fn where_clause_inter_parameter_bound_leaf() {
+    let err: WhereBoundError<u8, u16> = WhereConvert { value: 256u16 }.build();
+    assert_eq!(err.to_string(), "converted 256");
+    let err: WhereBoundError<u8, u16> = WhereSeed { seed: 9u8 }.build();
+    assert_eq!(err.to_string(), "seed 9");
+}
+
+// ─── inter-parameter bound on a sourced variant that references all params ───
+// The sourced `Contextual` impl carries every error parameter, so `U: From<T>`
+// is satisfiable there as long as the variant constrains both `T` and `U` (a
+// variant that left `T` unreferenced is rejected by the unconstrained-param
+// guard, covered by the `sourced_variant_unconstrained_param` trybuild case).
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum SourcedInterBound<
+    T: fmt::Debug + Clone,
+    U: From<T> + fmt::Debug,
+    E: std::error::Error + 'static,
+> {
+    #[oopsie("converted {value:?} from {seed:?}")]
+    SourcedConvert { source: E, value: U, seed: T },
+}
+
+#[test]
+fn sourced_inter_parameter_bound_all_params() {
+    let io_err = io::Error::new(io::ErrorKind::Other, "boom");
+    let err: SourcedInterBound<u8, u16, io::Error> = SourcedConvert {
+        value: 42u16,
+        seed: 1u8,
+    }
+    .build_error(io_err);
+    assert_eq!(err.to_string(), "converted 42 from 1");
+    assert_eq!(err.source().expect("exposes source").to_string(), "boom");
+}

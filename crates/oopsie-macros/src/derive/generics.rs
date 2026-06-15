@@ -6,7 +6,9 @@
 //! whose fields never mention them (e.g. a leaf variant on `enum E<T, U>` whose
 //! fields use neither). This module finds the minimal subset a selector's
 //! captured fields actually reference and projects the error's generics down to
-//! just that subset, preserving the original declaration order and bounds.
+//! just that subset, preserving the original declaration order. Inline bounds
+//! are lowered to `where` predicates on the impls (a struct needs none, and a
+//! bound may name a parameter the selector does not carry).
 
 use std::collections::HashSet;
 
@@ -28,8 +30,8 @@ pub struct SelectorGenerics {
 }
 
 impl SelectorGenerics {
-    /// The declaration-position generics (`<'a, T: Bound, const N: usize>`),
-    /// bounds and all, or empty tokens when the selector carries no parameter.
+    /// The declaration-position generics (`<'a, T, const N: usize>`), bounds
+    /// lowered out, or empty tokens when the selector carries no parameter.
     pub fn decl(&self) -> TokenStream2 {
         if self.decl_params.is_empty() {
             return quote! {};
@@ -65,56 +67,32 @@ pub fn param_name(param: &GenericParam) -> String {
     }
 }
 
-/// Whether a `where` predicate's subject (the bounded type or lifetime) names
-/// any parameter in `names`. Used to route each error predicate to the impl or
-/// method that has the parameter in scope.
-pub fn predicate_mentions(
-    pred: &syn::WherePredicate,
-    names: &std::collections::HashSet<String>,
-) -> bool {
-    let probe_ty = |ty: &Type| {
-        let mut found = false;
-        for name in names {
-            // A cheap textual check would misfire on substrings; reuse the type
-            // walk by building a single-name declared set.
-            let declared = DeclaredParams {
-                types: std::iter::once(name.clone()).collect(),
-                consts: std::iter::once(name.clone()).collect(),
-                lifetimes: std::iter::once(name.clone()).collect(),
-            };
-            if declared.type_references_param(ty) {
-                found = true;
-                break;
-            }
-        }
-        found
-    };
-    match pred {
-        syn::WherePredicate::Type(ty_pred) => probe_ty(&ty_pred.bounded_ty),
-        syn::WherePredicate::Lifetime(lt_pred) => {
-            names.contains(&lt_pred.lifetime.ident.to_string())
-        }
-        _ => false,
-    }
-}
-
 /// Project `generics` down to the parameters whose names appear in
-/// `referenced`, keeping declaration order. A `where` predicate is **not**
-/// pulled in here: selector structs carry no `where` clause (their `Into`
-/// bounds suffice for construction), so only the parameter declarations and
-/// their inline bounds travel onto the selector.
+/// `referenced`, keeping declaration order. Inline bounds are **dropped** from
+/// the projected declarations: a struct (`struct EV<U> { val: U }`) needs no
+/// bound to be well-formed, and a bound may name a parameter the selector does
+/// not carry (`U: From<T>` with `T` unprojected), which would dangle on the
+/// struct. The bounds re-surface as `where` predicates on the impls that name
+/// the destination error — see [`projected_bound_predicates`], routed by the
+/// generators to whichever impl or method has every named parameter in scope.
 pub fn project(generics: &Generics, referenced: &ReferencedParams) -> SelectorGenerics {
     let mut decl_params = Vec::new();
     let mut use_args = Vec::new();
     for param in &generics.params {
         match param {
             GenericParam::Lifetime(lt) if referenced.lifetimes.contains(&lt.lifetime) => {
-                decl_params.push(param.clone());
+                let mut bare = lt.clone();
+                bare.bounds.clear();
+                bare.colon_token = None;
+                decl_params.push(GenericParam::Lifetime(bare));
                 let lifetime = &lt.lifetime;
                 use_args.push(quote! { #lifetime });
             }
             GenericParam::Type(tp) if referenced.types.contains(&tp.ident.to_string()) => {
-                decl_params.push(param.clone());
+                let mut bare = tp.clone();
+                bare.bounds.clear();
+                bare.colon_token = None;
+                decl_params.push(GenericParam::Type(bare));
                 let ident = &tp.ident;
                 use_args.push(quote! { #ident });
             }
@@ -130,6 +108,80 @@ pub fn project(generics: &Generics, referenced: &ReferencedParams) -> SelectorGe
         decl_params,
         use_args,
     }
+}
+
+/// The `where` predicates equivalent to the inline bounds of the parameters
+/// named in `projected` (`<U: From<T>>` → `U: From<T>`). [`project`] strips
+/// these bounds off the selector's struct declarations, so they must travel
+/// onto the impls that name the destination error; a caller routes each one to
+/// the impl or method that has every parameter it names in scope.
+pub fn projected_bound_predicates(
+    generics: &Generics,
+    projected: &std::collections::HashSet<String>,
+) -> Vec<syn::WherePredicate> {
+    let mut predicates = Vec::new();
+    for param in &generics.params {
+        match param {
+            GenericParam::Type(tp) if projected.contains(&tp.ident.to_string()) => {
+                if tp.bounds.is_empty() {
+                    continue;
+                }
+                let ident = &tp.ident;
+                let bounds = &tp.bounds;
+                predicates.push(syn::parse_quote! { #ident: #bounds });
+            }
+            GenericParam::Lifetime(lt) if projected.contains(&lt.lifetime.ident.to_string()) => {
+                if lt.bounds.is_empty() {
+                    continue;
+                }
+                let lifetime = &lt.lifetime;
+                let bounds = &lt.bounds;
+                predicates.push(syn::parse_quote! { #lifetime: #bounds });
+            }
+            GenericParam::Type(_) | GenericParam::Lifetime(_) | GenericParam::Const(_) => {}
+        }
+    }
+    predicates
+}
+
+/// Every generic parameter a `where` predicate names — in its subject and in
+/// its bounds — restricted to those declared in `declared`. Routing a predicate
+/// requires the *whole* set in scope, so a bound that names an extra parameter
+/// (`U: From<T>`) is not silently dropped the way a subject-only check would.
+pub fn predicate_named_params(
+    pred: &syn::WherePredicate,
+    declared: &DeclaredParams,
+) -> std::collections::HashSet<String> {
+    let mut found = ReferencedParams::default();
+    match pred {
+        syn::WherePredicate::Type(ty_pred) => {
+            found.add_type(&ty_pred.bounded_ty, declared);
+            for bound in &ty_pred.bounds {
+                if let syn::TypeParamBound::Trait(tb) = bound {
+                    let mut visitor = RefVisitor {
+                        declared,
+                        found: &mut found,
+                    };
+                    visitor.visit_path(&tb.path);
+                }
+            }
+        }
+        syn::WherePredicate::Lifetime(lt_pred) => {
+            if declared
+                .lifetimes
+                .contains(&lt_pred.lifetime.ident.to_string())
+            {
+                found.lifetimes.insert(lt_pred.lifetime.clone());
+            }
+            for bound in &lt_pred.bounds {
+                if declared.lifetimes.contains(&bound.ident.to_string()) {
+                    found.lifetimes.insert(bound.clone());
+                }
+            }
+        }
+        _ => {}
+    }
+    found.names()
 }
 
 /// The names of an error type's generic parameters, partitioned by kind, so a

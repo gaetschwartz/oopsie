@@ -1,0 +1,5 @@
+error: a variant with a `source` field must reference every generic parameter of the error type in its source type or its other fields; parameter `T` is used only by other variants, which would leave this selector's `Contextual` impl unconstrained — split it into its own error type or add `T` to this variant
+  --> tests/compile-fail/sourced_inter_parameter_bound_unconstrained.rs:14:19
+   |
+14 | enum ConvertError<T: std::fmt::Debug + Clone, U: From<T> + std::fmt::Debug, E: std::error::Error + 'static>
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^^^^

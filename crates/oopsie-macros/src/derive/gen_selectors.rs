@@ -20,7 +20,8 @@ struct SelectorShape<'a> {
     /// destination (`E<all>`) and split parameters into selector-bound and free.
     generics: &'a Generics,
     /// Declaration generics for the selector struct: projected error params
-    /// (with bounds) followed by the `__T{i}` params, e.g. `<T, __T0>`.
+    /// (bounds lowered to the impls) followed by the `__T{i}` params, e.g.
+    /// `<T, __T0>`.
     struct_decl: TokenStream2,
     /// Use-position generics naming the selector: the same params without
     /// bounds, e.g. `<T, __T0>`. Used wherever the selector type is named (the
@@ -95,8 +96,8 @@ fn selector_shape<'a>(
     let struct_decl = join_generics(projected.decl(), &into_param_tokens);
     let struct_use = join_generics(projected.use_(), &into_param_tokens);
 
-    // The selector's own parameters: projected error params (with bounds) plus
-    // the synthetic `__T{i}` type params.
+    // The selector's own parameters: projected error params (bounds lowered to
+    // the impls) plus the synthetic `__T{i}` type params.
     let mut selector_params = projected.params().to_vec();
     for ident in &into_param_idents {
         selector_params.push(syn::parse_quote! { #ident });
@@ -126,12 +127,13 @@ fn selector_shape<'a>(
 
 impl SelectorShape<'_> {
     /// Impl generics and `where` clause for an impl scoped to the selector alone:
-    /// its parameters, the `where` predicates over those parameters, and the
-    /// `Into` bounds. Used for the leaf `build`/`fail` inherent impl and the
-    /// `NoSource` `Contextual` impl. A predicate over a *free* parameter is left
-    /// off here — the leaf path puts it on `build`/`fail` (which declare the free
-    /// parameter), and the `NoSource` impl is emitted only when no parameter is
-    /// free (see [`SelectorShape::free_params`]).
+    /// its parameters, the bounds and `where` predicates every one of whose named
+    /// parameters the selector carries, and the `Into` bounds. Used for the leaf
+    /// `build`/`fail` inherent impl and the `NoSource` `Contextual` impl. A
+    /// predicate that also names a *free* parameter is left off here — the leaf
+    /// path puts it on `build`/`fail` (which declare the free parameter), and the
+    /// `NoSource` impl is emitted only when no parameter is free (see
+    /// [`SelectorShape::free_params`]).
     fn selector_impl(&self) -> (TokenStream2, TokenStream2) {
         let params = &self.selector_params;
         let impl_generics = if params.is_empty() {
@@ -198,21 +200,47 @@ impl SelectorShape<'_> {
         })
     }
 
-    /// The `where` predicates whose subject mentions one of `names`.
+    /// The pool of `where` predicates the leaf impls must place: the error's own
+    /// `where` clause plus the inline bounds [`project`] stripped off the
+    /// selector's struct parameters (`<U: From<T>>` → `U: From<T>`). A free
+    /// parameter's inline bounds are not lowered here — they ride its method-
+    /// generic declaration in [`SelectorShape::free_params`] — so each pool
+    /// predicate lands on exactly one impl or method.
+    ///
+    /// [`project`]: super::generics::project
+    fn leaf_predicate_pool(&self) -> Vec<syn::WherePredicate> {
+        let mut pool =
+            super::generics::projected_bound_predicates(self.generics, &self.referenced_names);
+        pool.extend(
+            self.generics
+                .where_clause
+                .iter()
+                .flat_map(|wc| wc.predicates.iter())
+                .cloned(),
+        );
+        pool
+    }
+
+    /// The pool predicates every one of whose named parameters is in `names`, so
+    /// they fit an impl scoped to exactly that parameter set. A predicate whose
+    /// bound also names a parameter outside `names` (`U: From<T>` with `T` not in
+    /// `names`) is held back for whichever method does declare it.
     fn scoped_predicates(&self, names: &std::collections::HashSet<String>) -> Vec<TokenStream2> {
-        self.generics
-            .where_clause
+        let declared = DeclaredParams::from_generics(self.generics);
+        self.leaf_predicate_pool()
             .iter()
-            .flat_map(|wc| wc.predicates.iter())
-            .filter(|pred| super::generics::predicate_mentions(pred, names))
+            .filter(|pred| {
+                super::generics::predicate_named_params(pred, &declared).is_subset(names)
+            })
             .map(|pred| quote! { #pred })
             .collect()
     }
 
-    /// The error parameters no field references, declared with bounds and the
-    /// `where` predicates over them, for the leaf `build`/`fail` methods (which
-    /// name the destination `E<all>`). Empty when the selector pins every error
-    /// parameter, in which case the `NoSource` `Contextual` impl is emitted.
+    /// The error parameters no field references, declared with their inline
+    /// bounds, plus the pool predicates that name at least one of them, for the
+    /// leaf `build`/`fail` methods (which name the destination `E<all>`, bringing
+    /// every error parameter into scope). Empty when the selector pins every
+    /// error parameter, in which case the `NoSource` `Contextual` impl is emitted.
     fn free_params(&self) -> (Vec<GenericParam>, Vec<TokenStream2>) {
         let decl: Vec<GenericParam> = self
             .generics
@@ -227,12 +255,13 @@ impl SelectorShape<'_> {
             .collect();
         let free_names: std::collections::HashSet<String> =
             decl.iter().map(super::generics::param_name).collect();
+        let declared = DeclaredParams::from_generics(self.generics);
         let predicates = self
-            .generics
-            .where_clause
+            .leaf_predicate_pool()
             .iter()
-            .flat_map(|wc| wc.predicates.iter())
-            .filter(|pred| super::generics::predicate_mentions(pred, &free_names))
+            .filter(|pred| {
+                !super::generics::predicate_named_params(pred, &declared).is_disjoint(&free_names)
+            })
             .map(|pred| quote! { #pred })
             .collect();
         (decl, predicates)
