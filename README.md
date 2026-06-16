@@ -11,7 +11,7 @@ reports with automatic backtraces and span traces.
 [![MSRV](https://img.shields.io/badge/MSRV-1.89-blue.svg)](https://crates.io/crates/oopsie)
 [![license](https://img.shields.io/crates/l/oopsie.svg)](#license)
 
-![A colorized oopsie error report — error code and source chain](https://raw.githubusercontent.com/gaetschwartz/oopsie/develop/assets/report.png)
+![A colorized oopsie report — typed error code, source chain, span trace, and backtrace](https://raw.githubusercontent.com/gaetschwartz/oopsie/develop/assets/report.png)
 
 ## 📦 Install
 
