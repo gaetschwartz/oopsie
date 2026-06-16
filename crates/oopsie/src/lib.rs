@@ -311,6 +311,20 @@ e.g. API error responses."
 //! let err: Lookup<u32> = Missing { key: 7 }.build();
 //! assert_eq!(err.to_string(), "no entry for 7");
 //! ```
+//!
+//! # Feature flags
+//!
+//! | Feature | Default | Toolchain | Effect |
+//! |---------|---------|-----------|--------|
+//! | `fancy` | yes | stable | `Report`, colorized output, and the panic hook |
+//! | `tracing` | no | stable | span-trace capture and the `tracing-subscriber` error layer |
+//! | `serde` | no | stable | the `erased` module: serialize any error as a type-erased value |
+//! | `chrono` | no | stable | `chrono::DateTime<Local>` timestamps for `traced(timestamp(chrono = true))` |
+//! | `jiff` | no | stable | `jiff::Timestamp` / `jiff::Zoned` timestamp capture |
+//! | `extras` | no | stable | the `extras` module: environment-snapshot `Capturable` helpers |
+//! | `unstable` | no | nightly | umbrella for the two unstable features below |
+//! | `unstable-error-generic-member-access` | no | nightly | trace and diagnostic surfacing through the Provider API |
+//! | `unstable-try-trait-v2` | no | nightly | `?` converts a failed `Result` directly into a `Report` |
 
 // Re-export the proc-macro attribute and derive.
 pub use oopsie_macros::Oopsie;

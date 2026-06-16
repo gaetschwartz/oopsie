@@ -1,11 +1,23 @@
-# oopsie
+# oopsie 💥
 
 Ergonomic, structured error handling for Rust — typed context selectors,
-automatic backtrace/span-trace capture, and rich colorized reports.
+automatic backtrace / span-trace capture, and rich colorized reports.
 
-> Pre-release: not yet published to crates.io. Public API changes freely.
+[![crates.io](https://img.shields.io/crates/v/oopsie.svg)](https://crates.io/crates/oopsie)
+[![docs.rs](https://img.shields.io/docsrs/oopsie)](https://docs.rs/oopsie)
+[![license](https://img.shields.io/crates/l/oopsie.svg)](#license)
 
-## Quick start
+![A colorized oopsie error report — error code, source chain, and a filtered backtrace](https://raw.githubusercontent.com/gaetschwartz/oopsie/develop/assets/report.png)
+
+`oopsie` is `0.x`: the public API may still change between minor releases.
+
+## 📦 Install
+
+```sh
+cargo add oopsie
+```
+
+## 🚀 Quick start
 
 ```rust
 use oopsie::prelude::*;
@@ -35,38 +47,29 @@ fn main() -> oopsie::Report<AppError> {
 
 | Crate | What it is |
 |-------|------------|
-| [`oopsie`](crates/oopsie) | The facade: `#[oopsie]` macro, `Report`, panic hook, prelude. Start here. |
-| [`oopsie-core`](crates/oopsie-core) | Core types: `Backtrace`, `SpanTrace`, `Diagnostic`, `Welp`. |
-| [`oopsie-macros`](crates/oopsie-macros) | Proc macros: `#[oopsie]` attribute and `Oopsie` derive. |
+| [`oopsie`](https://docs.rs/oopsie) | The facade: `#[oopsie]` macro, `Report`, panic hook, prelude. Start here. |
+| [`oopsie-core`](https://docs.rs/oopsie-core) | Core types: `Backtrace`, `SpanTrace`, `Diagnostic`, `Welp`. |
+| [`oopsie-macros`](https://docs.rs/oopsie-macros) | Proc macros: `#[oopsie]` attribute and `Oopsie` derive. |
 
-## Features
-
-| Feature | Default | Toolchain | Effect |
-|---------|---------|-----------|--------|
-| `fancy` | yes | stable | `Report`, color output, panic hook |
-| `tracing` | no | stable | span-trace capture and the `tracing-subscriber` error layer |
-| `serde` | no | stable | the `erased` module: serialize any error as a type-erased value |
-| `chrono` | no | stable | `chrono::DateTime<Local>` timestamps for `traced(timestamp(chrono = true))`; no direct `chrono` dependency required |
-| `jiff` | no | stable | `jiff::Timestamp` / `jiff::Zoned` timestamp capture |
-| `extras` | no | stable | the `extras` module: environment-snapshot `Capturable` helpers |
-| `unstable` | no | nightly | umbrella for the two features below |
-| `unstable-error-generic-member-access` | no | nightly | trace/diagnostic surfacing through the Provider API |
-| `unstable-try-trait-v2` | no | nightly | `?` converts directly into `Report` |
-
-MSRV: 1.89. Development uses the nightly pinned in `rust-toolchain.toml`.
+The feature flags are documented in the [crate docs](https://docs.rs/oopsie/latest/oopsie/#feature-flags).
 
 ## Development
 
+The minimum supported Rust version is **1.89**. The repository pins a nightly
+toolchain in `rust-toolchain.toml`, which the snapshot tests and the
+unstable-feature lanes need; stable contributions still build on 1.89.
+
 ```sh
-just test        # fast loop: the two snapshot-bearing combos (stable + nightly) + doctests
-just test-full   # whole feature powerset, then doctests for every combo
-just test-bless  # re-bless insta snapshots and trybuild stderr
-just clippy      # lint default features (-D warnings); clippy-full sweeps the powerset
+just test    # the snapshot-bearing combos (stable + nightly) plus doctests
+just clippy  # lint both channels with -D warnings
+cargo fmt    # format
 ```
 
-Snapshot tests are only valid for the two blessed combos — **stable + default
-features** and **nightly + `--features unstable`**. Other feature combinations
-compare against the wrong snapshots.
+Snapshot tests only match on the two blessed combinations encoded in the
+`just nextest` recipe — stable and nightly, each with
+`fancy,serde,tracing,chrono` (nightly also `unstable`). Other feature
+combinations compare against the wrong snapshots and skip themselves. Run
+`just test-bless` after a change that legitimately shifts a snapshot.
 
 ## License
 
