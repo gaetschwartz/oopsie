@@ -374,8 +374,8 @@ pub mod __private {
 #[cfg(feature = "serde")]
 pub mod erased {
     pub use oopsie_core::erased::{
-        Diagnostics, ErasedBacktrace, ErasedError, ErasedFrame, ErasedMetadata, ErasedSpan,
-        ErasedSpanTrace, TracingLevel,
+        Diagnostics, ErasedBacktrace, ErasedError, ErasedFrame, ErasedLocation, ErasedMetadata,
+        ErasedSpan, ErasedSpanTrace, TracingLevel,
     };
 }
 
