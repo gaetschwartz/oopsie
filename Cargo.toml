@@ -18,9 +18,9 @@ keywords = ["error", "error-handling", "diagnostics", "backtrace", "spantrace"]
 categories = ["rust-patterns", "development-tools::debugging"]
 
 [workspace.dependencies]
-oopsie-core = { path = "crates/oopsie-core", default-features = false }
-oopsie-macros = { path = "crates/oopsie-macros" }
-oopsie = { path = "crates/oopsie" }
+oopsie-core = { path = "crates/oopsie-core", version = "0.1.0", default-features = false }
+oopsie-macros = { path = "crates/oopsie-macros", version = "0.1.0" }
+oopsie = { path = "crates/oopsie", version = "0.1.0" }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
