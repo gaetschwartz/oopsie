@@ -44,7 +44,9 @@ struct MietteErr {
 
 // Backtrace-carrying error types for the `render_traced*` groups. oopsie uses
 // the `traced` machinery without the spantrace; anyhow and eyre capture from
-// the forced env; snafu captures and renders via its `backtrace` feature.
+// the forced env. snafu's `backtrace` feature captures a backtrace, but its
+// `Report` only renders one under the nightly provider API (not enabled here),
+// so the snafu arm measures a backtrace-free render.
 #[oopsie(traced(spantrace(false)))]
 #[oopsie("wrap failed: {ctx}")]
 struct TracedError {
