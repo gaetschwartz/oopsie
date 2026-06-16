@@ -347,3 +347,50 @@ fn sourced_inter_parameter_bound_all_params() {
     assert_eq!(err.to_string(), "converted 42 from 1");
     assert_eq!(err.source().expect("exposes source").to_string(), "boom");
 }
+
+// ─── leaf that does not reference an outer lifetime ───
+// `Detached` references `T` but not `'a`, so `'a` is "free" and rides
+// `build`/`fail` as a method generic. `fail` inserts an `Ok`-type param, and a
+// free lifetime must stay ahead of it (lifetimes precede type/const params).
+// `build`/`fail` share one impl block, so a malformed `fail` list poisons
+// `build` too — every prior generic test referenced its param in the leaf, so
+// none exercised a free lifetime.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum FreeLifetimeError<'a, T: fmt::Debug> {
+    #[oopsie("ref: {note}")]
+    RefNote { note: &'a str },
+    #[oopsie("detached: {value:?}")]
+    Detached { value: T },
+}
+
+#[test]
+fn leaf_free_of_outer_lifetime() {
+    let err: FreeLifetimeError<'_, u32> = Detached { value: 5u32 }.build();
+    assert_eq!(err.to_string(), "detached: 5");
+    // `fail` is the path that inserts `__T` ahead of the free params.
+    let res: Result<(), FreeLifetimeError<'_, u32>> = Detached { value: 7u32 }.fail();
+    assert_eq!(res.unwrap_err().to_string(), "detached: 7");
+}
+
+// ─── leaf freeing both a lifetime and a const param ───
+// `FreeLeaf` references only `T`, freeing `'a` and `N`; `fail`'s list must order
+// them `<'a, __T, N>`, not `<__T, 'a, N>`.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum MixedFreeError<'a, T: fmt::Debug, const N: usize> {
+    #[oopsie("anchor {note} x{}", N)]
+    Anchor { note: &'a str, data: [u8; N] },
+    #[oopsie("free {value:?}")]
+    FreeLeaf { value: T },
+}
+
+#[test]
+fn leaf_free_of_lifetime_and_const() {
+    let err: MixedFreeError<'_, u32, 4> = FreeLeaf { value: 9u32 }.build();
+    assert_eq!(err.to_string(), "free 9");
+    let res: Result<(), MixedFreeError<'_, u32, 4>> = FreeLeaf { value: 1u32 }.fail();
+    assert_eq!(res.unwrap_err().to_string(), "free 1");
+}

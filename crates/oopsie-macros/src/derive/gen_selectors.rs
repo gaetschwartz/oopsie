@@ -887,7 +887,12 @@ fn gen_build_fail(
     let fail_generics = if free_decl.is_empty() {
         quote! { <__T> }
     } else {
-        quote! { <__T, #(#free_decl),*> }
+        // Lifetimes must precede type/const params: emit free lifetimes, then the
+        // `Ok`-type `__T`, then the remaining free params.
+        let (free_lts, free_rest): (Vec<_>, Vec<_>) = free_decl
+            .iter()
+            .partition(|p| matches!(p, GenericParam::Lifetime(_)));
+        quote! { <#(#free_lts,)* __T, #(#free_rest),*> }
     };
     let fail_where = render_where(&free_preds);
 
