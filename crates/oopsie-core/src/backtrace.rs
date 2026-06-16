@@ -1,4 +1,6 @@
 use std::cell::Cell;
+#[cfg(test)]
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicU8;
 use std::sync::atomic::Ordering::Relaxed;
 use std::sync::{Arc, LazyLock};
@@ -169,7 +171,7 @@ pub fn with_rust_backtrace_override<R>(value: RustBacktrace, f: impl FnOnce() ->
 // first frame access resolves symbols exactly once for all clones.
 #[derive(Clone)]
 enum Inner {
-    Captured(Arc<LazyLock<Capture, helper::LazyResolve>>),
+    Captured(Arc<Lazy>),
     Disabled(backtrace::Backtrace), // Always empty, used when capture is disabled to avoid the LazyLock indirection.
 }
 
@@ -191,7 +193,7 @@ impl crate::Capturable for Backtrace {
     fn capture() -> Self {
         if rust_backtrace().is_enabled() {
             Self {
-                inner: Inner::Captured(Arc::new(LazyLock::new(helper::lazy_resolve(Capture {
+                inner: Inner::Captured(Arc::new(Lazy::new(helper::lazy_resolve(Capture {
                     backtrace: backtrace::Backtrace::new_unresolved(),
                 })))),
                 marker: crate::marker::current(),
@@ -234,7 +236,7 @@ impl Backtrace {
     #[inline]
     pub fn as_backtrace(&self) -> &backtrace::Backtrace {
         match &self.inner {
-            Inner::Captured(bt) => &bt.backtrace,
+            Inner::Captured(bt) => &bt.force().backtrace,
             Inner::Disabled(bt) => bt,
         }
     }
@@ -305,7 +307,7 @@ impl Backtrace {
     #[cfg(test)]
     fn is_resolved(&self) -> bool {
         match &self.inner {
-            Inner::Captured(bt) => LazyLock::get(&**bt).is_some(),
+            Inner::Captured(bt) => bt.is_resolved(),
             Inner::Disabled(_) => true,
         }
     }
@@ -313,6 +315,42 @@ impl Backtrace {
 
 struct Capture {
     backtrace: backtrace::Backtrace,
+}
+
+/// A lazily symbol-resolved [`Capture`], shared across clones via the enclosing
+/// `Arc` so resolution happens once for the whole family.
+struct Lazy {
+    cell: LazyLock<Capture, helper::LazyResolve>,
+    // Test-only mirror of `cell`'s forced state: the direct `LazyLock::get` probe
+    // isn't stable on this crate's MSRV, and a test's needs must not raise the
+    // library's floor. `force` is the only path that resolves `cell`, so the two
+    // stay in step.
+    #[cfg(test)]
+    forced: AtomicBool,
+}
+
+impl Lazy {
+    fn new(resolve: helper::LazyResolve) -> Self {
+        Self {
+            cell: LazyLock::new(resolve),
+            #[cfg(test)]
+            forced: AtomicBool::new(false),
+        }
+    }
+
+    /// Force symbol resolution (idempotent) and return the cached capture.
+    #[inline]
+    fn force(&self) -> &Capture {
+        let capture = &*self.cell;
+        #[cfg(test)]
+        self.forced.store(true, Relaxed);
+        capture
+    }
+
+    #[cfg(test)]
+    fn is_resolved(&self) -> bool {
+        self.forced.load(Relaxed)
+    }
 }
 
 mod helper {
