@@ -1,15 +1,17 @@
 # oopsie 💥
 
-Ergonomic, structured error handling for Rust — typed context selectors,
-automatic backtrace / span-trace capture, and rich colorized reports.
+Structured, context-rich error handling for Rust — define your error type once,
+attach it to any `Result` with `.context(...)`, and render colorized diagnostic
+reports with automatic backtraces and span traces.
+
+`oopsie` is `0.x`: the public API may still change between minor releases.
 
 [![crates.io](https://img.shields.io/crates/v/oopsie.svg)](https://crates.io/crates/oopsie)
 [![docs.rs](https://img.shields.io/docsrs/oopsie)](https://docs.rs/oopsie)
+[![MSRV](https://img.shields.io/badge/MSRV-1.89-blue.svg)](https://crates.io/crates/oopsie)
 [![license](https://img.shields.io/crates/l/oopsie.svg)](#license)
 
 ![A colorized oopsie error report — error code, source chain, and a filtered backtrace](https://raw.githubusercontent.com/gaetschwartz/oopsie/develop/assets/report.png)
-
-`oopsie` is `0.x`: the public API may still change between minor releases.
 
 ## 📦 Install
 
@@ -39,37 +41,39 @@ fn main() -> oopsie::Report<AppError> {
 }
 ```
 
-`#[oopsie]` generates context selectors, `Display`, `Debug`, and `Error` impls.
-`traced` adds backtrace + span-trace capture and an automatic error code.
-`Report` renders errors (and panics, via its panic hook) as colorized reports.
+`#[oopsie]` generates a *context selector* per variant — here `app_oopsies::Connect`,
+in a module named after the type (`AppError` → `app_oopsies`) — alongside `Display`,
+`Debug`, and `Error` impls. `.context(selector)` attaches your typed error to any
+`Result` or `Option`. `traced` adds a captured backtrace (and a span trace with the
+`tracing` feature) plus an automatic error code, and `Report` renders the result —
+including panics, via its hook — as the colorized output shown above.
+
+Unlike `thiserror`, the attachment points and the renderer come built in; unlike
+`anyhow` / `eyre`, your errors stay strongly typed.
 
 ## Crates
 
 | Crate | What it is |
 |-------|------------|
-| [`oopsie`](https://docs.rs/oopsie) | The facade: `#[oopsie]` macro, `Report`, panic hook, prelude. Start here. |
-| [`oopsie-core`](https://docs.rs/oopsie-core) | Core types: `Backtrace`, `SpanTrace`, `Diagnostic`, `Welp`. |
-| [`oopsie-macros`](https://docs.rs/oopsie-macros) | Proc macros: `#[oopsie]` attribute and `Oopsie` derive. |
+| [`oopsie`](https://docs.rs/oopsie) | The facade — `#[oopsie]`, `Report`, panic hook, prelude. **Start here.** |
+| [`oopsie-core`](https://docs.rs/oopsie-core) | Lower-level types (`Backtrace`, `SpanTrace`, `Diagnostic`, `Welp`), used through the facade. |
+| [`oopsie-macros`](https://docs.rs/oopsie-macros) | The `#[oopsie]` attribute and `Oopsie` derive. |
 
-The feature flags are documented in the [crate docs](https://docs.rs/oopsie/latest/oopsie/#feature-flags).
+Feature flags are documented in the [crate docs](https://docs.rs/oopsie/latest/oopsie/#feature-flags).
 
 ## Development
 
-The minimum supported Rust version is **1.89**. The repository pins a nightly
-toolchain in `rust-toolchain.toml`, which the snapshot tests and the
-unstable-feature lanes need; stable contributions still build on 1.89.
+The MSRV is **1.89**. A nightly toolchain is pinned in `rust-toolchain.toml` for the
+snapshot tests and the unstable-feature lanes — you don't need it to use the crate.
 
 ```sh
-just test    # the snapshot-bearing combos (stable + nightly) plus doctests
+just test    # snapshot-bearing combos (stable + nightly) plus doctests
 just clippy  # lint both channels with -D warnings
 cargo fmt    # format
 ```
 
-Snapshot tests only match on the two blessed combinations encoded in the
-`just nextest` recipe — stable and nightly, each with
-`fancy,serde,tracing,chrono` (nightly also `unstable`). Other feature
-combinations compare against the wrong snapshots and skip themselves. Run
-`just test-bless` after a change that legitimately shifts a snapshot.
+Snapshot tests only match on the blessed feature combos; run `just test-bless`
+after a change that legitimately shifts one.
 
 ## License
 

@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.2] - 2026-06-16
+
+### Changed
+
+- Documentation: README overhaul (badges, a colorized report screenshot, sharper
+  framing), the feature-flags table moved into the crate docs, and dedicated
+  READMEs for `oopsie-core` and `oopsie-macros`.
+
 ## [0.1.0-rc.1] - 2026-06-16
 
 Initial release candidate.
@@ -21,4 +29,5 @@ Initial release candidate.
 - Feature flags: `fancy`, `serde`, `tracing`, `chrono`, `jiff`, `extras`, and
   the nightly `unstable-*` set.
 
+[0.1.0-rc.2]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.2
 [0.1.0-rc.1]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.1

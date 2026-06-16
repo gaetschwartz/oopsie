@@ -7,7 +7,7 @@ rust-version.workspace = true
 description = "Core error types and trace capture for the oopsie error-handling library"
 license.workspace = true
 repository.workspace = true
-readme.workspace = true
+readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
 
