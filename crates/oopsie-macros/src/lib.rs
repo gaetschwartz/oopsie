@@ -118,9 +118,9 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | `path` | Path to the `oopsie` crate in generated impls |
 /// | `debug` | Skip the automatic `Debug` derive |
 ///
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/traced.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/path.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/attr/debug.md")]
+#[doc = include_str!("../keyword_docs/attr/traced.md")]
+#[doc = include_str!("../keyword_docs/attr/path.md")]
+#[doc = include_str!("../keyword_docs/attr/debug.md")]
 ///
 /// ## `traced(...)` options
 ///
@@ -142,17 +142,17 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
 /// | `r#type` | Override the injected type for this part |
 /// | `enabled` | Explicit on/off inside a settings block |
 ///
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/backtrace.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/spantrace.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/timestamp.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/location.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/packed.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/boxed.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/code.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/chrono.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/provide.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/type.md")]
-#[doc = include_str!("../../oopsie/src/__private/keyword_docs/traced/enabled.md")]
+#[doc = include_str!("../keyword_docs/traced/backtrace.md")]
+#[doc = include_str!("../keyword_docs/traced/spantrace.md")]
+#[doc = include_str!("../keyword_docs/traced/timestamp.md")]
+#[doc = include_str!("../keyword_docs/traced/location.md")]
+#[doc = include_str!("../keyword_docs/traced/packed.md")]
+#[doc = include_str!("../keyword_docs/traced/boxed.md")]
+#[doc = include_str!("../keyword_docs/traced/code.md")]
+#[doc = include_str!("../keyword_docs/traced/chrono.md")]
+#[doc = include_str!("../keyword_docs/traced/provide.md")]
+#[doc = include_str!("../keyword_docs/traced/type.md")]
+#[doc = include_str!("../keyword_docs/traced/enabled.md")]
 ///
 /// With `traced`, every variant (or the struct itself) also gets an automatic
 /// error code unless it is `transparent` or carries an explicit
