@@ -23,6 +23,8 @@ jobs:
           - "tracing"
           - "serde,tracing"
           - "chrono"
+          - "jiff"
+          - "extras"
           - "fancy,tracing"
           - "fancy,serde,tracing,chrono"
     env:

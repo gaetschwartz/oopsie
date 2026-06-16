@@ -397,6 +397,30 @@ mod tests {
     use std::fmt;
     use std::time::SystemTime;
 
+    #[cfg(feature = "jiff")]
+    #[test]
+    fn captures_current_jiff_timestamp() {
+        let before = jiff::Timestamp::now();
+        let captured = <jiff::Timestamp as Capturable>::capture();
+        let after = jiff::Timestamp::now();
+        assert!(
+            (before..=after).contains(&captured),
+            "captured {captured} outside [{before}, {after}]"
+        );
+    }
+
+    #[cfg(feature = "jiff")]
+    #[test]
+    fn captures_current_jiff_zoned() {
+        let before = jiff::Timestamp::now();
+        let captured = <jiff::Zoned as Capturable>::capture().timestamp();
+        let after = jiff::Timestamp::now();
+        assert!(
+            (before..=after).contains(&captured),
+            "captured {captured} outside [{before}, {after}]"
+        );
+    }
+
     #[derive(Debug)]
     struct DiagOnly;
 
