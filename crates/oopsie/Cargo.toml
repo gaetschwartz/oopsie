@@ -32,7 +32,6 @@ tracing = ["oopsie-core/tracing"]
 chrono = ["oopsie-core/chrono"]
 jiff = ["oopsie-core/jiff"]
 extras = ["oopsie-core/extras"]
-unstable-snafu-provider = ["unstable-error-generic-member-access", "snafu/unstable-provider-api"]
 
 [dependencies]
 linkme = { version = "0.3.36", optional = true }

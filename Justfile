@@ -1,8 +1,8 @@
 # Powerset sweeps for the *-full recipes. Stable excludes every nightly-only
 # feature (can't compile them) plus the empty `default`; nightly instead pins
 # `unstable` on for all combos, dropping the sub-features it already implies.
-stable_powerset := "--feature-powerset --exclude-features default,unstable,unstable-error-generic-member-access,unstable-try-trait-v2,unstable-snafu-provider"
-nightly_powerset := "--feature-powerset --exclude-features default,unstable-error-generic-member-access,unstable-try-trait-v2,unstable-snafu-provider -F unstable"
+stable_powerset := "--feature-powerset --exclude-features default,unstable,unstable-error-generic-member-access,unstable-try-trait-v2"
+nightly_powerset := "--feature-powerset --exclude-features default,unstable-error-generic-member-access,unstable-try-trait-v2 -F unstable"
 
 # Run `cargo <cmd>` on both stable and nightly. First arg "1" sweeps the feature
 # powerset of every workspace package; "0" runs default features only.
