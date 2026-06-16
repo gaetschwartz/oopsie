@@ -232,6 +232,10 @@ impl Backtrace {
     /// Returns a reference to the inner [`backtrace::Backtrace`].
     ///
     /// Forces and caches full symbol resolution on first access.
+    // Hidden from the public API: it surfaces `backtrace` 0.x types, whose minor
+    // releases are breaking. Kept `pub` only for the renderer and the erased
+    // conversion, which need the raw capture; consumers use the owned frames.
+    #[doc(hidden)]
     #[must_use]
     #[inline]
     pub fn as_backtrace(&self) -> &backtrace::Backtrace {
@@ -258,6 +262,7 @@ impl Backtrace {
     /// Returns the frames of the backtrace.
     ///
     /// Forces and caches full symbol resolution on first access.
+    #[doc(hidden)]
     #[must_use]
     #[inline]
     pub fn frames(&self) -> &[backtrace::BacktraceFrame] {
