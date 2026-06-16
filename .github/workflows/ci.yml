@@ -130,5 +130,9 @@ jobs:
           rustup override set $MSRV
       - name: cargo check (bare)
         run: cargo check --workspace --all-targets --locked --no-default-features
-      - name: cargo check (all features)
-        run: cargo check --workspace --all-targets --locked --all-features
+      # MSRV runs on stable: the unstable-* features gate nightly `#![feature]`s,
+      # and `test-utils` drags in deps that float the floor above the library's.
+      - name: cargo check (max stable features)
+        run: >
+          cargo check --workspace --all-targets --locked --no-default-features
+          --features fancy,serde,tracing,chrono,jiff,extras
