@@ -10,8 +10,7 @@
 
 use std::sync::{PoisonError, RwLock};
 
-use owo_colors::Style;
-
+use crate::style::Style;
 use crate::trace_printer::TraceTheme;
 
 /// A color theme: nine named colors plus the role accessors that paint a

@@ -9,9 +9,10 @@ use std::fmt;
 use std::ops::Deref;
 use std::path;
 
-use owo_colors::{OwoColorize as _, Style};
+use owo_colors::OwoColorize as _;
 
 use crate::Backtrace;
+use crate::style::Style;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data types
@@ -658,7 +659,7 @@ impl TracePrinter {
         writeln!(
             f,
             "{}",
-            format_args!("{:━^80}", " BACKTRACE ").style(theme.header)
+            format_args!("{:━^80}", " BACKTRACE ").style(theme.header.into_owo())
         )?;
 
         // Read per render: the working directory is mutable process state,
@@ -701,7 +702,7 @@ impl TracePrinter {
         writeln!(
             f,
             "{}",
-            format_args!("   ... {count} frames hidden ...").style(theme.frames_hidden)
+            format_args!("   ... {count} frames hidden ...").style(theme.frames_hidden.into_owo())
         )
     }
 
@@ -717,19 +718,19 @@ impl TracePrinter {
         write!(
             f,
             "{}{}",
-            format_args!("{number:>3}").style(theme.frame_number),
-            ": ".style(theme.separator)
+            format_args!("{number:>3}").style(theme.frame_number.into_owo()),
+            ": ".style(theme.separator.into_owo())
         )?;
 
         // Function name
         if let Some(name) = &frame.name {
             let (base, hash) = split_function_hash(name);
-            write!(f, "{}", base.style(theme.function_name))?;
+            write!(f, "{}", base.style(theme.function_name.into_owo()))?;
             if let Some(h) = hash {
-                write!(f, "{}", h.style(theme.function_hash))?;
+                write!(f, "{}", h.style(theme.function_hash.into_owo()))?;
             }
         } else {
-            write!(f, "{}", "<unknown>".style(theme.function_name))?;
+            write!(f, "{}", "<unknown>".style(theme.function_name.into_owo()))?;
         }
         writeln!(f)?;
 
@@ -741,13 +742,21 @@ impl TracePrinter {
             write!(
                 f,
                 "           {}{}",
-                "at ".style(theme.separator),
-                display_path.display().style(theme.file_path)
+                "at ".style(theme.separator.into_owo()),
+                display_path.display().style(theme.file_path.into_owo())
             )?;
             if let Some(lineno) = frame.lineno {
-                write!(f, "{}", format_args!(":{lineno}").style(theme.line_number))?;
+                write!(
+                    f,
+                    "{}",
+                    format_args!(":{lineno}").style(theme.line_number.into_owo())
+                )?;
                 if let Some(colno) = frame.colno {
-                    write!(f, "{}", format_args!(":{colno}").style(theme.line_number))?;
+                    write!(
+                        f,
+                        "{}",
+                        format_args!(":{colno}").style(theme.line_number.into_owo())
+                    )?;
                 }
             }
             writeln!(f)?;
@@ -770,7 +779,7 @@ impl TracePrinter {
         writeln!(
             f,
             "{}",
-            format_args!("{:━^80}", " SPANTRACE ").style(theme.header)
+            format_args!("{:━^80}", " SPANTRACE ").style(theme.header.into_owo())
         )?;
 
         let mut index = 1usize;
@@ -800,32 +809,36 @@ impl TracePrinter {
         write!(
             f,
             "{}",
-            format_args!("{index:>3}").style(theme.frame_number)
+            format_args!("{index:>3}").style(theme.frame_number.into_owo())
         )?;
-        write!(f, "{}", ": ".style(theme.separator))?;
+        write!(f, "{}", ": ".style(theme.separator.into_owo()))?;
 
         // target::name
         write!(
             f,
             "{}",
-            format_args!("{}::{}", meta.target, meta.name).style(theme.function_name)
+            format_args!("{}::{}", meta.target, meta.name).style(theme.function_name.into_owo())
         )?;
         writeln!(f)?;
 
         // Fields line (only if non-empty)
         if !fields.is_empty() {
             write!(f, "           ")?; // 11 spaces
-            write!(f, "{}", "with ".style(theme.separator))?;
-            writeln!(f, "{}", fields.style(theme.fields))?;
+            write!(f, "{}", "with ".style(theme.separator.into_owo()))?;
+            writeln!(f, "{}", fields.style(theme.fields.into_owo()))?;
         }
 
         // File location
         if let Some(file) = &meta.file {
             write!(f, "           ")?; // 11 spaces
-            write!(f, "{}", "at ".style(theme.separator))?;
-            write!(f, "{}", file.style(theme.file_path))?;
+            write!(f, "{}", "at ".style(theme.separator.into_owo()))?;
+            write!(f, "{}", file.style(theme.file_path.into_owo()))?;
             if let Some(line) = meta.line {
-                write!(f, "{}", format_args!(":{line}").style(theme.line_number))?;
+                write!(
+                    f,
+                    "{}",
+                    format_args!(":{line}").style(theme.line_number.into_owo())
+                )?;
             }
             writeln!(f)?;
         }

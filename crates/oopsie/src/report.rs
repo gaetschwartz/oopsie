@@ -10,7 +10,8 @@ use crate::ColorMode;
 
 use crate::Diagnostic;
 
-use crate::color::{S, style};
+use crate::color::style;
+use crate::style::Style;
 use crate::theme::{Theme, get_theme};
 use crate::trace_printer::{TracePrinter, error_backtrace_frame_filter, marker_strip_filter};
 
@@ -216,8 +217,8 @@ impl<E: Diagnostic> Report<E> {
             writeln!(
                 f,
                 "  {} {}",
-                style!("at", S.dimmed(), c),
-                style!(at, S.dimmed(), c)
+                style!("at", Style::new().dimmed(), c),
+                style!(at, Style::new().dimmed(), c)
             )?;
         }
 

@@ -121,12 +121,18 @@ pub fn get_color_mode() -> ColorMode {
 }
 
 macro_rules! style {
-    ($expr:expr, $style:expr, $colorize:expr) => {{ ::owo_colors::OwoColorize::style(&$expr, if $colorize { $style } else { $crate::color::S }) }};
+    ($expr:expr, $style:expr, $colorize:expr) => {{
+        ::owo_colors::OwoColorize::style(
+            &$expr,
+            (if $colorize {
+                $style
+            } else {
+                $crate::style::Style::new()
+            })
+            .into_owo(),
+        )
+    }};
 }
-
-/// The empty-style sentinel: an `owo_colors::Style` that emits no ANSI codes,
-/// used as the uncolored base when colorization is off.
-pub const S: owo_colors::Style = owo_colors::Style::new();
 pub(crate) use style;
 
 #[cfg(test)]
