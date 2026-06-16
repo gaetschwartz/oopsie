@@ -533,7 +533,7 @@ fn split_function_hash(name: &str) -> (&str, Option<&str>) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A closure that filters backtrace frames in-place.
-type FrameFilterBox = BoxOrBorrow<'static, dyn Fn(&mut [Option<&BacktraceFrame>])>;
+type FrameFilterBox = BoxOrBorrow<'static, dyn Fn(&mut [Option<&BacktraceFrame>]) + Send + Sync>;
 
 /// Renders backtraces and span traces with colors.
 pub struct TracePrinter {
@@ -567,7 +567,9 @@ impl TracePrinter {
     /// current global theme.
     #[must_use]
     #[inline]
-    pub fn with_filter(filter: impl Fn(&mut [Option<&BacktraceFrame>]) + 'static) -> Self {
+    pub fn with_filter(
+        filter: impl Fn(&mut [Option<&BacktraceFrame>]) + Send + Sync + 'static,
+    ) -> Self {
         Self {
             frame_filter: BoxOrBorrow::Box(Box::new(filter)),
             theme: None,
@@ -579,7 +581,7 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn with_const_filter(
-        filter: &'static (dyn Fn(&mut [Option<&BacktraceFrame>]) + 'static),
+        filter: &'static (dyn Fn(&mut [Option<&BacktraceFrame>]) + Send + Sync + 'static),
     ) -> Self {
         Self {
             frame_filter: BoxOrBorrow::Borrow(filter),
@@ -592,7 +594,7 @@ impl TracePrinter {
     #[must_use]
     pub fn add_frame_filter(
         mut self,
-        filter: impl Fn(&mut [Option<&BacktraceFrame>]) + 'static,
+        filter: impl Fn(&mut [Option<&BacktraceFrame>]) + Send + Sync + 'static,
     ) -> Self {
         self.frame_filter =
             overlay_frame_filters(self.frame_filter, BoxOrBorrow::Box(Box::new(filter)));
@@ -869,7 +871,7 @@ const fn noop_frame_filter(_frames: &mut [Option<&BacktraceFrame>]) {}
 /// empties the list.
 ///
 /// [`Backtrace::marker_hidden_frames`]: oopsie_core::Backtrace::marker_hidden_frames
-pub fn marker_strip_filter(cut: usize) -> impl Fn(&mut [Option<&BacktraceFrame>]) {
+pub fn marker_strip_filter(cut: usize) -> impl Fn(&mut [Option<&BacktraceFrame>]) + Send + Sync {
     move |frames: &mut [Option<&BacktraceFrame>]| {
         let keep = frames.len().saturating_sub(cut);
         if keep > 0 {
@@ -894,6 +896,12 @@ fn overlay_frame_filters(under: FrameFilterBox, above: FrameFilterBox) -> FrameF
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trace_printer_is_send_sync() {
+        const fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<TracePrinter>();
+    }
 
     fn kept_names<'a>(frames: &[Option<&'a BacktraceFrame>]) -> Vec<&'a str> {
         frames
