@@ -1,0 +1,21 @@
+# cargo-release configuration for the oopsie workspace.
+#
+# Dry-run is the default; nothing happens without `--execute`. Usage:
+#   cargo release 0.1.0-rc.1            # preview the release
+#   cargo release 0.1.0-rc.1 --execute  # bump, commit, tag (publishes core -> macros -> facade)
+# `push = false` keeps the release commit + tag local; push them yourself with
+#   git push --follow-tags
+
+# This repo's default branch is `develop`, not main/master.
+allow-branch = ["develop"]
+
+# All three crates share one version and are released together in one commit
+# and under one tag. cargo-release derives the publish order from the dependency
+# graph (oopsie-core -> oopsie-macros -> oopsie).
+shared-version = true
+tag-name = "v{{version}}"
+pre-release-commit-message = "chore: release {{version}}"
+tag-message = "release {{version}}"
+
+publish = true
+push = false
