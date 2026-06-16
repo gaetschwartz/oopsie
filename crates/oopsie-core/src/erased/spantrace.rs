@@ -10,10 +10,9 @@ use serde::{Deserialize, Serialize};
 
 /// The verbosity level of a transported span, mirroring `tracing::Level`.
 ///
-/// Unrecognized or unparseable level strings deserialize as
-/// [`UNKNOWN`](Self::UNKNOWN) instead of rejecting the payload.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumString, strum::Display, Serialize)]
-#[strum(serialize_all = "SCREAMING_SNAKE_CASE", ascii_case_insensitive)]
+/// Unrecognized or unparseable level strings map to [`UNKNOWN`](Self::UNKNOWN)
+/// instead of rejecting the payload, whether parsed or deserialized.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[repr(u8)]
 pub enum TracingLevel {
     /// The most verbose level.
@@ -28,6 +27,40 @@ pub enum TracingLevel {
     ERROR = 4,
     /// A level that could not be recognized when deserializing.
     UNKNOWN = 5,
+}
+
+impl fmt::Display for TracingLevel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::TRACE => "TRACE",
+            Self::DEBUG => "DEBUG",
+            Self::INFO => "INFO",
+            Self::WARN => "WARN",
+            Self::ERROR => "ERROR",
+            Self::UNKNOWN => "UNKNOWN",
+        })
+    }
+}
+
+impl std::str::FromStr for TracingLevel {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let level = if s.eq_ignore_ascii_case("TRACE") {
+            Self::TRACE
+        } else if s.eq_ignore_ascii_case("DEBUG") {
+            Self::DEBUG
+        } else if s.eq_ignore_ascii_case("INFO") {
+            Self::INFO
+        } else if s.eq_ignore_ascii_case("WARN") {
+            Self::WARN
+        } else if s.eq_ignore_ascii_case("ERROR") {
+            Self::ERROR
+        } else {
+            Self::UNKNOWN
+        };
+        Ok(level)
+    }
 }
 
 impl<'de> Deserialize<'de> for TracingLevel {
