@@ -89,4 +89,4 @@ Error[erased::common::MyError::Inner]:
            at [STDLIB]/library/alloc/src/boxed.rs:[LOC]
  36: <std[[HASH]]::sys::thread::unix::Thread>::new::thread_start
            at [STDLIB]/library/std/src/sys/thread/unix.rs:[LOC]
- 37: __pthread_cond_wait
+ 37: [OS_TAIL]

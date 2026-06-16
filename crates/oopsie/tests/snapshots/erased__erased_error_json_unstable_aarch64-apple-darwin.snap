@@ -260,7 +260,7 @@ expression: error
         "column": 69
       },
       {
-        "name": "__pthread_cond_wait",
+        "name": "[OS_TAIL]",
         "filename": null,
         "line": null,
         "column": null

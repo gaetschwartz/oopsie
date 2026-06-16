@@ -135,6 +135,10 @@ pub mod settings {
         // JSON snapshots carry line/column as numeric fields rather than `rs:N:C`.
         settings.add_filter(r#""line":\s*\d+"#, r#""line": 42"#);
         settings.add_filter(r#""column":\s*\d+"#, r#""column": 69"#);
+        // macOS test threads bottom out in a libc frame whose exact symbol
+        // varies between runs; the render path peels this OS tail, but the
+        // erased path serializes raw frames, so normalize it here.
+        settings.add_filter(r"__pthread\w*", "[OS_TAIL]");
         settings
     }
 }
