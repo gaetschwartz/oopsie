@@ -6,7 +6,7 @@
 //! Procedural macros backing the `oopsie` error-handling crate.
 //!
 //! This crate provides the [`#[oopsie]`](macro@oopsie) attribute — the canonical
-//! way to define an error type — and the underlying [`Oopsie`](macro@oopsie_derive)
+//! way to define an error type — and the underlying [`Oopsie`](derive@Oopsie)
 //! derive. Both generate context selectors plus `Display` and `Error` impls; the
 //! attribute additionally derives `Debug` and can inject diagnostic fields such
 //! as backtraces, span traces, timestamps, and caller locations.

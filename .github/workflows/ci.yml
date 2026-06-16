@@ -136,3 +136,32 @@ jobs:
         run: >
           cargo check --workspace --all-targets --locked --no-default-features
           --features fancy,serde,tracing,chrono,jiff,extras
+
+  docs:
+    name: Docs (rustdoc, -D warnings)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: [stable, nightly]
+    env:
+      RUSTUP_TOOLCHAIN: ${{ matrix.toolchain == 'stable' && 'stable' || '' }}
+      RUSTDOCFLAGS: -D warnings
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get Rust toolchain version
+        id: get_rust_version
+        run: echo "version=$(rustup show active-toolchain | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.get_rust_version.outputs.version }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: docs-${{ matrix.toolchain }}
+      # nightly mirrors the docs.rs all-features build; stable can't enable the
+      # unstable-* features, so it documents the curated stable surface.
+      - name: cargo doc
+        run: >
+          cargo doc --no-deps --workspace
+          ${{ matrix.toolchain == 'nightly' && '--all-features' || '--no-default-features --features fancy,serde,tracing,chrono,jiff,extras' }}
