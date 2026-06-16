@@ -20,7 +20,7 @@ categories = ["rust-patterns", "development-tools::debugging"]
 [workspace.dependencies]
 oopsie-core = { path = "crates/oopsie-core", version = "0.1.0", default-features = false }
 oopsie-macros = { path = "crates/oopsie-macros", version = "0.1.0" }
-oopsie = { path = "crates/oopsie", version = "0.1.0" }
+oopsie = { path = "crates/oopsie" }
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
