@@ -1,0 +1,5 @@
+error: `#[oopsie(forward(...))]` is redundant on a `transparent` error; transparent already forwards all traces
+  --> tests/compile-fail/forward_with_transparent.rs:19:9
+   |
+19 |         source: LeafError,
+   |         ^^^^^^

@@ -200,6 +200,14 @@ fn validate_transparent(
              or marked `#[oopsie(from)]`)",
         ));
     }
+    if let Some(src) = &fields.source
+        && src.forward.any()
+    {
+        return Err(syn::Error::new_spanned(
+            &src.ident,
+            "`#[oopsie(forward(...))]` is redundant on a `transparent` error; transparent already forwards all traces",
+        ));
+    }
     if let Some(extra) = fields.user_fields.first() {
         return Err(syn::Error::new_spanned(
             &extra.ident,
