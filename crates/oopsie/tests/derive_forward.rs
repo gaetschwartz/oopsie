@@ -223,6 +223,65 @@ fn partial_forward_forwards_spantrace() {
     );
 }
 
+// ─── Generic forwarded source forwards (stable + nightly) ────────────────────
+// The source is a bare generic param bounded only by `Error`. With a concrete
+// `S` that IS `Diagnostic` the forwarded accessors must still reach the source —
+// on stable (where the Provider path yields `None`) and on nightly.
+
+#[oopsie(traced)]
+pub struct GenWrapError<S: std::error::Error + std::fmt::Debug + 'static> {
+    #[oopsie(forward)]
+    source: S,
+}
+
+#[test]
+fn generic_forwarded_backtrace_matches_source() {
+    common::force_backtrace();
+    let src = leaf_oopsies::Boom { msg: "x" }.build();
+    let src_frames = src
+        .oopsie_backtrace()
+        .expect("forced capture => Some")
+        .frames()
+        .len();
+    assert!(
+        src_frames > 0,
+        "force_backtrace must yield frames for this test to be probative"
+    );
+
+    let wrap: GenWrapError<LeafError> = gen_wrap_oopsies::GenWrap.build_error(src);
+    let wrap_bt = wrap
+        .oopsie_backtrace()
+        .expect("generic wrapper must forward the source's backtrace");
+    assert_eq!(
+        wrap_bt.frames().len(),
+        src_frames,
+        "forwarded backtrace is the source's"
+    );
+}
+
+#[oopsie(traced)]
+pub struct GenLocWrapError<S: std::error::Error + std::fmt::Debug + 'static> {
+    #[oopsie(forward(location))]
+    source: S,
+}
+
+#[test]
+fn generic_forwarded_location_matches_source() {
+    let src = leaf_oopsies::Boom { msg: "x" }.build();
+    let src_loc = src
+        .oopsie_location()
+        .expect("traced leaf captures a location");
+    let wrap: GenLocWrapError<LeafError> = gen_loc_wrap_oopsies::GenLocWrap.build_error(src);
+    let wrap_loc = wrap
+        .oopsie_location()
+        .expect("generic wrapper must forward the source's location");
+    assert_eq!(
+        (wrap_loc.file(), wrap_loc.line()),
+        (src_loc.file(), src_loc.line()),
+        "forwarded location is the source's"
+    );
+}
+
 // ─── Explicit `from(Type, transform)` source forwards too ─────────────────────
 
 #[oopsie(traced)]

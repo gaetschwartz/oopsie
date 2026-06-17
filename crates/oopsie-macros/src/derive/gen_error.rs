@@ -33,10 +33,10 @@ fn exit_code_some(exit: ExitCodeAttr, oopsie_path: &syn::Path) -> TokenStream2 {
 /// `source_fn` names the skip-empty `__private` lookup (`source_backtrace` /
 /// `source_spantrace`), so an empty source trace never shadows a captured one.
 ///
-/// `probe` is the stable `DiagProbe` forwarding expression, supplied only for
-/// `transparent` layers. It sits between the (nightly-only) provider path and
-/// the own field, so a transparent wrapper forwards its source's trace on
-/// stable too — degrading to the own field when the source carries none.
+/// `probe` is the stable `DiagProbe` forwarding expression. It sits between the
+/// (nightly-only) provider path and the own field, so a forwarding wrapper
+/// surfaces its source's trace on stable too — degrading to the own field when
+/// the source carries none.
 fn trace_accessor_body(
     own: Option<TokenStream2>,
     source_access: Option<TokenStream2>,
@@ -74,8 +74,8 @@ fn location_accessor_body(
     }
 }
 
-/// The provider-API trace lookup, with the (transparent-only) stable `DiagProbe`
-/// forwarder OR-ed in after it when present.
+/// The provider-API trace lookup, with the stable `DiagProbe` source-forwarder
+/// OR-ed in after it when present.
 fn provider_then_probe(
     src: &TokenStream2,
     probe: Option<TokenStream2>,
@@ -105,11 +105,11 @@ fn accessor_pattern_binds(
     binds
 }
 
-/// Build a `DiagProbe` forwarding call for a transparent layer: forward one
-/// `Diagnostic` accessor (`method`) to the source if it implements `Diagnostic`,
-/// else `None`. `target` is the `&Source` reference to probe (a by-ref binding
-/// in enum arms, `&self.field` in structs). Mirrors the autoref dispatch used by
-/// `CaptureProbe` in `gen_selectors`.
+/// Build a `DiagProbe` forwarding call: forward one `Diagnostic` accessor
+/// (`method`) to the source if it implements `Diagnostic`, else `None`. `target`
+/// is the `&Source` reference to probe (a by-ref binding in enum arms,
+/// `&self.field` in structs). Mirrors the autoref dispatch used by `CaptureProbe`
+/// in `gen_selectors`.
 fn gen_diag_forward(
     target: impl quote::ToTokens,
     method: &str,
@@ -122,6 +122,55 @@ fn gen_diag_forward(
             (&#oopsie_path::__private::DiagProbe(#target)).#method()
         }
     }
+}
+
+/// The `Diagnostic` impl's `where` clause: the type's own predicates plus a
+/// `<source_ty>: Diagnostic` bound per forwarded generic source. The stable
+/// `DiagProbe` autoref needs that bound to select the forwarding impl over the
+/// `None` fallback at the generic level; without it forwarding silently breaks
+/// for a bare `S: Error`. (Concrete sources are filtered out upstream.)
+fn diagnostic_where_clause(
+    generics: &syn::Generics,
+    forwarded_generic_sources: &[&Type],
+    oopsie_path: &syn::Path,
+) -> TokenStream2 {
+    let mut predicates: Vec<TokenStream2> = generics
+        .where_clause
+        .iter()
+        .flat_map(|wc| wc.predicates.iter())
+        .map(|pred| quote! { #pred })
+        .collect();
+    let mut seen: Vec<String> = Vec::new();
+    for ty in forwarded_generic_sources {
+        let key = quote! { #ty }.to_string();
+        if seen.contains(&key) {
+            continue;
+        }
+        seen.push(key);
+        predicates.push(quote! { #ty: #oopsie_path::Diagnostic });
+    }
+    if predicates.is_empty() {
+        quote! {}
+    } else {
+        quote! { where #(#predicates),* }
+    }
+}
+
+/// A forwarded source field's declared type when it names a generic parameter of
+/// `generics` (so the `DiagProbe` bound is needed), else `None`. A concrete type
+/// names no parameter and must keep yielding `None`, so it is skipped.
+fn forwarded_generic_source_ty<'a>(
+    source: Option<&'a super::parse::SourceField>,
+    generics: &syn::Generics,
+) -> Option<&'a Type> {
+    let source = source?;
+    if !source.forward.any() {
+        return None;
+    }
+    let declared = super::generics::DeclaredParams::from_generics(generics);
+    declared
+        .type_references_param(&source.ty)
+        .then_some(&source.ty)
 }
 
 /// Generate `std::error::Error` impl for an enum.
@@ -275,19 +324,20 @@ pub fn gen_enum_error(
         // ── Diagnostic arms ──
 
         let source_ident = categorized.source.as_ref().map(|s| &s.ident);
-        let fwd = categorized
+        let forward = categorized
             .source
             .as_ref()
             .map(|s| s.forward)
             .unwrap_or_default();
         let src_access = source_ident.map(|s| quote! { #s.as_error_source() });
-        // Transparent layers forward the source's trace on stable via `DiagProbe`
-        // (the provider path is nightly-only). `#s` is bound by ref in the arm.
+        // `transparent` or `forward(...)` surfaces the source's trace on stable
+        // via `DiagProbe` (the provider path is nightly-only). `#s` is bound by
+        // ref in the arm.
         let bt_probe = source_ident
-            .filter(|_| variant_attrs.transparent || fwd.backtrace)
+            .filter(|_| variant_attrs.transparent || forward.backtrace)
             .map(|s| gen_diag_forward(s, "fwd_backtrace", oopsie_path));
         let st_probe = source_ident
-            .filter(|_| variant_attrs.transparent || fwd.spantrace)
+            .filter(|_| variant_attrs.transparent || forward.spantrace)
             .map(|s| gen_diag_forward(s, "fwd_spantrace", oopsie_path));
         let bt_fn = format_ident!("source_backtrace");
         let st_fn = format_ident!("source_spantrace");
@@ -349,13 +399,14 @@ pub fn gen_enum_error(
 
         // Location: the origin-most location is captured at construction (the
         // `CaptureProbe` extracts the source's via `capture_or_extract`), so the
-        // accessor returns this layer's own field. A `transparent` layer has no
-        // own field, so it forwards to the source on stable via `DiagProbe`.
+        // accessor returns this layer's own field. A `transparent` or
+        // `forward(location)` layer keeps no own field and forwards to the source
+        // on stable via `DiagProbe`.
         let loc_own = categorized
             .location_field
             .as_ref()
             .map(|lf| quote! { *#lf });
-        let loc_source = source_ident.filter(|_| variant_attrs.transparent || fwd.location);
+        let loc_source = source_ident.filter(|_| variant_attrs.transparent || forward.location);
         let loc_probe = loc_source.map(|s| gen_diag_forward(s, "fwd_location", oopsie_path));
         if let Some(body) = location_accessor_body(loc_own, loc_probe) {
             let binds = accessor_pattern_binds(categorized.location_field.as_ref(), loc_source);
@@ -609,6 +660,14 @@ pub fn gen_enum_error(
         }
     };
 
+    let forwarded_generic_sources: Vec<&Type> = resolved
+        .variants
+        .iter()
+        .filter_map(|v| forwarded_generic_source_ty(v.fields.source.as_ref(), &input.generics))
+        .collect();
+    let diag_where =
+        diagnostic_where_clause(&input.generics, &forwarded_generic_sources, oopsie_path);
+
     Ok(quote! {
         impl #impl_generics ::core::error::Error for #enum_ident #ty_generics #where_clause {
             fn source(&self) -> ::core::option::Option<&(dyn ::core::error::Error + 'static)> {
@@ -618,7 +677,7 @@ pub fn gen_enum_error(
             #provide_method
         }
 
-        impl #impl_generics #oopsie_path::Diagnostic for #enum_ident #ty_generics #where_clause {
+        impl #impl_generics #oopsie_path::Diagnostic for #enum_ident #ty_generics #diag_where {
             #bt_method
             #st_method
             #loc_method
@@ -774,7 +833,7 @@ pub fn gen_struct_error(
     // ── Diagnostic impl for struct ──
 
     let struct_source = categorized.source.as_ref().map(|s| &s.ident);
-    let fwd = categorized
+    let forward = categorized
         .source
         .as_ref()
         .map(|s| s.forward)
@@ -785,12 +844,13 @@ pub fn gen_struct_error(
     } else {
         quote! {}
     };
-    // Transparent structs forward the source's trace on stable via `DiagProbe`.
+    // A `transparent` or `forward(...)` struct surfaces the source's trace on
+    // stable via `DiagProbe`.
     let bt_probe = struct_source
-        .filter(|_| variant_attrs.transparent || fwd.backtrace)
+        .filter(|_| variant_attrs.transparent || forward.backtrace)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_backtrace", oopsie_path));
     let st_probe = struct_source
-        .filter(|_| variant_attrs.transparent || fwd.spantrace)
+        .filter(|_| variant_attrs.transparent || forward.spantrace)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_spantrace", oopsie_path));
     let bt_fn = format_ident!("source_backtrace");
     let st_fn = format_ident!("source_spantrace");
@@ -855,7 +915,7 @@ pub fn gen_struct_error(
         .as_ref()
         .map(|lf| quote! { self.#lf });
     let loc_probe = struct_source
-        .filter(|_| variant_attrs.transparent || fwd.location)
+        .filter(|_| variant_attrs.transparent || forward.location)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_location", oopsie_path));
     let loc_sig = quote! {
         fn oopsie_location(&self) -> ::core::option::Option<&'static ::core::panic::Location<'static>>
@@ -1004,6 +1064,13 @@ pub fn gen_struct_error(
         quote! {}
     };
 
+    let forwarded_generic_sources: Vec<&Type> =
+        forwarded_generic_source_ty(categorized.source.as_ref(), &input.generics)
+            .into_iter()
+            .collect();
+    let diag_where =
+        diagnostic_where_clause(&input.generics, &forwarded_generic_sources, oopsie_path);
+
     Ok(quote! {
         impl #impl_generics ::core::error::Error for #struct_ident #ty_generics #where_clause {
             fn source(&self) -> ::core::option::Option<&(dyn ::core::error::Error + 'static)> {
@@ -1013,7 +1080,7 @@ pub fn gen_struct_error(
             #provide_method
         }
 
-        impl #impl_generics #oopsie_path::Diagnostic for #struct_ident #ty_generics #where_clause {
+        impl #impl_generics #oopsie_path::Diagnostic for #struct_ident #ty_generics #diag_where {
             #bt_method
             #st_method
             #loc_method
