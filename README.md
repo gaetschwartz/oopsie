@@ -4,8 +4,6 @@ Structured, context-rich error handling for Rust — define your error type once
 attach it to any `Result` with `.context(...)`, and render colorized diagnostic
 reports with automatic backtraces and span traces.
 
-`oopsie` is `0.x`: the public API may still change between minor releases.
-
 [![crates.io](https://img.shields.io/crates/v/oopsie.svg)](https://crates.io/crates/oopsie)
 [![docs.rs](https://img.shields.io/docsrs/oopsie)](https://docs.rs/oopsie)
 [![MSRV](https://img.shields.io/badge/MSRV-1.89-blue.svg)](https://crates.io/crates/oopsie)
