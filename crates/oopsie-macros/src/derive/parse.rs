@@ -618,7 +618,6 @@ fn merge_short_display(target: &mut Option<DisplayAttr>, short: DisplayAttr) -> 
 /// Sub-keys of `#[oopsie(forward(...))]`: which diagnostic traces this source
 /// supplies. `backtrace` and `spantrace` default on; `location` defaults off.
 #[derive(Clone, Debug, Default, darling::FromMeta)]
-#[allow(dead_code, reason = "read by the forward inject and codegen passes")]
 pub struct ForwardArgs {
     #[darling(default)]
     pub backtrace: crate::utils::BetterFlag<true>,
@@ -630,14 +629,12 @@ pub struct ForwardArgs {
 
 /// Flattened forward decision for one source field.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[allow(dead_code, reason = "read by the forward inject and codegen passes")]
 pub struct ResolvedForward {
     pub backtrace: bool,
     pub spantrace: bool,
     pub location: bool,
 }
 
-#[allow(dead_code, reason = "read by the forward inject and codegen passes")]
 impl ResolvedForward {
     pub fn resolve(setting: &crate::utils::FieldSetting<false, ForwardArgs>) -> Self {
         if !setting.is_enabled() {
@@ -682,7 +679,6 @@ pub struct FieldAttrs {
     #[darling(default)]
     pub help: bool,
     #[darling(default)]
-    #[allow(dead_code, reason = "read by the forward inject and codegen passes")]
     pub forward: crate::utils::FieldSetting<false, ForwardArgs>,
 }
 
@@ -1424,6 +1420,8 @@ pub struct SourceField {
     pub ident: Ident,
     pub ty: Type,
     pub kind: SourceKind,
+    #[allow(dead_code, reason = "read by the forward inject and codegen passes")]
+    pub forward: ResolvedForward,
     /// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs on the field, forwarded onto every
     /// generated mention so stripped fields take their references with them.
     pub cfg_attrs: Vec<syn::Attribute>,
@@ -1597,6 +1595,14 @@ impl CategorizedFields {
                 help_field = Some(ident.clone());
             }
 
+            let forward = ResolvedForward::resolve(&attrs.forward);
+            if forward.any() && !attrs.is_source() {
+                return Err(syn::Error::new_spanned(
+                    field,
+                    "`#[oopsie(forward)]` must be on a source field (named `source` or marked `#[oopsie(from)]`)",
+                ));
+            }
+
             if attrs.is_source() {
                 if source.is_some() {
                     return Err(syn::Error::new_spanned(
@@ -1608,6 +1614,7 @@ impl CategorizedFields {
                     ident: ident.clone(),
                     ty: field.ty.clone(),
                     kind: attrs.from,
+                    forward,
                     cfg_attrs,
                 });
             } else if attrs.capture.is_enabled() {

@@ -186,6 +186,9 @@ pub mod field {
 
     #[doc = include_str!("keyword_docs/field/help.md")]
     pub fn help() {}
+
+    #[doc = include_str!("keyword_docs/field/forward.md")]
+    pub fn forward() {}
 }
 
 /// Keywords accepted at the top level of the `#[oopsie::oopsie(...)]`
