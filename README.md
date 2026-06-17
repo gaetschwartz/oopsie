@@ -75,6 +75,15 @@ cargo fmt    # format
 Snapshot tests only match on the blessed feature combos; run `just test-bless`
 after a change that legitimately shifts one.
 
+## Acknowledgements
+
+`oopsie` builds on ideas from the Rust error-handling ecosystem:
+
+- [**snafu**](https://github.com/shepmaster/snafu) — the context-selector pattern
+  behind `#[oopsie]`: a selector per variant, attached to a `Result` with `.context(...)`.
+- [**color-eyre**](https://github.com/eyre-rs/color-eyre) — the rich, colorized
+  rendering of the error chain, span trace, and backtrace, and the matching panic hook.
+
 ## License
 
 Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE) at
