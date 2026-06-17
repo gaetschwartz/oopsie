@@ -10,7 +10,7 @@
 
 use std::sync::{PoisonError, RwLock};
 
-use crate::style::Style;
+use crate::style::{Style, parse_rgb as hex};
 use crate::trace_printer::TraceTheme;
 
 /// A color theme: nine named colors plus the role accessors that paint a
@@ -18,7 +18,7 @@ use crate::trace_printer::TraceTheme;
 ///
 /// Choose one of the shipped presets (the associated constants) and install it
 /// with [`set_theme`]; the palette colors are intentionally opaque.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Theme {
     red: (u8, u8, u8),
     peach: (u8, u8, u8),
@@ -33,32 +33,8 @@ pub struct Theme {
 
 const _: () = assert!(
     std::mem::size_of::<Theme>() <= 32,
-    "Theme is copied on every get_theme(); keep it a small palette",
+    "Theme is cloned on every get_theme(); keep it a small palette",
 );
-
-/// Parse a `#rrggbb` literal at compile time. Written as a `&str` so editors
-/// render the color swatch inline next to each preset.
-const fn hex(literal: &str) -> (u8, u8, u8) {
-    // Require exact #rrggbb: a bare hex parse would silently accept shorthand or
-    // a missing `#` as a *different* color instead of failing the build.
-    assert!(
-        literal.len() == 7 && literal.as_bytes()[0] == b'#',
-        "color literal must be in #rrggbb form",
-    );
-    let (_, digits) = literal.split_at(1);
-    let Ok(value) = u32::from_str_radix(digits, 16) else {
-        panic!("color literal has a non-hex digit")
-    };
-    (
-        ((value >> 16) & 0xFF) as u8,
-        ((value >> 8) & 0xFF) as u8,
-        (value & 0xFF) as u8,
-    )
-}
-
-const fn style((r, g, b): (u8, u8, u8)) -> Style {
-    Style::new().truecolor(r, g, b)
-}
 
 impl Theme {
     /// Catppuccin Mocha — the dark default. <https://catppuccin.com/palette>
@@ -147,47 +123,47 @@ impl Theme {
     /// Backtrace/span-trace frame index.
     #[must_use]
     pub const fn frame_number(&self) -> Style {
-        style(self.overlay1)
+        Style::from_rgb(self.overlay1)
     }
     /// Function / span name.
     #[must_use]
     pub const fn function_name(&self) -> Style {
-        style(self.red)
+        Style::from_rgb(self.red)
     }
     /// The `::h…` hash suffix on a function name.
     #[must_use]
     pub const fn function_hash(&self) -> Style {
-        style(self.overlay0)
+        Style::from_rgb(self.overlay0)
     }
     /// Source file path.
     #[must_use]
     pub const fn file_path(&self) -> Style {
-        style(self.mauve)
+        Style::from_rgb(self.mauve)
     }
     /// `:line:col` location.
     #[must_use]
     pub const fn line_number(&self) -> Style {
-        style(self.peach)
+        Style::from_rgb(self.peach)
     }
     /// Inline separators (`at`, `:`, `with`).
     #[must_use]
     pub const fn separator(&self) -> Style {
-        style(self.overlay0)
+        Style::from_rgb(self.overlay0)
     }
     /// Span field list.
     #[must_use]
     pub const fn fields(&self) -> Style {
-        style(self.sky)
+        Style::from_rgb(self.sky)
     }
     /// The `━ BACKTRACE ━` / `━ SPANTRACE ━` banner.
     #[must_use]
     pub const fn header(&self) -> Style {
-        style(self.mauve)
+        Style::from_rgb(self.mauve)
     }
     /// The `… N frames hidden …` notice.
     #[must_use]
     pub const fn frames_hidden(&self) -> Style {
-        style(self.teal)
+        Style::from_rgb(self.teal)
     }
 
     // ── Error-chain / panic roles ───────────────────────────────────────────
@@ -195,42 +171,42 @@ impl Theme {
     /// The `Error` headline, and the panic header line.
     #[must_use]
     pub const fn error_title(&self) -> Style {
-        style(self.red).bold()
+        Style::from_rgb(self.red).bold()
     }
     /// The `[error_code]` token next to the headline.
     #[must_use]
     pub const fn error_code(&self) -> Style {
-        style(self.blue)
+        Style::from_rgb(self.blue)
     }
     /// The brackets around the error code.
     #[must_use]
     pub const fn delimiter(&self) -> Style {
-        style(self.overlay0)
+        Style::from_rgb(self.overlay0)
     }
     /// The `├─▶` / `╰─▶` arrows joining the error chain.
     #[must_use]
     pub const fn cause(&self) -> Style {
-        style(self.yellow)
+        Style::from_rgb(self.yellow)
     }
     /// The `help` label.
     #[must_use]
     pub const fn help(&self) -> Style {
-        style(self.teal)
+        Style::from_rgb(self.teal)
     }
     /// The panic message body.
     #[must_use]
     pub const fn panic_message(&self) -> Style {
-        style(self.sky)
+        Style::from_rgb(self.sky)
     }
     /// The panic location (`file:line:col`).
     #[must_use]
     pub const fn panic_location(&self) -> Style {
-        style(self.mauve)
+        Style::from_rgb(self.mauve)
     }
     /// Dimmed hints, e.g. the `RUST_BACKTRACE` note.
     #[must_use]
     pub const fn hint(&self) -> Style {
-        style(self.overlay0)
+        Style::from_rgb(self.overlay0)
     }
 
     /// Bundle the trace roles into a [`TraceTheme`] for [`TracePrinter`].
@@ -265,7 +241,7 @@ pub fn set_theme(theme: Theme) {
 #[must_use]
 #[inline]
 pub fn get_theme() -> Theme {
-    *THEME.read().unwrap_or_else(PoisonError::into_inner)
+    THEME.read().unwrap_or_else(PoisonError::into_inner).clone()
 }
 
 #[cfg(test)]

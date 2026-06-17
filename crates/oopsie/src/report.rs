@@ -3,6 +3,7 @@
 //! This module provides [`Report`], a wrapper that formats errors with
 //! colorized output including the error chain, span traces, and backtraces.
 
+use std::borrow::Cow;
 use std::fmt;
 use std::process::{ExitCode, Termination};
 
@@ -11,7 +12,6 @@ use crate::ColorMode;
 use crate::Diagnostic;
 
 use crate::color::style;
-use crate::style::Style;
 use crate::theme::{Theme, get_theme};
 use crate::trace_printer::{TracePrinter, error_backtrace_frame_filter, marker_strip_filter};
 
@@ -157,8 +157,11 @@ impl<E: Diagnostic> Report<E> {
 
     /// The theme to render with: the per-report override, else the global.
     #[inline]
-    fn resolved_theme(&self) -> Theme {
-        self.theme_override.unwrap_or_else(get_theme)
+    fn resolved_theme(&self) -> Cow<'_, Theme> {
+        match self.theme_override.as_ref() {
+            Some(theme) => Cow::Borrowed(theme),
+            None => Cow::Owned(get_theme()),
+        }
     }
 
     /// Get a reference to the wrapped error.
@@ -208,7 +211,7 @@ impl<E: Diagnostic> Report<E> {
         // Caller location, directly under the header so it reads even with
         // backtraces disabled.
         if let Some(location) = err.oopsie_location() {
-            let at = format!(
+            let at = format_args!(
                 "{}:{}:{}",
                 location.file(),
                 location.line(),
@@ -217,8 +220,8 @@ impl<E: Diagnostic> Report<E> {
             writeln!(
                 f,
                 "  {} {}",
-                style!("at", Style::new().dimmed(), c),
-                style!(at, Style::new().dimmed(), c)
+                style!("at", theme.hint(), c),
+                style!(at, theme.hint(), c)
             )?;
         }
 
@@ -257,7 +260,7 @@ impl<E: Diagnostic> Report<E> {
 
     /// Format the span trace if available.
     #[cfg(feature = "tracing")]
-    fn write_span_trace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn write_spantrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Some(span_trace) = self.error().and_then(|e| e.oopsie_spantrace()) else {
             return Ok(());
         };
@@ -360,7 +363,7 @@ impl<E: Diagnostic> fmt::Display for Report<E> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_error_chain(f)?;
         #[cfg(feature = "tracing")]
-        self.write_span_trace(f)?;
+        self.write_spantrace(f)?;
         self.write_backtrace(f)?;
         Ok(())
     }

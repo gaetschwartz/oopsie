@@ -148,7 +148,7 @@ impl<'a> PanicReport<'a> {
     }
 
     #[cfg(feature = "tracing")]
-    fn write_span_trace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn write_spantrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Some(span_trace) = &self.span_trace else {
             return Ok(());
         };
@@ -210,7 +210,7 @@ impl fmt::Display for PanicReport<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.write_header(f)?;
         #[cfg(feature = "tracing")]
-        self.write_span_trace(f)?;
+        self.write_spantrace(f)?;
         self.write_backtrace(f)?;
         Ok(())
     }
