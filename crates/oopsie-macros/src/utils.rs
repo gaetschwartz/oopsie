@@ -72,6 +72,13 @@ impl<const DEFAULT: bool, T: FromMeta> FromMeta for FieldSetting<DEFAULT, T> {
     }
 }
 
+impl<const DEFAULT: bool, T: FromMeta> Default for FieldSetting<DEFAULT, T> {
+    #[inline]
+    fn default() -> Self {
+        Self::Flag(DEFAULT)
+    }
+}
+
 #[derive(Clone, Debug, darling::FromMeta)]
 pub struct Settings<T> {
     enabled: Option<bool>,

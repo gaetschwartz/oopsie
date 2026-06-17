@@ -613,6 +613,49 @@ fn merge_short_display(target: &mut Option<DisplayAttr>, short: DisplayAttr) -> 
     Ok(())
 }
 
+// ─── Forward-trace attribute ─────────────────────────────────────
+
+/// Sub-keys of `#[oopsie(forward(...))]`: which diagnostic traces this source
+/// supplies. `backtrace` and `spantrace` default on; `location` defaults off.
+#[derive(Clone, Debug, Default, darling::FromMeta)]
+#[allow(dead_code, reason = "read by the forward inject and codegen passes")]
+pub struct ForwardArgs {
+    #[darling(default)]
+    pub backtrace: crate::utils::BetterFlag<true>,
+    #[darling(default)]
+    pub spantrace: crate::utils::BetterFlag<true>,
+    #[darling(default)]
+    pub location: crate::utils::BetterFlag<false>,
+}
+
+/// Flattened forward decision for one source field.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[allow(dead_code, reason = "read by the forward inject and codegen passes")]
+pub struct ResolvedForward {
+    pub backtrace: bool,
+    pub spantrace: bool,
+    pub location: bool,
+}
+
+#[allow(dead_code, reason = "read by the forward inject and codegen passes")]
+impl ResolvedForward {
+    pub fn resolve(setting: &crate::utils::FieldSetting<false, ForwardArgs>) -> Self {
+        if !setting.is_enabled() {
+            return Self::default();
+        }
+        let s = setting.opt_settings();
+        Self {
+            backtrace: s.map_or(true, |a| a.backtrace.is_enabled()),
+            spantrace: s.map_or(true, |a| a.spantrace.is_enabled()),
+            location: s.map_or(false, |a| a.location.is_enabled()),
+        }
+    }
+
+    pub const fn any(self) -> bool {
+        self.backtrace || self.spantrace || self.location
+    }
+}
+
 // ─── Field-level attributes ──────────────────────────────────────
 
 #[expect(
@@ -638,6 +681,9 @@ pub struct FieldAttrs {
     pub location: bool,
     #[darling(default)]
     pub help: bool,
+    #[darling(default)]
+    #[allow(dead_code, reason = "read by the forward inject and codegen passes")]
+    pub forward: crate::utils::FieldSetting<false, ForwardArgs>,
 }
 
 #[derive(Debug, Default)]
@@ -1608,5 +1654,66 @@ impl CategorizedFields {
             location_field,
             help_field,
         })
+    }
+}
+
+#[cfg(test)]
+mod forward_tests {
+    use darling::FromAttributes as _;
+
+    use super::*;
+
+    fn attrs(a: syn::Attribute) -> FieldAttrs {
+        FieldAttrs::from_attributes(&[a]).expect("parse field attrs")
+    }
+
+    #[test]
+    fn bare_forward_forwards_backtrace_and_spantrace_not_location() {
+        let rf = ResolvedForward::resolve(&attrs(syn::parse_quote!(#[oopsie(forward)])).forward);
+        assert_eq!(
+            rf,
+            ResolvedForward {
+                backtrace: true,
+                spantrace: true,
+                location: false
+            }
+        );
+    }
+
+    #[test]
+    fn forward_disables_backtrace_and_enables_location() {
+        let rf = ResolvedForward::resolve(
+            &attrs(syn::parse_quote!(#[oopsie(forward(backtrace = false, location = true))]))
+                .forward,
+        );
+        assert_eq!(
+            rf,
+            ResolvedForward {
+                backtrace: false,
+                spantrace: true,
+                location: true
+            }
+        );
+    }
+
+    #[test]
+    fn forward_accepts_paren_flag_spelling() {
+        let rf = ResolvedForward::resolve(
+            &attrs(syn::parse_quote!(#[oopsie(forward(location(true)))])).forward,
+        );
+        assert!(rf.location);
+    }
+
+    #[test]
+    fn absent_forward_resolves_to_nothing() {
+        let rf = ResolvedForward::resolve(&attrs(syn::parse_quote!(#[oopsie(from)])).forward);
+        assert_eq!(rf, ResolvedForward::default());
+    }
+
+    #[test]
+    fn explicit_forward_false_resolves_to_nothing() {
+        let rf =
+            ResolvedForward::resolve(&attrs(syn::parse_quote!(#[oopsie(forward = false)])).forward);
+        assert_eq!(rf, ResolvedForward::default());
     }
 }
