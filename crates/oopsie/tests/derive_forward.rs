@@ -63,3 +63,48 @@ fn forwarding_shrinks_the_value() {
         std::mem::size_of::<CapturingSizeError>(),
     );
 }
+
+#[oopsie(traced)]
+pub struct BtWrapError {
+    #[oopsie(forward)]
+    source: LeafError,
+}
+
+#[test]
+fn forwarded_backtrace_matches_source() {
+    common::force_backtrace();
+    let src = leaf_oopsies::Boom { msg: "x" }.build();
+    let src_frames = src
+        .oopsie_backtrace()
+        .expect("forced capture => Some")
+        .frames()
+        .len();
+    assert!(
+        src_frames > 0,
+        "force_backtrace must yield frames for this test to be probative"
+    );
+
+    let wrap: BtWrapError = bt_wrap_oopsies::BtWrap.build_error(src);
+    let wrap_bt = wrap
+        .oopsie_backtrace()
+        .expect("Wrap must forward the source's backtrace");
+    assert_eq!(
+        wrap_bt.frames().len(),
+        src_frames,
+        "forwarded backtrace is the source's"
+    );
+}
+
+#[cfg(feature = "tracing")]
+#[test]
+fn forwarded_spantrace_parity_with_source() {
+    let _sub = common::init_test_subscriber();
+    let src = leaf_oopsies::Boom { msg: "x" }.build();
+    let src_st_present = src.oopsie_spantrace().is_some();
+    let wrap: BtWrapError = bt_wrap_oopsies::BtWrap.build_error(src);
+    assert_eq!(
+        wrap.oopsie_spantrace().is_some(),
+        src_st_present,
+        "forwarded spantrace presence must match the source's"
+    );
+}

@@ -275,14 +275,19 @@ pub fn gen_enum_error(
         // ── Diagnostic arms ──
 
         let source_ident = categorized.source.as_ref().map(|s| &s.ident);
+        let fwd = categorized
+            .source
+            .as_ref()
+            .map(|s| s.forward)
+            .unwrap_or_default();
         let src_access = source_ident.map(|s| quote! { #s.as_error_source() });
         // Transparent layers forward the source's trace on stable via `DiagProbe`
         // (the provider path is nightly-only). `#s` is bound by ref in the arm.
         let bt_probe = source_ident
-            .filter(|_| variant_attrs.transparent)
+            .filter(|_| variant_attrs.transparent || fwd.backtrace)
             .map(|s| gen_diag_forward(s, "fwd_backtrace", oopsie_path));
         let st_probe = source_ident
-            .filter(|_| variant_attrs.transparent)
+            .filter(|_| variant_attrs.transparent || fwd.spantrace)
             .map(|s| gen_diag_forward(s, "fwd_spantrace", oopsie_path));
         let bt_fn = format_ident!("source_backtrace");
         let st_fn = format_ident!("source_spantrace");
@@ -350,7 +355,7 @@ pub fn gen_enum_error(
             .location_field
             .as_ref()
             .map(|lf| quote! { *#lf });
-        let loc_source = source_ident.filter(|_| variant_attrs.transparent);
+        let loc_source = source_ident.filter(|_| variant_attrs.transparent || fwd.location);
         let loc_probe = loc_source.map(|s| gen_diag_forward(s, "fwd_location", oopsie_path));
         if let Some(body) = location_accessor_body(loc_own, loc_probe) {
             let binds = accessor_pattern_binds(categorized.location_field.as_ref(), loc_source);
@@ -769,6 +774,11 @@ pub fn gen_struct_error(
     // ── Diagnostic impl for struct ──
 
     let struct_source = categorized.source.as_ref().map(|s| &s.ident);
+    let fwd = categorized
+        .source
+        .as_ref()
+        .map(|s| s.forward)
+        .unwrap_or_default();
     let struct_src_access = struct_source.map(|s| quote! { self.#s.as_error_source() });
     let struct_use_aes = if struct_source.is_some() {
         quote! { use #oopsie_path::AsErrorSource as _; }
@@ -777,10 +787,10 @@ pub fn gen_struct_error(
     };
     // Transparent structs forward the source's trace on stable via `DiagProbe`.
     let bt_probe = struct_source
-        .filter(|_| variant_attrs.transparent)
+        .filter(|_| variant_attrs.transparent || fwd.backtrace)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_backtrace", oopsie_path));
     let st_probe = struct_source
-        .filter(|_| variant_attrs.transparent)
+        .filter(|_| variant_attrs.transparent || fwd.spantrace)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_spantrace", oopsie_path));
     let bt_fn = format_ident!("source_backtrace");
     let st_fn = format_ident!("source_spantrace");
@@ -845,7 +855,7 @@ pub fn gen_struct_error(
         .as_ref()
         .map(|lf| quote! { self.#lf });
     let loc_probe = struct_source
-        .filter(|_| variant_attrs.transparent)
+        .filter(|_| variant_attrs.transparent || fwd.location)
         .map(|s| gen_diag_forward(quote! { &self.#s }, "fwd_location", oopsie_path));
     let loc_sig = quote! {
         fn oopsie_location(&self) -> ::core::option::Option<&'static ::core::panic::Location<'static>>
