@@ -222,3 +222,24 @@ fn partial_forward_forwards_spantrace() {
         "forwarded spantrace presence must match the source's"
     );
 }
+
+// ─── Explicit `from(Type, transform)` source forwards too ─────────────────────
+
+#[oopsie(traced)]
+pub struct FromWrapError {
+    #[oopsie(from(LeafError, Box::new), forward)]
+    source: Box<LeafError>,
+}
+
+#[test]
+fn from_transform_source_forwards() {
+    common::force_backtrace();
+    let leaf = leaf_oopsies::Boom { msg: "x" }.build();
+    let some = leaf.oopsie_backtrace().is_some();
+    let fw: FromWrapError = from_wrap_oopsies::FromWrap.build_error(leaf);
+    assert_eq!(
+        fw.oopsie_backtrace().is_some(),
+        some,
+        "an explicit from(Type, transform) source forwards its backtrace"
+    );
+}
