@@ -46,6 +46,21 @@ in a module named after the type (`AppError` → `app_oopsies`) — alongside `D
 `tracing` feature) plus an automatic error code, and `Report` renders the result —
 including panics, via its hook — as the colorized output shown above.
 
+When one traced error wraps another, you can annotate the source field with
+`#[oopsie(forward)]` to forward the inner error's backtrace and span trace instead of
+capturing a redundant outer layer:
+
+```rust
+#[oopsie::oopsie(traced)]
+pub enum GatewayError {
+    #[oopsie("gateway rejected request")]
+    Rejected {
+        #[oopsie(forward)]
+        source: AppError,
+    },
+}
+```
+
 Unlike `thiserror`, the attachment points and the renderer come built in; unlike
 `anyhow` / `eyre`, your errors stay strongly typed.
 

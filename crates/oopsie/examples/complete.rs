@@ -41,6 +41,17 @@ pub enum HandlerError {
     Request { user: String, source: QueryError },
 }
 
+// Carries no trace of its own — the source's traces are forwarded through
+// instead of capturing a redundant outer layer.
+#[oopsie(traced)]
+pub enum GatewayError {
+    #[oopsie("gateway rejected request")]
+    Rejected {
+        #[oopsie(forward)]
+        source: HandlerError,
+    },
+}
+
 #[cfg_attr(feature = "tracing", tracing::instrument)]
 fn send_network_request(request: &str) -> Result<(), NetworkError> {
     network_oopsies::Network {
@@ -62,14 +73,29 @@ fn handle_request(user: &str) -> Result<(), HandlerError> {
     Ok(())
 }
 
-fn main() -> Report<HandlerError> {
+#[cfg_attr(feature = "tracing", tracing::instrument)]
+fn gateway_handle(user: &str) -> Result<(), GatewayError> {
+    handle_request(user).context(gateway_oopsies::Rejected)?;
+    Ok(())
+}
+
+fn main() -> Report<GatewayError> {
     setup_example();
 
     init_tracing();
 
-    Report::run(|| handle_request("alice"))
+    Report::run(|| gateway_handle("alice"))
 }
 
+// const-eligible only without `tracing`, where the body is empty; with the
+// feature it calls non-const subscriber setup, so the lint fires in just one cfg.
+#[cfg_attr(
+    not(feature = "tracing"),
+    expect(
+        clippy::missing_const_for_fn,
+        reason = "empty body only without `tracing`"
+    )
+)]
 fn init_tracing() {
     #[cfg(feature = "tracing")]
     {

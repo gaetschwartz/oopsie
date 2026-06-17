@@ -270,6 +270,7 @@ e.g. API error responses."
 //! | `traces` | Packed `(Backtrace, SpanTrace)` field |
 //! | `location` | Captured caller location |
 //! | `help` | Dynamic help from this field's `Display` |
+//! | `forward` | Forward source's traces instead of capturing new ones |
 //!
 //! A field named `source` is auto-detected as the chained source error, and a
 //! `Box<T>` source is auto-unboxed so the selector accepts `T` (trait objects
@@ -283,6 +284,7 @@ e.g. API error responses."
 #![doc = include_str!("__private/keyword_docs/field/traces.md")]
 #![doc = include_str!("__private/keyword_docs/field/location.md")]
 #![doc = include_str!("__private/keyword_docs/field/help.md")]
+#![doc = include_str!("__private/keyword_docs/field/forward.md")]
 //!
 //! ## Generic error types
 //!

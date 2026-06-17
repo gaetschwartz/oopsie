@@ -642,9 +642,9 @@ impl ResolvedForward {
         }
         let s = setting.opt_settings();
         Self {
-            backtrace: s.map_or(true, |a| a.backtrace.is_enabled()),
-            spantrace: s.map_or(true, |a| a.spantrace.is_enabled()),
-            location: s.map_or(false, |a| a.location.is_enabled()),
+            backtrace: s.is_none_or(|a| a.backtrace.is_enabled()),
+            spantrace: s.is_none_or(|a| a.spantrace.is_enabled()),
+            location: s.is_some_and(|a| a.location.is_enabled()),
         }
     }
 

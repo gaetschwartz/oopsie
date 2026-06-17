@@ -27,6 +27,15 @@ fn main() -> Report<QueryError> {
     Report::run(|| fetch_user("alice"))
 }
 
+// const-eligible only without `tracing`, where the body is empty; with the
+// feature it calls non-const subscriber setup, so the lint fires in just one cfg.
+#[cfg_attr(
+    not(feature = "tracing"),
+    expect(
+        clippy::missing_const_for_fn,
+        reason = "empty body only without `tracing`"
+    )
+)]
 fn init_tracing() {
     #[cfg(feature = "tracing")]
     {
