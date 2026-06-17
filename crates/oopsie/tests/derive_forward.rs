@@ -28,6 +28,17 @@ pub enum WrapError {
     },
 }
 
+#[oopsie(traced)]
+pub struct ForwardedSizeError {
+    #[oopsie(forward)]
+    source: LeafError,
+}
+
+#[oopsie(traced)]
+pub struct CapturingSizeError {
+    source: LeafError,
+}
+
 fn leaf() -> LeafError {
     common::force_backtrace();
     leaf_oopsies::Boom { msg: "boom" }.build()
@@ -38,4 +49,17 @@ fn forwarded_wrapper_compiles_and_keeps_source() {
     let err: WrapError = wrap_oopsies::Around.build_error(leaf());
     assert_eq!(err.to_string(), "wrap"); // own message, NOT transparent
     assert!(err.source().is_some());
+}
+
+#[test]
+fn forwarding_shrinks_the_value() {
+    // The capturing variant keeps the boxed trace pair + location fields the
+    // forwarded variant omits; both are pointer-aligned, so the difference can't
+    // be absorbed by padding.
+    assert!(
+        std::mem::size_of::<ForwardedSizeError>() < std::mem::size_of::<CapturingSizeError>(),
+        "forwarded ({}) must be smaller than capturing ({})",
+        std::mem::size_of::<ForwardedSizeError>(),
+        std::mem::size_of::<CapturingSizeError>(),
+    );
 }

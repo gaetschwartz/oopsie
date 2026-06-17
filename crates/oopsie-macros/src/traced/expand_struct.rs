@@ -6,7 +6,7 @@ use syn::ext::IdentExt as _;
 use super::args::{CodeSettings, TracedArgs};
 use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{add_provide_attrs, check_existing_fields, inject_fields};
-use crate::derive::parse::StructAttrs;
+use crate::derive::parse::{StructAttrs, field_forward};
 use crate::utils::FieldSetting;
 
 pub fn expand_struct(
@@ -24,22 +24,35 @@ pub fn expand_struct(
 
     let existence = check_existing_fields(&input.fields, &config.timestamp_type);
 
+    let forward = input
+        .fields
+        .iter()
+        .map(field_forward)
+        .collect::<syn::Result<Vec<_>>>()?
+        .into_iter()
+        .find(|f| f.any())
+        .unwrap_or_default();
+
+    let inject_backtrace = resolved.backtrace && !forward.backtrace;
+    let inject_spantrace = resolved.spantrace && !forward.spantrace;
+    let inject_location = resolved.location && !forward.location;
+
     // Packed only applies when both traces are enabled and no trace field
     // already exists; otherwise fall back to per-field (unpacked) injection,
     // which also covers the single-trace case.
     let packed = resolved.packed
-        && resolved.backtrace
-        && resolved.spantrace
+        && inject_backtrace
+        && inject_spantrace
         && !existence.has_backtrace
         && !existence.has_spantrace
         && !existence.has_traces;
 
     let to_inject = FieldsToInject {
-        backtrace: !packed && resolved.backtrace && !existence.has_backtrace,
-        spantrace: !packed && resolved.spantrace && !existence.has_spantrace,
+        backtrace: !packed && inject_backtrace && !existence.has_backtrace,
+        spantrace: !packed && inject_spantrace && !existence.has_spantrace,
         timestamp: resolved.timestamp && !existence.has_timestamp,
         traces: packed,
-        location: resolved.location && !existence.has_location,
+        location: inject_location && !existence.has_location,
     };
 
     inject_fields(&mut input.fields, &config, &to_inject)?;

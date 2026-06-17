@@ -1,0 +1,5 @@
+error: `forward(backtrace)` cannot coexist with an own backtrace/traces field
+  --> tests/compile-fail/forward_conflicts_with_own_backtrace.rs:19:9
+   |
+19 |         source: LeafError,
+   |         ^^^^^^

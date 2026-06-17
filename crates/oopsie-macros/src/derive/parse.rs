@@ -653,6 +653,14 @@ impl ResolvedForward {
     }
 }
 
+/// Resolves a field's `forward(...)` for the inject stage, which operates on raw
+/// `syn::Field`s before the derive-layer attribute parsing runs.
+pub fn field_forward(field: &syn::Field) -> syn::Result<ResolvedForward> {
+    use darling::FromAttributes as _;
+    let attrs = FieldAttrs::from_attributes(&field.attrs).map_err(syn::Error::from)?;
+    Ok(ResolvedForward::resolve(&attrs.forward))
+}
+
 // ─── Field-level attributes ──────────────────────────────────────
 
 #[expect(
@@ -1420,7 +1428,6 @@ pub struct SourceField {
     pub ident: Ident,
     pub ty: Type,
     pub kind: SourceKind,
-    #[allow(dead_code, reason = "read by the forward inject and codegen passes")]
     pub forward: ResolvedForward,
     /// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs on the field, forwarded onto every
     /// generated mention so stripped fields take their references with them.
@@ -1646,6 +1653,32 @@ impl CategorizedFields {
                 return Err(syn::Error::new_spanned(
                     st,
                     "a packed `traces` field cannot coexist with a separate `spantrace` field",
+                ));
+            }
+        }
+
+        // A forwarded trace and an own field for that same trace would both claim
+        // the accessor; reject the ambiguity. Checked post-loop against the
+        // accumulated own-trace fields, since the conflicting field is a sibling
+        // of the source. (Auto-injected trace fields for forwarded traces are
+        // suppressed before this runs, so only user-declared fields remain.)
+        if let Some(src) = &source {
+            if src.forward.backtrace && (backtrace_field.is_some() || traces_field.is_some()) {
+                return Err(syn::Error::new_spanned(
+                    &src.ident,
+                    "`forward(backtrace)` cannot coexist with an own backtrace/traces field",
+                ));
+            }
+            if src.forward.spantrace && (spantrace_field.is_some() || traces_field.is_some()) {
+                return Err(syn::Error::new_spanned(
+                    &src.ident,
+                    "`forward(spantrace)` cannot coexist with an own spantrace/traces field",
+                ));
+            }
+            if src.forward.location && location_field.is_some() {
+                return Err(syn::Error::new_spanned(
+                    &src.ident,
+                    "`forward(location)` cannot coexist with an own location field",
                 ));
             }
         }
