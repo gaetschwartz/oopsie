@@ -393,11 +393,9 @@ pub mod erased {
     };
 }
 
-/// `tracing-subscriber` integration helpers.
-#[cfg(all(feature = "tracing", feature = "serde"))]
-pub mod tracing {
-    pub use oopsie_core::json_error_layer;
-}
+/// `tracing` integration helpers.
+#[cfg(feature = "tracing")]
+pub use oopsie_core::tracing;
 
 /// Common imports for error handling at the call site.
 ///

@@ -52,7 +52,7 @@ macro_rules! snap_name {
 #[must_use]
 pub fn init_test_subscriber() -> tracing::subscriber::DefaultGuard {
     #[cfg(feature = "serde")]
-    let error_layer = crate::json_error_layer();
+    let error_layer = crate::tracing::json_error_layer();
     #[cfg(not(feature = "serde"))]
     let error_layer = tracing_error::ErrorLayer::default();
     let subscriber = tracing_subscriber::registry().with(error_layer);

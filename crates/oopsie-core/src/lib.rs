@@ -36,6 +36,12 @@ pub use backtrace::{
 };
 pub use chain::{Chain, ErrorChainExt};
 pub use diagnostic::Diagnostic;
+pub use spantrace::{OptionalSpanTrace, SpanTrace};
+#[cfg(feature = "tracing")]
+pub mod tracing;
+
+pub use traits::*;
+pub use welp::{Welp, WelpOptionExt, WelpResultExt};
 /// Private helpers used by macro-generated code. Not part of the public API.
 #[doc(hidden)]
 pub mod __private {
@@ -238,16 +244,6 @@ pub mod __private {
     pub use chrono;
 }
 
-pub use spantrace::{OptionalSpanTrace, SpanTrace};
-#[cfg(all(feature = "tracing", feature = "serde"))]
-use tracing_error::ErrorLayer;
-#[cfg(all(feature = "tracing", feature = "serde"))]
-use tracing_subscriber::fmt::format::JsonFields;
-#[cfg(all(feature = "tracing", feature = "serde"))]
-use tracing_subscriber::registry::LookupSpan;
-pub use traits::*;
-pub use welp::{Welp, WelpOptionExt, WelpResultExt};
-
 macro_rules! impl_string_newtypes {
     ($($(#[$meta:meta])* $ident:ident,)* $(,)?) => { $(
         #[derive(Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -336,18 +332,3 @@ impl_string_newtypes!(
     /// User-facing help text, intended to be shown in diagnostics.
     HelpText,
 );
-
-/// Construct a `tracing_error::ErrorLayer` configured to format span fields
-/// as JSON.
-///
-/// Equivalent to `ErrorLayer::new(JsonFields::default())` but doesn't require
-/// the caller to depend on `tracing-subscriber` directly.
-#[cfg(all(feature = "tracing", feature = "serde"))]
-#[inline]
-#[must_use]
-pub fn json_error_layer<S>() -> ErrorLayer<S, JsonFields>
-where
-    S: tracing::Subscriber + for<'span> LookupSpan<'span>,
-{
-    ErrorLayer::new(JsonFields::default())
-}
