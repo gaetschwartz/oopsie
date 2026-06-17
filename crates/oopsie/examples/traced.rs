@@ -2,41 +2,47 @@
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
 )]
-#![allow(
-    clippy::print_stdout,
-    clippy::print_stderr,
-    reason = "examples print to demonstrate library output"
-)]
-//! Capture a backtrace automatically with `traced` and render it via `Report`.
+
+//! Simple example showing `oopsie`'s `traced` attribute in action: capture a `tracing` span trace
+//! alongside backtraces.
 //!
-//! Run with: `cargo run --example traced`
+//! Run with: `RUST_BACKTRACE=1 cargo run --example traced -F fancy`
 
-use oopsie::backtrace::set_override;
-use oopsie::{Report, RustBacktrace, oopsie};
+use oopsie::{Report, oopsie};
 
-// `traced` captures a backtrace; under the `tracing` feature a span-trace is captured too.
 #[oopsie(traced)]
-#[oopsie("failed to load layer {index}")]
-pub struct LoadError {
-    index: u32,
+pub enum QueryError {
+    #[oopsie("unknown user: {user}")]
+    UnknownUser { user: String },
 }
 
-fn load(index: u32) -> Result<(), LoadError> {
-    load_oopsies::Load { index }.fail()
+#[cfg_attr(feature = "tracing", tracing::instrument)]
+fn fetch_user(user: &str) -> Result<(), QueryError> {
+    query_oopsies::UnknownUser { user }.fail()
 }
 
-fn deep_call(index: u32) -> Result<(), LoadError> {
-    load(index)
+fn main() -> Report<QueryError> {
+    init_tracing();
+
+    Report::run(|| fetch_user("alice"))
 }
 
-fn main() {
-    if RustBacktrace::detect_opt().is_none() {
-        eprintln!(
-            "Warning: RUST_BACKTRACE environment variable not set; force-enabling backtrace capture for this example. Set RUST_BACKTRACE=1 to enable by default."
-        );
-        set_override(RustBacktrace::Enabled);
+fn init_tracing() {
+    #[cfg(feature = "tracing")]
+    {
+        use tracing_subscriber::prelude::*;
+
+        tracing_subscriber::registry()
+            .with({
+                #[cfg(feature = "serde")]
+                {
+                    oopsie::tracing::json_error_layer()
+                }
+                #[cfg(not(feature = "serde"))]
+                {
+                    oopsie::tracing::default_error_layer()
+                }
+            })
+            .init();
     }
-
-    let err = deep_call(3).unwrap_err();
-    print!("{}", Report::new(err));
 }
