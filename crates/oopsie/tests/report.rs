@@ -1013,3 +1013,31 @@ fn termination_uses_declarative_exit_code_when_no_provider() {
 pub struct ExitCodedError {
     message: String,
 }
+
+// ─── Forwarded-chain render snapshot ────────────────────────────────────────
+
+#[oopsie(traced)]
+#[oopsie("forward leaf: {msg}")]
+pub struct FwdLeafError {
+    msg: String,
+}
+
+#[oopsie(traced)]
+#[oopsie("forward wrap")]
+pub struct FwdWrapError {
+    #[oopsie(forward)]
+    source: FwdLeafError,
+}
+
+#[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
+fn test_report_forward_chain() {
+    common::force_backtrace();
+    let leaf = fwd_leaf_oopsies::FwdLeaf { msg: "root cause" }.build();
+    let wrap: FwdWrapError = fwd_wrap_oopsies::FwdWrap.build_error(leaf);
+    let report = Report::new(wrap).no_colors();
+
+    redact!(backtrace, {
+        insta::assert_snapshot!(snap_name!("report_forward_chain"), report);
+    });
+}

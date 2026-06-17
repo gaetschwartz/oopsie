@@ -1,0 +1,15 @@
+---
+source: crates/oopsie/tests/report.rs
+expression: report
+---
+Error[report::FwdWrapError]: forward wrap
+  at crates/oopsie/tests/report.rs:[LOC]
+  ╰─▶ forward leaf: root cause
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ... 9 frames hidden ...
+  1: report[[HASH]]::test_report_forward_chain
+           at tests/report.rs:[LOC]
+  2: report[[HASH]]::test_report_forward_chain::{closure#0}
+           at tests/report.rs:[LOC]
+   ... 22 frames hidden ...

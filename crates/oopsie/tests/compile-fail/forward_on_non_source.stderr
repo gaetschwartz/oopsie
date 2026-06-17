@@ -1,0 +1,6 @@
+error: `#[oopsie(forward)]` must be on a source field (named `source` or marked `#[oopsie(from)]`)
+  --> tests/compile-fail/forward_on_non_source.rs:10:5
+   |
+10 | /     #[oopsie(forward)]
+11 | |     not_a_source: String,
+   | |________________________^

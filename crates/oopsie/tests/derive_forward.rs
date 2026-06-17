@@ -12,6 +12,7 @@ mod common;
 
 use oopsie::{Contextual as _, Diagnostic as _, oopsie};
 use std::error::Error as _;
+use std::io;
 
 #[oopsie(traced)]
 pub enum LeafError {
@@ -104,6 +105,119 @@ fn forwarded_spantrace_parity_with_source() {
     let wrap: BtWrapError = bt_wrap_oopsies::BtWrap.build_error(src);
     assert_eq!(
         wrap.oopsie_spantrace().is_some(),
+        src_st_present,
+        "forwarded spantrace presence must match the source's"
+    );
+}
+
+// ─── Mixed-enum: variants forward independently ──────────────────────────────
+
+#[oopsie(traced)]
+pub enum MixedError {
+    #[oopsie("leaf {detail}")]
+    LeafV { detail: String },
+    #[oopsie("wrap")]
+    WrapV {
+        #[oopsie(forward)]
+        source: LeafError,
+    },
+    #[oopsie("io")]
+    IoV { source: io::Error },
+}
+
+#[test]
+fn mixed_enum_variants_behave_independently() {
+    common::force_backtrace();
+    let leaf = leaf_oopsies::Boom { msg: "x" }.build();
+    let leaf_some = leaf.oopsie_backtrace().is_some();
+    let wrap: MixedError = mixed_oopsies::WrapV.build_error(leaf);
+    assert_eq!(
+        wrap.oopsie_backtrace().is_some(),
+        leaf_some,
+        "WrapV forwards the source's backtrace"
+    );
+
+    let io: MixedError = mixed_oopsies::IoV.build_error(io::Error::other("e"));
+    assert!(
+        io.oopsie_backtrace().is_some(),
+        "IoV is foreign + non-forwarded, so it captures its own backtrace"
+    );
+
+    let leaf_v = mixed_oopsies::LeafV { detail: "d" }.build();
+    assert!(
+        leaf_v.oopsie_backtrace().is_some(),
+        "LeafV is a source-less leaf, so it captures its own backtrace"
+    );
+}
+
+// ─── Boxed source forwards ───────────────────────────────────────────────────
+
+#[oopsie(traced)]
+pub struct BoxWrapError {
+    #[oopsie(forward)]
+    source: Box<LeafError>,
+}
+
+#[test]
+fn boxed_source_forwards() {
+    common::force_backtrace();
+    let leaf = leaf_oopsies::Boom { msg: "x" }.build();
+    let some = leaf.oopsie_backtrace().is_some();
+    let bw: BoxWrapError = box_wrap_oopsies::BoxWrap.build_error(leaf);
+    assert_eq!(
+        bw.oopsie_backtrace().is_some(),
+        some,
+        "BoxWrapError forwards the boxed source's backtrace"
+    );
+}
+
+// ─── Foreign source: forward yields None ─────────────────────────────────────
+
+#[oopsie(traced)]
+pub struct ForeignWrapError {
+    #[oopsie(forward)]
+    source: io::Error,
+}
+
+#[test]
+fn foreign_source_forward_yields_none() {
+    let fw: ForeignWrapError = foreign_wrap_oopsies::ForeignWrap.build_error(io::Error::other("e"));
+    assert!(
+        fw.oopsie_backtrace().is_none(),
+        "io::Error has no oopsie backtrace to forward"
+    );
+}
+
+// ─── Partial forward: backtrace=false keeps own field ────────────────────────
+
+#[oopsie(traced)]
+pub struct PartialWrapError {
+    #[oopsie(forward(backtrace = false))]
+    source: LeafError,
+}
+
+#[test]
+fn partial_forward_keeps_own_backtrace_field() {
+    common::force_backtrace();
+    let pw: PartialWrapError =
+        partial_wrap_oopsies::PartialWrap.build_error(leaf_oopsies::Boom { msg: "x" }.build());
+    // backtrace is NOT forwarded — the wrapper captures its own.
+    assert!(
+        pw.oopsie_backtrace().is_some(),
+        "wrapper must capture its own backtrace when forward(backtrace = false)"
+    );
+}
+
+#[cfg(feature = "tracing")]
+#[test]
+fn partial_forward_forwards_spantrace() {
+    let _sub = common::init_test_subscriber();
+    let src = leaf_oopsies::Boom { msg: "x" }.build();
+    let src_st_present = src.oopsie_spantrace().is_some();
+    // spantrace IS forwarded (no own spantrace field on the wrapper).
+    let pw: PartialWrapError = partial_wrap_oopsies::PartialWrap.build_error(src);
+    assert_eq!(
+        pw.oopsie_spantrace().is_some(),
         src_st_present,
         "forwarded spantrace presence must match the source's"
     );

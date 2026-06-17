@@ -1,0 +1,5 @@
+error: Unknown field: `timestamp`. Available values: `backtrace`, `enabled`, `location`, `spantrace`
+  --> tests/compile-fail/nightly/forward_timestamp_unknown_key.rs:16:22
+   |
+16 |     #[oopsie(forward(timestamp = true))]
+   |                      ^^^^^^^^^^^^^^^^
