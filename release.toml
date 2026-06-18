@@ -2,9 +2,7 @@
 #
 # Dry-run is the default; nothing happens without `--execute`. Usage:
 #   cargo release 0.1.0-rc.1            # preview the release
-#   cargo release 0.1.0-rc.1 --execute  # bump, commit, tag (publishes core -> macros -> facade)
-# `push = false` keeps the release commit + tag local; push them yourself with
-#   git push --follow-tags
+#   cargo release 0.1.0-rc.1 --execute  # bump, commit, publish (core -> macros -> facade), tag, push
 
 # This repo's default branch is `develop`, not main/master.
 allow-branch = ["develop"]
@@ -18,4 +16,4 @@ pre-release-commit-message = "chore: release {{version}}"
 tag-message = "release {{version}}"
 
 publish = true
-push = false
+push = true
