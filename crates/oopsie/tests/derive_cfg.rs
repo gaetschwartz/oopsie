@@ -359,7 +359,7 @@ pub struct StructBtStrippedError {
 #[test]
 fn struct_cfg_stripped_backtrace_field_yields_none() {
     use oopsie::Diagnostic as _;
-    let err = StructBtStripped { keep: 1u32 }.build();
+    let err = StructBtStrippedOopsie { keep: 1u32 }.build();
     assert!(err.oopsie_backtrace().is_none());
 }
 
@@ -375,7 +375,7 @@ pub struct StructBtKeptError {
 #[test]
 fn struct_cfg_kept_backtrace_field_returns_some() {
     use oopsie::Diagnostic as _;
-    let err = StructBtKept { keep: 2u32 }.build();
+    let err = StructBtKeptOopsie { keep: 2u32 }.build();
     assert!(err.oopsie_backtrace().is_some());
 }
 

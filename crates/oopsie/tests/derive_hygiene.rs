@@ -57,8 +57,7 @@ struct RenamedFromStructError {
 #[test]
 fn c2_renamed_from_source_plus_capture_struct() {
     let io_err = io::Error::new(io::ErrorKind::BrokenPipe, "pipe broke");
-    let err: RenamedFromStructError =
-        renamed_from_struct_oopsies::RenamedFromStruct.build_error(io_err);
+    let err: RenamedFromStructError = RenamedFromStructOopsie.build_error(io_err);
     assert_eq!(err.source().expect("has source").to_string(), "pipe broke");
 }
 

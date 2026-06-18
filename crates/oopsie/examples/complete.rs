@@ -54,7 +54,7 @@ pub enum GatewayError {
 
 #[cfg_attr(feature = "tracing", tracing::instrument)]
 fn send_network_request(request: &str) -> Result<(), NetworkError> {
-    network_oopsies::Network {
+    NetworkOopsie {
         kind: "connection reset",
         request,
     }

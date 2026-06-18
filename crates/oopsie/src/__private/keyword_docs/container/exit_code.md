@@ -18,6 +18,6 @@ pub struct AppError {
     detail: String,
 }
 
-let err = App { detail: String::from("boom") }.build();
+let err = AppOopsie { detail: String::from("boom") }.build();
 assert_eq!(err.oopsie_exit_code().map(|n| n.get()), Some(70));
 ```

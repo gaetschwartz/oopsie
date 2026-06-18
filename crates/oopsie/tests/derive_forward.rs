@@ -85,7 +85,7 @@ fn forwarded_backtrace_matches_source() {
         "force_backtrace must yield frames for this test to be probative"
     );
 
-    let wrap: BtWrapError = bt_wrap_oopsies::BtWrap.build_error(src);
+    let wrap: BtWrapError = BtWrapOopsie.build_error(src);
     let wrap_bt = wrap
         .oopsie_backtrace()
         .expect("Wrap must forward the source's backtrace");
@@ -102,7 +102,7 @@ fn forwarded_spantrace_parity_with_source() {
     let _sub = common::init_test_subscriber();
     let src = leaf_oopsies::Boom { msg: "x" }.build();
     let src_st_present = src.oopsie_spantrace().is_some();
-    let wrap: BtWrapError = bt_wrap_oopsies::BtWrap.build_error(src);
+    let wrap: BtWrapError = BtWrapOopsie.build_error(src);
     assert_eq!(
         wrap.oopsie_spantrace().is_some(),
         src_st_present,
@@ -163,7 +163,7 @@ fn boxed_source_forwards() {
     common::force_backtrace();
     let leaf = leaf_oopsies::Boom { msg: "x" }.build();
     let some = leaf.oopsie_backtrace().is_some();
-    let bw: BoxWrapError = box_wrap_oopsies::BoxWrap.build_error(leaf);
+    let bw: BoxWrapError = BoxWrapOopsie.build_error(leaf);
     assert_eq!(
         bw.oopsie_backtrace().is_some(),
         some,
@@ -181,7 +181,7 @@ pub struct ForeignWrapError {
 
 #[test]
 fn foreign_source_forward_yields_none() {
-    let fw: ForeignWrapError = foreign_wrap_oopsies::ForeignWrap.build_error(io::Error::other("e"));
+    let fw: ForeignWrapError = ForeignWrapOopsie.build_error(io::Error::other("e"));
     assert!(
         fw.oopsie_backtrace().is_none(),
         "io::Error has no oopsie backtrace to forward"
@@ -200,7 +200,7 @@ pub struct PartialWrapError {
 fn partial_forward_keeps_own_backtrace_field() {
     common::force_backtrace();
     let pw: PartialWrapError =
-        partial_wrap_oopsies::PartialWrap.build_error(leaf_oopsies::Boom { msg: "x" }.build());
+        PartialWrapOopsie.build_error(leaf_oopsies::Boom { msg: "x" }.build());
     // backtrace is NOT forwarded — the wrapper captures its own.
     assert!(
         pw.oopsie_backtrace().is_some(),
@@ -215,7 +215,7 @@ fn partial_forward_forwards_spantrace() {
     let src = leaf_oopsies::Boom { msg: "x" }.build();
     let src_st_present = src.oopsie_spantrace().is_some();
     // spantrace IS forwarded (no own spantrace field on the wrapper).
-    let pw: PartialWrapError = partial_wrap_oopsies::PartialWrap.build_error(src);
+    let pw: PartialWrapError = PartialWrapOopsie.build_error(src);
     assert_eq!(
         pw.oopsie_spantrace().is_some(),
         src_st_present,
@@ -248,7 +248,7 @@ fn generic_forwarded_backtrace_matches_source() {
         "force_backtrace must yield frames for this test to be probative"
     );
 
-    let wrap: GenWrapError<LeafError> = gen_wrap_oopsies::GenWrap.build_error(src);
+    let wrap: GenWrapError<LeafError> = GenWrapOopsie.build_error(src);
     let wrap_bt = wrap
         .oopsie_backtrace()
         .expect("generic wrapper must forward the source's backtrace");
@@ -271,7 +271,7 @@ fn generic_forwarded_location_matches_source() {
     let src_loc = src
         .oopsie_location()
         .expect("traced leaf captures a location");
-    let wrap: GenLocWrapError<LeafError> = gen_loc_wrap_oopsies::GenLocWrap.build_error(src);
+    let wrap: GenLocWrapError<LeafError> = GenLocWrapOopsie.build_error(src);
     let wrap_loc = wrap
         .oopsie_location()
         .expect("generic wrapper must forward the source's location");
@@ -295,7 +295,7 @@ fn from_transform_source_forwards() {
     common::force_backtrace();
     let leaf = leaf_oopsies::Boom { msg: "x" }.build();
     let some = leaf.oopsie_backtrace().is_some();
-    let fw: FromWrapError = from_wrap_oopsies::FromWrap.build_error(leaf);
+    let fw: FromWrapError = FromWrapOopsie.build_error(leaf);
     assert_eq!(
         fw.oopsie_backtrace().is_some(),
         some,

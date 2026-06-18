@@ -77,7 +77,7 @@ fn enum_no_display_fallback() {
 
 #[test]
 fn struct_field_interpolation() {
-    let err = parse_err_oopsies::ParseErrOopsie {
+    let err = ParseErrOopsie {
         msg: "unexpected EOF",
     }
     .build();
@@ -86,7 +86,7 @@ fn struct_field_interpolation() {
 
 #[test]
 fn struct_no_display_fallback() {
-    let err = bare_struct_oopsies::BareStructOopsie { value: 99i32 }.build();
+    let err = BareStructOopsie { value: 99i32 }.build();
     assert_eq!(format!("{err}"), "BareStruct");
 }
 
@@ -311,6 +311,6 @@ struct r#struct {
 
 #[test]
 fn raw_ident_struct_default_display_drops_prefix() {
-    let err = struct_oopsies::structOopsie { value: 7i32 }.build();
+    let err = structOopsie { value: 7i32 }.build();
     assert_eq!(format!("{err}"), "struct");
 }

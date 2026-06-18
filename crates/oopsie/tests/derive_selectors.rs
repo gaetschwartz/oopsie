@@ -113,20 +113,20 @@ fn multi_field_selector() {
 #[test]
 fn struct_leaf_build_fail() {
     // ParseError uses #[oopsie(suffix)], so selector is ParseOopsie ("Error" stripped).
-    let err = parse_oopsies::ParseOopsie {
+    let err = ParseOopsie {
         msg: "unexpected token",
     }
     .build();
     assert_eq!(err.msg, "unexpected token");
 
-    let result: Result<(), ParseError> = parse_oopsies::ParseOopsie { msg: "bad" }.fail();
+    let result: Result<(), ParseError> = ParseOopsie { msg: "bad" }.fail();
     assert!(result.is_err());
 }
 
 #[test]
 fn struct_source_build_error() {
     let io_err = io::Error::new(io::ErrorKind::NotFound, "file missing");
-    let err: WrapError = wrap_oopsies::WrapOopsie {
+    let err: WrapError = WrapOopsie {
         detail: "while reading",
     }
     .build_error(io_err);
@@ -355,7 +355,7 @@ struct LoadError {
 
 #[test]
 fn struct_default_module_form() {
-    let err = load_oopsies::Load { what: "config" }.build();
+    let err = LoadOopsie { what: "config" }.build();
     assert_eq!(err.to_string(), "load failed: config");
     assert_eq!(err.what, "config");
 }
@@ -370,7 +370,7 @@ struct DecodeError {
 
 #[test]
 fn struct_traced_default_module_form() {
-    let err = decode_oopsies::Decode { stage: "header" }.fail::<()>();
+    let err = DecodeOopsie { stage: "header" }.fail::<()>();
     let err = err.unwrap_err();
     assert_eq!(err.to_string(), "decode failed: header");
     assert!(oopsie::Diagnostic::oopsie_backtrace(&err).is_some());
@@ -387,7 +387,7 @@ struct FlatError {
 
 #[test]
 fn struct_module_false_bare_selector() {
-    let err = Flat { detail: "x" }.build();
+    let err = FlatOopsie { detail: "x" }.build();
     assert_eq!(err.to_string(), "flat: x");
 }
 
@@ -423,6 +423,6 @@ mod restricted {
 
 #[test]
 fn struct_pub_crate_vis_lifted_into_module() {
-    let err = restricted::scoped_oopsies::Scoped { what: "y" }.build();
+    let err = restricted::ScopedOopsie { what: "y" }.build();
     assert_eq!(err.to_string(), "scoped: y");
 }

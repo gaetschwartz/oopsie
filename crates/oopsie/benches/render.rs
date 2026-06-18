@@ -17,7 +17,7 @@ struct RenderError {
 }
 
 fn make() -> RenderError {
-    render_oopsies::Render { id: 7u32 }.build()
+    RenderOopsie { id: 7u32 }.build()
 }
 
 fn bench_render(c: &mut Criterion) {

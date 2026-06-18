@@ -35,7 +35,7 @@ pub struct ConnError {
 
 #[test]
 fn traced_struct_basic() {
-    let err = conn_oopsies::Conn { reason: "refused" }.build();
+    let err = ConnOopsie { reason: "refused" }.build();
     assert_eq!(err.reason, "refused");
 }
 
@@ -151,7 +151,7 @@ pub struct PreExistingBtStructError {
 
 #[test]
 fn traced_struct_does_not_duplicate_backtrace() {
-    let err = pre_existing_bt_struct_oopsies::PreExistingBtStruct { msg: "struct bt" }.build();
+    let err = PreExistingBtStructOopsie { msg: "struct bt" }.build();
     assert_eq!(err.msg, "struct bt");
 }
 
@@ -337,7 +337,7 @@ pub struct FeaturelessSpantraceError {
 #[test]
 fn featureless_explicit_spantrace_compiles_and_degrades() {
     use oopsie::Diagnostic as _;
-    let e = featureless_spantrace_oopsies::FeaturelessSpantrace { info: "x" }.build();
+    let e = FeaturelessSpantraceOopsie { info: "x" }.build();
     assert!(
         !e.oopsie_spantrace()
             .expect("spantrace accessor present")
@@ -359,13 +359,13 @@ pub struct InlineStructError {
 
 #[test]
 fn layout_struct_default_packed_exposes_both_traces() {
-    let e = packed_struct_oopsies::PackedStruct { info: "x" }.build();
+    let e = PackedStructOopsie { info: "x" }.build();
     assert_both_traces(&e);
 }
 
 #[test]
 fn layout_struct_separate_inline_exposes_both_traces() {
-    let e = inline_struct_oopsies::InlineStruct { info: "x" }.build();
+    let e = InlineStructOopsie { info: "x" }.build();
     assert_both_traces(&e);
 }
 
@@ -380,7 +380,7 @@ pub struct WrongTypedBacktraceError {
 #[cfg(feature = "tracing")]
 #[test]
 fn wrong_typed_backtrace_field_is_ordinary_and_real_backtrace_injected() {
-    let e = wrong_typed_backtrace_oopsies::WrongTypedBacktrace {
+    let e = WrongTypedBacktraceOopsie {
         backtrace: "external textual backtrace",
         info: "x",
     }

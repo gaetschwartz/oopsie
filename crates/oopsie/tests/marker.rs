@@ -20,7 +20,7 @@ pub struct KaboomError {
 }
 
 fn fail_deep() -> Result<(), KaboomError> {
-    Err(kaboom_oopsies::Kaboom {
+    Err(KaboomOopsie {
         message: "deep failure",
     }
     .build())
@@ -62,7 +62,7 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
     let rendered = std::thread::spawn(|| {
         common::force_backtrace();
         oopsie::start_marker!();
-        let err = kaboom_oopsies::Kaboom {
+        let err = KaboomOopsie {
             message: "in thread",
         }
         .build();
@@ -98,7 +98,7 @@ fn start_marker_macro_cuts_in_a_spawned_thread() {
 fn mid_stack_catch_unwind_user_frames_survive() {
     fn supervisor() -> KaboomError {
         std::panic::catch_unwind(|| {
-            kaboom_oopsies::Kaboom {
+            KaboomOopsie {
                 message: "inside supervised section",
             }
             .build()
@@ -121,7 +121,7 @@ fn report_run_mid_stack_catch_unwind_survives_with_marker() {
     let report = Report::run(|| -> Result<(), KaboomError> {
         fn supervised() -> Result<(), KaboomError> {
             std::panic::catch_unwind(|| {
-                Err(kaboom_oopsies::Kaboom {
+                Err(KaboomOopsie {
                     message: "inside guarded section",
                 }
                 .build())
@@ -155,7 +155,7 @@ fn marker_from_another_thread_never_applies() {
     oopsie::start_marker!();
     let err = std::thread::spawn(|| {
         common::force_backtrace();
-        kaboom_oopsies::Kaboom {
+        KaboomOopsie {
             message: "cross-thread",
         }
         .build()
@@ -175,7 +175,7 @@ fn report_run_restores_previous_marker_on_return() {
     oopsie::start_marker!();
     let _ = Report::run(fail_deep);
     // The original marker still applies to captures after `run` returns.
-    let err = kaboom_oopsies::Kaboom {
+    let err = KaboomOopsie {
         message: "after run",
     }
     .build();
@@ -195,7 +195,7 @@ fn report_run_restores_previous_marker_on_unwind() {
         });
     }));
     assert!(payload.is_err());
-    let err = kaboom_oopsies::Kaboom {
+    let err = KaboomOopsie {
         message: "after unwound run",
     }
     .build();
@@ -222,7 +222,7 @@ fn report_run_leaves_no_marker_on_a_clean_thread() {
     std::thread::spawn(|| {
         common::force_backtrace();
         let _ = Report::run(fail_deep);
-        let err = kaboom_oopsies::Kaboom {
+        let err = KaboomOopsie {
             message: "after clean run",
         }
         .build();
@@ -234,7 +234,7 @@ fn report_run_leaves_no_marker_on_a_clean_thread() {
         let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let _ = Report::run(|| -> Result<(), KaboomError> { panic!("boom") });
         }));
-        let err = kaboom_oopsies::Kaboom {
+        let err = KaboomOopsie {
             message: "after unwound clean run",
         }
         .build();
@@ -250,7 +250,7 @@ fn report_run_leaves_no_marker_on_a_clean_thread() {
 #[test]
 fn generated_selector_frames_are_hidden() {
     common::force_backtrace();
-    let err = kaboom_oopsies::Kaboom {
+    let err = KaboomOopsie {
         message: "generated frames",
     }
     .build();

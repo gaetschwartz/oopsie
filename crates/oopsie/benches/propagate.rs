@@ -29,7 +29,7 @@ fn io_result(fail: bool) -> io::Result<u64> {
 }
 
 fn with_context(fail: bool) -> Result<u64, WrapError> {
-    let value = io_result(fail).context(wrap_oopsies::Wrap {
+    let value = io_result(fail).context(WrapOopsie {
         context: "operation",
     })?;
     Ok(value)

@@ -378,7 +378,7 @@ pub fn gen_enum_selectors(
     let container = resolved.container;
     let enum_ident = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
-    let wrapped_in_module = matches!(container.effective_module(), ModuleSetting::On(_));
+    let wrapped_in_module = matches!(container.effective_module(true), ModuleSetting::On(_));
     let vis = resolve_selector_vis(container.visibility(), &input.vis, wrapped_in_module);
 
     let mut selectors = Vec::new();
@@ -530,11 +530,14 @@ pub fn gen_struct_selector(
     let attrs = resolved.attrs;
     let struct_ident = &input.ident;
     let (_, ty_generics, _) = input.generics.split_for_impl();
-    let wrapped_in_module = matches!(attrs.container.effective_module(), ModuleSetting::On(_));
+    let wrapped_in_module = matches!(
+        attrs.container.effective_module(false),
+        ModuleSetting::On(_)
+    );
     let vis = resolve_selector_vis(attrs.visibility(), &input.vis, wrapped_in_module);
-    // The selector and the error type can share a name (struct not ending in
-    // `Error`, default `Off` suffix). Inside the generated module the selector
-    // would then shadow the `use super::*`-imported type, so every reference to
+    // The selector and the error type can share a name (a struct with no `Error`
+    // to strip and `suffix(false)`). When `module(true)` wraps the selector, that
+    // name would shadow the `use super::*`-imported type, so every reference to
     // the destination type goes through `super::`. A `transparent` struct emits
     // its `From` impl unwrapped, so it always names the type directly. The error
     // type's parameters ride along so a generic struct's destination resolves.
@@ -598,7 +601,7 @@ pub fn gen_struct_selector(
         });
     }
 
-    let selector_ident = selector_name(struct_ident, &attrs.container.effective_suffix())?;
+    let selector_ident = selector_name(struct_ident, &attrs.container.effective_suffix(false))?;
     let has_source = categorized.source.is_some();
     let user_fields = &categorized.user_fields;
 

@@ -92,13 +92,13 @@ expression: error
         "column": 69
       },
       {
-        "name": "erased::common::my_error_inner_oopsies::MyErrorInner<__T0>::build::h[HASH]",
+        "name": "erased::common::MyErrorInnerOopsie<__T0>::build::h[HASH]",
         "filename": "[WORKSPACE]/crates/oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "erased::common::my_error_inner_oopsies::MyErrorInner<__T0>::fail::h[HASH]",
+        "name": "erased::common::MyErrorInnerOopsie<__T0>::fail::h[HASH]",
         "filename": "[WORKSPACE]/crates/oopsie/tests/common/mod.rs",
         "line": 42,
         "column": 69

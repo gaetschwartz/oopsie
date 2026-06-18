@@ -139,7 +139,7 @@ struct ParseFailure<T: fmt::Debug> {
 
 #[test]
 fn generic_struct_module_selector() {
-    let err: ParseFailure<char> = parse_failure_oopsies::ParseFailure {
+    let err: ParseFailure<char> = ParseFailureOopsie {
         token: '{',
         line: 12usize,
     }
@@ -262,7 +262,7 @@ struct LoadError<E: std::error::Error + 'static> {
 #[test]
 fn generic_struct_with_source() {
     let io_err = io::Error::new(io::ErrorKind::NotFound, "nope");
-    let err: LoadError<io::Error> = load_oopsies::Load {
+    let err: LoadError<io::Error> = LoadOopsie {
         path: "/etc/conf".to_owned(),
     }
     .build_error(io_err);

@@ -171,22 +171,23 @@ e.g. API error responses."
 //! # Selector naming
 //!
 //! The selector name is the **variant name** (for enums) or **struct name** (for structs),
-//! with a trailing `"Error"` suffix stripped. Enums and structs share this rule.
+//! with a trailing `"Error"` suffix stripped.
 //!
-//! Append a suffix with `#[oopsie(suffix)]` (`"Oopsie"`) or `#[oopsie(suffix = "X")]`;
-//! the default is none.
+//! Structs additionally get an `"Oopsie"` suffix by default — `struct QueryError`
+//! → selector `QueryOopsie`. Disable with `#[oopsie(suffix(false))]` or set a
+//! custom one with `#[oopsie(suffix = "X")]`.
 //!
 //! | Variant / struct | Selector name |
 //! |------------------|---------------|
 //! | `Connect` (variant) | `Connect` |
 //! | `ConnectionError` (variant) | `Connection` |
-//! | `QueryError` (struct) | `Query` |
+//! | `QueryError` (struct) | `QueryOopsie` |
 //!
 //! ## Module wrapping
 //!
-//! Selectors are placed in a generated module by default, for both enums and
-//! structs. The auto-generated module name is derived from the error type name:
-//! strip trailing `"Error"`, convert to `snake_case`, append `_oopsies`:
+//! Selectors can be placed in a generated module — the default for enums; structs
+//! default to no module. The auto-generated module name is derived from the error
+//! type name: strip trailing `"Error"`, convert to `snake_case`, append `_oopsies`:
 //!
 //! | Error type | Module |
 //! |------------|--------|

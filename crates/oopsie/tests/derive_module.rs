@@ -144,7 +144,7 @@ pub struct QueryError {
 
 #[test]
 fn struct_module_wraps_selector() {
-    let err = query_oopsies::Query { what: "join" }.build();
+    let err = query_oopsies::QueryOopsie { what: "join" }.build();
     assert_eq!(err.to_string(), "query failed: join");
 }
 
@@ -157,7 +157,7 @@ pub struct ParseError;
 
 #[test]
 fn struct_auto_module_name() {
-    let err = parse_oopsies::Parse.build();
+    let err = parse_oopsies::ParseOopsie.build();
     assert_eq!(err.to_string(), "parse failed");
 }
 
@@ -170,7 +170,7 @@ pub struct FlatStructError;
 
 #[test]
 fn struct_default_no_module() {
-    let err = flat_struct_oopsies::FlatStruct.build();
+    let err = FlatStructOopsie.build();
     assert_eq!(err.to_string(), "flat struct error");
 }
 
@@ -192,7 +192,7 @@ mod crate_vis {
 
 #[test]
 fn restricted_vis_struct_module_selector_reachable_crate_wide() {
-    let err = crate_vis::scoped_oopsies::Scoped { what: "x" }.build();
+    let err = crate_vis::scoped_oopsies::ScopedOopsie { what: "x" }.build();
     assert_eq!(err.to_string(), "scoped: x");
 }
 

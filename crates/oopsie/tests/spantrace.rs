@@ -44,7 +44,7 @@ pub struct CapturedContentError {
 fn captured_backtrace_has_real_frames() {
     use oopsie::Diagnostic as _;
     common::force_backtrace();
-    let err = captured_content_oopsies::CapturedContent { info: "x" }.build();
+    let err = CapturedContentOopsie { info: "x" }.build();
 
     let bt = err
         .oopsie_backtrace()
@@ -74,7 +74,7 @@ fn captured_spantrace_status_is_captured_within_span() {
 
     #[instrument(target = "test")]
     fn make() -> CapturedContentError {
-        captured_content_oopsies::CapturedContent { info: "x" }.build()
+        CapturedContentOopsie { info: "x" }.build()
     }
 
     let _guard = common::init_test_subscriber();

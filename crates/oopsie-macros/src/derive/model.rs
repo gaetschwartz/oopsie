@@ -80,7 +80,7 @@ impl<'a> ResolvedEnum<'a> {
 
         // Phase 2 — parse attributes, resolve selector names, validate
         // transparent shapes and selector collisions.
-        let suffix = container.effective_suffix();
+        let suffix = container.effective_suffix(true);
         let mut seen_selectors: std::collections::HashMap<String, Ident> =
             std::collections::HashMap::new();
         let mut variants = Vec::with_capacity(data.variants.len());
@@ -253,7 +253,7 @@ fn reject_display_keywords_struct(input: &DeriveInput, attrs: &StructAttrs) -> s
 }
 
 fn selector_name_for_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<Ident> {
-    super::gen_selectors::selector_name(&input.ident, &attrs.container.effective_suffix())
+    super::gen_selectors::selector_name(&input.ident, &attrs.container.effective_suffix(false))
 }
 
 fn selector_collision_error(first: &Ident, second: &Ident, selector: &Ident) -> syn::Error {

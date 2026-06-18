@@ -36,7 +36,7 @@ pub fn make_error() -> MyError {
 
     #[instrument(target = "sys", fields(id = 42))]
     fn inner_function(foo: bool, name: &str) -> Result<(), MyErrorInner> {
-        my_error_inner_oopsies::MyErrorInner {
+        MyErrorInnerOopsie {
             message: format!("Inner function failed (foo={foo}, name={name})"),
         }
         .fail()

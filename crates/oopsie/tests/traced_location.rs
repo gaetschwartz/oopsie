@@ -51,7 +51,7 @@ pub enum AppError {
 #[test]
 fn location_captured_at_build_call_site() {
     let line = line!() + 1;
-    let err = leaf_oopsies::Leaf { what: "disk" }.build();
+    let err = LeafOopsie { what: "disk" }.build();
 
     let loc = err.oopsie_location().expect("location captured");
     assert!(
@@ -71,7 +71,7 @@ fn location_captured_at_context_call_site() {
     // closure inside the method).
     let result: Result<(), std::io::Error> = Err(std::io::Error::other("io"));
     let line = line!() + 1;
-    let err = result.context(io_wrap_oopsies::IoWrap).unwrap_err();
+    let err = result.context(IoWrapOopsie).unwrap_err();
 
     let loc = err.oopsie_location().expect("location captured");
     assert!(loc.file().ends_with("traced_location.rs"));
@@ -88,9 +88,9 @@ fn context_on_diagnostic_source_surfaces_origin_location() {
     // location, the origin-most (the source's) wins — extracted at construction
     // via `CaptureProbe`.
     let leaf_line = line!() + 1;
-    let leaf = leaf_oopsies::Leaf { what: "x" }.build();
+    let leaf = LeafOopsie { what: "x" }.build();
     let result: Result<(), LeafError> = Err(leaf);
-    let err = result.context(wrap_oopsies::Wrap).unwrap_err();
+    let err = result.context(WrapOopsie).unwrap_err();
 
     let loc = err.oopsie_location().expect("location captured");
     assert_eq!(
@@ -106,8 +106,8 @@ fn origin_most_location_wins_through_wrap_chain() {
     // origin-most location (the leaf's) must win — it is captured at the wrap's
     // construction via `CaptureProbe`/`capture_or_extract`.
     let leaf_line = line!() + 1;
-    let leaf = leaf_oopsies::Leaf { what: "disk" }.build();
-    let wrapped: WrapError = wrap_oopsies::Wrap.build_error(leaf);
+    let leaf = LeafOopsie { what: "disk" }.build();
+    let wrapped: WrapError = WrapOopsie.build_error(leaf);
 
     let loc = wrapped.oopsie_location().expect("location captured");
     assert_eq!(
@@ -119,7 +119,7 @@ fn origin_most_location_wins_through_wrap_chain() {
 
 #[test]
 fn location_disabled_yields_none() {
-    let err = no_location_oopsies::NoLocation { what: "x" }.build();
+    let err = NoLocationOopsie { what: "x" }.build();
     assert!(
         err.oopsie_location().is_none(),
         "traced(location = false) must not capture a location"
@@ -139,7 +139,7 @@ pub struct ManualLocationError {
 #[test]
 fn manually_marked_location_field_is_captured() {
     let line = line!() + 1;
-    let err = ManualLocation.build();
+    let err = ManualLocationOopsie.build();
     let loc = err.oopsie_location().expect("location captured");
     assert_eq!(loc.line(), line);
 }
@@ -165,7 +165,7 @@ pub struct TransparentError {
 #[test]
 fn transparent_forwards_source_location() {
     let inner_line = line!() + 1;
-    let inner = inner_oopsies::Inner { what: "x" }.build();
+    let inner = InnerOopsie { what: "x" }.build();
     let outer: TransparentError = TransparentError::from(inner);
 
     let loc = outer.oopsie_location().expect("location forwarded");
@@ -278,7 +278,7 @@ fn enum_sourced_selector_captures_context_call_site() {
 #[test]
 fn result_with_context_captures_call_site() {
     let result: Result<(), std::io::Error> = Err(std::io::Error::other("io"));
-    let mk = |_: &std::io::Error| io_wrap_oopsies::IoWrap;
+    let mk = |_: &std::io::Error| IoWrapOopsie;
     let line = line!() + 1;
     let err = result.with_context(mk).unwrap_err();
     let loc = err.oopsie_location().expect("location captured");
@@ -291,7 +291,7 @@ fn option_context_captures_call_site() {
 
     let opt: Option<()> = None;
     let line = line!() + 1;
-    let err = opt.context(leaf_oopsies::Leaf { what: "x" }).unwrap_err();
+    let err = opt.context(LeafOopsie { what: "x" }).unwrap_err();
     let loc = err.oopsie_location().expect("location captured");
     assert_eq!(loc.line(), line, "line should be the .context site");
 }
@@ -301,7 +301,7 @@ fn option_with_context_captures_call_site() {
     use oopsie::OptionExt as _;
 
     let opt: Option<()> = None;
-    let mk = || leaf_oopsies::Leaf { what: "x" };
+    let mk = || LeafOopsie { what: "x" };
     let line = line!() + 1;
     let err = opt.with_context(mk).unwrap_err();
     let loc = err.oopsie_location().expect("location captured");
@@ -315,7 +315,7 @@ fn option_with_context_captures_call_site() {
 fn erased_error_preserves_location() {
     use oopsie_core::erased::ErasedError;
 
-    let err = leaf_oopsies::Leaf { what: "disk" }.build();
+    let err = LeafOopsie { what: "disk" }.build();
     let captured = err.oopsie_location().expect("location captured");
 
     let erased = ErasedError::from_error(err);

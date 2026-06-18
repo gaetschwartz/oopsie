@@ -19,7 +19,7 @@ struct ErasedTarget {
 }
 
 fn make() -> ErasedTarget {
-    erased_target_oopsies::ErasedTarget { id: 1u32 }.build()
+    ErasedTargetOopsie { id: 1u32 }.build()
 }
 
 fn bench_erased(c: &mut Criterion) {

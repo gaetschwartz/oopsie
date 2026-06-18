@@ -30,7 +30,7 @@ pub struct UpstreamError {
 
 fn call_upstream() -> Result<(), UpstreamError> {
     let io = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "connection refused");
-    Err(upstream_oopsies::Upstream {
+    Err(UpstreamOopsie {
         service: "billing",
         status: 503u16,
     }

@@ -129,7 +129,7 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
     let error = gen_enum_error(&resolved, &path)?;
 
     // Wrap selectors in module if enabled
-    let effective_module = attrs.effective_module();
+    let effective_module = attrs.effective_module(true);
     let module_vis = attrs
         .visibility()
         .cloned()
@@ -169,7 +169,7 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
         .as_ref()
         .map(|c| gen_size_assertion(&input.ident, c));
 
-    let effective_module = attrs.container.effective_module();
+    let effective_module = attrs.container.effective_module(false);
     let module_vis = attrs
         .visibility()
         .cloned()
