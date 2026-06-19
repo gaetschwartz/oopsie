@@ -1,5 +1,0 @@
-error[E0080]: evaluation panicked: the size of OutOfRangeError must be at most 2 bytes
- --> tests/compile-fail/stable/size_out_of_range.rs:6:29
-  |
-6 | #[oopsie(module(false), size(1..=2))]
-  |                             ^^^^^^^ evaluation of `_::assert_size::_` failed here

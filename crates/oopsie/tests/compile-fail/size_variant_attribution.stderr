@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: the size of BigError must be at most 8 bytes; Big is its largest variant
+  --> tests/compile-fail/size_variant_attribution.rs:13:5
+   |
+13 |     Big { buf: [u8; 64] },
+   |     ^^^ evaluation of `_::size_check::_` failed here

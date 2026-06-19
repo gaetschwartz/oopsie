@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: the size of TieError must be at most 8 bytes; First is its largest variant
+  --> tests/compile-fail/size_variant_tie.rs:13:5
+   |
+13 |     First { a: [u8; 64] },
+   |     ^^^^^ evaluation of `_::size_check::_` failed here

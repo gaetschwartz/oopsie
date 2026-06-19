@@ -1,5 +1,5 @@
-error[E0080]: evaluation panicked: the size of WrongSizeError must be exactly 1 bytes
- --> tests/compile-fail/size_exact_mismatch.rs:6:30
+error[E0080]: evaluation panicked: the size of WrongSizeError must be exactly 1 bytes; HasData is its largest variant
+ --> tests/compile-fail/size_exact_mismatch.rs:9:5
   |
-6 | #[oopsie(module(false), size(1))]
-  |                              ^ evaluation of `_::assert_size::_` failed here
+9 |     HasData { data: String },
+  |     ^^^^^^^ evaluation of `_::size_check::_` failed here

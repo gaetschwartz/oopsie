@@ -7,9 +7,10 @@ mod gen_selectors;
 mod generics;
 pub mod model;
 pub mod parse;
+mod size;
 
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{ToTokens, quote, quote_spanned};
+use quote::{ToTokens, quote};
 use syn::DeriveInput;
 
 pub use self::gen_display::{gen_enum_display, gen_struct_display};
@@ -17,7 +18,11 @@ pub use self::gen_error::{gen_enum_error, gen_struct_error};
 pub use self::gen_module::wrap_in_module;
 pub use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
 pub use self::model::{ResolvedEnum, ResolvedStruct};
-pub use self::parse::{EnumContainerAttrs, SizeAttr, SizeConstraint, StructAttrs};
+pub use self::parse::{EnumContainerAttrs, StructAttrs};
+use self::size::{
+    gen_enum_size_assertion, gen_size_assertion, reject_size_with_generics,
+    wrap_size_assertion_in_const,
+};
 
 pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     let input: DeriveInput = syn::parse2(input)?;
@@ -48,77 +53,6 @@ fn gen_site_registration(oopsie_path: &syn::Path) -> TokenStream2 {
     }
 }
 
-/// A `size(...)` constraint asserts `size_of::<E>()` against a fixed byte count,
-/// but a generic `E<T>` has no single size — it depends on `T`. Reject the
-/// combination up front so the error names the conflict rather than surfacing as
-/// an inscrutable const-eval failure inside the generated assertion.
-fn reject_size_with_generics(input: &DeriveInput, size: Option<&SizeAttr>) -> syn::Result<()> {
-    if size.is_some() && !input.generics.params.is_empty() {
-        return Err(syn::Error::new_spanned(
-            &input.generics,
-            "`size(...)` cannot be combined with generic parameters: the size of \
-             a generic type depends on its arguments and is unknown here",
-        ));
-    }
-    Ok(())
-}
-
-fn wrap_size_assertion_in_const(assertion: &TokenStream2) -> TokenStream2 {
-    if assertion.is_empty() {
-        return quote! {};
-    }
-    quote! {
-        // Compile-time assertion that the size of the error type meets the specified constraint, if any.
-        const _: () = { mod assert_size { use super::*; const _: () = { #assertion }; } };
-    }
-}
-
-fn gen_size_assertion(ident: &syn::Ident, size: &SizeAttr) -> TokenStream2 {
-    match &size.constraint {
-        SizeConstraint::Exact(n) => {
-            let msg = format!("the size of {ident} must be exactly {n} bytes");
-            quote_spanned! {size.span=>
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() == #n,
-                    #msg
-                );
-            }
-        }
-        SizeConstraint::AtMost(n) => {
-            let msg = format!("the size of {ident} must be at most {n} bytes");
-            quote_spanned! {size.span=>
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() <= #n,
-                    #msg
-                );
-            }
-        }
-        SizeConstraint::AtLeast(n) => {
-            let msg = format!("the size of {ident} must be at least {n} bytes");
-            quote_spanned! {size.span=>
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() >= #n,
-                    #msg
-                );
-            }
-        }
-        SizeConstraint::Range(lo, hi) => {
-            let msg_lo = format!("the size of {ident} must be at least {lo} bytes");
-            let msg_hi = format!("the size of {ident} must be at most {hi} bytes");
-            quote_spanned! {size.span=>
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() >= #lo,
-                    #msg_lo
-                );
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() <= #hi,
-                    #msg_hi
-                );
-            }
-        }
-    }
-}
-
 pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Result<TokenStream2> {
     reject_size_with_generics(input, attrs.size.as_ref())?;
     let resolved = ResolvedEnum::resolve(input, attrs)?;
@@ -139,7 +73,10 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
     let size_assert = attrs
         .size
         .as_ref()
-        .map_or_else(|| quote! {}, |c| gen_size_assertion(&input.ident, c))
+        .map_or_else(
+            || quote! {},
+            |c| gen_enum_size_assertion(&input.ident, &resolved.variants, c),
+        )
         .wrap(wrap_size_assertion_in_const);
 
     let keyword_docs = crate::keyword_docs::gen_keyword_docs(input, &path);

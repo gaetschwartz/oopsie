@@ -163,3 +163,26 @@ fn size_at_least_meaningful_passes() {
     };
     let _empty = LowerBoundError::Empty;
 }
+
+// ---- a cfg-stripped variant stays out of the size computation ----
+// `Huge` and its field type are both behind an always-false cfg. The generated
+// size assertion must gate its mention of `Huge`'s field types; without the
+// gate it would reference the stripped `OnlyWhenEnabled` and fail to compile.
+
+#[cfg(any())]
+struct OnlyWhenEnabled([u8; 9999]);
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false), size(..=8))]
+enum CfgGatedError {
+    #[oopsie("tiny")]
+    Tiny { byte: u8 },
+    #[cfg(any())]
+    #[oopsie("huge")]
+    Huge { field: OnlyWhenEnabled },
+}
+
+#[test]
+fn size_cfg_stripped_variant_excluded() {
+    let _err = CfgGatedError::Tiny { byte: 0 };
+}
