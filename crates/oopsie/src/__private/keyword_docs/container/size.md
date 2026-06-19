@@ -18,10 +18,3 @@ pub enum AppError {
 }
 # fn main() {}
 ```
-
-### Project-wide default
-
-To apply a default ceiling to every derived error instead of annotating each
-type, set the `OOPSIE_MAX_ERROR_SIZE` environment variable; a per-type
-`size(...)` always takes precedence. See the crate-level
-[Environment variables](#environment-variables) section.

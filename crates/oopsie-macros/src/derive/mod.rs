@@ -8,9 +8,6 @@ mod generics;
 pub mod model;
 pub mod parse;
 
-use std::env;
-use std::num::IntErrorKind;
-
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{ToTokens, quote, quote_spanned};
 use syn::DeriveInput;
@@ -122,73 +119,6 @@ fn gen_size_assertion(ident: &syn::Ident, size: &SizeAttr) -> TokenStream2 {
     }
 }
 
-const OOPSIE_MAX_ERROR_SIZE_ENV_VAR: &str = "OOPSIE_MAX_ERROR_SIZE";
-
-/// Validates a raw `OOPSIE_MAX_ERROR_SIZE` value.
-///
-/// `Ok(None)` is empty/whitespace (no cap); `Ok(Some(n))` is a positive cap;
-/// `Err` carries a user-facing message for an invalid value (zero, non-numeric,
-/// or larger than `usize`).
-fn parse_max_size(raw: &str) -> Result<Option<usize>, String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Ok(None);
-    }
-    match trimmed.parse::<usize>() {
-        Ok(0) => Err(format!(
-            "{OOPSIE_MAX_ERROR_SIZE_ENV_VAR} is set to 0, which is not a valid size limit; \
-             unset it (or leave it empty) to disable the cap instead"
-        )),
-        Ok(n) => Ok(Some(n)),
-        Err(e) => Err(match *e.kind() {
-            IntErrorKind::InvalidDigit => {
-                format!("{OOPSIE_MAX_ERROR_SIZE_ENV_VAR} is set to a non-numeric value: {raw:?}")
-            }
-            IntErrorKind::PosOverflow => format!(
-                "{OOPSIE_MAX_ERROR_SIZE_ENV_VAR} is set to {raw:?}, which is too large to fit in a usize (max {})",
-                usize::MAX
-            ),
-            _ => format!("{OOPSIE_MAX_ERROR_SIZE_ENV_VAR} is set to an invalid value {raw:?}: {e}"),
-        }),
-    }
-}
-
-/// Reads the optional size cap from `OOPSIE_MAX_ERROR_SIZE`
-fn read_default_max_size() -> Result<Option<usize>, String> {
-    // Enforce it only for crates the user builds directly,
-    // never for dependencies (whose error sizes they can't change).
-    if env::var_os("CARGO_PRIMARY_PACKAGE").is_none() {
-        return Ok(None);
-    }
-    match env::var(OOPSIE_MAX_ERROR_SIZE_ENV_VAR) {
-        Ok(raw) => parse_max_size(&raw),
-        Err(env::VarError::NotPresent) => Ok(None),
-        Err(env::VarError::NotUnicode(s)) => Err(format!(
-            "{OOPSIE_MAX_ERROR_SIZE_ENV_VAR} is set to a value that is not valid Unicode: {}",
-            s.to_string_lossy()
-        )),
-    }
-}
-
-fn gen_default_size_assertion(ident: &syn::Ident) -> TokenStream2 {
-    let max = match read_default_max_size() {
-        Ok(None) => return quote! {},
-        Ok(Some(max)) => max,
-        Err(msg) => return quote! { ::core::compile_error!(#msg); },
-    };
-    let msg = format!(
-        "the size of {ident} must be at most {max} bytes, the global cap set by \
-         {OOPSIE_MAX_ERROR_SIZE_ENV_VAR}. Use #[oopsie(size(...))] to set a per-type \
-         limit, or unset {OOPSIE_MAX_ERROR_SIZE_ENV_VAR} to remove the cap",
-    );
-    quote! {
-        ::core::assert!(
-            ::core::mem::size_of::<#ident>() <= #max,
-            #msg
-        );
-    }
-}
-
 pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Result<TokenStream2> {
     reject_size_with_generics(input, attrs.size.as_ref())?;
     let resolved = ResolvedEnum::resolve(input, attrs)?;
@@ -209,10 +139,7 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
     let size_assert = attrs
         .size
         .as_ref()
-        .map_or_else(
-            || gen_default_size_assertion(&input.ident),
-            |c| gen_size_assertion(&input.ident, c),
-        )
+        .map_or_else(|| quote! {}, |c| gen_size_assertion(&input.ident, c))
         .wrap(wrap_size_assertion_in_const);
 
     let keyword_docs = crate::keyword_docs::gen_keyword_docs(input, &path);
@@ -240,10 +167,7 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
         .container
         .size
         .as_ref()
-        .map_or_else(
-            || gen_default_size_assertion(&input.ident),
-            |c| gen_size_assertion(&input.ident, c),
-        )
+        .map_or_else(|| quote! {}, |c| gen_size_assertion(&input.ident, c))
         .wrap(wrap_size_assertion_in_const);
 
     let effective_module = attrs.container.effective_module(false);
@@ -289,19 +213,6 @@ impl<T: ToTokens> TokenStreamExt for T {
 mod tests {
     use super::*;
     use quote::quote;
-
-    #[test]
-    fn parse_max_size_classifies_values() {
-        assert_eq!(parse_max_size(""), Ok(None));
-        assert_eq!(parse_max_size("   "), Ok(None));
-        assert_eq!(parse_max_size("16"), Ok(Some(16)));
-        assert_eq!(parse_max_size("  128  "), Ok(Some(128)));
-        // zero, non-numeric, negative, and overflow are all rejected with a message
-        assert!(parse_max_size("0").is_err());
-        assert!(parse_max_size("abc").is_err());
-        assert!(parse_max_size("-5").is_err());
-        assert!(parse_max_size("99999999999999999999999999999").is_err());
-    }
 
     #[test]
     fn test_derive_struct_minimal() {
