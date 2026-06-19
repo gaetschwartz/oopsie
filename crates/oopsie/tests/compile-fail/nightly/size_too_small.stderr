@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: the size of TooSmallError must be at least 9999 bytes
+ --> tests/compile-fail/nightly/size_too_small.rs:6:30
+  |
+6 | #[oopsie(module(false), size(9999..))]
+  |                              ^^^^^^ evaluation of `_::assert_size::_` failed here

@@ -12,7 +12,7 @@ use std::env;
 use std::num::IntErrorKind;
 
 use proc_macro2::TokenStream as TokenStream2;
-use quote::{ToTokens, quote};
+use quote::{ToTokens, quote, quote_spanned};
 use syn::DeriveInput;
 
 pub use self::gen_display::{gen_enum_display, gen_struct_display};
@@ -20,7 +20,7 @@ pub use self::gen_error::{gen_enum_error, gen_struct_error};
 pub use self::gen_module::wrap_in_module;
 pub use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
 pub use self::model::{ResolvedEnum, ResolvedStruct};
-pub use self::parse::{EnumContainerAttrs, SizeConstraint, StructAttrs};
+pub use self::parse::{EnumContainerAttrs, SizeAttr, SizeConstraint, StructAttrs};
 
 pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     let input: DeriveInput = syn::parse2(input)?;
@@ -55,10 +55,7 @@ fn gen_site_registration(oopsie_path: &syn::Path) -> TokenStream2 {
 /// but a generic `E<T>` has no single size — it depends on `T`. Reject the
 /// combination up front so the error names the conflict rather than surfacing as
 /// an inscrutable const-eval failure inside the generated assertion.
-fn reject_size_with_generics(
-    input: &DeriveInput,
-    size: Option<&SizeConstraint>,
-) -> syn::Result<()> {
+fn reject_size_with_generics(input: &DeriveInput, size: Option<&SizeAttr>) -> syn::Result<()> {
     if size.is_some() && !input.generics.params.is_empty() {
         return Err(syn::Error::new_spanned(
             &input.generics,
@@ -75,15 +72,15 @@ fn wrap_size_assertion_in_const(assertion: &TokenStream2) -> TokenStream2 {
     }
     quote! {
         // Compile-time assertion that the size of the error type meets the specified constraint, if any.
-        const _: () = { #assertion };
+        const _: () = { mod assert_size { use super::*; const _: () = { #assertion }; } };
     }
 }
 
-fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenStream2 {
-    match constraint {
+fn gen_size_assertion(ident: &syn::Ident, size: &SizeAttr) -> TokenStream2 {
+    match &size.constraint {
         SizeConstraint::Exact(n) => {
             let msg = format!("the size of {ident} must be exactly {n} bytes");
-            quote! {
+            quote_spanned! {size.span=>
                 ::core::assert!(
                     ::core::mem::size_of::<#ident>() == #n,
                     #msg
@@ -92,7 +89,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
         }
         SizeConstraint::AtMost(n) => {
             let msg = format!("the size of {ident} must be at most {n} bytes");
-            quote! {
+            quote_spanned! {size.span=>
                 ::core::assert!(
                     ::core::mem::size_of::<#ident>() <= #n,
                     #msg
@@ -101,7 +98,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
         }
         SizeConstraint::AtLeast(n) => {
             let msg = format!("the size of {ident} must be at least {n} bytes");
-            quote! {
+            quote_spanned! {size.span=>
                 ::core::assert!(
                     ::core::mem::size_of::<#ident>() >= #n,
                     #msg
@@ -111,7 +108,7 @@ fn gen_size_assertion(ident: &syn::Ident, constraint: &SizeConstraint) -> TokenS
         SizeConstraint::Range(lo, hi) => {
             let msg_lo = format!("the size of {ident} must be at least {lo} bytes");
             let msg_hi = format!("the size of {ident} must be at most {hi} bytes");
-            quote! {
+            quote_spanned! {size.span=>
                 ::core::assert!(
                     ::core::mem::size_of::<#ident>() >= #lo,
                     #msg_lo
@@ -157,7 +154,7 @@ fn parse_max_size(raw: &str) -> Result<Option<usize>, String> {
 }
 
 /// Reads the optional size cap from `OOPSIE_MAX_ERROR_SIZE`
-fn default_max_size() -> Result<Option<usize>, String> {
+fn read_default_max_size() -> Result<Option<usize>, String> {
     // Enforce it only for crates the user builds directly,
     // never for dependencies (whose error sizes they can't change).
     if env::var_os("CARGO_PRIMARY_PACKAGE").is_none() {
@@ -174,7 +171,7 @@ fn default_max_size() -> Result<Option<usize>, String> {
 }
 
 fn gen_default_size_assertion(ident: &syn::Ident) -> TokenStream2 {
-    let max = match default_max_size() {
+    let max = match read_default_max_size() {
         Ok(None) => return quote! {},
         Ok(Some(max)) => max,
         Err(msg) => return quote! { ::core::compile_error!(#msg); },

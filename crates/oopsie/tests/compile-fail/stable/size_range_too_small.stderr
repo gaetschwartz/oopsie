@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: the size of RangeTooSmallError must be at least 9999 bytes
+ --> tests/compile-fail/stable/size_range_too_small.rs:6:29
+  |
+6 | #[oopsie(module(false), size(9999..=10000))]
+  |                             ^^^^^^^^^^^^^^ evaluation of `_::assert_size::_` failed here

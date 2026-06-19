@@ -1,5 +1,5 @@
 error[E0080]: evaluation panicked: the size of WrongSizeError must be exactly 1 bytes
- --> tests/compile-fail/size_exact_mismatch.rs:5:17
+ --> tests/compile-fail/size_exact_mismatch.rs:6:30
   |
-5 | #[derive(Debug, Oopsie)]
-  |                 ^^^^^^ evaluation of `_` failed here
+6 | #[oopsie(module(false), size(1))]
+  |                              ^ evaluation of `_::assert_size::_` failed here

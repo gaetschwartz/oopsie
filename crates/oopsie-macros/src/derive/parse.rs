@@ -77,14 +77,50 @@ fn expr_to_usize(expr: &syn::Expr) -> syn::Result<usize> {
 
 impl darling::FromMeta for SizeConstraint {
     fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        SizeAttr::from_meta(item).map(|attr| attr.constraint)
+    }
+}
+
+/// A `size(...)` constraint plus the span of its arguments, so codegen can point
+/// the generated assertion's diagnostic at the user's constraint.
+#[derive(Debug, Clone)]
+pub struct SizeAttr {
+    pub constraint: SizeConstraint,
+    pub span: proc_macro2::Span,
+}
+
+impl darling::FromMeta for SizeAttr {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
         match item {
-            syn::Meta::List(list) => syn::parse2(list.tokens.clone())
-                .map_err(|e| darling::Error::custom(e).with_span(&list.tokens)),
-            other => Err(darling::Error::custom(
+            syn::Meta::List(list) => {
+                let constraint: SizeConstraint = syn::parse2(list.tokens.clone())
+                    .map_err(|e| darling::Error::custom(e).with_span(&list.tokens))?;
+                Ok(Self {
+                    constraint,
+                    span: size_arg_span(list),
+                })
+            }
+            syn::Meta::Path(_) | syn::Meta::NameValue(_) => Err(darling::Error::custom(
                 "expected `size(N)`, `size(..=N)`, `size(N..)`, or `size(N..=M)`",
             )
-            .with_span(other)),
+            .with_span(item)),
         }
+    }
+}
+
+/// Span covering the `size(...)` arguments.
+///
+/// `Span::join` is a no-op off nightly, so a multi-token argument (any range)
+/// can't be spanned precisely on stable; fall back to the delimiter group's own
+/// span there, which the compiler supplies as a unit. A lone token (`size(N)`)
+/// needs neither and is spanned directly.
+fn size_arg_span(list: &syn::MetaList) -> proc_macro2::Span {
+    let group = list.delimiter.span().join();
+    let spans: Vec<proc_macro2::Span> = list.tokens.clone().into_iter().map(|t| t.span()).collect();
+    match spans.as_slice() {
+        [] => group,
+        [single] => *single,
+        [first, .., last] => first.join(*last).unwrap_or(group),
     }
 }
 
@@ -144,7 +180,7 @@ pub struct EnumContainerAttrsInner {
     #[darling(default)]
     pub suffix: Option<crate::utils::MaybeAloneOopsieValue<String>>,
     #[darling(default)]
-    pub size: Option<SizeConstraint>,
+    pub size: Option<SizeAttr>,
     #[darling(default)]
     pub path: Option<Path>,
     #[darling(default)]

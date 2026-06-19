@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: the size of TooLargeError must be at most 1 bytes
+ --> tests/compile-fail/nightly/size_too_large.rs:6:30
+  |
+6 | #[oopsie(module(false), size(..=1))]
+  |                              ^^^^ evaluation of `_::assert_size::_` failed here
