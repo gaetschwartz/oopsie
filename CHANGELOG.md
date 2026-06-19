@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.7] - 2026-06-19
+
+### Added
+
+- Generated `From` conversions for transparent errors now carry a doc comment
+  describing the conversion (e.g. "Converts `InnerError` into
+  `Wrapper::Inner`."), so they read clearly in rustdoc alongside the context
+  selectors.
+
 ## [0.1.0-rc.6] - 2026-06-19
 
 ### Added
