@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: WrongSizeError size must be exactly 1 bytes
+error[E0080]: evaluation panicked: the size of WrongSizeError must be exactly 1 bytes
  --> tests/compile-fail/size_exact_mismatch.rs:5:17
   |
 5 | #[derive(Debug, Oopsie)]

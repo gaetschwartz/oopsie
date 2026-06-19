@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: OutOfRangeError exceeds size limit of 2 bytes
+error[E0080]: evaluation panicked: the size of OutOfRangeError must be at most 2 bytes
  --> tests/compile-fail/size_out_of_range.rs:5:17
   |
 5 | #[derive(Debug, Oopsie)]

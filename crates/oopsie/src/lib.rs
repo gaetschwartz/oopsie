@@ -328,6 +328,16 @@ e.g. API error responses."
 //! | `unstable` | no | nightly | umbrella for the two unstable features below |
 //! | `unstable-error-generic-member-access` | no | nightly | trace and diagnostic surfacing through the Provider API |
 //! | `unstable-try-trait-v2` | no | nightly | `?` converts a failed `Result` directly into a `Report` |
+//!
+//! # Environment variables
+//!
+//! ## `OOPSIE_MAX_ERROR_SIZE`
+//!
+//! Set `OOPSIE_MAX_ERROR_SIZE=N` to assert that every `#[derive(Oopsie)]` error
+//! is at most `N` bytes — the project-wide form of the per-type
+//! `#[oopsie(size(...))]` constraint, which overrides it where present. It
+//! applies only to the crates you build directly, never to your dependencies, so
+//! a dependency's error sizes can never break your build.
 
 // Re-export the proc-macro attribute and derive.
 pub use oopsie_macros::Oopsie;

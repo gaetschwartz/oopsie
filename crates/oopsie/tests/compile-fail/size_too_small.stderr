@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: TooSmallError must be at least 9999 bytes
+error[E0080]: evaluation panicked: the size of TooSmallError must be at least 9999 bytes
  --> tests/compile-fail/size_too_small.rs:5:17
   |
 5 | #[derive(Debug, Oopsie)]

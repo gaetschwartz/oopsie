@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: TooLargeError exceeds size limit of 1 bytes
+error[E0080]: evaluation panicked: the size of TooLargeError must be at most 1 bytes
  --> tests/compile-fail/size_too_large.rs:5:17
   |
 5 | #[derive(Debug, Oopsie)]

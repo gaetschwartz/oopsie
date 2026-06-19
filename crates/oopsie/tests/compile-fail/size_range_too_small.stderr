@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: RangeTooSmallError must be at least 9999 bytes
+error[E0080]: evaluation panicked: the size of RangeTooSmallError must be at least 9999 bytes
  --> tests/compile-fail/size_range_too_small.rs:5:17
   |
 5 | #[derive(Debug, Oopsie)]
