@@ -417,9 +417,11 @@ pub fn gen_enum_selectors(
             };
             let auto_inits = gen_auto_inits(categorized, oopsie_path, true);
             let auto_names = gen_auto_field_inits(categorized);
+            let doc = format!("Converts `{param_ty}` into `{enum_ident}::{variant_ident}`.");
             selectors.push(quote! {
                 #(#cfg_attrs)*
                 impl #impl_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics #where_clause {
+                    #[doc = #doc]
                     #[track_caller]
                     fn from(source: #param_ty) -> Self {
                         // Capture probes borrow `&source` before
@@ -587,8 +589,10 @@ pub fn gen_struct_selector(
         let auto_inits = gen_auto_inits(categorized, oopsie_path, true);
         let auto_names = gen_auto_field_inits(categorized);
         let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
+        let doc = format!("Converts `{param_ty}` into `{struct_ident}`.");
         return Ok(quote! {
             impl #impl_generics ::core::convert::From<#param_ty> for #struct_ident #ty_generics #where_clause {
+                #[doc = #doc]
                 #[track_caller]
                 fn from(source: #param_ty) -> Self {
                     // Capture probes borrow `&source` before `body_assign`
