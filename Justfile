@@ -55,9 +55,10 @@ test *ARGS: (nextest ARGS) doctest
 # Run the whole feature powerset, then doctests for every combo.
 test-full *ARGS: (nextest-full ARGS) doctest-full
 
-# Trybuild stderr is overwritten on stable only — nightly's wider diagnostic
-# span underlines don't match the stored stable form.
-# Re-bless insta snapshots + trybuild stderr for the two blessed combos.
+# Re-bless insta snapshots + trybuild stderr on both blessed combos.
+[env("OOPSIE_BACKTRACE_SNAPSHOT_TESTS", "1")]
+[env("INSTA_UPDATE", "always")]
+[env("TRYBUILD", "overwrite")]
 test-bless *ARGS:
-    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 INSTA_UPDATE=always TRYBUILD=overwrite cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
-    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 INSTA_UPDATE=always cargo nextest run --workspace --features unstable,fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
+    cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
+    cargo nextest run --workspace --features unstable,fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
