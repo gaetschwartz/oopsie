@@ -807,6 +807,74 @@ fn error_code_dynamic_accessor_and_provider_agree() {
     assert_eq!(via_accessor.as_str(), via_provider.as_str());
 }
 
+// ---- field-level provide(ErrorCode) must reach the stable accessor ----
+//
+// An `ErrorCode` provide placed on a FIELD (not the container/variant) is
+// surfaced by the Provider API; `oopsie_error_code()` must agree on stable,
+// or the code is silently dropped from rendered reports.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(suffix)]
+struct FieldCodeStruct {
+    #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from("field::code")))]
+    msg: String,
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum FieldCodeEnum {
+    #[oopsie("coded by field")]
+    FieldCoded {
+        #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from("variant::field::code")))]
+        msg: String,
+    },
+}
+
+#[test]
+fn error_code_accessor_surfaces_field_level_provide_struct() {
+    use oopsie::Diagnostic as _;
+    let err = FieldCodeStructOopsie {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    let code = err.oopsie_error_code();
+    assert!(
+        code.is_some(),
+        "field-level provide(ErrorCode) must reach the stable accessor"
+    );
+    assert_eq!(code.unwrap().as_str(), "field::code");
+}
+
+#[test]
+fn error_code_accessor_surfaces_field_level_provide_enum() {
+    use oopsie::Diagnostic as _;
+    let err = FieldCoded {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    let code = err.oopsie_error_code();
+    assert!(
+        code.is_some(),
+        "field-level provide(ErrorCode) on a variant field must reach the stable accessor"
+    );
+    assert_eq!(code.unwrap().as_str(), "variant::field::code");
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn error_code_field_level_accessor_and_provider_agree() {
+    use oopsie::Diagnostic as _;
+    let err = FieldCodeStructOopsie {
+        msg: "boom".to_owned(),
+    }
+    .build();
+    let via_accessor = err.oopsie_error_code().expect("accessor yields field code");
+    let via_provider =
+        core::error::request_value::<oopsie::ErrorCode>(&err).expect("provider yields code");
+    assert_eq!(via_accessor.as_str(), "field::code");
+    assert_eq!(via_accessor.as_str(), via_provider.as_str());
+}
+
 // ---- code() format-string interpolation referencing variant/struct fields ----
 //
 // `code("fmt {}", expr)` and `code = "{field}"` (inline capture) mirror the

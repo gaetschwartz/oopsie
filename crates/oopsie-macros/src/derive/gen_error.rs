@@ -437,9 +437,11 @@ pub fn gen_enum_error(
                     Self::#variant_ident { #(#code_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*))),
                 });
             }
-        } else if let Some(provide_attr) = variant_attrs
+        } else if let Some(provide_attr) = categorized
             .provides
             .iter()
+            .map(|(_, p)| p)
+            .chain(variant_attrs.provides.iter())
             .find(|p| is_error_code_provide(p))
         {
             let expr = &provide_attr.expr;
@@ -961,8 +963,14 @@ pub fn gen_struct_error(
             }
         }
     } else {
-        // Check for auto-generated code from trace-injection provide attrs
-        let code_provide = attrs.provides.iter().find(|p| is_error_code_provide(p));
+        // An ErrorCode provide may sit on a field or on the container; field-level
+        // is chained first to mirror `provide()`'s first-wins ordering.
+        let code_provide = categorized
+            .provides
+            .iter()
+            .map(|(_, p)| p)
+            .chain(attrs.provides.iter())
+            .find(|p| is_error_code_provide(p));
         if let Some(provide_attr) = code_provide {
             let expr = &provide_attr.expr;
             // The provide expr may reference fields (it gets the same bindings
