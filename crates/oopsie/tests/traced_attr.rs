@@ -80,6 +80,26 @@ fn traced_with_help_and_code() {
     }
 }
 
+// ---- unit variant + explicit discriminant, nothing injected ----
+//
+// A fieldless variant carrying an explicit discriminant (no `#[repr(int)]`) is
+// legal Rust. With every injectable trace turned off, the macro must leave it a
+// unit variant: rewriting it to `A {} = 1` makes it a non-unit discriminant
+// variant, which rustc rejects with E0732 — pointing into generated code.
+
+#[oopsie(traced(backtrace(false), spantrace(false), location(false)))]
+pub enum DiscriminantUnit {
+    #[oopsie("a")]
+    A = 1,
+}
+
+#[test]
+fn unit_variant_with_discriminant_compiles() {
+    let err = discriminant_unit_oopsies::A.build();
+    assert!(matches!(err, DiscriminantUnit::A));
+    assert_eq!(DiscriminantUnit::A as u8, 1);
+}
+
 // ---- Test 5: enum module naming convention ----
 
 #[oopsie(traced)]

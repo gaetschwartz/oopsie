@@ -417,3 +417,85 @@ fn cfg_kept_spantrace_field_accessor_returns_some() {
     let err = KeptSt { keep: 2u32 }.build();
     assert!(err.oopsie_spantrace().is_some());
 }
+
+// ---- dynamic `#[oopsie(help)]` field under field-level cfg ----
+//
+// A struct help accessor names `self.<field>` and the `provide()` closure
+// captures it, so a stripped help field must drop both the accessor and the
+// provide statement with the field (the enum drops its match arm to `_ => None`).
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructHelpStrippedError {
+    #[cfg(any())]
+    #[oopsie(help)]
+    hint: String,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_stripped_help_field_yields_none() {
+    use oopsie::Diagnostic as _;
+    let err = StructHelpStrippedOopsie { keep: 1u32 }.build();
+    assert!(err.oopsie_help_text().is_none());
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructHelpKeptError {
+    #[cfg(all())]
+    #[oopsie(help)]
+    hint: String,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_kept_help_field_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = StructHelpKeptOopsie {
+        hint: "do this".to_owned(),
+        keep: 2u32,
+    }
+    .build();
+    assert_eq!(&*err.oopsie_help_text().unwrap(), "do this");
+}
+
+// Enum sibling: the help accessor arm is already cfg-gated, but the `provide()`
+// closure references the help field too and must drop with it under `unstable`.
+#[oopsie]
+#[oopsie(module(false), suffix = "He")]
+pub enum EnumHelpCfgError {
+    #[oopsie("stripped: {keep}")]
+    Stripped {
+        #[cfg(any())]
+        #[oopsie(help)]
+        hint: String,
+        keep: u32,
+    },
+
+    #[oopsie("kept: {keep}")]
+    Kept {
+        #[cfg(all())]
+        #[oopsie(help)]
+        hint: String,
+        keep: u32,
+    },
+}
+
+#[test]
+fn enum_cfg_stripped_help_field_falls_through_to_none() {
+    use oopsie::Diagnostic as _;
+    let err = StrippedHe { keep: 1u32 }.build();
+    assert!(err.oopsie_help_text().is_none());
+}
+
+#[test]
+fn enum_cfg_kept_help_field_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = KeptHe {
+        hint: "fix it".to_owned(),
+        keep: 2u32,
+    }
+    .build();
+    assert_eq!(&*err.oopsie_help_text().unwrap(), "fix it");
+}

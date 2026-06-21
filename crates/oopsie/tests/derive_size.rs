@@ -9,7 +9,7 @@
     reason = "derive-macro test fixtures intentionally trip style lints"
 )]
 
-use oopsie::Oopsie;
+use oopsie::{Oopsie, oopsie};
 
 // ---- AtMost: should compile since size <= 128 ----
 
@@ -185,4 +185,28 @@ enum CfgGatedError {
 #[test]
 fn size_cfg_stripped_variant_excluded() {
     let _err = CfgGatedError::Tiny { byte: 0 };
+}
+
+// ---- a cfg-stripped FIELD (not a whole variant) stays out of the size sum ----
+// Under the attribute-macro form the macro sees the field before rustc strips
+// `#[cfg]`, so the per-variant payload size must gate each field's term; without
+// the gate it references the stripped `OnlyWhenFieldEnabled` and fails (E0425).
+
+#[cfg(any())]
+struct OnlyWhenFieldEnabled([u8; 9999]);
+
+#[oopsie]
+#[oopsie(module(false), size(..=8))]
+enum CfgGatedFieldError {
+    #[oopsie("wee")]
+    Wee {
+        byte: u8,
+        #[cfg(any())]
+        huge: OnlyWhenFieldEnabled,
+    },
+}
+
+#[test]
+fn size_cfg_stripped_field_excluded() {
+    let _err = CfgGatedFieldError::Wee { byte: 0 };
 }

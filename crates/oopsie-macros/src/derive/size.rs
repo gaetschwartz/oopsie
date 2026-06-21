@@ -86,10 +86,25 @@ pub(super) fn gen_size_assertion(ident: &syn::Ident, size: &SizeAttr) -> TokenSt
     }
 }
 
-/// `size_of` of a variant's payload as the tuple of all its field types.
+/// A variant's payload size, as the sum of its field sizes. Each term carries
+/// the field's `#[cfg]` so a cfg-stripped field drops out instead of leaving its
+/// (now-removed) type referenced — the attribute-macro form expands before rustc
+/// strips `#[cfg]`. The sum ignores layout padding, but this value only ranks
+/// variants to attribute the blame; the size check itself uses `size_of::<E>()`.
 fn payload_size(variant: &ResolvedVariant<'_>) -> TokenStream2 {
-    let tys = variant.variant.fields.iter().map(|f| &f.ty);
-    quote! { ::core::mem::size_of::<( #( #tys, )* )>() }
+    let terms = variant.variant.fields.iter().map(|f| {
+        let cfg = f
+            .attrs
+            .iter()
+            .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"));
+        let ty = &f.ty;
+        quote! { #( #cfg )* { __payload += ::core::mem::size_of::<#ty>(); } }
+    });
+    quote! {{
+        let mut __payload = 0usize;
+        #( #terms )*
+        __payload
+    }}
 }
 
 /// The size assertion for an enum. An upper-bound violation is blamed on the

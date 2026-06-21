@@ -146,6 +146,12 @@ pub(super) struct FieldsToInject {
     pub location: bool,
 }
 
+impl FieldsToInject {
+    pub(super) const fn any(&self) -> bool {
+        self.backtrace || self.spantrace || self.timestamp || self.traces || self.location
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use quote::ToTokens as _;

@@ -59,11 +59,7 @@ pub fn expand_enum(
         // user sees a discriminant-spanning message instead of one pointing into
         // the rewritten enum.
         if let Some((_, disc)) = &variant.discriminant
-            && (to_inject.backtrace
-                || to_inject.spantrace
-                || to_inject.timestamp
-                || to_inject.traces
-                || to_inject.location)
+            && to_inject.any()
         {
             return Err(syn::Error::new_spanned(
                 disc,

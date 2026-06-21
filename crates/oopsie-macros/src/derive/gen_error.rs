@@ -296,7 +296,9 @@ pub fn gen_enum_error(
 
         // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
         if let Some(help_field) = &categorized.help_field {
+            let help_cfg = field_cfg_for(categorized, help_field);
             provide_stmts.push(quote! {
+                #(#help_cfg)*
                 #req.provide_value_with::<#oopsie_path::HelpText>(
                     || #oopsie_path::HelpText::from(#help_field.to_string())
                 );
@@ -792,7 +794,9 @@ pub fn gen_struct_error(
 
     // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
     if let Some(help_field) = &categorized.help_field {
+        let help_cfg = field_cfg_for(categorized, help_field);
         provide_stmts.push(quote! {
+            #(#help_cfg)*
             #req.provide_value_with::<#oopsie_path::HelpText>(
                 || #oopsie_path::HelpText::from(#help_field.to_string())
             );
@@ -1008,7 +1012,12 @@ pub fn gen_struct_error(
 
     // Dynamic help field takes precedence over static attribute
     let help_method = if let Some(help_field) = &categorized.help_field {
+        // The body names `self.<field>`, so a cfg-stripped help field takes the
+        // whole accessor with it, degrading to the trait default (`None`) — the
+        // struct analogue of the enum arm dropping to `_ => None`.
+        let help_cfg = field_cfg_for(categorized, help_field);
         quote! {
+            #(#help_cfg)*
             fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
                 ::core::option::Option::Some(#oopsie_path::HelpText::from(self.#help_field.to_string()))
             }

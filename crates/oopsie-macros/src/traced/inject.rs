@@ -64,6 +64,13 @@ pub(super) fn inject_fields(
             Ok(())
         }
         Fields::Unit => {
+            // Leave a unit variant/struct untouched when nothing is injected:
+            // rewriting it to empty braces changes its shape, and for a variant
+            // carrying an explicit discriminant that turns it into a non-unit
+            // variant, which rustc rejects without a `#[repr(int)]`.
+            if !to_inject.any() {
+                return Ok(());
+            }
             let mut named = FieldsNamed {
                 brace_token: token::Brace::default(),
                 named: Punctuated::default(),
@@ -262,6 +269,24 @@ mod tests {
         };
         inject_fields(&mut fields, &config, &to_inject).unwrap();
         assert!(matches!(fields, syn::Fields::Named(_)));
+    }
+
+    #[test]
+    fn inject_fields_leaves_unit_when_nothing_injected() {
+        let mut fields = syn::Fields::Unit;
+        let config = test_config();
+        let to_inject = FieldsToInject {
+            backtrace: false,
+            spantrace: false,
+            timestamp: false,
+            traces: false,
+            location: false,
+        };
+        inject_fields(&mut fields, &config, &to_inject).unwrap();
+        assert!(
+            matches!(fields, syn::Fields::Unit),
+            "a unit variant must stay unit when no fields are injected"
+        );
     }
 
     #[test]
