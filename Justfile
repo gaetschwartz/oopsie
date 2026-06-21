@@ -34,12 +34,14 @@ doctest-full: (_cargo "1" "test" "--doc" "--workspace")
 # Run doctests for default features on stable + nightly.
 doctest: (_cargo "0" "test" "--doc" "--workspace")
 
-# The two snapshot-bearing combos: stable + nightly, full feature set, with the
-# env-gated backtrace snapshot tests switched on. Every other combo leaves them
-# skipped, so these are the only place snapshots actually run.
+# The snapshot-bearing combos: stable + nightly channels, crossed with serde
+# on/off because serde swaps the spantrace field formatter and so the rendered
+# snapshots. The env-gated backtrace snapshot tests run here and nowhere else.
 _nextest-snapshots *ARGS:
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo nextest run --workspace --features unstable,fancy,serde,tracing,chrono {{ ARGS }}
+    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run --workspace --no-default-features --features fancy,tracing,chrono {{ ARGS }}
+    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo nextest run --workspace --no-default-features --features unstable,fancy,tracing,chrono {{ ARGS }}
 
 # Run the snapshot-bearing combos — the meaningful everyday test.
 nextest *ARGS: (_nextest-snapshots ARGS)
@@ -62,3 +64,5 @@ test-full *ARGS: (nextest-full ARGS) doctest-full
 test-bless *ARGS:
     cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
     cargo nextest run --workspace --features unstable,fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
+    cargo +stable nextest run --workspace --no-default-features --features fancy,tracing,chrono --no-fail-fast {{ ARGS }} || true
+    cargo nextest run --workspace --no-default-features --features unstable,fancy,tracing,chrono --no-fail-fast {{ ARGS }} || true

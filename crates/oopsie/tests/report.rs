@@ -179,15 +179,29 @@ fn test_report_with_help() {
     });
 }
 
-#[cfg(feature = "tracing")]
+// Split by `serde` because it swaps the span-field formatter (JSON object vs
+// `key=value`), so the rendered spantrace — and thus the snapshot — differs.
+#[cfg(all(feature = "tracing", feature = "serde"))]
 #[test]
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
-fn test_report_with_spantrace() {
+fn test_report_with_spantrace_serde() {
     let error = common::make_error();
     let report = Report::new(error).no_colors();
 
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("report_with_spantrace"), report);
+        insta::assert_snapshot!(snap_name!("report_with_spantrace_serde"), report);
+    });
+}
+
+#[cfg(all(feature = "tracing", not(feature = "serde")))]
+#[test]
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
+fn test_report_with_spantrace_no_serde() {
+    let error = common::make_error();
+    let report = Report::new(error).no_colors();
+
+    redact!(backtrace, {
+        insta::assert_snapshot!(snap_name!("report_with_spantrace_no_serde"), report);
     });
 }
 

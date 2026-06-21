@@ -16,14 +16,14 @@ Error[report::common::MyError::Inner]: Inner error happened
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 10 frames hidden ...
-  1: report[[HASH]]::common::make_error::inner_function
+  1: report::common::make_error::inner_function::h[HASH]
            at tests/common/mod.rs:[LOC]
-  2: report[[HASH]]::common::make_error::outer_function
+  2: report::common::make_error::outer_function::h[HASH]
            at tests/common/mod.rs:[LOC]
-  3: report[[HASH]]::common::make_error
+  3: report::common::make_error::h[HASH]
            at tests/common/mod.rs:[LOC]
-  4: report[[HASH]]::test_report_with_spantrace
+  4: report::test_report_with_spantrace_serde::h[HASH]
            at tests/report.rs:[LOC]
-  5: report[[HASH]]::test_report_with_spantrace::{closure#0}
+  5: report::test_report_with_spantrace_serde::{{closure}}::h[HASH]
            at tests/report.rs:[LOC]
    ... 22 frames hidden ...
