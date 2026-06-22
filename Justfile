@@ -38,7 +38,7 @@ doctest: (_cargo "0" "test" "--doc" "--workspace")
 # on/off because serde swaps the spantrace field formatter and so the rendered
 # snapshots. The env-gated backtrace snapshot tests run here and nowhere else.
 _nextest-snapshots *ARGS:
-    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono {{ ARGS }}
+    OOPSIE_SETTINGS_E2E=1 OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo nextest run --workspace --features unstable,fancy,serde,tracing,chrono {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo +stable nextest run --workspace --no-default-features --features fancy,tracing,chrono {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1 cargo nextest run --workspace --no-default-features --features unstable,fancy,tracing,chrono {{ ARGS }}
@@ -62,7 +62,7 @@ test-full *ARGS: (nextest-full ARGS) doctest-full
 [env("INSTA_UPDATE", "always")]
 [env("TRYBUILD", "overwrite")]
 test-bless *ARGS:
-    cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
+    OOPSIE_SETTINGS_E2E=1 OOPSIE_SETTINGS_BLESS=1 cargo +stable nextest run --workspace --no-default-features --features fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
     cargo nextest run --workspace --features unstable,fancy,serde,tracing,chrono --no-fail-fast {{ ARGS }} || true
     cargo +stable nextest run --workspace --no-default-features --features fancy,tracing,chrono --no-fail-fast {{ ARGS }} || true
     cargo nextest run --workspace --no-default-features --features unstable,fancy,tracing,chrono --no-fail-fast {{ ARGS }} || true

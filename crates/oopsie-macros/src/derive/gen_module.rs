@@ -30,7 +30,8 @@ pub fn wrap_in_module(
                 if !module_name.is_empty() {
                     module_name.push('_');
                 }
-                module_name.push_str("oopsies");
+                let suffix = crate::utils::manifest_module_suffix();
+                module_name.push_str(suffix.as_deref().unwrap_or("oopsies"));
                 Ident::new(&module_name, type_ident.span())
             };
             let doc = format!("Auto-generated context selectors for `{type_ident}`.");

@@ -1,6 +1,52 @@
 //! Argument types for trace injection options.
 
-use crate::utils::{BetterFlag, FieldSetting};
+use darling::FromMeta;
+
+use crate::utils::{BetterFlag, FieldSetting, TracedDefaults};
+
+/// A `FieldSetting` that also records whether it was written by the user.
+///
+/// `FieldSetting` collapses an absent key and an explicit `key = <default>` to
+/// the same `Flag(DEFAULT)`, so it alone can't tell "defaulted" from "the user
+/// chose the default". This wrapper keeps that distinction so a manifest default
+/// only applies when the per-attribute toggle is truly absent.
+#[derive(Clone, Debug)]
+pub struct Tristate<const DEFAULT: bool, T: FromMeta> {
+    inner: FieldSetting<DEFAULT, T>,
+    explicit: bool,
+}
+
+impl<const DEFAULT: bool, T: FromMeta> Tristate<DEFAULT, T> {
+    const fn flag(value: bool, explicit: bool) -> Self {
+        Self {
+            inner: FieldSetting::Flag(value),
+            explicit,
+        }
+    }
+
+    pub const fn inner(&self) -> &FieldSetting<DEFAULT, T> {
+        &self.inner
+    }
+
+    /// `Some(state)` when the user wrote the toggle; `None` when it defaulted.
+    /// A settings block (`key(...)`) always counts as explicit-on.
+    pub fn explicit(&self) -> Option<bool> {
+        self.explicit.then(|| self.inner.is_enabled())
+    }
+}
+
+impl<const DEFAULT: bool, T: FromMeta> FromMeta for Tristate<DEFAULT, T> {
+    fn from_meta(item: &syn::Meta) -> darling::Result<Self> {
+        FieldSetting::from_meta(item).map(|inner| Self {
+            inner,
+            explicit: true,
+        })
+    }
+
+    fn from_none() -> Option<Self> {
+        Some(Self::flag(DEFAULT, false))
+    }
+}
 
 /// Inner arguments of `traced(...)`. Every part starts from its default
 /// (backtrace + spantrace on, timestamp off) and is individually tunable:
@@ -9,11 +55,11 @@ use crate::utils::{BetterFlag, FieldSetting};
 pub struct TracedArgs {
     pub backtrace: FieldSetting<true, TraceSettings>,
     pub spantrace: FieldSetting<true, TraceSettings>,
-    pub timestamp: FieldSetting<false, TimestampSettings>,
+    pub timestamp: Tristate<false, TimestampSettings>,
     pub location: BetterFlag<true>,
     pub packed: BetterFlag<true>,
     pub boxed: BetterFlag<true>,
-    pub code: FieldSetting<true, CodeSettings>,
+    pub code: Tristate<true, CodeSettings>,
 }
 
 impl Default for TracedArgs {
@@ -21,45 +67,60 @@ impl Default for TracedArgs {
         Self {
             backtrace: FieldSetting::Flag(true),
             spantrace: FieldSetting::Flag(true),
-            timestamp: FieldSetting::Flag(false),
+            timestamp: Tristate::flag(false, false),
             location: BetterFlag::Default,
             packed: BetterFlag::Default,
             boxed: BetterFlag::Default,
-            code: FieldSetting::Flag(true),
+            code: Tristate::flag(true, false),
         }
     }
 }
 
 impl TracedArgs {
-    /// Per-trace boxing: the trace's own `boxed` override if a settings block
-    /// exists, else the pair-level `boxed`.
-    fn trace_boxed(&self, trace: &FieldSetting<true, TraceSettings>) -> bool {
-        trace
-            .opt_settings()
-            .map_or_else(|| self.boxed.is_enabled(), |s| s.boxed.is_enabled())
-    }
-
-    pub fn resolve(&self) -> ResolvedTraceArgs<'_> {
+    /// Fold the per-attribute toggles against the manifest defaults.
+    ///
+    /// Precedence per toggle: an explicit per-attribute setting wins; otherwise
+    /// the manifest default applies; otherwise the hardcoded const-generic
+    /// default. `defaults` is empty when nothing is configured, so the manifest
+    /// arm only fires for keys a project actually set.
+    pub fn resolve(&self, defaults: &TracedDefaults) -> ResolvedTraceArgs<'_> {
+        // `boxed` is a pair-level toggle: a per-trace `boxed` override (handled
+        // in `trace_boxed`) still wins over both the manifest and this fold.
+        let manifest_boxed = self.boxed.to_option().or(defaults.boxed);
+        let trace_boxed = |trace: &FieldSetting<true, TraceSettings>| {
+            trace
+                .opt_settings()
+                .map_or_else(|| manifest_boxed.unwrap_or(true), |s| s.boxed.is_enabled())
+        };
         ResolvedTraceArgs {
             backtrace: self.backtrace.is_enabled(),
             spantrace: self.spantrace.is_enabled(),
-            timestamp: self.timestamp.is_enabled(),
-            location: self.location.is_enabled(),
-            packed: self.packed.is_enabled(),
-            backtrace_boxed: self.trace_boxed(&self.backtrace),
-            spantrace_boxed: self.trace_boxed(&self.spantrace),
+            timestamp: fold(self.timestamp.explicit(), defaults.timestamp, false),
+            location: fold(self.location.to_option(), defaults.location, true),
+            packed: fold(self.packed.to_option(), defaults.packed, true),
+            code: fold(self.code.explicit(), defaults.code, true),
+            backtrace_boxed: trace_boxed(&self.backtrace),
+            spantrace_boxed: trace_boxed(&self.spantrace),
             backtrace_type: self.backtrace.r#type(),
             spantrace_type: self.spantrace.r#type(),
             timestamp_chrono: self
                 .timestamp
+                .inner()
                 .opt_settings()
                 .is_some_and(|s| s.chrono.is_enabled()),
             timestamp_provide: self
                 .timestamp
+                .inner()
                 .opt_settings()
                 .is_some_and(|s| s.provide.is_enabled()),
         }
     }
+}
+
+/// Per-toggle precedence: explicit per-attribute setting, then manifest default,
+/// then the hardcoded default.
+fn fold(per_attr: Option<bool>, manifest: Option<bool>, hardcoded: bool) -> bool {
+    per_attr.or(manifest).unwrap_or(hardcoded)
 }
 
 /// Flat view of [`TracedArgs`] after folding flags, per-trace overrides, and
@@ -74,6 +135,7 @@ pub struct ResolvedTraceArgs<'a> {
     pub timestamp: bool,
     pub location: bool,
     pub packed: bool,
+    pub code: bool,
     pub backtrace_boxed: bool,
     pub spantrace_boxed: bool,
     pub backtrace_type: Option<&'a syn::Path>,
@@ -134,7 +196,6 @@ impl<const DEFAULT: bool> FieldSetting<DEFAULT, TraceSettings> {
 
 #[cfg(test)]
 mod tests {
-    use darling::FromMeta as _;
     use syn::parse_quote;
 
     use super::*;
@@ -149,10 +210,15 @@ mod tests {
         TracedArgs::from_list(&nested).expect("parse traced args list")
     }
 
+    /// Resolve with no manifest defaults — the hardcoded defaults apply.
+    fn resolve(a: &TracedArgs) -> ResolvedTraceArgs<'_> {
+        a.resolve(&TracedDefaults::default())
+    }
+
     #[test]
     fn default_is_packed_and_boxed_with_both_traces() {
         let a = args_list(parse_quote!(traced()));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.packed);
         assert!(r.backtrace_boxed);
         assert!(r.spantrace_boxed);
@@ -163,7 +229,7 @@ mod tests {
     #[test]
     fn packed_false_unpacks() {
         let a = args(&parse_quote!(traced(packed = false)));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(!r.packed);
         assert!(r.backtrace_boxed && r.spantrace_boxed);
     }
@@ -171,7 +237,7 @@ mod tests {
     #[test]
     fn boxed_false_is_inline() {
         let a = args(&parse_quote!(traced(boxed = false)));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.packed);
         assert!(!r.backtrace_boxed && !r.spantrace_boxed);
     }
@@ -179,7 +245,7 @@ mod tests {
     #[test]
     fn backtrace_false_keeps_spantrace_and_enables_timestamp() {
         let a = args(&parse_quote!(traced(backtrace(false), timestamp)));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(!r.backtrace);
         assert!(r.spantrace);
         assert!(r.timestamp);
@@ -188,7 +254,7 @@ mod tests {
     #[test]
     fn spantrace_false_keeps_backtrace_only() {
         let a = args(&parse_quote!(traced(spantrace(false))));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.backtrace);
         assert!(!r.spantrace);
         assert!(!r.timestamp);
@@ -198,7 +264,7 @@ mod tests {
     fn mentioning_one_trace_does_not_disable_others() {
         // `spantrace(boxed = false)` tunes spantrace; backtrace stays enabled.
         let a = args(&parse_quote!(traced(spantrace(boxed = false))));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.backtrace);
         assert!(r.spantrace);
         assert!(r.backtrace_boxed);
@@ -211,7 +277,7 @@ mod tests {
             packed = false,
             spantrace(boxed = false)
         )));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(!r.packed);
         assert!(r.backtrace);
         assert!(r.spantrace);
@@ -223,7 +289,7 @@ mod tests {
     fn validate_rejects_packed_incoherent_boxing() {
         // Both traces enabled, packed default, boxing disagrees.
         let a = args(&parse_quote!(traced(backtrace, spantrace(boxed = false))));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.backtrace && r.spantrace);
         assert!(r.packed);
         assert!(r.backtrace_boxed && !r.spantrace_boxed);
@@ -233,7 +299,7 @@ mod tests {
     #[test]
     fn validate_accepts_packed_uniform_inline() {
         let a = args(&parse_quote!(traced(boxed = false)));
-        let r = a.resolve();
+        let r = resolve(&a);
         r.validate(proc_macro2::Span::call_site()).unwrap();
     }
 
@@ -242,7 +308,7 @@ mod tests {
     #[test]
     fn bare_timestamp_keeps_both_traces() {
         let a = args(&parse_quote!(traced(timestamp)));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.timestamp);
         assert!(r.backtrace);
         assert!(r.spantrace);
@@ -254,7 +320,7 @@ mod tests {
             chrono = true,
             provide = false
         ))));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.timestamp);
         assert!(r.timestamp_chrono);
     }
@@ -264,7 +330,7 @@ mod tests {
         // The bare `timestamp` path (no settings list) has no `opt_settings`, so
         // both sub-flags resolve to false: default field type is `SystemTime`.
         let a = args(&parse_quote!(traced(timestamp)));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.timestamp);
         assert!(!r.timestamp_chrono);
         assert!(!r.timestamp_provide);
@@ -275,7 +341,7 @@ mod tests {
         // A `timestamp(...)` settings block without `enabled` counts as on,
         // despite the field's off-by-default.
         let a = args(&parse_quote!(traced(timestamp(provide = true))));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.timestamp);
     }
 
@@ -284,7 +350,7 @@ mod tests {
         // Opt-in: `chrono` omitted inside a settings block stays disabled, so
         // `timestamp(provide = true)` alone keeps the `SystemTime` field type.
         let a = args(&parse_quote!(traced(timestamp(provide = true))));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(!r.timestamp_chrono);
         assert!(r.timestamp_provide);
     }
@@ -292,7 +358,7 @@ mod tests {
     #[test]
     fn timestamp_chrono_false_inside_settings_block() {
         let a = args(&parse_quote!(traced(timestamp(chrono = false))));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(!r.timestamp_chrono);
     }
 
@@ -301,7 +367,7 @@ mod tests {
         // Opt-in: `provide` omitted stays disabled, so `timestamp(chrono = true)`
         // does not emit a provide attr.
         let a = args(&parse_quote!(traced(timestamp(chrono = true))));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(!r.timestamp_provide, "provide is opt-in when omitted");
         assert!(r.timestamp_chrono);
     }
@@ -309,7 +375,144 @@ mod tests {
     #[test]
     fn timestamp_provide_true_resolves_enabled() {
         let a = args(&parse_quote!(traced(timestamp(provide = true))));
-        let r = a.resolve();
+        let r = resolve(&a);
         assert!(r.timestamp_provide);
+    }
+
+    // ── manifest-default fold precedence ──────────────────────────────
+    // per-attribute setting > manifest default > hardcoded default.
+
+    #[test]
+    fn fold_prefers_per_attr_then_manifest_then_hardcoded() {
+        assert!(fold(Some(true), Some(false), false));
+        assert!(!fold(Some(false), Some(true), true));
+        assert!(fold(None, Some(true), false));
+        assert!(!fold(None, Some(false), true));
+        assert!(fold(None, None, true));
+        assert!(!fold(None, None, false));
+    }
+
+    /// All-`Some` manifest defaults that invert every hardcoded default, so a
+    /// fold falling through to the manifest is unambiguous.
+    fn inverted_defaults() -> TracedDefaults {
+        TracedDefaults {
+            traced: None,
+            location: Some(false),
+            timestamp: Some(true),
+            packed: Some(false),
+            boxed: Some(false),
+            code: Some(false),
+        }
+    }
+
+    #[test]
+    fn manifest_fills_unset_toggles() {
+        // A bare `traced()` sets no sub-toggles, so each falls through to the
+        // manifest default rather than the hardcoded one.
+        let a = args_list(parse_quote!(traced()));
+        let r = a.resolve(&inverted_defaults());
+        assert!(!r.location);
+        assert!(r.timestamp);
+        assert!(!r.packed);
+        assert!(!r.backtrace_boxed && !r.spantrace_boxed);
+        assert!(!r.code);
+    }
+
+    #[test]
+    fn per_attr_location_wins_over_manifest() {
+        let a = args(&parse_quote!(traced(location)));
+        let r = a.resolve(&inverted_defaults());
+        assert!(r.location, "explicit `location` overrides manifest off");
+
+        let a = args(&parse_quote!(traced(location = false)));
+        let r = a.resolve(&TracedDefaults {
+            location: Some(true),
+            ..TracedDefaults::default()
+        });
+        assert!(
+            !r.location,
+            "explicit `location = false` overrides manifest on"
+        );
+    }
+
+    #[test]
+    fn per_attr_packed_wins_over_manifest() {
+        let a = args(&parse_quote!(traced(packed)));
+        let r = a.resolve(&inverted_defaults());
+        assert!(r.packed);
+
+        let a = args(&parse_quote!(traced(packed = false)));
+        let r = a.resolve(&TracedDefaults {
+            packed: Some(true),
+            ..TracedDefaults::default()
+        });
+        assert!(!r.packed);
+    }
+
+    #[test]
+    fn per_attr_boxed_wins_over_manifest() {
+        let a = args(&parse_quote!(traced(boxed = false)));
+        let r = a.resolve(&TracedDefaults {
+            boxed: Some(true),
+            ..TracedDefaults::default()
+        });
+        assert!(!r.backtrace_boxed && !r.spantrace_boxed);
+    }
+
+    #[test]
+    fn per_attr_timestamp_off_wins_over_manifest_on() {
+        // The explicit-false case the `Tristate` wrapper exists for: a bare
+        // `traced` (no timestamp) takes the manifest default, but
+        // `timestamp = false` must override a manifest that turns it on.
+        let on = TracedDefaults {
+            timestamp: Some(true),
+            ..TracedDefaults::default()
+        };
+        let a = args(&parse_quote!(traced(timestamp = false)));
+        assert!(!a.resolve(&on).timestamp, "explicit off beats manifest on");
+
+        let a = args_list(parse_quote!(traced()));
+        assert!(a.resolve(&on).timestamp, "unset takes manifest on");
+    }
+
+    #[test]
+    fn per_attr_code_off_wins_over_manifest_on() {
+        let on = TracedDefaults {
+            code: Some(true),
+            ..TracedDefaults::default()
+        };
+        let a = args(&parse_quote!(traced(code = false)));
+        assert!(!a.resolve(&on).code, "explicit off beats manifest on");
+
+        // Symmetric explicit-true over a manifest that turns code off.
+        let off = TracedDefaults {
+            code: Some(false),
+            ..TracedDefaults::default()
+        };
+        let a = args(&parse_quote!(traced(code)));
+        assert!(a.resolve(&off).code, "explicit on beats manifest off");
+    }
+
+    #[test]
+    fn code_settings_block_counts_as_explicit_on() {
+        // A `code(type = ...)` block has no `enabled`, yet it is user-written, so
+        // it overrides a manifest `code = false` and stays on.
+        let off = TracedDefaults {
+            code: Some(false),
+            ..TracedDefaults::default()
+        };
+        let a = args(&parse_quote!(traced(code(r#type = MyCode))));
+        assert!(a.resolve(&off).code);
+    }
+
+    #[test]
+    fn empty_manifest_keeps_hardcoded_defaults() {
+        let a = args_list(parse_quote!(traced()));
+        let r = a.resolve(&TracedDefaults::default());
+        assert!(r.location);
+        assert!(!r.timestamp);
+        assert!(r.packed);
+        assert!(r.backtrace_boxed && r.spantrace_boxed);
+        assert!(r.code);
     }
 }

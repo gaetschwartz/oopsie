@@ -340,7 +340,9 @@ fn resolve_selector_vis(
     error_vis: &Visibility,
     wrapped_in_module: bool,
 ) -> Visibility {
-    let chosen = explicit.unwrap_or(error_vis);
+    // explicit `vis(...)` > project-wide `default-vis` > the error type's own vis.
+    let manifest_vis = crate::utils::manifest_vis_default();
+    let chosen = explicit.or(manifest_vis.as_ref()).unwrap_or(error_vis);
     if wrapped_in_module {
         lift_into_child_module(chosen)
     } else {

@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.10] - 2026-06-22
+
+### Added
+
+- A `settings` cargo feature that reads project-wide defaults from a
+  `[package.metadata.oopsie]` table in the consumer's `Cargo.toml`. Each key is
+  the manifest form of a per-type `#[oopsie(...)]` attribute, which overrides it:
+  `max-size` (a default size cap), `default-suffix` and `default-vis` (selector
+  suffix and visibility), `module` (`true`/`false` or a `{ enabled, suffix }`
+  table), and `traced` (`true`/`false` or a `{ enabled, location, timestamp,
+  packed, boxed, code }` table). Defaults are read from each crate's own
+  manifest, never its dependencies'.
+
 ## [0.1.0-rc.9] - 2026-06-19
 
 ### Changed

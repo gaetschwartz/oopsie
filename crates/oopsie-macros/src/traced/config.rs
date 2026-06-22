@@ -163,7 +163,7 @@ mod tests {
 
     fn config_for(meta: &syn::Meta) -> FieldInjectorConfig {
         let args = TracedArgs::from_meta(meta).unwrap();
-        let resolved = args.resolve();
+        let resolved = args.resolve(&crate::utils::TracedDefaults::default());
         let code = FieldSetting::<true, CodeSettings>::Flag(true);
         let path: syn::Path = parse_quote!(::oopsie);
         FieldInjectorConfig::new(&resolved, &code, &path)

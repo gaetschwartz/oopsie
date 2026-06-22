@@ -3,24 +3,24 @@
 use proc_macro2::Span;
 use syn::ext::IdentExt as _;
 
-use super::args::{CodeSettings, TracedArgs};
+use super::args::TracedArgs;
 use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{add_provide_attrs, check_existing_fields, inject_fields};
 use crate::derive::parse::{StructAttrs, field_forward};
-use crate::utils::FieldSetting;
+use crate::utils::TracedDefaults;
 
 pub fn expand_struct(
     args: &TracedArgs,
-    code: &FieldSetting<true, CodeSettings>,
+    defaults: &TracedDefaults,
     oopsie_path: &syn::Path,
     args_span: Span,
     input: &mut syn::ItemStruct,
 ) -> syn::Result<()> {
     let struct_name = input.ident.unraw().to_string();
 
-    let resolved = args.resolve();
+    let resolved = args.resolve(defaults);
     resolved.validate(args_span)?;
-    let config = FieldInjectorConfig::new(&resolved, code, oopsie_path);
+    let config = FieldInjectorConfig::new(&resolved, args.code.inner(), oopsie_path);
 
     let existence = check_existing_fields(&input.fields, &config.timestamp_type);
 
@@ -70,7 +70,7 @@ pub fn expand_struct(
         &config,
         &struct_name,
         None,
-        code.is_enabled(),
+        resolved.code,
         has_user_code,
         is_transparent,
     );

@@ -20,8 +20,8 @@ pub use self::gen_selectors::{gen_enum_selectors, gen_struct_selector};
 pub use self::model::{ResolvedEnum, ResolvedStruct};
 pub use self::parse::{EnumContainerAttrs, StructAttrs};
 use self::size::{
-    gen_enum_size_assertion, gen_size_assertion, reject_size_with_generics,
-    wrap_size_assertion_in_const,
+    gen_default_size_cap_enum, gen_default_size_cap_struct, gen_enum_size_assertion,
+    gen_size_assertion, manifest_size_cap, reject_size_with_generics, wrap_size_assertion_in_const,
 };
 
 pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
@@ -66,27 +66,32 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
     let module_vis = attrs
         .visibility()
         .cloned()
+        .or_else(crate::utils::manifest_vis_default)
         .unwrap_or_else(|| input.vis.clone());
     let wrapped_selectors =
         wrap_in_module(&effective_module, &input.ident, &module_vis, &selectors);
 
-    let size_assert = attrs
-        .size
-        .as_ref()
-        .map_or_else(
-            || quote! {},
-            |c| gen_enum_size_assertion(&input.ident, &resolved.variants, c),
-        )
-        .wrap(wrap_size_assertion_in_const);
+    let (manifest_cap, cap_err) = manifest_size_cap();
+    let assertion = if let Some(c) = attrs.size.as_ref() {
+        gen_enum_size_assertion(&input.ident, &resolved.variants, c)
+    } else if let Some(cap) = manifest_cap.filter(|_| input.generics.params.is_empty()) {
+        gen_default_size_cap_enum(&input.ident, &resolved.variants, cap)
+    } else {
+        quote! {}
+    };
+    let size_assert = assertion.wrap(wrap_size_assertion_in_const);
 
     let keyword_docs = crate::keyword_docs::gen_keyword_docs(input, &path);
     let site_registration = gen_site_registration(&path);
+    let naming_err = crate::utils::manifest_naming().1;
 
     Ok(quote! {
         #wrapped_selectors
         #display
         #error
         #size_assert
+        #cap_err
+        #naming_err
         #keyword_docs
         #site_registration
     })
@@ -100,17 +105,21 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
     let display = gen_struct_display(&resolved);
     let error = gen_struct_error(&resolved, &path)?;
 
-    let size_assert = attrs
-        .container
-        .size
-        .as_ref()
-        .map_or_else(|| quote! {}, |c| gen_size_assertion(&input.ident, c))
-        .wrap(wrap_size_assertion_in_const);
+    let (manifest_cap, cap_err) = manifest_size_cap();
+    let assertion = if let Some(c) = attrs.container.size.as_ref() {
+        gen_size_assertion(&input.ident, c)
+    } else if let Some(cap) = manifest_cap.filter(|_| input.generics.params.is_empty()) {
+        gen_default_size_cap_struct(&input.ident, cap)
+    } else {
+        quote! {}
+    };
+    let size_assert = assertion.wrap(wrap_size_assertion_in_const);
 
     let effective_module = attrs.container.effective_module(false);
     let module_vis = attrs
         .visibility()
         .cloned()
+        .or_else(crate::utils::manifest_vis_default)
         .unwrap_or_else(|| input.vis.clone());
     let wrapped_selector = if attrs.transparent {
         selector
@@ -125,12 +134,15 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
 
     let keyword_docs = crate::keyword_docs::gen_keyword_docs(input, &path);
     let site_registration = gen_site_registration(&path);
+    let naming_err = crate::utils::manifest_naming().1;
 
     Ok(quote! {
         #wrapped_selector
         #display
         #error
         #size_assert
+        #cap_err
+        #naming_err
         #keyword_docs
         #site_registration
     })

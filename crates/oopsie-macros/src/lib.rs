@@ -64,7 +64,10 @@ pub(crate) mod utils;
 #[proc_macro_derive(Oopsie, attributes(oopsie))]
 pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     match derive::expand(input.into()) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            let dep = utils::manifest_dep_token();
+            quote::quote! { #tokens #dep }.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }
@@ -168,7 +171,10 @@ pub fn oopsie(
     element: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     match oopsie_attr::expand(attrs.into(), element.into()) {
-        Ok(tokens) => tokens.into(),
+        Ok(tokens) => {
+            let dep = utils::manifest_dep_token();
+            quote::quote! { #tokens #dep }.into()
+        }
         Err(err) => err.to_compile_error().into(),
     }
 }

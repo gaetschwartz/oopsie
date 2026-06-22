@@ -21,14 +21,17 @@ proc-macro = true
 default = []
 unstable-error-generic-member-access = []
 unstable = ["unstable-error-generic-member-access"]
+settings = ["dep:__serde", "dep:toml_edit"]
 
 [dependencies]
+__serde = { package = "serde", version = "1.0.228", features = ["derive"], optional = true }
 convert_case = "0.11"
 darling = "0.23"
 derive-syn-parse = "0.2.0"
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full", "visit"] }
+toml_edit = { version = "0.25.12", features = ["parse", "serde"], optional = true, default-features = false }
 
 [lints]
 workspace = true

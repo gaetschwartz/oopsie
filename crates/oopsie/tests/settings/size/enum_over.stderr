@@ -1,0 +1,7 @@
+error[E0080]: evaluation panicked: the size of BigEnum must be at most 16 bytes
+              set by `[package.metadata.oopsie] max-size` in Cargo.toml
+              Heavy is its largest variant
+ --> enum_over.rs:7:5
+  |
+7 |     Heavy { data: [u8; 32] },
+  |     ^^^^^ evaluation of `_::size_check::_` failed here

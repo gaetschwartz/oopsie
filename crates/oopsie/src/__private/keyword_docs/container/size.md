@@ -18,3 +18,10 @@ pub enum AppError {
 }
 # fn main() {}
 ```
+
+### Project-wide default
+
+With the `settings` feature, `max-size = N` under `[package.metadata.oopsie]` in
+the crate's `Cargo.toml` caps every error derived in that crate, as if each
+carried `#[oopsie(size(..=N))]`. A per-type `size(...)` always overrides it, and
+`max-size = 0` is rejected (remove the key to disable the cap).

@@ -1,0 +1,6 @@
+error[E0080]: evaluation panicked: the size of Big must be at most 16 bytes
+              set by `[package.metadata.oopsie] max-size` in Cargo.toml
+ --> struct_over.rs:4:17
+  |
+4 | #[derive(Debug, Oopsie)]
+  |                 ^^^^^^ evaluation of `_::size_check::_` failed here

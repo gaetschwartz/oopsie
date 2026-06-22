@@ -227,6 +227,453 @@ impl<T: FromMeta> FromMeta for MaybeAloneOopsieValue<T> {
     }
 }
 
+/// A token tying generated code to the consumer's `Cargo.toml` so editing
+/// `[package.metadata.oopsie]` re-runs the macro; nothing when `settings` is off.
+pub fn manifest_dep_token() -> proc_macro2::TokenStream {
+    #[cfg(feature = "settings")]
+    {
+        settings::manifest_dep_token()
+    }
+    #[cfg(not(feature = "settings"))]
+    {
+        quote::quote! {}
+    }
+}
+
+/// A project-wide selector-suffix default, resolved from the manifest.
+pub enum SuffixDefault {
+    /// No suffix — selector name equals the variant/type name.
+    Off,
+    /// A custom suffix appended to the stripped name.
+    Name(String),
+}
+
+/// Resolved naming/visibility defaults from `[package.metadata.oopsie]`. Each is
+/// `None` when unset (the per-kind hardcoded default applies); a per-type
+/// `#[oopsie(...)]` attribute always overrides these.
+#[derive(Default)]
+pub struct NamingDefaults {
+    pub module: Option<bool>,
+    pub module_suffix: Option<String>,
+    pub suffix: Option<SuffixDefault>,
+    pub vis: Option<syn::Visibility>,
+}
+
+/// Resolved `traced` defaults from `[package.metadata.oopsie]`. `None` keeps the
+/// hardcoded default; a per-attribute `traced(...)` setting overrides these.
+#[derive(Default)]
+pub struct TracedDefaults {
+    pub traced: Option<bool>,
+    pub location: Option<bool>,
+    pub timestamp: Option<bool>,
+    pub packed: Option<bool>,
+    pub boxed: Option<bool>,
+    pub code: Option<bool>,
+}
+
+/// Naming/visibility defaults plus a `compile_error!` for an invalid manifest
+/// (empty when the `settings` feature is off or nothing is configured).
+pub fn manifest_naming() -> (NamingDefaults, proc_macro2::TokenStream) {
+    #[cfg(feature = "settings")]
+    {
+        settings::naming_defaults()
+    }
+    #[cfg(not(feature = "settings"))]
+    {
+        (NamingDefaults::default(), quote::quote! {})
+    }
+}
+
+/// `traced` defaults plus a `compile_error!` for an invalid manifest (empty when
+/// the `settings` feature is off or nothing is configured).
+pub fn manifest_traced() -> (TracedDefaults, proc_macro2::TokenStream) {
+    #[cfg(feature = "settings")]
+    {
+        settings::traced_defaults()
+    }
+    #[cfg(not(feature = "settings"))]
+    {
+        (TracedDefaults::default(), quote::quote! {})
+    }
+}
+
+// Per-knob naming accessors for the deep codegen sites. They drop the validation
+// `compile_error!` — that is surfaced once via `manifest_naming().1` at the
+// expansion entry, which aborts the build, so the defaults returned here on a
+// bad manifest never reach generated code.
+fn naming() -> NamingDefaults {
+    manifest_naming().0
+}
+
+pub fn manifest_module_default() -> Option<bool> {
+    naming().module
+}
+
+pub fn manifest_module_suffix() -> Option<String> {
+    naming().module_suffix
+}
+
+pub fn manifest_suffix_default() -> Option<SuffixDefault> {
+    naming().suffix
+}
+
+pub fn manifest_vis_default() -> Option<syn::Visibility> {
+    naming().vis
+}
+
+#[cfg(feature = "settings")]
+pub mod settings {
+    use std::str::FromStr as _;
+    use std::sync::OnceLock;
+
+    use __serde::Deserialize as _;
+    use __serde::de::IntoDeserializer as _;
+    use quote::quote;
+
+    #[derive(Debug, Clone, Default, __serde::Deserialize)]
+    #[serde(crate = "__serde", rename_all = "kebab-case", deny_unknown_fields)]
+    pub struct Settings {
+        max_size: Option<usize>,
+        default_suffix: Option<RawSuffix>,
+        default_vis: Option<String>,
+        module: Option<ModuleSetting>,
+        traced: Option<TracedSetting>,
+    }
+
+    /// `default-suffix` accepts a name string or `false` (disable). `true` is
+    /// rejected as ambiguous (it would force the struct-style suffix onto enums).
+    #[derive(Debug, Clone, __serde::Deserialize)]
+    #[serde(crate = "__serde", untagged)]
+    enum RawSuffix {
+        Toggle(bool),
+        Name(String),
+    }
+
+    /// `module` is either a bool (wrap on/off) or a table of options.
+    #[derive(Debug, Clone, __serde::Deserialize)]
+    #[serde(crate = "__serde", untagged)]
+    enum ModuleSetting {
+        Toggle(bool),
+        Table(ModuleTable),
+    }
+
+    #[derive(Debug, Clone, __serde::Deserialize)]
+    #[serde(crate = "__serde", rename_all = "kebab-case", deny_unknown_fields)]
+    struct ModuleTable {
+        enabled: Option<bool>,
+        suffix: Option<String>,
+    }
+
+    /// `traced` is either a bool (trace-by-default on/off) or a table whose keys
+    /// set the defaults for the matching `traced(...)` sub-toggles. `enabled`
+    /// controls trace-by-default; the sub-toggle defaults apply whenever tracing
+    /// is active (globally or per type).
+    #[derive(Debug, Clone, __serde::Deserialize)]
+    #[serde(crate = "__serde", untagged)]
+    enum TracedSetting {
+        Toggle(bool),
+        Table(TracedTable),
+    }
+
+    #[derive(Debug, Clone, __serde::Deserialize)]
+    #[serde(crate = "__serde", rename_all = "kebab-case", deny_unknown_fields)]
+    struct TracedTable {
+        enabled: Option<bool>,
+        location: Option<bool>,
+        timestamp: Option<bool>,
+        packed: Option<bool>,
+        boxed: Option<bool>,
+        code: Option<bool>,
+    }
+
+    const MANIFEST_ENV_VAR: &str = "CARGO_MANIFEST_DIR";
+
+    fn compile_error(msg: &str) -> proc_macro2::TokenStream {
+        quote! { ::core::compile_error!(#msg); }
+    }
+
+    /// A non-empty run of identifier characters, so appending it to `name_`
+    /// yields a valid identifier.
+    fn is_ident_fragment(s: &str) -> bool {
+        !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+    }
+
+    /// Parse `[package.metadata.oopsie]` out of a Cargo manifest. A manifest with
+    /// no such section yields default (empty) settings; only a malformed section
+    /// or an unknown / invalid key is an error.
+    fn parse_settings(manifest_toml: &str) -> Result<Settings, String> {
+        let mut manifest =
+            toml_edit::DocumentMut::from_str(manifest_toml).map_err(|e| e.to_string())?;
+        let Some(metadata) = manifest
+            .as_table_mut()
+            .get_mut("package")
+            .and_then(|item| item.as_table_mut())
+            .and_then(|table| table.get_mut("metadata"))
+            .and_then(|item| item.as_table_mut())
+            .and_then(|table| table.get_mut("oopsie"))
+            .and_then(|item| item.as_table_mut())
+        else {
+            return Ok(Settings::default());
+        };
+        Settings::deserialize(
+            toml_edit::Value::from(std::mem::take(metadata).into_inline_table())
+                .into_deserializer(),
+        )
+        .map_err(|e| format!("invalid [package.metadata.oopsie] section: {e}"))
+    }
+
+    fn read_settings() -> Result<Settings, String> {
+        let manifest_dir = std::env::var(MANIFEST_ENV_VAR).map_err(|e| e.to_string())?;
+        let cargo_toml_path = std::path::Path::new(&manifest_dir).join("Cargo.toml");
+        let content = std::fs::read_to_string(&cargo_toml_path)
+            .map_err(|e| format!("failed to read {}: {e}", cargo_toml_path.display()))?;
+        parse_settings(&content)
+    }
+
+    fn cached_settings() -> &'static Result<Settings, String> {
+        static CACHE: OnceLock<Result<Settings, String>> = OnceLock::new();
+        CACHE.get_or_init(read_settings)
+    }
+
+    /// Reject `Some(0)` — a zero cap can never be satisfied, so it's a config
+    /// mistake rather than a meaningful limit.
+    fn validate_cap(max_size: Option<usize>) -> Result<Option<usize>, String> {
+        match max_size {
+            Some(0) => Err(
+                "[package.metadata.oopsie] max-size is 0, which is not a valid size \
+                            limit; remove the key to disable the cap instead"
+                    .to_owned(),
+            ),
+            Some(n) => Ok(Some(n)),
+            None => Ok(None),
+        }
+    }
+
+    /// The validated project-wide size cap declared in the consumer's manifest.
+    pub fn cap() -> Result<Option<usize>, String> {
+        match cached_settings() {
+            Ok(settings) => validate_cap(settings.max_size),
+            Err(e) => Err(e.clone()),
+        }
+    }
+
+    /// Resolve and validate the naming/visibility defaults. A manifest *parse*
+    /// error is reported once via [`cap`]; defer to it here (returning defaults +
+    /// no token) so a malformed manifest doesn't emit the same error per accessor.
+    pub fn naming_defaults() -> (super::NamingDefaults, proc_macro2::TokenStream) {
+        let Ok(settings) = cached_settings() else {
+            return (super::NamingDefaults::default(), quote! {});
+        };
+        match resolve_naming(settings) {
+            Ok(naming) => (naming, quote! {}),
+            Err(e) => (super::NamingDefaults::default(), compile_error(&e)),
+        }
+    }
+
+    fn resolve_naming(settings: &Settings) -> Result<super::NamingDefaults, String> {
+        let (module, module_suffix) = match &settings.module {
+            None => (None, None),
+            Some(ModuleSetting::Toggle(b)) => (Some(*b), None),
+            Some(ModuleSetting::Table(t)) => {
+                let suffix = match &t.suffix {
+                    Some(s) if !is_ident_fragment(s) => {
+                        return Err(format!(
+                            "[package.metadata.oopsie] module.suffix {s:?} is not a valid identifier fragment"
+                        ));
+                    }
+                    other => other.clone(),
+                };
+                (t.enabled, suffix)
+            }
+        };
+        let suffix = match &settings.default_suffix {
+            None => None,
+            Some(RawSuffix::Toggle(false)) => Some(super::SuffixDefault::Off),
+            Some(RawSuffix::Toggle(true)) => {
+                return Err(
+                    "[package.metadata.oopsie] default-suffix = true is ambiguous; \
+                            use a suffix name or `false` to disable"
+                        .to_owned(),
+                );
+            }
+            Some(RawSuffix::Name(s)) if !is_ident_fragment(s) => {
+                return Err(format!(
+                    "[package.metadata.oopsie] default-suffix {s:?} is not a valid identifier fragment"
+                ));
+            }
+            Some(RawSuffix::Name(s)) => Some(super::SuffixDefault::Name(s.clone())),
+        };
+        let vis = match &settings.default_vis {
+            None => None,
+            Some(v) => Some(syn::parse_str::<syn::Visibility>(v).map_err(|e| {
+                format!(
+                    "[package.metadata.oopsie] default-vis {v:?} is not a valid visibility: {e}"
+                )
+            })?),
+        };
+        Ok(super::NamingDefaults {
+            module,
+            module_suffix,
+            suffix,
+            vis,
+        })
+    }
+
+    /// Resolve the `traced` defaults (no validation needed — all booleans). A
+    /// manifest parse error is reported once via [`cap`]; defer to it here.
+    pub fn traced_defaults() -> (super::TracedDefaults, proc_macro2::TokenStream) {
+        let Ok(settings) = cached_settings() else {
+            return (super::TracedDefaults::default(), quote! {});
+        };
+        let resolved = match &settings.traced {
+            None => super::TracedDefaults::default(),
+            Some(TracedSetting::Toggle(b)) => super::TracedDefaults {
+                traced: Some(*b),
+                ..super::TracedDefaults::default()
+            },
+            Some(TracedSetting::Table(t)) => super::TracedDefaults {
+                traced: t.enabled,
+                location: t.location,
+                timestamp: t.timestamp,
+                packed: t.packed,
+                boxed: t.boxed,
+                code: t.code,
+            },
+        };
+        (resolved, quote! {})
+    }
+
+    /// A token tying generated code to the consumer's `Cargo.toml`, so editing
+    /// `[package.metadata.oopsie]` re-runs the macro.
+    pub fn manifest_dep_token() -> proc_macro2::TokenStream {
+        quote! {
+            const _: &[u8] = include_bytes!(concat!(env!(#MANIFEST_ENV_VAR), "/Cargo.toml"));
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn missing_section_is_default() {
+            assert_eq!(
+                parse_settings("[package]\nname = \"x\"\n")
+                    .unwrap()
+                    .max_size,
+                None
+            );
+        }
+
+        #[test]
+        fn reads_max_size() {
+            let settings = parse_settings("[package.metadata.oopsie]\nmax-size = 64\n").unwrap();
+            assert_eq!(settings.max_size, Some(64));
+        }
+
+        #[test]
+        fn rejects_unknown_key() {
+            assert!(parse_settings("[package.metadata.oopsie]\nfoo = 1\n").is_err());
+        }
+
+        #[test]
+        fn rejects_non_integer() {
+            assert!(parse_settings("[package.metadata.oopsie]\nmax-size = \"big\"\n").is_err());
+        }
+
+        #[test]
+        fn validate_cap_rejects_zero() {
+            assert!(validate_cap(Some(0)).is_err());
+            assert_eq!(validate_cap(Some(8)).unwrap(), Some(8));
+            assert_eq!(validate_cap(None).unwrap(), None);
+        }
+
+        fn naming(toml: &str) -> Result<super::super::NamingDefaults, String> {
+            resolve_naming(&parse_settings(toml).expect("valid toml"))
+        }
+
+        #[test]
+        fn module_table_suffix() {
+            let n =
+                naming("[package.metadata.oopsie]\nmodule = { suffix = \"errors\" }\n").unwrap();
+            assert_eq!(n.module_suffix.as_deref(), Some("errors"));
+            // A table without `enabled` leaves the per-kind default in place.
+            assert_eq!(n.module, None);
+        }
+
+        #[test]
+        fn module_bool_and_enabled_forms() {
+            assert_eq!(
+                naming("[package.metadata.oopsie]\nmodule = false\n")
+                    .unwrap()
+                    .module,
+                Some(false)
+            );
+            let t =
+                naming("[package.metadata.oopsie]\nmodule = { enabled = true, suffix = \"e\" }\n")
+                    .unwrap();
+            assert_eq!(t.module, Some(true));
+            assert_eq!(t.module_suffix.as_deref(), Some("e"));
+        }
+
+        #[test]
+        fn rejects_bad_module_suffix() {
+            assert!(
+                naming("[package.metadata.oopsie]\nmodule = { suffix = \"has space\" }\n").is_err()
+            );
+        }
+
+        #[test]
+        fn rejects_unknown_module_key() {
+            assert!(parse_settings("[package.metadata.oopsie]\nmodule = { bogus = 1 }\n").is_err());
+        }
+
+        #[test]
+        fn default_suffix_forms() {
+            use super::super::SuffixDefault;
+            let off = naming("[package.metadata.oopsie]\ndefault-suffix = false\n").unwrap();
+            assert!(matches!(off.suffix, Some(SuffixDefault::Off)));
+            let named = naming("[package.metadata.oopsie]\ndefault-suffix = \"Ctx\"\n").unwrap();
+            assert!(matches!(named.suffix, Some(SuffixDefault::Name(s)) if s == "Ctx"));
+            // `true` is ambiguous and rejected.
+            assert!(naming("[package.metadata.oopsie]\ndefault-suffix = true\n").is_err());
+        }
+
+        #[test]
+        fn parses_default_vis() {
+            let ok = naming("[package.metadata.oopsie]\ndefault-vis = \"pub(crate)\"\n").unwrap();
+            assert!(ok.vis.is_some());
+            assert!(naming("[package.metadata.oopsie]\ndefault-vis = \"bogus\"\n").is_err());
+        }
+
+        #[test]
+        fn traced_bool_and_table_forms() {
+            assert!(matches!(
+                parse_settings("[package.metadata.oopsie]\ntraced = true\n")
+                    .unwrap()
+                    .traced,
+                Some(TracedSetting::Toggle(true))
+            ));
+            let table = parse_settings(
+                "[package.metadata.oopsie]\n[package.metadata.oopsie.traced]\nlocation = false\n",
+            )
+            .unwrap()
+            .traced;
+            assert!(
+                matches!(table, Some(TracedSetting::Table(t)) if t.location == Some(false) && t.enabled.is_none())
+            );
+        }
+
+        #[test]
+        fn rejects_unknown_traced_key() {
+            assert!(parse_settings(
+                "[package.metadata.oopsie]\n[package.metadata.oopsie.traced]\nlocaiton = false\n"
+            )
+            .is_err());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use syn::parse_quote;

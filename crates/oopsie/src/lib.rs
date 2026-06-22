@@ -325,9 +325,62 @@ e.g. API error responses."
 //! | `chrono` | no | stable | `chrono::DateTime<Local>` timestamps for `traced(timestamp(chrono = true))` |
 //! | `jiff` | no | stable | `jiff::Timestamp` / `jiff::Zoned` timestamp capture |
 //! | `extras` | no | stable | the `extras` module: environment-snapshot `Capturable` helpers |
+//! | `settings` | no | stable | read project-wide defaults from `[package.metadata.oopsie]` |
 //! | `unstable` | no | nightly | umbrella for the two unstable features below |
 //! | `unstable-error-generic-member-access` | no | nightly | trace and diagnostic surfacing through the Provider API |
 //! | `unstable-try-trait-v2` | no | nightly | `?` converts a failed `Result` directly into a `Report` |
+//!
+//! # Project-wide settings
+//!
+//! With the `settings` feature, a `[package.metadata.oopsie]` table in a crate's
+//! `Cargo.toml` sets a default for every error derived in that crate. Each key is
+//! the project-wide form of a per-type `#[oopsie(...)]` attribute, which always
+//! overrides it. Settings are read from each crate's own manifest, never its
+//! dependencies'.
+//!
+//! | `[package.metadata.oopsie]` | per-type equivalent | effect |
+//! |---|---|---|
+//! | `max-size = 64` | `size(..=64)` | cap on the error type's size, in bytes |
+//! | `default-suffix = "Ctx"` | `suffix("Ctx")` | suffix on generated selector names |
+//! | `default-suffix = false` | `suffix(false)` | no selector suffix |
+//! | `default-vis = "pub(crate)"` | `vis(pub(crate))` | visibility of selectors and their module |
+//! | `module = true` | `module` | wrap selectors in a module |
+//! | `module = false` | `module(false)` | leave selectors at the crate top level |
+//! | `module = { suffix = "errors" }` | *(none)* | name the module `<type>_errors` |
+//! | `traced = true` | `traced` | trace by default |
+//! | `traced = { location = false }` | `traced(location = false)` | tune a `traced(...)` sub-toggle |
+//!
+//! `module` and `traced` each take a bool or a table:
+//!
+//! ```toml
+//! [package.metadata.oopsie.module]
+//! enabled = true
+//! suffix = "errors"
+//!
+//! [package.metadata.oopsie.traced]
+//! enabled = true
+//! location = true
+//! timestamp = false
+//! packed = true
+//! boxed = true
+//! code = true
+//! ```
+//!
+//! Notes:
+//!
+//! - `traced` only affects types using the `#[oopsie]` attribute; a bare
+//!   `#[derive(Oopsie)]` is never traced. `enabled` is the trace-by-default
+//!   switch; the other keys set defaults applied whenever a type is traced.
+//! - `default-suffix` (the selector suffix) and `module.suffix` (the module name)
+//!   are independent; `module.suffix` has no per-type form — a per-type
+//!   `module(name)` sets the module's full name instead.
+//! - `timestamp = true` records a `SystemTime`; the `chrono` / `provide` forms
+//!   stay per-type (`traced(timestamp(chrono = true))`).
+//!
+//! `max-size` rejects `0` and `default-suffix = true` is rejected as ambiguous
+//! (use a name or `false`); `module.suffix` / `default-suffix` must be valid
+//! identifier fragments and `default-vis` a valid visibility, else the build
+//! fails with a clear message.
 
 // Re-export the proc-macro attribute and derive.
 pub use oopsie_macros::Oopsie;

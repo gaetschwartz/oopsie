@@ -14,7 +14,7 @@ use syn::spanned::Spanned as _;
 
 use crate::derive;
 use crate::traced::args::TracedArgs;
-use crate::utils::FieldSetting;
+use crate::utils::{FieldSetting, TracedDefaults};
 
 #[derive(Debug, darling::FromMeta)]
 pub struct OopsieAttrArgs {
@@ -69,14 +69,38 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
     }
 
     let args = OopsieAttrArgs::from_list(&meta)?;
-    let needs_tracing = args.traced.as_ref().is_some_and(FieldSetting::is_enabled);
+    let (traced_defaults, manifest_err) = crate::utils::manifest_traced();
+    // Precedence: a per-attribute `traced(...)` (including `traced = false`)
+    // wins; otherwise the manifest `traced` default decides. When the manifest
+    // turns tracing on, every sub-toggle starts from its hardcoded default and
+    // falls through to the manifest in `resolve`.
+    let effective_traced: Option<std::borrow::Cow<'_, TracedArgs>> = match &args.traced {
+        Some(setting) if setting.is_enabled() => Some(setting.settings()),
+        Some(_) => None,
+        None if traced_defaults.traced == Some(true) => {
+            Some(std::borrow::Cow::Owned(TracedArgs::default()))
+        }
+        None => None,
+    };
     let keywords = crate::keyword_docs::collect_attr_keywords(&meta);
 
     match syn::parse2::<syn::Item>(input)? {
-        syn::Item::Enum(item_enum) => expand_enum(&args, needs_tracing, &keywords, item_enum),
-        syn::Item::Struct(item_struct) => {
-            expand_struct(&args, needs_tracing, &keywords, item_struct)
-        }
+        syn::Item::Enum(item_enum) => expand_enum(
+            &args,
+            effective_traced.as_deref(),
+            &traced_defaults,
+            &manifest_err,
+            &keywords,
+            item_enum,
+        ),
+        syn::Item::Struct(item_struct) => expand_struct(
+            &args,
+            effective_traced.as_deref(),
+            &traced_defaults,
+            &manifest_err,
+            &keywords,
+            item_struct,
+        ),
         other => Err(syn::Error::new_spanned(
             other,
             "`#[oopsie]` can only be applied to enums or structs",
@@ -86,7 +110,9 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
 
 fn expand_enum(
     args: &OopsieAttrArgs,
-    needs_tracing: bool,
+    traced: Option<&TracedArgs>,
+    defaults: &TracedDefaults,
+    manifest_err: &TokenStream2,
     keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
     mut item: syn::ItemEnum,
 ) -> syn::Result<TokenStream2> {
@@ -97,19 +123,8 @@ fn expand_enum(
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     // Step 1: inject diagnostic fields in place if requested.
-    if needs_tracing {
-        let traced = args
-            .traced
-            .as_ref()
-            .expect("needs_tracing implies traced is present")
-            .settings();
-        crate::traced::expand_enum::expand_enum(
-            &traced,
-            &traced.code,
-            &oopsie_path,
-            span,
-            &mut item,
-        )?;
+    if let Some(traced) = traced {
+        crate::traced::expand_enum::expand_enum(traced, defaults, &oopsie_path, span, &mut item)?;
     }
 
     // Step 2: generate Oopsie impls from the injected item. The derive layer
@@ -145,12 +160,15 @@ fn expand_enum(
         #item
         #impls
         #keyword_docs
+        #manifest_err
     })
 }
 
 fn expand_struct(
     args: &OopsieAttrArgs,
-    needs_tracing: bool,
+    traced: Option<&TracedArgs>,
+    defaults: &TracedDefaults,
+    manifest_err: &TokenStream2,
     keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
     mut item: syn::ItemStruct,
 ) -> syn::Result<TokenStream2> {
@@ -161,15 +179,10 @@ fn expand_struct(
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
     // Step 1: inject diagnostic fields in place if requested.
-    if needs_tracing {
-        let traced = args
-            .traced
-            .as_ref()
-            .expect("needs_tracing implies traced is present")
-            .settings();
+    if let Some(traced) = traced {
         crate::traced::expand_struct::expand_struct(
-            &traced,
-            &traced.code,
+            traced,
+            defaults,
             &oopsie_path,
             span,
             &mut item,
@@ -206,6 +219,7 @@ fn expand_struct(
         #item
         #impls
         #keyword_docs
+        #manifest_err
     })
 }
 

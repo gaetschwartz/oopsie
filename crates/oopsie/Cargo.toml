@@ -32,6 +32,7 @@ tracing = ["oopsie-core/tracing"]
 chrono = ["oopsie-core/chrono"]
 jiff = ["oopsie-core/jiff"]
 extras = ["oopsie-core/extras"]
+settings = ["oopsie-macros/settings"]
 
 [dependencies]
 linkme = { version = "0.3.36", optional = true }
@@ -55,10 +56,12 @@ miette = { version = "7.6.0", features = ["fancy"] }
 oopsie-core = { workspace = true, features = ["test-utils"] }
 rstest = "0.26.1"
 rustversion = "1.0.22"
+serde_json = "1"
 snafu = { version = "0.9.1", features = ["backtrace"] }
 strip-ansi-escapes = "0.2.1"
 test-with = { version = "0.16.1", default-features = false }
 thiserror = "2.0.18"
+toml_edit = "0.25.12"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.22", features = ["env-filter"] }
 trybuild = "1.0.116"

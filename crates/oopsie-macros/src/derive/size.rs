@@ -86,6 +86,59 @@ pub(super) fn gen_size_assertion(ident: &syn::Ident, size: &SizeAttr) -> TokenSt
     }
 }
 
+/// The validated project-wide size cap from `[package.metadata.oopsie]`, plus any
+/// `compile_error!` to surface a malformed manifest. `(None, empty)` when the
+/// `settings` feature is off or no cap is configured.
+pub(super) fn manifest_size_cap() -> (Option<usize>, TokenStream2) {
+    #[cfg(feature = "settings")]
+    {
+        match crate::utils::settings::cap() {
+            Ok(cap) => (cap, quote! {}),
+            Err(msg) => (None, quote! { ::core::compile_error!(#msg); }),
+        }
+    }
+    #[cfg(not(feature = "settings"))]
+    {
+        (None, quote! {})
+    }
+}
+
+/// Where the manifest cap comes from, shown on its own line under the size
+/// violation. Leads with a newline so it forms its own line.
+const CAP_SOURCE: &str = "\nset by `[package.metadata.oopsie] max-size` in Cargo.toml";
+
+/// The manifest-cap assertion for a struct: a plain `<= cap` check spanned at the
+/// type, since a struct has no variants to attribute the blame to.
+pub(super) fn gen_default_size_cap_struct(ident: &syn::Ident, cap: usize) -> TokenStream2 {
+    let msg = format!("the size of {ident} must be at most {cap} bytes{CAP_SOURCE}");
+    quote! {
+        ::core::assert!(
+            ::core::mem::size_of::<#ident>() <= #cap,
+            #msg
+        );
+    }
+}
+
+/// The manifest-cap assertion for an enum, reusing the variant-blaming upper-bound
+/// path so an over-cap enum points at its largest variant (on its own line, below
+/// the cap source).
+pub(super) fn gen_default_size_cap_enum(
+    ident: &syn::Ident,
+    variants: &[ResolvedVariant<'_>],
+    cap: usize,
+) -> TokenStream2 {
+    let headline = format!("the size of {ident} must be at most {cap} bytes");
+    gen_upper_bound(
+        ident,
+        variants,
+        ident.span(),
+        cap,
+        &headline,
+        "\n",
+        CAP_SOURCE,
+    )
+}
+
 /// A variant's payload size, as the sum of its field sizes. Each term carries
 /// the field's `#[cfg]` so a cfg-stripped field drops out instead of leaving its
 /// (now-removed) type referenced — the attribute-macro form expands before rustc
@@ -146,7 +199,7 @@ pub(super) fn gen_enum_size_assertion(
     };
 
     let upper_assert =
-        upper.map(|(limit, msg)| gen_upper_bound(ident, variants, span, limit, &msg));
+        upper.map(|(limit, msg)| gen_upper_bound(ident, variants, span, limit, &msg, "; ", ""));
     let lower_assert = lower.map(|(limit, msg)| {
         quote_spanned! {span=>
             ::core::assert!(::core::mem::size_of::<#ident>() >= #limit, #msg);
@@ -164,8 +217,11 @@ fn gen_upper_bound(
     variants: &[ResolvedVariant<'_>],
     attr_span: proc_macro2::Span,
     limit: usize,
-    msg: &str,
+    headline: &str,
+    blame_join: &str,
+    note: &str,
 ) -> TokenStream2 {
+    let whole_type_msg = format!("{headline}{note}");
     let fielded: Vec<&ResolvedVariant<'_>> = variants
         .iter()
         .filter(|v| !v.variant.fields.is_empty())
@@ -173,7 +229,7 @@ fn gen_upper_bound(
 
     if fielded.is_empty() {
         return quote_spanned! {attr_span=>
-            ::core::assert!(::core::mem::size_of::<#ident>() <= #limit, #msg);
+            ::core::assert!(::core::mem::size_of::<#ident>() <= #limit, #whole_type_msg);
         };
     }
 
@@ -187,14 +243,19 @@ fn gen_upper_bound(
     let checks = fielded.iter().map(|v| {
         let cfg = &v.cfg_attrs;
         let size = payload_size(v);
-        let variant_msg = format!("{msg}; {} is its largest variant", v.variant.ident);
+        // `note` (e.g. the cap source) sits between the headline and the blame so
+        // it reads as part of the size statement, not the variant clause.
+        let variant_msg = format!(
+            "{headline}{note}{blame_join}{} is its largest variant",
+            v.variant.ident
+        );
         let blame = quote_spanned! {v.variant.ident.span()=> ::core::panic!(#variant_msg) };
         quote! { #( #cfg )* if #size == max_payload { #blame } }
     });
 
     // Reached only when every field-bearing variant is cfg-stripped on this
     // target: report the whole-type violation rather than blaming a variant.
-    let fallback = quote_spanned! {attr_span=> ::core::panic!(#msg) };
+    let fallback = quote_spanned! {attr_span=> ::core::panic!(#whole_type_msg) };
 
     quote! {
         if ::core::mem::size_of::<#ident>() > #limit {
