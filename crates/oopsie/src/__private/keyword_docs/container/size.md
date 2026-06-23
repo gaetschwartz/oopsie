@@ -2,7 +2,11 @@ Asserts the size of the error type at compile time, so an accidental growth of
 the error fails the build instead of silently bloating every `Result` that
 carries it. Accepts an exact size or a range, in bytes.
 
-Forms: `size(N)`, `size(..=N)`, `size(N..)`, `size(N..=M)`.
+Forms: `size(N)`, `size(..=N)`, `size(..N)`, `size(N..)`, `size(N..=M)`, `size(N..M)`.
+Upper bounds may be inclusive (`..=N`, `N..=M`) or exclusive (`..N`, `N..M`). The
+unbounded `size(..)`, the unsatisfiable `size(..0)`, and any empty range (`N..N`,
+or `N..M` / `N..=M` whose low bound is not below / exceeds the high bound) are
+rejected.
 
 Not available on a generic error type: its size depends on the type arguments
 and has no single value to assert, so combining `size(...)` with generic
