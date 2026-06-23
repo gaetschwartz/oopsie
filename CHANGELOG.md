@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.13] - 2026-06-23
+
+### Fixed
+
+- An error type declared inside a function body (such as a throwaway type in a
+  `#[test]`) no longer fails to compile when a size cap applies to it — whether
+  from a per-type `#[oopsie(size(...))]` or a project-wide
+  `[workspace.metadata.oopsie]` / `[package.metadata.oopsie]` `max-size`. The
+  generated size check now resolves function-local error types.
+
 ## [0.1.0-rc.12] - 2026-06-23
 
 ### Added
