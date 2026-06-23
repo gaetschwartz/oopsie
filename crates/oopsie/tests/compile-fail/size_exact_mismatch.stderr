@@ -2,4 +2,4 @@ error[E0080]: evaluation panicked: `WrongSizeError` is 24 bytes, must be exactly
  --> tests/compile-fail/size_exact_mismatch.rs:9:5
   |
 9 |     HasData { data: String },
-  |     ^^^^^^^ evaluation of `_::size_check::_` failed here
+  |     ^^^^^^^ evaluation of `_::size_check` failed here

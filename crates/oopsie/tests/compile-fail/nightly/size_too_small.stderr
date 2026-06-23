@@ -2,4 +2,4 @@ error[E0080]: evaluation panicked: `TooSmallError` is 0 bytes, must be ≥ 9999
  --> tests/compile-fail/nightly/size_too_small.rs:6:30
   |
 6 | #[oopsie(module(false), size(9999..))]
-  |                              ^^^^^^ evaluation of `_::size_check::_` failed here
+  |                              ^^^^^^ evaluation of `_::size_check` failed here

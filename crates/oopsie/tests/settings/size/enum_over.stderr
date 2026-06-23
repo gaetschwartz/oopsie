@@ -3,4 +3,4 @@ error[E0080]: evaluation panicked: `BigEnum` is 32 bytes, must be ≤ 16; larges
  --> enum_over.rs:7:5
   |
 7 |     Heavy { data: [u8; 32] },
-  |     ^^^^^ evaluation of `_::size_check::_` failed here
+  |     ^^^^^ evaluation of `_::size_check` failed here

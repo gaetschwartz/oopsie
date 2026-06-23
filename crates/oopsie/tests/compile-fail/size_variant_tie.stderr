@@ -2,4 +2,4 @@ error[E0080]: evaluation panicked: `TieError` is 65 bytes, must be ≤ 8; larges
   --> tests/compile-fail/size_variant_tie.rs:13:5
    |
 13 |     First { a: [u8; 64] },
-   |     ^^^^^ evaluation of `_::size_check::_` failed here
+   |     ^^^^^ evaluation of `_::size_check` failed here

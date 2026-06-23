@@ -2,4 +2,4 @@ error[E0080]: evaluation panicked: `RangeTooSmallError` is 0 bytes, must be in 9
  --> tests/compile-fail/stable/size_range_too_small.rs:6:29
   |
 6 | #[oopsie(module(false), size(9999..=10000))]
-  |                             ^^^^^^^^^^^^^^ evaluation of `_::size_check::_` failed here
+  |                             ^^^^^^^^^^^^^^ evaluation of `_::size_check` failed here

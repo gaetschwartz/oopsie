@@ -36,7 +36,10 @@ pub(super) fn wrap_size_assertion_in_const(assertion: &TokenStream2) -> TokenStr
         return quote! {};
     }
     quote! {
-        const _: () = { mod size_check { use super::*; const _: () = { #assertion }; } };
+        const _: () = {
+            #[allow(non_upper_case_globals)]
+            const size_check: () = { #assertion };
+        };
     }
 }
 

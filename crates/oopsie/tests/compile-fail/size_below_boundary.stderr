@@ -2,4 +2,4 @@ error[E0080]: evaluation panicked: `BelowBoundary` is 24 bytes, must be < 24; la
  --> tests/compile-fail/size_below_boundary.rs:9:5
   |
 9 |     HasData { data: String },
-  |     ^^^^^^^ evaluation of `_::size_check::_` failed here
+  |     ^^^^^^^ evaluation of `_::size_check` failed here

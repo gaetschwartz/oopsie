@@ -3,4 +3,4 @@ error[E0080]: evaluation panicked: `Big` is 32 bytes, must be ≤ 16
  --> member/pkg_wins.rs:7:12
   |
 7 | pub struct Big {
-  |            ^^^ evaluation of `_::size_check::_` failed here
+  |            ^^^ evaluation of `_::size_check` failed here

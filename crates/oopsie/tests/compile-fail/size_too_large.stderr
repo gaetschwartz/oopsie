@@ -2,4 +2,4 @@ error[E0080]: evaluation panicked: `TooLargeError` is 24 bytes, must be ≤ 1; l
  --> tests/compile-fail/size_too_large.rs:9:5
   |
 9 |     HasData { data: String },
-  |     ^^^^^^^ evaluation of `_::size_check::_` failed here
+  |     ^^^^^^^ evaluation of `_::size_check` failed here

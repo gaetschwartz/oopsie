@@ -246,3 +246,22 @@ enum CfgGatedFieldError {
 fn size_cfg_stripped_field_excluded() {
     let _err = CfgGatedFieldError::Wee { byte: 0 };
 }
+
+// ---- a type declared inside a fn body: the size assertion must resolve it ----
+// A fn-local type is only lexically in scope, not a member of any module. The
+// size assertion expands as a sibling of the type, so it must name the type
+// directly rather than through a module hop that skips the function scope.
+
+#[test]
+fn size_check_resolves_fn_local_type() {
+    #[derive(Debug, Oopsie)]
+    #[oopsie(module(false), size(..=128))]
+    enum FnLocalError {
+        #[oopsie("fn-local: {msg}")]
+        Local { msg: String },
+    }
+
+    let _err = FnLocalError::Local {
+        msg: "x".to_owned(),
+    };
+}

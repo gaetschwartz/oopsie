@@ -2,4 +2,4 @@ error[E0080]: evaluation panicked: `OutOfRangeError` is 24 bytes, must be in 1..
  --> tests/compile-fail/size_out_of_range.rs:9:5
   |
 9 |     HasData { data: String },
-  |     ^^^^^^^ evaluation of `_::size_check::_` failed here
+  |     ^^^^^^^ evaluation of `_::size_check` failed here
