@@ -73,6 +73,8 @@ fn bound_phrase(constraint: &SizeConstraint) -> String {
         SizeConstraint::AtMost(n) => format!("≤ {n}"),
         SizeConstraint::AtLeast(n) => format!("≥ {n}"),
         SizeConstraint::Range(lo, hi) => format!("in {lo}..={hi}"),
+        SizeConstraint::Below(n) => format!("< {n}"),
+        SizeConstraint::RangeHalfOpen(lo, hi) => format!("in {lo}..{hi}"),
     }
 }
 
@@ -83,6 +85,8 @@ const fn upper_bound(constraint: &SizeConstraint) -> Option<(usize, bool)> {
         SizeConstraint::Exact(n) | SizeConstraint::AtMost(n) => Some((*n, true)),
         SizeConstraint::Range(_, hi) => Some((*hi, true)),
         SizeConstraint::AtLeast(_) => None,
+        SizeConstraint::Below(n) => Some((*n, false)),
+        SizeConstraint::RangeHalfOpen(_, hi) => Some((*hi, false)),
     }
 }
 
@@ -92,6 +96,8 @@ const fn lower_bound(constraint: &SizeConstraint) -> Option<usize> {
         SizeConstraint::Exact(n) | SizeConstraint::AtLeast(n) => Some(*n),
         SizeConstraint::Range(lo, _) => Some(*lo),
         SizeConstraint::AtMost(_) => None,
+        SizeConstraint::Below(_) => None,
+        SizeConstraint::RangeHalfOpen(lo, _) => Some(*lo),
     }
 }
 

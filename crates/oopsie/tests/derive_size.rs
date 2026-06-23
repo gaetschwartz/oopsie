@@ -187,6 +187,42 @@ fn size_cfg_stripped_variant_excluded() {
     let _err = CfgGatedError::Tiny { byte: 0 };
 }
 
+// ---- Below (..N): exclusive upper bound, passing side ----
+// Pins the largest size an exclusive upper bound accepts (just under the cap);
+// the failing boundary (size == cap) lives in compile-fail/size_below_boundary.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false), size(..25))]
+enum BelowError {
+    #[oopsie("below data: {msg}")]
+    BelowData { msg: String },
+}
+
+#[test]
+fn size_below_passes() {
+    assert_eq!(std::mem::size_of::<BelowError>(), 24);
+    let _err = BelowError::BelowData {
+        msg: "x".to_owned(),
+    };
+}
+
+// ---- Half-open (N..M): inclusive-lower boundary, passing side ----
+// Pins the inclusive-lower edge of a half-open range: a size equal to the low
+// bound passes.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false), size(24..256))]
+enum HalfOpenError {
+    #[oopsie("half-open data: {msg}")]
+    HalfOpenData { msg: String },
+}
+
+#[test]
+fn size_half_open_passes() {
+    assert_eq!(std::mem::size_of::<HalfOpenError>(), 24);
+    let _err = HalfOpenError::HalfOpenData {
+        msg: "x".to_owned(),
+    };
+}
+
 // ---- a cfg-stripped FIELD (not a whole variant) stays out of the size sum ----
 // Under the attribute-macro form the macro sees the field before rustc strips
 // `#[cfg]`, so the per-variant payload size must gate each field's term; without

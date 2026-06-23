@@ -27,10 +27,14 @@ pub enum SizeConstraint {
     Exact(usize),
     /// `size(..=N)` — at most N bytes.
     AtMost(usize),
+    /// `size(..N)` — fewer than N bytes.
+    Below(usize),
     /// `size(N..)` — at least N bytes.
     AtLeast(usize),
     /// `size(N..=M)` — between N and M bytes inclusive.
     Range(usize, usize),
+    /// `size(N..M)` — at least N and fewer than M bytes.
+    RangeHalfOpen(usize, usize),
 }
 
 impl Parse for SizeConstraint {
@@ -47,19 +51,47 @@ impl Parse for SizeConstraint {
                 let closed = matches!(r.limits, syn::RangeLimits::Closed(_));
                 let start = r.start.as_deref().map(expr_to_usize).transpose()?;
                 let end = r.end.as_deref().map(expr_to_usize).transpose()?;
+                let err = |msg: &str| Err(syn::Error::new_spanned(&expr, msg.to_owned()));
                 match (start, end, closed) {
+                    (None, None, _) => err(
+                        "`size(..)` places no constraint; specify a bound (e.g. `..=N`, `..N`, `N..`, `N..M`, `N..=M`) or remove it",
+                    ),
                     (None, Some(e), true) => Ok(Self::AtMost(e)),
+                    (None, Some(e), false) => {
+                        if e == 0 {
+                            err("`size(..0)` is unsatisfiable: a size is never negative")
+                        } else {
+                            Ok(Self::Below(e))
+                        }
+                    }
                     (Some(s), None, false) => Ok(Self::AtLeast(s)),
-                    (Some(s), Some(e), true) => Ok(Self::Range(s, e)),
-                    _ => Err(syn::Error::new_spanned(
-                        &expr,
-                        "unsupported range shape (use `..=N`, `N..`, or `N..=M`)",
-                    )),
+                    (Some(s), Some(e), true) => {
+                        if s > e {
+                            err("empty `size(N..=M)` range: the low bound exceeds the high bound")
+                        } else {
+                            Ok(Self::Range(s, e))
+                        }
+                    }
+                    (Some(s), Some(e), false) => {
+                        if s >= e {
+                            err(
+                                "empty `size(N..M)` range: the low bound is not below the high bound",
+                            )
+                        } else {
+                            Ok(Self::RangeHalfOpen(s, e))
+                        }
+                    }
+                    // Unreachable: `N..=` is not valid Rust syntax, so syn never
+                    // yields a closed range with no high bound. This arm exists
+                    // only to keep the tuple match exhaustive.
+                    (Some(_), None, true) => err(
+                        "unsupported range shape (an inclusive range needs a high bound: `N..=M`)",
+                    ),
                 }
             }
             _ => Err(syn::Error::new_spanned(
                 &expr,
-                "expected integer or range (e.g. `64`, `..=128`, `32..`, `32..=64`)",
+                "expected integer or range (e.g. `64`, `..=128`, `..64`, `32..`, `32..=64`, `32..64`)",
             )),
         }
     }
@@ -101,7 +133,7 @@ impl darling::FromMeta for SizeAttr {
                 })
             }
             syn::Meta::Path(_) | syn::Meta::NameValue(_) => Err(darling::Error::custom(
-                "expected `size(N)`, `size(..=N)`, `size(N..)`, or `size(N..=M)`",
+                "expected `size(N)`, `size(..=N)`, `size(..N)`, `size(N..)`, `size(N..=M)`, or `size(N..M)`",
             )
             .with_span(item)),
         }
@@ -1003,6 +1035,62 @@ mod tests {
         assert_eq!(
             SizeConstraint::from_meta(&meta).unwrap(),
             SizeConstraint::Range(32, 64)
+        );
+    }
+
+    #[test]
+    fn size_constraint_below() {
+        let meta: syn::Meta = parse_quote!(size(..64));
+        assert_eq!(
+            SizeConstraint::from_meta(&meta).unwrap(),
+            SizeConstraint::Below(64)
+        );
+    }
+
+    #[test]
+    fn size_constraint_range_half_open() {
+        let meta: syn::Meta = parse_quote!(size(32..64));
+        assert_eq!(
+            SizeConstraint::from_meta(&meta).unwrap(),
+            SizeConstraint::RangeHalfOpen(32, 64)
+        );
+    }
+
+    #[test]
+    fn size_constraint_full_range_rejected() {
+        let meta: syn::Meta = parse_quote!(size(..));
+        SizeConstraint::from_meta(&meta).unwrap_err();
+    }
+
+    #[test]
+    fn size_constraint_below_zero_rejected() {
+        let meta: syn::Meta = parse_quote!(size(..0));
+        SizeConstraint::from_meta(&meta).unwrap_err();
+    }
+
+    #[test]
+    fn size_constraint_empty_half_open_rejected() {
+        SizeConstraint::from_meta(&parse_quote!(size(64..64))).unwrap_err();
+        SizeConstraint::from_meta(&parse_quote!(size(64..32))).unwrap_err();
+    }
+
+    #[test]
+    fn size_constraint_empty_inclusive_rejected() {
+        // lo > hi is empty; lo == hi stays valid (single value)
+        SizeConstraint::from_meta(&parse_quote!(size(64..=32))).unwrap_err();
+        assert_eq!(
+            SizeConstraint::from_meta(&parse_quote!(size(64..=64))).unwrap(),
+            SizeConstraint::Range(64, 64)
+        );
+    }
+
+    #[test]
+    fn size_constraint_at_most_zero_valid() {
+        // `..=0` (≤ 0 ⇒ exactly 0 bytes, a ZST) stays valid — the deliberate
+        // counterpart to the rejected `..0`.
+        assert_eq!(
+            SizeConstraint::from_meta(&parse_quote!(size(..=0))).unwrap(),
+            SizeConstraint::AtMost(0)
         );
     }
 
