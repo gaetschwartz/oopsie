@@ -71,11 +71,11 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
     let wrapped_selectors =
         wrap_in_module(&effective_module, &input.ident, &module_vis, &selectors);
 
-    let (manifest_cap, cap_err) = manifest_size_cap();
+    let (cap_info, cap_err) = manifest_size_cap();
     let assertion = if let Some(c) = attrs.size.as_ref() {
         gen_enum_size_assertion(&input.ident, &resolved.variants, c)
-    } else if let Some(cap) = manifest_cap.filter(|_| input.generics.params.is_empty()) {
-        gen_default_size_cap_enum(&input.ident, &resolved.variants, cap)
+    } else if let Some((cap, section)) = cap_info.filter(|_| input.generics.params.is_empty()) {
+        gen_default_size_cap_enum(&input.ident, &resolved.variants, cap, section)
     } else {
         quote! {}
     };
@@ -105,11 +105,11 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
     let display = gen_struct_display(&resolved);
     let error = gen_struct_error(&resolved, &path)?;
 
-    let (manifest_cap, cap_err) = manifest_size_cap();
+    let (cap_info, cap_err) = manifest_size_cap();
     let assertion = if let Some(c) = attrs.container.size.as_ref() {
         gen_size_assertion(&input.ident, c)
-    } else if let Some(cap) = manifest_cap.filter(|_| input.generics.params.is_empty()) {
-        gen_default_size_cap_struct(&input.ident, cap)
+    } else if let Some((cap, section)) = cap_info.filter(|_| input.generics.params.is_empty()) {
+        gen_default_size_cap_struct(&input.ident, cap, section)
     } else {
         quote! {}
     };

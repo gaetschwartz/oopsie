@@ -920,12 +920,14 @@ dependencies = [
  "convert_case",
  "darling",
  "derive-syn-parse",
+ "glob",
  "insta",
  "oopsie",
  "proc-macro2",
  "quote",
  "serde",
  "syn",
+ "tempfile",
  "toml_edit",
 ]
 

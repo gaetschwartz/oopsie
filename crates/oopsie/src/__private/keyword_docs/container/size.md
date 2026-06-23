@@ -23,5 +23,7 @@ pub enum AppError {
 
 With the `settings` feature, `max-size = N` under `[package.metadata.oopsie]` in
 the crate's `Cargo.toml` caps every error derived in that crate, as if each
-carried `#[oopsie(size(..=N))]`. A per-type `size(...)` always overrides it, and
-`max-size = 0` is rejected (remove the key to disable the cap).
+carried `#[oopsie(size(..=N))]`. The same key is also honored from
+`[workspace.metadata.oopsie]` at the workspace root, applying to every member
+crate that opts into the `settings` feature. A per-type `size(...)` always
+overrides it, and `max-size = 0` is rejected (remove the key to disable the cap).

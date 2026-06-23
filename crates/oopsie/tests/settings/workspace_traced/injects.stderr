@@ -1,0 +1,5 @@
+error[E0063]: missing fields `__oopsie_location` and `__oopsie_traces` in initializer of `E`
+ --> member/injects.rs:9:13
+  |
+9 |     let _ = E { a: 0 };
+  |             ^ missing `__oopsie_location` and `__oopsie_traces`

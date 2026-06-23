@@ -5,6 +5,12 @@
 //! default manifest). A case with a sibling `<case>.stderr` must fail to compile
 //! and match it; otherwise it must build clean.
 //!
+//! A group that also carries a `<group>/workspace.toml` sidecar is a *workspace
+//! group*: instead of one detached crate it generates a real Cargo workspace (a
+//! virtual root manifest carrying the sidecar under `[workspace]`, plus one member
+//! crate holding the cases), so the macro's workspace-root discovery and
+//! `[workspace.metadata.oopsie]` merge are exercised end-to-end.
+//!
 //! trybuild itself can't drive this: it regenerates each fixture's `Cargo.toml`
 //! and drops `[package.metadata]`, so a fixture would never see custom settings.
 //! We instead build each group with one `cargo build --bins --keep-going
@@ -31,8 +37,9 @@ fn oopsie_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
 }
 
-/// `<workspace-root>/target/tests/settings` — generated crates live in `ws/`
-/// (sources rewritten only when changed); `target/` (a sibling) stays warm.
+/// `<workspace-root>/target/tests/settings` — standalone groups live in `ws/`
+/// (sources rewritten only when changed); `target/` (a sibling) stays warm and is
+/// the shared `CARGO_TARGET_DIR` for every group.
 fn target_base() -> PathBuf {
     oopsie_dir()
         .ancestors()
@@ -41,6 +48,14 @@ fn target_base() -> PathBuf {
         .join("target")
         .join("tests")
         .join("settings")
+}
+
+/// Workspace groups generate a real Cargo root, which must sit OUTSIDE the oopsie
+/// workspace tree: an excluded member otherwise walks up past the generated root
+/// to the oopsie root, which doesn't list it (cargo's "believes it's in a
+/// workspace when it's not"). A stable temp path keeps warm caching across runs.
+fn wsroot_base() -> PathBuf {
+    std::env::temp_dir().join("oopsie-settings-wsroot")
 }
 
 /// Deep-merge `overlay` into `base`: tables recurse, everything else is replaced.
@@ -57,9 +72,23 @@ fn merge_into(base: &mut toml_edit::Table, mut overlay: toml_edit::Table) {
     }
 }
 
-/// The generated crate manifest: a default with a `[[bin]]` per case, then the
-/// group's `oopsie.toml` merged in for its `[package.metadata.oopsie]`.
-fn manifest_for(group: &str, oopsie_path: &str, cases: &[String], sidecar: Option<&str>) -> String {
+/// The package manifest for a group's crate: `[package]` + a `[[bin]]` per case +
+/// the `oopsie` path dep, then the group's `oopsie.toml` merged in for its
+/// `[package.metadata.oopsie]`. `workspace_table` is the standalone empty
+/// `[workspace]` that detaches the crate from the parent workspace; a member of a
+/// generated workspace passes `false` so it resolves against the generated root.
+fn package_manifest(
+    group: &str,
+    oopsie_path: &str,
+    cases: &[String],
+    sidecar: Option<&str>,
+    workspace_table: bool,
+) -> String {
+    let workspace_table = if workspace_table {
+        "[workspace]\n\n"
+    } else {
+        ""
+    };
     let mut base = format!(
         "[package]\n\
          name = \"settings-{group}\"\n\
@@ -67,8 +96,7 @@ fn manifest_for(group: &str, oopsie_path: &str, cases: &[String], sidecar: Optio
          edition = \"2024\"\n\
          autobins = false\n\
          \n\
-         [workspace]\n\
-         \n\
+         {workspace_table}\
          [dependencies]\n\
          oopsie = {{ path = {oopsie_path:?}, default-features = false, features = [\"settings\"] }}\n",
     );
@@ -89,6 +117,23 @@ fn manifest_for(group: &str, oopsie_path: &str, cases: &[String], sidecar: Optio
     doc.to_string()
 }
 
+/// The virtual root manifest for a workspace group: `[workspace] resolver = "2"`
+/// with the group's `workspace.toml` deep-merged under `[workspace]`. The sidecar
+/// fully controls membership — no default `members` is injected.
+fn workspace_root_manifest(group: &str, sidecar: &str) -> String {
+    let mut doc = "[workspace]\nresolver = \"2\"\n"
+        .parse::<toml_edit::DocumentMut>()
+        .expect("root manifest base parses");
+    let overlay = sidecar
+        .parse::<toml_edit::DocumentMut>()
+        .unwrap_or_else(|e| panic!("[{group}] workspace.toml does not parse: {e}"));
+    let workspace = doc["workspace"]
+        .as_table_mut()
+        .expect("workspace table present");
+    merge_into(workspace, overlay.into_table());
+    doc.to_string()
+}
+
 /// Write `content` to `path` only if it differs, so an unchanged case keeps its
 /// mtime and cargo can reuse the cached build (warm re-runs stay fast).
 fn write_if_changed(path: &Path, content: &str) {
@@ -103,28 +148,63 @@ struct Outcome {
     rendered: String,
 }
 
+/// Sidecars read alongside a group's `*.rs` cases.
+struct Sidecars {
+    oopsie: Option<String>,
+    /// Present iff this is a workspace group (`None` keeps the standalone layout).
+    workspace: Option<String>,
+}
+
 /// Build one group as a multi-bin crate; returns each case's rendered errors.
+///
+/// A standalone group (no `workspace.toml`) builds one detached crate under `ws/`.
+/// A workspace group generates a virtual root + member crate (out of tree, see
+/// [`wsroot_base`]) and builds in the member dir, so the macro walks up to the
+/// generated root.
 fn build_group(
     group: &str,
     oopsie_path: &str,
     cases: &[(String, String)],
-    sidecar: Option<&str>,
+    sidecars: &Sidecars,
 ) -> BTreeMap<String, Outcome> {
     let base = target_base();
-    let crate_dir = base.join("ws").join(group);
-    std::fs::create_dir_all(&crate_dir).expect("create group crate dir");
-
     let stems: Vec<String> = cases.iter().map(|(stem, _)| stem.clone()).collect();
-    write_if_changed(
-        &crate_dir.join("Cargo.toml"),
-        &manifest_for(group, oopsie_path, &stems, sidecar),
-    );
+
+    let build_dir = if let Some(workspace_sidecar) = &sidecars.workspace {
+        let root_dir = wsroot_base().join(group);
+        let member_dir = root_dir.join("member");
+        std::fs::create_dir_all(&member_dir).expect("create workspace member dir");
+        write_if_changed(
+            &root_dir.join("Cargo.toml"),
+            &workspace_root_manifest(group, workspace_sidecar),
+        );
+        write_if_changed(
+            &member_dir.join("Cargo.toml"),
+            &package_manifest(
+                group,
+                oopsie_path,
+                &stems,
+                sidecars.oopsie.as_deref(),
+                false,
+            ),
+        );
+        member_dir
+    } else {
+        let crate_dir = base.join("ws").join(group);
+        std::fs::create_dir_all(&crate_dir).expect("create group crate dir");
+        write_if_changed(
+            &crate_dir.join("Cargo.toml"),
+            &package_manifest(group, oopsie_path, &stems, sidecars.oopsie.as_deref(), true),
+        );
+        crate_dir
+    };
+
     for (stem, source) in cases {
-        write_if_changed(&crate_dir.join(format!("{stem}.rs")), source);
+        write_if_changed(&build_dir.join(format!("{stem}.rs")), source);
     }
 
     let output = Command::new(cargo())
-        .current_dir(&crate_dir)
+        .current_dir(&build_dir)
         .arg("build")
         .arg("--bins")
         .arg("--keep-going")
@@ -245,8 +325,11 @@ fn settings_fixtures() {
             .to_string_lossy()
             .into_owned();
         let cases = cases_in(group_dir);
-        let sidecar = std::fs::read_to_string(group_dir.join("oopsie.toml")).ok();
-        let outcomes = build_group(&group, &oopsie_path, &cases, sidecar.as_deref());
+        let sidecars = Sidecars {
+            oopsie: std::fs::read_to_string(group_dir.join("oopsie.toml")).ok(),
+            workspace: std::fs::read_to_string(group_dir.join("workspace.toml")).ok(),
+        };
+        let outcomes = build_group(&group, &oopsie_path, &cases, &sidecars);
 
         for (stem, _) in &cases {
             let outcome = &outcomes[stem];

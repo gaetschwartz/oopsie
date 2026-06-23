@@ -1,0 +1,4 @@
+members = ["member"]
+[metadata.oopsie]
+max-size = 64
+default-suffix = "Ctx"

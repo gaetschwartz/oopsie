@@ -1,0 +1,3 @@
+members = ["member"]
+[metadata.oopsie]
+traced = true

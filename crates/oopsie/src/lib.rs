@@ -333,12 +333,13 @@ e.g. API error responses."
 //! # Project-wide settings
 //!
 //! With the `settings` feature, a `[package.metadata.oopsie]` table in a crate's
-//! `Cargo.toml` sets a default for every error derived in that crate. Each key is
-//! the project-wide form of a per-type `#[oopsie(...)]` attribute, which always
-//! overrides it. Settings are read from each crate's own manifest, never its
+//! `Cargo.toml` sets a default for every error derived in that crate. The same
+//! keys may also be declared once at the workspace root under
+//! `[workspace.metadata.oopsie]`, so a multi-crate workspace can share a single
+//! set of defaults. Settings are read from each crate's own manifest, never its
 //! dependencies'.
 //!
-//! | `[package.metadata.oopsie]` | per-type equivalent | effect |
+//! | key | per-type equivalent | effect |
 //! |---|---|---|
 //! | `max-size = 64` | `size(..=64)` | cap on the error type's size, in bytes |
 //! | `default-suffix = "Ctx"` | `suffix("Ctx")` | suffix on generated selector names |
@@ -366,7 +367,24 @@ e.g. API error responses."
 //! code = true
 //! ```
 //!
-//! Notes:
+//! ## Precedence
+//!
+//! Each knob resolves independently, in this order (first set value wins):
+//!
+//! 1. A per-type `#[oopsie(...)]` attribute.
+//! 2. The crate's own `[package.metadata.oopsie]`.
+//! 3. `[workspace.metadata.oopsie]` at the workspace root.
+//! 4. The hardcoded default.
+//!
+//! Setting one key in `[package.metadata.oopsie]` does not discard the remaining
+//! keys inherited from the workspace — each knob is resolved on its own.
+//! A crate that the workspace `exclude`s does not inherit workspace settings.
+//!
+//! When `max-size` is exceeded, the error names its source — either
+//! `[package.metadata.oopsie] max-size` or `[workspace.metadata.oopsie] max-size`
+//! — so the right table is clear.
+//!
+//! ## Notes
 //!
 //! - `traced` only affects types using the `#[oopsie]` attribute; a bare
 //!   `#[derive(Oopsie)]` is never traced. `enabled` is the trace-by-default

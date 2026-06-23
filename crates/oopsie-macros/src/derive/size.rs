@@ -86,14 +86,16 @@ pub(super) fn gen_size_assertion(ident: &syn::Ident, size: &SizeAttr) -> TokenSt
     }
 }
 
-/// The validated project-wide size cap from `[package.metadata.oopsie]`, plus any
+/// The validated project-wide size cap from `[package.metadata.oopsie]` or
+/// `[workspace.metadata.oopsie]`, paired with its source section label, plus any
 /// `compile_error!` to surface a malformed manifest. `(None, empty)` when the
 /// `settings` feature is off or no cap is configured.
-pub(super) fn manifest_size_cap() -> (Option<usize>, TokenStream2) {
+pub(super) fn manifest_size_cap() -> (Option<(usize, &'static str)>, TokenStream2) {
     #[cfg(feature = "settings")]
     {
         match crate::utils::settings::cap() {
-            Ok(cap) => (cap, quote! {}),
+            Ok(Some((cap, section))) => (Some((cap, section)), quote! {}),
+            Ok(None) => (None, quote! {}),
             Err(msg) => (None, quote! { ::core::compile_error!(#msg); }),
         }
     }
@@ -103,14 +105,22 @@ pub(super) fn manifest_size_cap() -> (Option<usize>, TokenStream2) {
     }
 }
 
-/// Where the manifest cap comes from, shown on its own line under the size
-/// violation. Leads with a newline so it forms its own line.
-const CAP_SOURCE: &str = "\nset by `[package.metadata.oopsie] max-size` in Cargo.toml";
+/// The cap-source line shown on its own line under the size violation, naming the
+/// manifest section the cap came from. Leads with a newline so it forms its own
+/// line.
+fn cap_source_line(section: &str) -> String {
+    format!("\nset by `{section}` in Cargo.toml")
+}
 
 /// The manifest-cap assertion for a struct: a plain `<= cap` check spanned at the
 /// type, since a struct has no variants to attribute the blame to.
-pub(super) fn gen_default_size_cap_struct(ident: &syn::Ident, cap: usize) -> TokenStream2 {
-    let msg = format!("the size of {ident} must be at most {cap} bytes{CAP_SOURCE}");
+pub(super) fn gen_default_size_cap_struct(
+    ident: &syn::Ident,
+    cap: usize,
+    section: &str,
+) -> TokenStream2 {
+    let source = cap_source_line(section);
+    let msg = format!("the size of {ident} must be at most {cap} bytes{source}");
     quote! {
         ::core::assert!(
             ::core::mem::size_of::<#ident>() <= #cap,
@@ -126,6 +136,7 @@ pub(super) fn gen_default_size_cap_enum(
     ident: &syn::Ident,
     variants: &[ResolvedVariant<'_>],
     cap: usize,
+    section: &str,
 ) -> TokenStream2 {
     let headline = format!("the size of {ident} must be at most {cap} bytes");
     gen_upper_bound(
@@ -135,7 +146,7 @@ pub(super) fn gen_default_size_cap_enum(
         cap,
         &headline,
         "\n",
-        CAP_SOURCE,
+        &cap_source_line(section),
     )
 }
 
