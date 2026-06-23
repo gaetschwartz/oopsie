@@ -240,6 +240,82 @@ pub mod __private {
         }
     }
 
+    /// Fixed-capacity const string builder: concatenate string slices and base-10
+    /// `usize`s in a `const` context, then borrow the result as `&str` — e.g. to
+    /// feed a const `panic!("{}", …)` with a computed message. `N` is the byte
+    /// capacity; callers size it from the pieces (`Σ part.len() + 20·#usize`) so a
+    /// push never runs past the buffer.
+    pub struct ConstStr<const N: usize> {
+        buf: [u8; N],
+        len: usize,
+    }
+
+    impl<const N: usize> ConstStr<N> {
+        #[inline]
+        #[must_use]
+        pub const fn new() -> Self {
+            Self {
+                buf: [0; N],
+                len: 0,
+            }
+        }
+
+        /// Append a string slice (its UTF-8 bytes verbatim).
+        #[inline]
+        #[must_use]
+        pub const fn str(mut self, s: &str) -> Self {
+            let b = s.as_bytes();
+            let mut i = 0;
+            while i < b.len() {
+                self.buf[self.len] = b[i];
+                self.len += 1;
+                i += 1;
+            }
+            self
+        }
+
+        /// Append a `usize` in base 10.
+        #[inline]
+        #[must_use]
+        pub const fn usize(mut self, mut n: usize) -> Self {
+            let mut digits = [0u8; 20];
+            let mut count = if n == 0 {
+                digits[0] = b'0';
+                1
+            } else {
+                0
+            };
+            while n > 0 {
+                digits[count] = b'0' + (n % 10) as u8;
+                n /= 10;
+                count += 1;
+            }
+            while count > 0 {
+                count -= 1;
+                self.buf[self.len] = digits[count];
+                self.len += 1;
+            }
+            self
+        }
+
+        /// Borrow the accumulated bytes as `&str`. Only valid UTF-8 and ASCII digits
+        /// are ever written, so the error branch is unreachable in correct use.
+        #[inline]
+        #[must_use]
+        pub const fn as_str(&self) -> &str {
+            match core::str::from_utf8(self.buf.split_at(self.len).0) {
+                Ok(s) => s,
+                Err(_) => panic!("ConstStr: built a non-utf8 message"),
+            }
+        }
+    }
+
+    impl<const N: usize> Default for ConstStr<N> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+
     #[cfg(feature = "chrono")]
     pub use chrono;
 }
@@ -332,3 +408,36 @@ impl_string_newtypes!(
     /// User-facing help text, intended to be shown in diagnostics.
     HelpText,
 );
+
+#[cfg(test)]
+mod const_str_tests {
+    use crate::__private::ConstStr;
+
+    #[test]
+    fn builds_interleaved_string() {
+        let s = ConstStr::<64>::new()
+            .str("`E` is ")
+            .usize(80)
+            .str(" bytes, must be ≤ 64");
+        assert_eq!(s.as_str(), "`E` is 80 bytes, must be ≤ 64");
+    }
+
+    #[test]
+    fn formats_zero_and_large() {
+        assert_eq!(ConstStr::<8>::new().as_str(), "");
+        assert_eq!(ConstStr::<32>::new().usize(0).as_str(), "0");
+        assert_eq!(
+            ConstStr::<32>::new().usize(18446744073709551615).as_str(),
+            "18446744073709551615"
+        );
+    }
+
+    #[test]
+    fn usable_in_const_context() {
+        const M: &str = {
+            const C: ConstStr<16> = ConstStr::new().str("n=").usize(42);
+            C.as_str()
+        };
+        assert_eq!(M, "n=42");
+    }
+}
