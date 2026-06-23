@@ -4,6 +4,22 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.12] - 2026-06-23
+
+### Added
+
+- `#[oopsie(size(...))]` now accepts exclusive-upper ranges: `size(..N)` (fewer
+  than `N` bytes) and `size(N..M)` (at least `N` and fewer than `M`). The
+  unbounded `size(..)`, the unsatisfiable `size(..0)`, and empty ranges (such as
+  `N..N`, or a low bound not below the high bound) are rejected at compile time.
+
+### Changed
+
+- When a type violates a `size(...)` constraint, the compile error now reports
+  the type's measured size — and, for an enum, the offending variant's size — for
+  example ``` `Error` is 80 bytes, must be ≤ 64; largest variant `Big` is 72
+  bytes ``` instead of only restating the limit.
+
 ## [0.1.0-rc.11] - 2026-06-23
 
 ### Added
