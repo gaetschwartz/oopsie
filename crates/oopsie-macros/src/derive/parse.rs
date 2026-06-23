@@ -1059,25 +1059,41 @@ mod tests {
     #[test]
     fn size_constraint_full_range_rejected() {
         let meta: syn::Meta = parse_quote!(size(..));
-        SizeConstraint::from_meta(&meta).unwrap_err();
+        assert_eq!(
+            SizeConstraint::from_meta(&meta).unwrap_err().to_string(),
+            "`size(..)` places no constraint; specify a bound (e.g. `..=N`, `..N`, `N..`, `N..M`, `N..=M`) or remove it",
+        );
     }
 
     #[test]
     fn size_constraint_below_zero_rejected() {
         let meta: syn::Meta = parse_quote!(size(..0));
-        SizeConstraint::from_meta(&meta).unwrap_err();
+        assert_eq!(
+            SizeConstraint::from_meta(&meta).unwrap_err().to_string(),
+            "`size(..0)` is unsatisfiable: a size is never negative",
+        );
     }
 
     #[test]
     fn size_constraint_empty_half_open_rejected() {
-        SizeConstraint::from_meta(&parse_quote!(size(64..64))).unwrap_err();
+        assert_eq!(
+            SizeConstraint::from_meta(&parse_quote!(size(64..64)))
+                .unwrap_err()
+                .to_string(),
+            "empty `size(N..M)` range: the low bound is not below the high bound",
+        );
         SizeConstraint::from_meta(&parse_quote!(size(64..32))).unwrap_err();
     }
 
     #[test]
     fn size_constraint_empty_inclusive_rejected() {
         // lo > hi is empty; lo == hi stays valid (single value)
-        SizeConstraint::from_meta(&parse_quote!(size(64..=32))).unwrap_err();
+        assert_eq!(
+            SizeConstraint::from_meta(&parse_quote!(size(64..=32)))
+                .unwrap_err()
+                .to_string(),
+            "empty `size(N..=M)` range: the low bound exceeds the high bound",
+        );
         assert_eq!(
             SizeConstraint::from_meta(&parse_quote!(size(64..=64))).unwrap(),
             SizeConstraint::Range(64, 64)
