@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: the size of WrongSizeError must be exactly 1 bytes; HasData is its largest variant
+error[E0080]: evaluation panicked: `WrongSizeError` is 24 bytes, must be exactly 1; largest variant `HasData` is 24 bytes
  --> tests/compile-fail/size_exact_mismatch.rs:9:5
   |
 9 |     HasData { data: String },

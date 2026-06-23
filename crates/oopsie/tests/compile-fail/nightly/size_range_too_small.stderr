@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: the size of RangeTooSmallError must be at least 9999 bytes
+error[E0080]: evaluation panicked: `RangeTooSmallError` is 0 bytes, must be in 9999..=10000
  --> tests/compile-fail/nightly/size_range_too_small.rs:6:30
   |
 6 | #[oopsie(module(false), size(9999..=10000))]

@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: the size of TooLargeError must be at most 1 bytes; HasData is its largest variant
+error[E0080]: evaluation panicked: `TooLargeError` is 24 bytes, must be ≤ 1; largest variant `HasData` is 24 bytes
  --> tests/compile-fail/size_too_large.rs:9:5
   |
 9 |     HasData { data: String },

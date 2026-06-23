@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: the size of TieError must be at most 8 bytes; First is its largest variant
+error[E0080]: evaluation panicked: `TieError` is 65 bytes, must be ≤ 8; largest variant `First` is 64 bytes
   --> tests/compile-fail/size_variant_tie.rs:13:5
    |
 13 |     First { a: [u8; 64] },

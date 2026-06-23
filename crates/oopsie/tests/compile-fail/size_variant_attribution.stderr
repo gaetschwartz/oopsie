@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: the size of BigError must be at most 8 bytes; Big is its largest variant
+error[E0080]: evaluation panicked: `BigError` is 66 bytes, must be ≤ 8; largest variant `Big` is 64 bytes
   --> tests/compile-fail/size_variant_attribution.rs:13:5
    |
 13 |     Big { buf: [u8; 64] },

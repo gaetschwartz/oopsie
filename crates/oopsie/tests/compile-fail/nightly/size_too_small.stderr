@@ -1,4 +1,4 @@
-error[E0080]: evaluation panicked: the size of TooSmallError must be at least 9999 bytes
+error[E0080]: evaluation panicked: `TooSmallError` is 0 bytes, must be ≥ 9999
  --> tests/compile-fail/nightly/size_too_small.rs:6:30
   |
 6 | #[oopsie(module(false), size(9999..))]

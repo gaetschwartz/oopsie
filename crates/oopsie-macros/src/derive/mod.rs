@@ -73,9 +73,9 @@ pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Resu
 
     let (cap_info, cap_err) = manifest_size_cap();
     let assertion = if let Some(c) = attrs.size.as_ref() {
-        gen_enum_size_assertion(&input.ident, &resolved.variants, c)
+        gen_enum_size_assertion(&path, &input.ident, &resolved.variants, c)
     } else if let Some((cap, section)) = cap_info.filter(|_| input.generics.params.is_empty()) {
-        gen_default_size_cap_enum(&input.ident, &resolved.variants, cap, section)
+        gen_default_size_cap_enum(&path, &input.ident, &resolved.variants, cap, section)
     } else {
         quote! {}
     };
@@ -107,9 +107,9 @@ pub fn expand_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<To
 
     let (cap_info, cap_err) = manifest_size_cap();
     let assertion = if let Some(c) = attrs.container.size.as_ref() {
-        gen_size_assertion(&input.ident, c)
+        gen_size_assertion(&path, &input.ident, c)
     } else if let Some((cap, section)) = cap_info.filter(|_| input.generics.params.is_empty()) {
-        gen_default_size_cap_struct(&input.ident, cap, section)
+        gen_default_size_cap_struct(&path, &input.ident, cap, section)
     } else {
         quote! {}
     };

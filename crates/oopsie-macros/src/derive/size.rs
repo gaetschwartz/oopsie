@@ -1,11 +1,12 @@
 //! Compile-time `size(...)` assertions.
 //!
-//! A `size(...)` constraint lowers to a `const` block asserting `size_of` of the
-//! error type against the requested byte bounds. For enums an upper-bound
-//! violation is attributed to the largest variant, so the diagnostic points
-//! there rather than at the attribute.
+//! A `size(...)` constraint lowers to a `const` block that compares `size_of` of
+//! the error type against the requested byte bounds and, on violation, panics
+//! with a message naming the measured size. For enums an upper-bound violation
+//! is attributed to the largest variant, so the diagnostic points there rather
+//! than at the attribute.
 
-use proc_macro2::TokenStream as TokenStream2;
+use proc_macro2::{Literal, Span, TokenStream as TokenStream2};
 use quote::{quote, quote_spanned};
 use syn::DeriveInput;
 
@@ -35,54 +36,7 @@ pub(super) fn wrap_size_assertion_in_const(assertion: &TokenStream2) -> TokenStr
         return quote! {};
     }
     quote! {
-        // Compile-time assertion that the size of the error type meets the specified constraint, if any.
         const _: () = { mod size_check { use super::*; const _: () = { #assertion }; } };
-    }
-}
-
-pub(super) fn gen_size_assertion(ident: &syn::Ident, size: &SizeAttr) -> TokenStream2 {
-    match &size.constraint {
-        SizeConstraint::Exact(n) => {
-            let msg = format!("the size of {ident} must be exactly {n} bytes");
-            quote_spanned! {size.span=>
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() == #n,
-                    #msg
-                );
-            }
-        }
-        SizeConstraint::AtMost(n) => {
-            let msg = format!("the size of {ident} must be at most {n} bytes");
-            quote_spanned! {size.span=>
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() <= #n,
-                    #msg
-                );
-            }
-        }
-        SizeConstraint::AtLeast(n) => {
-            let msg = format!("the size of {ident} must be at least {n} bytes");
-            quote_spanned! {size.span=>
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() >= #n,
-                    #msg
-                );
-            }
-        }
-        SizeConstraint::Range(lo, hi) => {
-            let msg_lo = format!("the size of {ident} must be at least {lo} bytes");
-            let msg_hi = format!("the size of {ident} must be at most {hi} bytes");
-            quote_spanned! {size.span=>
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() >= #lo,
-                    #msg_lo
-                );
-                ::core::assert!(
-                    ::core::mem::size_of::<#ident>() <= #hi,
-                    #msg_hi
-                );
-            }
-        }
     }
 }
 
@@ -112,42 +66,61 @@ fn cap_source_line(section: &str) -> String {
     format!("\nset by `{section}` in Cargo.toml")
 }
 
-/// The manifest-cap assertion for a struct: a plain `<= cap` check spanned at the
-/// type, since a struct has no variants to attribute the blame to.
-pub(super) fn gen_default_size_cap_struct(
-    ident: &syn::Ident,
-    cap: usize,
-    section: &str,
-) -> TokenStream2 {
-    let source = cap_source_line(section);
-    let msg = format!("the size of {ident} must be at most {cap} bytes{source}");
-    quote! {
-        ::core::assert!(
-            ::core::mem::size_of::<#ident>() <= #cap,
-            #msg
-        );
+/// Human phrase describing the allowed sizes, e.g. `≤ 64` or `in 32..=64`.
+fn bound_phrase(constraint: &SizeConstraint) -> String {
+    match constraint {
+        SizeConstraint::Exact(n) => format!("exactly {n}"),
+        SizeConstraint::AtMost(n) => format!("≤ {n}"),
+        SizeConstraint::AtLeast(n) => format!("≥ {n}"),
+        SizeConstraint::Range(lo, hi) => format!("in {lo}..={hi}"),
     }
 }
 
-/// The manifest-cap assertion for an enum, reusing the variant-blaming upper-bound
-/// path so an over-cap enum points at its largest variant (on its own line, below
-/// the cap source).
-pub(super) fn gen_default_size_cap_enum(
-    ident: &syn::Ident,
-    variants: &[ResolvedVariant<'_>],
-    cap: usize,
-    section: &str,
+/// The upper bound as `(limit, inclusive)`, if the constraint has one.
+/// `inclusive` ⇒ a violation is `size_of > limit`; exclusive ⇒ `size_of >= limit`.
+const fn upper_bound(constraint: &SizeConstraint) -> Option<(usize, bool)> {
+    match constraint {
+        SizeConstraint::Exact(n) | SizeConstraint::AtMost(n) => Some((*n, true)),
+        SizeConstraint::Range(_, hi) => Some((*hi, true)),
+        SizeConstraint::AtLeast(_) => None,
+    }
+}
+
+/// The (always-inclusive) lower bound, if any. A violation is `size_of < limit`.
+const fn lower_bound(constraint: &SizeConstraint) -> Option<usize> {
+    match constraint {
+        SizeConstraint::Exact(n) | SizeConstraint::AtLeast(n) => Some(*n),
+        SizeConstraint::Range(lo, _) => Some(*lo),
+        SizeConstraint::AtMost(_) => None,
+    }
+}
+
+/// Emit `panic!("{}", ConstStr::<N>::new().str(p0).usize(n0)….as_str())`, spanned
+/// at `span`. `parts` and `nums` interleave: `parts[0], nums[0], parts[1], …,
+/// parts[k]` with `parts.len() == nums.len() + 1`. `nums` are token streams that
+/// evaluate to `usize` in the generated context (e.g. `size_of::<E>()`).
+fn const_panic_msg(
+    oopsie_path: &syn::Path,
+    span: Span,
+    parts: &[String],
+    nums: &[TokenStream2],
 ) -> TokenStream2 {
-    let headline = format!("the size of {ident} must be at most {cap} bytes");
-    gen_upper_bound(
-        ident,
-        variants,
-        ident.span(),
-        cap,
-        &headline,
-        "\n",
-        &cap_source_line(section),
-    )
+    debug_assert_eq!(
+        parts.len(),
+        nums.len() + 1,
+        "const_panic_msg: parts must interleave around nums (parts.len() == nums.len() + 1)"
+    );
+    // 20 = max decimal digits of a usize (u64::MAX is 20 chars); reserve that per number.
+    let cap = parts.iter().map(String::len).sum::<usize>() + 20 * nums.len();
+    let cap = Literal::usize_unsuffixed(cap);
+    let mut chain = quote! { #oopsie_path::__private::ConstStr::<#cap>::new() };
+    for (i, part) in parts.iter().enumerate() {
+        chain = quote! { #chain.str(#part) };
+        if let Some(n) = nums.get(i) {
+            chain = quote! { #chain.usize(#n) };
+        }
+    }
+    quote_spanned! {span=> ::core::panic!("{}", #chain.as_str()) }
 }
 
 /// A variant's payload size, as the sum of its field sizes. Each term carries
@@ -171,76 +144,91 @@ fn payload_size(variant: &ResolvedVariant<'_>) -> TokenStream2 {
     }}
 }
 
-/// The size assertion for an enum. An upper-bound violation is blamed on the
-/// largest variant (the assertion is spanned at that variant); a lower-bound
-/// violation — being too *small* — isn't any one variant's fault and stays a
-/// whole-type assertion at the `size(...)` attribute.
-pub(super) fn gen_enum_size_assertion(
+/// Whole-type checks for a struct (or an enum's lower bound). `note` is appended
+/// to the message (empty for `size(...)`, the cap-source line for a manifest cap).
+fn gen_whole_type_checks(
+    oopsie_path: &syn::Path,
     ident: &syn::Ident,
-    variants: &[ResolvedVariant<'_>],
-    size: &SizeAttr,
-) -> TokenStream2 {
-    let span = size.span;
-    let (upper, lower) = match &size.constraint {
-        SizeConstraint::Exact(n) => {
-            let msg = format!("the size of {ident} must be exactly {n} bytes");
-            (Some((*n, msg.clone())), Some((*n, msg)))
-        }
-        SizeConstraint::AtMost(n) => (
-            Some((*n, format!("the size of {ident} must be at most {n} bytes"))),
-            None,
-        ),
-        SizeConstraint::AtLeast(n) => (
-            None,
-            Some((
-                *n,
-                format!("the size of {ident} must be at least {n} bytes"),
-            )),
-        ),
-        SizeConstraint::Range(lo, hi) => (
-            Some((
-                *hi,
-                format!("the size of {ident} must be at most {hi} bytes"),
-            )),
-            Some((
-                *lo,
-                format!("the size of {ident} must be at least {lo} bytes"),
-            )),
-        ),
-    };
-
-    let upper_assert =
-        upper.map(|(limit, msg)| gen_upper_bound(ident, variants, span, limit, &msg, "; ", ""));
-    let lower_assert = lower.map(|(limit, msg)| {
-        quote_spanned! {span=>
-            ::core::assert!(::core::mem::size_of::<#ident>() >= #limit, #msg);
-        }
-    });
-    quote! { #upper_assert #lower_assert }
-}
-
-/// Upper-bound (`<= limit`) half of an enum size assertion: if the enum exceeds
-/// `limit`, blame whichever variant holds the largest payload, spanned at that
-/// variant. With no field-bearing variant there's nothing to attribute, so it
-/// falls back to a whole-type assertion at the attribute.
-fn gen_upper_bound(
-    ident: &syn::Ident,
-    variants: &[ResolvedVariant<'_>],
-    attr_span: proc_macro2::Span,
-    limit: usize,
-    headline: &str,
-    blame_join: &str,
+    span: Span,
+    upper: Option<(usize, bool)>,
+    lower: Option<usize>,
+    phrase: &str,
     note: &str,
 ) -> TokenStream2 {
-    let whole_type_msg = format!("{headline}{note}");
+    let parts = [
+        format!("`{ident}` is "),
+        format!(" bytes, must be {phrase}{note}"),
+    ];
+    let panic = |sp| {
+        const_panic_msg(
+            oopsie_path,
+            sp,
+            &parts,
+            &[quote! { ::core::mem::size_of::<#ident>() }],
+        )
+    };
+    let upper = upper.map(|(limit, inclusive)| {
+        let cmp = if inclusive { quote!(>) } else { quote!(>=) };
+        let p = panic(span);
+        quote! { if ::core::mem::size_of::<#ident>() #cmp #limit { #p } }
+    });
+    let lower = lower.map(|limit| {
+        let p = panic(span);
+        quote! { if ::core::mem::size_of::<#ident>() < #limit { #p } }
+    });
+    quote! { #upper #lower }
+}
+
+/// Upper-bound check for an enum: if the enum exceeds `limit`, blame whichever
+/// variant holds the largest payload, spanned at that variant. With no
+/// field-bearing variant there's nothing to attribute, so it falls back to a
+/// whole-type panic at `attr_span`.
+struct EnumUpperParams<'a> {
+    oopsie_path: &'a syn::Path,
+    ident: &'a syn::Ident,
+    variants: &'a [ResolvedVariant<'a>],
+    attr_span: Span,
+    limit: usize,
+    inclusive: bool,
+    phrase: &'a str,
+    note: &'a str,
+}
+
+fn gen_enum_upper(p: &EnumUpperParams<'_>) -> TokenStream2 {
+    let EnumUpperParams {
+        oopsie_path,
+        ident,
+        variants,
+        attr_span,
+        limit,
+        inclusive,
+        phrase,
+        note,
+    } = p;
+    let (attr_span, limit, inclusive) = (*attr_span, *limit, *inclusive);
+    let cmp = if inclusive { quote!(>) } else { quote!(>=) };
+    let whole_parts = [
+        format!("`{ident}` is "),
+        format!(" bytes, must be {phrase}{note}"),
+    ];
+    let whole_panic = |sp| {
+        const_panic_msg(
+            oopsie_path,
+            sp,
+            &whole_parts,
+            &[quote! { ::core::mem::size_of::<#ident>() }],
+        )
+    };
+
     let fielded: Vec<&ResolvedVariant<'_>> = variants
         .iter()
         .filter(|v| !v.variant.fields.is_empty())
         .collect();
 
     if fielded.is_empty() {
-        return quote_spanned! {attr_span=>
-            ::core::assert!(::core::mem::size_of::<#ident>() <= #limit, #whole_type_msg);
+        let p = whole_panic(attr_span);
+        return quote! {
+            if ::core::mem::size_of::<#ident>() #cmp #limit { #p }
         };
     }
 
@@ -254,22 +242,27 @@ fn gen_upper_bound(
     let checks = fielded.iter().map(|v| {
         let cfg = &v.cfg_attrs;
         let size = payload_size(v);
-        // `note` (e.g. the cap source) sits between the headline and the blame so
-        // it reads as part of the size statement, not the variant clause.
-        let variant_msg = format!(
-            "{headline}{note}{blame_join}{} is its largest variant",
-            v.variant.ident
+        let vname = v.variant.ident.to_string();
+        let parts = [
+            format!("`{ident}` is "),
+            format!(" bytes, must be {phrase}; largest variant `{vname}` is "),
+            format!(" bytes{note}"),
+        ];
+        let p = const_panic_msg(
+            oopsie_path,
+            v.variant.ident.span(),
+            &parts,
+            &[quote! { ::core::mem::size_of::<#ident>() }, size.clone()],
         );
-        let blame = quote_spanned! {v.variant.ident.span()=> ::core::panic!(#variant_msg) };
-        quote! { #( #cfg )* if #size == max_payload { #blame } }
+        quote! { #( #cfg )* if #size == max_payload { #p } }
     });
 
     // Reached only when every field-bearing variant is cfg-stripped on this
     // target: report the whole-type violation rather than blaming a variant.
-    let fallback = quote_spanned! {attr_span=> ::core::panic!(#whole_type_msg) };
+    let fallback = whole_panic(attr_span);
 
     quote! {
-        if ::core::mem::size_of::<#ident>() > #limit {
+        if ::core::mem::size_of::<#ident>() #cmp #limit {
             let max_payload: usize = {
                 let mut largest = 0usize;
                 #( #updates )*
@@ -279,4 +272,100 @@ fn gen_upper_bound(
             #fallback
         }
     }
+}
+
+/// The size assertion for a struct (whole-type, no variant attribution).
+pub(super) fn gen_size_assertion(
+    oopsie_path: &syn::Path,
+    ident: &syn::Ident,
+    size: &SizeAttr,
+) -> TokenStream2 {
+    gen_whole_type_checks(
+        oopsie_path,
+        ident,
+        size.span,
+        upper_bound(&size.constraint),
+        lower_bound(&size.constraint),
+        &bound_phrase(&size.constraint),
+        "",
+    )
+}
+
+/// The size assertion for an enum. An upper-bound violation is blamed on the
+/// largest variant; a lower-bound violation (too *small*) isn't any one
+/// variant's fault and stays a whole-type assertion at the `size(...)` attribute.
+pub(super) fn gen_enum_size_assertion(
+    oopsie_path: &syn::Path,
+    ident: &syn::Ident,
+    variants: &[ResolvedVariant<'_>],
+    size: &SizeAttr,
+) -> TokenStream2 {
+    let phrase = bound_phrase(&size.constraint);
+    let upper = upper_bound(&size.constraint).map(|(limit, inclusive)| {
+        gen_enum_upper(&EnumUpperParams {
+            oopsie_path,
+            ident,
+            variants,
+            attr_span: size.span,
+            limit,
+            inclusive,
+            phrase: &phrase,
+            note: "",
+        })
+    });
+    let lower = lower_bound(&size.constraint).map(|limit| {
+        let parts = [
+            format!("`{ident}` is "),
+            format!(" bytes, must be {phrase}"),
+        ];
+        let p = const_panic_msg(
+            oopsie_path,
+            size.span,
+            &parts,
+            &[quote! { ::core::mem::size_of::<#ident>() }],
+        );
+        quote! { if ::core::mem::size_of::<#ident>() < #limit { #p } }
+    });
+    quote! { #upper #lower }
+}
+
+/// The manifest-cap assertion for a struct: a plain `<= cap` upper bound spanned
+/// at the type, since a struct has no variants to attribute the blame to.
+pub(super) fn gen_default_size_cap_struct(
+    oopsie_path: &syn::Path,
+    ident: &syn::Ident,
+    cap: usize,
+    section: &str,
+) -> TokenStream2 {
+    gen_whole_type_checks(
+        oopsie_path,
+        ident,
+        ident.span(),
+        Some((cap, true)),
+        None,
+        &format!("≤ {cap}"),
+        &cap_source_line(section),
+    )
+}
+
+/// The manifest-cap assertion for an enum, reusing the variant-blaming upper-bound
+/// path so an over-cap enum points at its largest variant (with the cap source on
+/// its own line at the end).
+pub(super) fn gen_default_size_cap_enum(
+    oopsie_path: &syn::Path,
+    ident: &syn::Ident,
+    variants: &[ResolvedVariant<'_>],
+    cap: usize,
+    section: &str,
+) -> TokenStream2 {
+    gen_enum_upper(&EnumUpperParams {
+        oopsie_path,
+        ident,
+        variants,
+        attr_span: ident.span(),
+        limit: cap,
+        inclusive: true,
+        phrase: &format!("≤ {cap}"),
+        note: &cap_source_line(section),
+    })
 }
