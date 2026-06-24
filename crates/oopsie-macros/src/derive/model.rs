@@ -136,6 +136,37 @@ impl<'a> ResolvedEnum<'a> {
             any_variant_cfg: super::parse::any_variant_has_cfg(data),
         })
     }
+
+    /// Reject a variant-level `traced` toggle when the enum isn't traced.
+    ///
+    /// The toggle is read only by `#[oopsie::oopsie(traced)]` trace injection;
+    /// on a derive-only or otherwise non-traced enum it would silently do
+    /// nothing. Call only after establishing that the enum isn't traced.
+    pub fn reject_inert_variant_traced(&self) -> syn::Result<()> {
+        const MSG: &str = "`traced` on an enum variant only applies when the enum is traced \
+             with `#[oopsie::oopsie(traced)]`; add `traced` to the enum or remove this";
+        for v in &self.variants {
+            if v.attrs.traced.to_option().is_none() {
+                continue;
+            }
+            return match v.variant.attrs.iter().find(|a| attr_mentions_traced(a)) {
+                Some(attr) => Err(syn::Error::new_spanned(attr, MSG)),
+                None => Err(syn::Error::new_spanned(v.ident(), MSG)),
+            };
+        }
+        Ok(())
+    }
+}
+
+/// Whether `attr` is an `#[oopsie(...)]` list that names the `traced` key, used
+/// to point the inert-`traced` diagnostic at the offending attribute.
+fn attr_mentions_traced(attr: &syn::Attribute) -> bool {
+    attr.path().is_ident("oopsie")
+        && attr
+            .parse_args_with(
+                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+            )
+            .is_ok_and(|metas| metas.iter().any(|m| m.path().is_ident("traced")))
 }
 
 impl<'a> ResolvedStruct<'a> {

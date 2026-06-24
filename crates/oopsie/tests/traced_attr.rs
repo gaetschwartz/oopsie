@@ -235,6 +235,65 @@ fn traced_code_disabled() {
     }
 }
 
+// ---- Test 12: per-variant traced toggle on enum variants ----
+
+#[oopsie(traced)]
+pub enum VariantToggleError {
+    #[oopsie(traced = false)]
+    #[oopsie("off: {msg}")]
+    Off { msg: String },
+    #[oopsie("on: {msg}")]
+    On { msg: String },
+}
+
+#[test]
+fn traced_variant_toggle_controls_injection_per_variant() {
+    use oopsie::Diagnostic as _;
+
+    let off = variant_toggle_oopsies::Off {
+        msg: "x".to_owned(),
+    }
+    .build();
+    assert_eq!(off.to_string(), "off: x");
+    assert!(
+        off.oopsie_backtrace().is_none(),
+        "variant traced=false must skip backtrace injection"
+    );
+    assert!(
+        off.oopsie_spantrace().is_none(),
+        "variant traced=false must skip spantrace injection"
+    );
+
+    let on = variant_toggle_oopsies::On {
+        msg: "x".to_owned(),
+    }
+    .build();
+    assert_eq!(on.to_string(), "on: x");
+    assert!(
+        on.oopsie_backtrace().is_some(),
+        "variant without override inherits enum traced behavior"
+    );
+    assert!(
+        on.oopsie_spantrace().is_some(),
+        "variant without override inherits enum traced behavior"
+    );
+}
+
+// ---- Test 13: discriminant variant can opt out of traced injection ----
+
+#[oopsie(traced)]
+pub enum DiscriminantVariantOptOutError {
+    #[oopsie(traced = false)]
+    #[oopsie("a")]
+    A = 1,
+}
+
+#[test]
+fn traced_variant_opt_out_allows_explicit_discriminant() {
+    let err = discriminant_variant_opt_out_oopsies::A.build();
+    assert!(matches!(err, DiscriminantVariantOptOutError::A));
+}
+
 // ---- Trace storage layouts (packed/boxed matrix) ----
 
 use oopsie::Diagnostic as _;

@@ -6,7 +6,7 @@ use syn::ext::IdentExt as _;
 use super::args::TracedArgs;
 use super::config::{FieldInjectorConfig, FieldsToInject};
 use super::inject::{add_provide_attrs, check_existing_fields, inject_fields};
-use crate::derive::parse::{VariantAttrs, field_forward};
+use crate::derive::parse::{ResolvedForward, VariantAttrs, field_forward};
 use crate::utils::TracedDefaults;
 
 pub fn expand_enum(
@@ -24,20 +24,29 @@ pub fn expand_enum(
 
     // Process variants
     for variant in &mut input.variants {
+        // Parse once so injection and auto-code decisions share the same
+        // variant-level attribute view.
+        let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
+        let variant_traced_enabled = variant_attrs.traced.is_enabled();
+
         let existence = check_existing_fields(&variant.fields, &config.timestamp_type);
 
-        let forward = variant
-            .fields
-            .iter()
-            .map(field_forward)
-            .collect::<syn::Result<Vec<_>>>()?
-            .into_iter()
-            .find(|f| f.any())
-            .unwrap_or_default();
+        let forward = if variant_traced_enabled {
+            variant
+                .fields
+                .iter()
+                .map(field_forward)
+                .collect::<syn::Result<Vec<_>>>()?
+                .into_iter()
+                .find(|f| f.any())
+                .unwrap_or_default()
+        } else {
+            ResolvedForward::default()
+        };
 
-        let inject_backtrace = resolved.backtrace && !forward.backtrace;
-        let inject_spantrace = resolved.spantrace && !forward.spantrace;
-        let inject_location = resolved.location && !forward.location;
+        let inject_backtrace = variant_traced_enabled && resolved.backtrace && !forward.backtrace;
+        let inject_spantrace = variant_traced_enabled && resolved.spantrace && !forward.spantrace;
+        let inject_location = variant_traced_enabled && resolved.location && !forward.location;
 
         let packed = resolved.packed
             && inject_backtrace
@@ -49,7 +58,7 @@ pub fn expand_enum(
         let to_inject = FieldsToInject {
             backtrace: !packed && inject_backtrace && !existence.has_backtrace,
             spantrace: !packed && inject_spantrace && !existence.has_spantrace,
-            timestamp: resolved.timestamp && !existence.has_timestamp,
+            timestamp: variant_traced_enabled && resolved.timestamp && !existence.has_timestamp,
             traces: packed,
             location: inject_location && !existence.has_location,
         };
@@ -70,10 +79,6 @@ pub fn expand_enum(
 
         inject_fields(&mut variant.fields, &config, &to_inject)?;
 
-        // Read the auto-code suppression facts through the same parser the
-        // derive layer uses, so injection and codegen can't disagree on what
-        // counts as a user `code` or a `transparent` variant.
-        let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
         let has_user_code = variant_attrs.code.is_some();
         let is_transparent = variant_attrs.transparent;
 
@@ -83,7 +88,7 @@ pub fn expand_enum(
             &config,
             &enum_name,
             Some(&variant_name),
-            resolved.code,
+            variant_traced_enabled && resolved.code,
             has_user_code,
             is_transparent,
         );

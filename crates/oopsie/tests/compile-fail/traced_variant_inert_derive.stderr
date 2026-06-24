@@ -1,0 +1,5 @@
+error: `traced` on an enum variant only applies when the enum is traced with `#[oopsie::oopsie(traced)]`; add `traced` to the enum or remove this
+  --> tests/compile-fail/traced_variant_inert_derive.rs:12:5
+   |
+12 |     #[oopsie(traced = false)]
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^

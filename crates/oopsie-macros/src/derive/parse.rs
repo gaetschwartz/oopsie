@@ -348,6 +348,8 @@ pub struct VariantAttrsInner {
     #[darling(default)]
     pub display: Option<DisplayAttr>,
     #[darling(default)]
+    pub traced: crate::utils::BetterFlag<true>,
+    #[darling(default)]
     pub transparent: bool,
     #[darling(default)]
     pub help: Option<DisplayAttr>,
@@ -395,6 +397,7 @@ impl darling::FromMeta for DisplayAttr {
 /// misparsed as a trailing display format arg (`#[oopsie("fmt", transparent)]`).
 const VARIANT_KEYWORDS: &[&str] = &[
     "display",
+    "traced",
     "transparent",
     "help",
     "code",

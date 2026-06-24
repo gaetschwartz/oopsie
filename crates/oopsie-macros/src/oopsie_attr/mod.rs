@@ -137,7 +137,7 @@ fn expand_enum(
     if container_attrs.inner.path.is_none() {
         container_attrs.inner.path.clone_from(&args.path);
     }
-    let impls = derive::expand_enum(&derive_input, &container_attrs)?;
+    let impls = derive::expand_enum(&derive_input, &container_attrs, traced.is_some())?;
 
     let (attr_kws, traced_kws) = keywords;
     let keyword_docs = crate::keyword_docs::gen_use_block(

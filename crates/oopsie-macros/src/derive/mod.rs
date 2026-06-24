@@ -30,7 +30,7 @@ pub fn expand(input: TokenStream2) -> syn::Result<TokenStream2> {
     match &input.data {
         syn::Data::Enum(_) => {
             let attrs = EnumContainerAttrs::from_attrs(&input.attrs)?;
-            expand_enum(&input, &attrs)
+            expand_enum(&input, &attrs, false)
         }
         syn::Data::Struct(_) => {
             let attrs = StructAttrs::from_attrs(&input.attrs)?;
@@ -53,9 +53,16 @@ fn gen_site_registration(oopsie_path: &syn::Path) -> TokenStream2 {
     }
 }
 
-pub fn expand_enum(input: &DeriveInput, attrs: &EnumContainerAttrs) -> syn::Result<TokenStream2> {
+pub fn expand_enum(
+    input: &DeriveInput,
+    attrs: &EnumContainerAttrs,
+    tracing_active: bool,
+) -> syn::Result<TokenStream2> {
     reject_size_with_generics(input, attrs.size.as_ref())?;
     let resolved = ResolvedEnum::resolve(input, attrs)?;
+    if !tracing_active {
+        resolved.reject_inert_variant_traced()?;
+    }
     let path = attrs.oopsie_path();
     let selectors = gen_enum_selectors(&resolved, &path)?;
     let display = gen_enum_display(&resolved);

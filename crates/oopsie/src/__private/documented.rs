@@ -124,6 +124,11 @@ pub mod variant {
         _ = args;
     }
 
+    #[doc = include_str!("keyword_docs/variant/traced.md")]
+    pub fn traced(enabled: bool) {
+        _ = enabled;
+    }
+
     #[doc = include_str!("keyword_docs/variant/transparent.md")]
     pub fn transparent() {}
 
