@@ -5,6 +5,8 @@ use quote::{format_ident, quote};
 use syn::ext::IdentExt as _;
 use syn::{GenericParam, Generics, Ident, Type, Visibility};
 
+use crate::utils::pretty::Pretty;
+
 use super::generics::{DeclaredParams, ReferencedParams};
 use super::model::{ResolvedEnum, ResolvedStruct};
 use super::parse::{CategorizedFields, ModuleSetting, SourceKind, SuffixSetting, UserField};
@@ -454,8 +456,10 @@ pub fn gen_enum_selectors(
         // Generate selector struct
         let shape = selector_shape(user_fields, &input.generics, &|uf| {
             format!(
-                "Value for the `{}` field of `{enum_ident}::{variant_ident}`.",
-                uf.ident
+                "Value for the `{}` field of `{enum_ident}::{variant_ident}`.\n\n\
+                Field type: `{}`",
+                uf.ident,
+                uf.ty.pretty()
             )
         });
         let SelectorShape {
@@ -612,7 +616,12 @@ pub fn gen_struct_selector(
     let user_fields = &categorized.user_fields;
 
     let shape = selector_shape(user_fields, &input.generics, &|uf| {
-        format!("Value for the `{}` field of `{struct_ident}`.", uf.ident)
+        format!(
+            "Value for the `{}` field of `{struct_ident}`.\n\n\
+            Field type: `{}`",
+            uf.ident,
+            uf.ty.pretty()
+        )
     });
     let SelectorShape {
         struct_decl,

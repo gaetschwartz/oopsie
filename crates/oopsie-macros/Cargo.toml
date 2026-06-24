@@ -40,4 +40,6 @@ workspace = true
 [dev-dependencies]
 insta = "1.46.3"
 oopsie = { workspace = true }
+pretty_assertions = "1.4.1"
+rstest = "0.26.1"
 tempfile = "3.27.0"
