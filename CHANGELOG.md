@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.14] - 2026-06-24
+
+### Added
+
+- Generated field selectors now document each field's type. Every selector
+  field's doc comment gains a line naming the field's type, rendered as idiomatic
+  Rust (for example `Vec<T>`, `HashMap<K, V>`, or `&'a mut str`).
+
 ## [0.1.0-rc.13] - 2026-06-23
 
 ### Fixed
