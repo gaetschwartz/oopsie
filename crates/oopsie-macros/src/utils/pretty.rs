@@ -30,15 +30,15 @@ fn write_path_segment(
     segment: &syn::PathSegment,
 ) -> std::fmt::Result {
     write!(f, "{}", segment.ident)?;
-    match segment.arguments {
-        syn::PathArguments::AngleBracketed(ref args) => {
+    match &segment.arguments {
+        syn::PathArguments::AngleBracketed(args) => {
             write_abga(f, args)?;
         }
-        syn::PathArguments::Parenthesized(ref args) => {
+        syn::PathArguments::Parenthesized(args) => {
             write!(f, "(")?;
             write_punct(f, &args.inputs, write_type)?;
             write!(f, ")")?;
-            if let syn::ReturnType::Type(_, ref output) = args.output {
+            if let syn::ReturnType::Type(_, output) = &args.output {
                 write!(f, " -> ")?;
                 write_type(f, output)?;
             }
@@ -75,7 +75,7 @@ fn write_generic_argument(
         }
         syn::GenericArgument::AssocType(assoc_type) => {
             write!(f, "{}", assoc_type.ident)?;
-            if let Some(ref bounds) = assoc_type.generics {
+            if let Some(bounds) = &assoc_type.generics {
                 write_abga(f, bounds)?;
             }
             write!(f, " = ")?;
@@ -88,7 +88,7 @@ fn write_generic_argument(
 fn write_type(f: &mut impl std::fmt::Write, ty: &syn::Type) -> std::fmt::Result {
     match ty {
         syn::Type::Path(type_path) => {
-            if let Some(ref qself) = type_path.qself {
+            if let Some(qself) = &type_path.qself {
                 write_type_path_with_qself(f, qself, type_path)
             } else {
                 write_path(f, &type_path.path)

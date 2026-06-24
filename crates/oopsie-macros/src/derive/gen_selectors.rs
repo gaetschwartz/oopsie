@@ -5,7 +5,7 @@ use quote::{format_ident, quote};
 use syn::ext::IdentExt as _;
 use syn::{GenericParam, Generics, Ident, Type, Visibility};
 
-use crate::utils::pretty::Pretty;
+use crate::utils::pretty::Pretty as _;
 
 use super::generics::{DeclaredParams, ReferencedParams};
 use super::model::{ResolvedEnum, ResolvedStruct};
