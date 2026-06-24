@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.15] - 2026-06-24
+
+### Added
+
+- Enum variants can now opt out of trace injection individually. On a traced
+  enum, marking a variant `#[oopsie(traced = false)]` skips every field that
+  would otherwise be injected into it — backtrace, span trace, timestamp, and
+  caller location — along with its auto-generated error code. A variant that
+  opts out can keep an explicit discriminant (`Variant = 1`), which injected
+  fields would otherwise make impossible.
+- Using a variant-level `traced` toggle on an enum that is not itself traced is
+  now rejected at compile time, with the error pointing at the offending
+  attribute, instead of being silently ignored.
+
 ## [0.1.0-rc.14] - 2026-06-24
 
 ### Added
