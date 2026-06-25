@@ -410,11 +410,10 @@ pub use oopsie_macros::oopsie;
 // contract via incidental glob re-export.
 #[cfg(feature = "extras")]
 pub use oopsie_core::extras;
-pub use oopsie_core::start_marker;
 pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, Chain, Contextual, Diagnostic, ErrorChainExt, ErrorCode,
-    HelpText, NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace, Welp,
-    WelpOptionExt, WelpResultExt,
+    HelpText, NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace,
+    SpanTraceStatus, Welp, WelpOptionExt, WelpResultExt, start_marker,
 };
 
 /// Thread-local control over backtrace capture.

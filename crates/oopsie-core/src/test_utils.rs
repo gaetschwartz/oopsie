@@ -59,6 +59,16 @@ pub fn init_test_subscriber() -> tracing::subscriber::DefaultGuard {
     tracing::subscriber::set_default(subscriber)
 }
 
+/// Install a test subscriber *without* an `ErrorLayer`, so captured span traces
+/// report [`Unsupported`](crate::SpanTraceStatus::Unsupported) — distinct from
+/// the no-subscriber [`Empty`](crate::SpanTraceStatus::Empty) case — for the
+/// duration of the returned guard.
+#[cfg(feature = "tracing")]
+#[must_use]
+pub fn init_test_subscriber_without_error_layer() -> tracing::subscriber::DefaultGuard {
+    tracing::subscriber::set_default(tracing_subscriber::registry())
+}
+
 /// Force backtrace capture on the current thread so snapshots are deterministic
 /// regardless of the ambient `RUST_BACKTRACE` environment.
 pub fn force_backtrace() {

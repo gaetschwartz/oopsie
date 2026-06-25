@@ -34,8 +34,8 @@ impl SpanTrace {
     /// Returns whether this trace was captured, empty, or unsupported.
     #[must_use]
     #[inline]
-    pub fn status(&self) -> tracing_error::SpanTraceStatus {
-        self.inner.status()
+    pub fn status(&self) -> SpanTraceStatus {
+        self.inner.status().into()
     }
 
     /// `true` if a span trace was actually captured (an active span existed and
@@ -44,7 +44,7 @@ impl SpanTrace {
     #[must_use]
     #[inline]
     pub fn is_captured(&self) -> bool {
-        matches!(self.status(), tracing_error::SpanTraceStatus::CAPTURED)
+        matches!(self.status(), SpanTraceStatus::Captured)
     }
 
     /// Consumes the wrapper and returns the underlying `tracing_error::SpanTrace`.
@@ -59,6 +59,32 @@ impl SpanTrace {
     #[must_use]
     pub const fn as_span_trace(&self) -> &tracing_error::SpanTrace {
         &self.inner
+    }
+}
+
+/// The status of a [`SpanTrace`]: whether it was captured, or why it is empty.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SpanTraceStatus {
+    /// Span traces are unsupported — typically no `ErrorLayer` is installed, or
+    /// it comes from an incompatible `tracing-error` version.
+    Unsupported,
+    /// The span trace is empty, typically because it was captured outside of
+    /// any spans.
+    Empty,
+    /// A span trace was captured and renders meaningful frames.
+    Captured,
+}
+
+#[cfg(feature = "tracing")]
+impl From<tracing_error::SpanTraceStatus> for SpanTraceStatus {
+    fn from(status: tracing_error::SpanTraceStatus) -> Self {
+        if status == tracing_error::SpanTraceStatus::CAPTURED {
+            Self::Captured
+        } else if status == tracing_error::SpanTraceStatus::EMPTY {
+            Self::Empty
+        } else {
+            Self::Unsupported
+        }
     }
 }
 
@@ -412,6 +438,12 @@ mod tests {
         tracing::subscriber::with_default(subscriber, f)
     }
 
+    #[cfg(feature = "tracing")]
+    fn without_error_subscriber<R>(f: impl FnOnce() -> R) -> R {
+        let subscriber = tracing_subscriber::Registry::default();
+        tracing::subscriber::with_default(subscriber, f)
+    }
+
     // Fixed callsites shared across captures: a depth-3 stack leaf -> mid -> root.
     // Same source location => same `&'static Metadata`, so two captures through
     // the same functions yield identical stacks.
@@ -449,7 +481,7 @@ mod tests {
     #[test]
     fn identical_depth3_stacks_are_equal() {
         let (a, b) = with_error_subscriber(|| (via_root_a(), via_root_a()));
-        assert_eq!(a.status(), tracing_error::SpanTraceStatus::CAPTURED);
+        assert_eq!(a.status(), SpanTraceStatus::Captured);
         assert_eq!(a, b);
         assert_eq!(a, a.clone());
     }
@@ -475,12 +507,26 @@ mod tests {
     #[cfg(feature = "tracing")]
     #[test]
     fn empty_span_traces_are_equal() {
-        // Without a subscriber, captures are uncaptured/empty; equality must be
-        // reflexive rather than reporting two empty traces as unequal.
+        // Without a subscriber, captures are empty; equality must be
+        // reflexive.
         let a = SpanTrace::capture();
         let b = SpanTrace::capture();
+        assert_eq!(a.status(), SpanTraceStatus::Empty);
+        assert_eq!(b.status(), SpanTraceStatus::Empty);
         assert_eq!(a, b);
         assert_eq!(a, a.clone());
+    }
+
+    #[cfg(feature = "tracing")]
+    #[test]
+    fn unsupported_span_traces() {
+        // When a subscriber is present but does not support span traces, captures are
+        // unsupported.
+        let (a, b) = without_error_subscriber(|| (via_root_a(), via_root_b()));
+
+        assert_eq!(a.status(), SpanTraceStatus::Unsupported);
+        assert_eq!(b.status(), SpanTraceStatus::Unsupported);
+        assert_eq!(a, b);
     }
 
     #[cfg(feature = "tracing")]
@@ -492,7 +538,7 @@ mod tests {
         // field-value branch of `eq` with a non-equal result; every other
         // inequality test diverges by span name (i.e. by callsite).
         let (a, b) = with_error_subscriber(|| (via_field(1), via_field(2)));
-        assert_eq!(a.status(), tracing_error::SpanTraceStatus::CAPTURED);
+        assert_eq!(a.status(), SpanTraceStatus::Captured);
 
         // Control: identical callsite *and* identical field value compare equal
         // in either build profile, proving the divergence below comes from the

@@ -250,6 +250,39 @@ fn test_report_colored_spantrace_renders_frames() {
     );
 }
 
+/// A span trace captured under a subscriber with no `ErrorLayer` reports
+/// `Unsupported`; the report renders a placeholder in the `SPANTRACE` section
+/// instead of suppressing it. Backtraces are disabled so the render is
+/// deterministic without depending on captured frames.
+#[cfg(feature = "tracing")]
+#[test]
+fn test_report_renders_unsupported_spantrace() {
+    oopsie::backtrace::set_override(RustBacktrace::Disabled);
+
+    // `Unsupported` requires a current span at capture (so `self.span` is set)
+    // *and* a subscriber without an `ErrorLayer` (so the `WithContext` downcast
+    // fails). Without the span it would be `Empty` instead.
+    let error = {
+        let _guard = common::init_test_subscriber_without_error_layer();
+        let _span = tracing::info_span!("unsupported").entered();
+        TestOopsie {
+            message: "unsupported render",
+        }
+        .build()
+    };
+
+    let report = Report::new(error).no_colors().to_string();
+    insta::with_settings!({ filters => vec![(r"report\.rs:\d+:\d+", "report.rs:[LOC]")] }, {
+        insta::assert_snapshot!(report, @"
+        Error[report::TestError]: Test error: unsupported render
+          at crates/oopsie/tests/report.rs:[LOC]
+
+        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+           ... span traces unsupported ...
+        ");
+    });
+}
+
 // --- Accessor method tests ---
 
 #[test]

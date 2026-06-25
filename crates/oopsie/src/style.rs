@@ -58,6 +58,20 @@ impl Style {
     }
 }
 
+pub trait Colorize: Sized {
+    /// Apply a style to this text, returning a styled wrapper that implements
+    /// [`Display`].
+    #[must_use]
+    fn style(&self, style: Style) -> owo_colors::Styled<&Self>;
+}
+
+impl<T: owo_colors::OwoColorize> Colorize for T {
+    #[inline]
+    fn style(&self, style: Style) -> owo_colors::Styled<&Self> {
+        owo_colors::OwoColorize::style(self, style.into_owo())
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ParseError {
     MissingHash,

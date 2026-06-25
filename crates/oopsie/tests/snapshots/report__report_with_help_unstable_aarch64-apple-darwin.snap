@@ -7,6 +7,9 @@ Error[report::ErrorWithHelp]: Something went wrong: connection refused
 
   help: Try restarting the service
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ... no spans captured ...
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 9 frames hidden ...
   1: report[[HASH]]::test_report_with_help

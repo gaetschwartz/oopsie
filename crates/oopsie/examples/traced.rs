@@ -40,7 +40,15 @@ fn init_tracing() {
     #[cfg(feature = "tracing")]
     {
         use tracing_subscriber::prelude::*;
-
+        let skip_tracing_init = std::env::var("OOPSIE_SKIP_TRACING_INIT").is_ok_and(|v| v == "1");
+        if skip_tracing_init {
+            return;
+        }
+        let skip_error_layer = std::env::var("OOPSIE_SKIP_ERROR_LAYER").is_ok_and(|v| v == "1");
+        if skip_error_layer {
+            tracing_subscriber::fmt::init();
+            return;
+        }
         tracing_subscriber::registry()
             .with({
                 #[cfg(feature = "serde")]

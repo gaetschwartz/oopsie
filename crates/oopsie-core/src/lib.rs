@@ -36,7 +36,7 @@ pub use backtrace::{
 };
 pub use chain::{Chain, ErrorChainExt};
 pub use diagnostic::Diagnostic;
-pub use spantrace::{OptionalSpanTrace, SpanTrace};
+pub use spantrace::{OptionalSpanTrace, SpanTrace, SpanTraceStatus};
 #[cfg(feature = "tracing")]
 pub mod tracing;
 

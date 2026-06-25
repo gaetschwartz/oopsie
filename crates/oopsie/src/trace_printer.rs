@@ -9,10 +9,10 @@ use std::fmt;
 use std::ops::Deref;
 use std::path;
 
-use owo_colors::OwoColorize as _;
+use oopsie_core::SpanTraceStatus;
 
 use crate::Backtrace;
-use crate::style::Style;
+use crate::style::{Colorize as _, Style};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Data types
@@ -103,6 +103,9 @@ pub trait SpanTraceProvider {
     /// span's metadata and its formatted fields. Iteration stops early when
     /// `f` returns `false`.
     fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata<'_>, &str) -> bool);
+
+    /// Returns the span trace's status: whether it is captured, empty, or unsupported.
+    fn status(&self) -> SpanTraceStatus;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,6 +131,7 @@ impl BacktraceProvider for Backtrace {
 
 #[cfg(feature = "tracing")]
 impl SpanTraceProvider for crate::SpanTrace {
+    #[inline]
     fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata<'_>, &str) -> bool) {
         self.as_span_trace().with_spans(|md, fields| {
             let meta = SpanMetadata {
@@ -138,6 +142,11 @@ impl SpanTraceProvider for crate::SpanTrace {
             };
             f(&meta, fields)
         });
+    }
+
+    #[inline]
+    fn status(&self) -> SpanTraceStatus {
+        self.status()
     }
 }
 
@@ -659,7 +668,7 @@ impl TracePrinter {
         writeln!(
             f,
             "{}",
-            format_args!("{:━^80}", " BACKTRACE ").style(theme.header.into_owo())
+            format_args!("{:━^80}", " BACKTRACE ").style(theme.header)
         )?;
 
         // Read per render: the working directory is mutable process state,
@@ -702,7 +711,7 @@ impl TracePrinter {
         writeln!(
             f,
             "{}",
-            format_args!("   ... {count} frames hidden ...").style(theme.frames_hidden.into_owo())
+            format_args!("   ... {count} frames hidden ...").style(theme.frames_hidden)
         )
     }
 
@@ -718,19 +727,19 @@ impl TracePrinter {
         write!(
             f,
             "{}{}",
-            format_args!("{number:>3}").style(theme.frame_number.into_owo()),
-            ": ".style(theme.separator.into_owo())
+            format_args!("{number:>3}").style(theme.frame_number),
+            ": ".style(theme.separator)
         )?;
 
         // Function name
         if let Some(name) = &frame.name {
             let (base, hash) = split_function_hash(name);
-            write!(f, "{}", base.style(theme.function_name.into_owo()))?;
+            write!(f, "{}", base.style(theme.function_name))?;
             if let Some(h) = hash {
-                write!(f, "{}", h.style(theme.function_hash.into_owo()))?;
+                write!(f, "{}", h.style(theme.function_hash))?;
             }
         } else {
-            write!(f, "{}", "<unknown>".style(theme.function_name.into_owo()))?;
+            write!(f, "{}", "<unknown>".style(theme.function_name))?;
         }
         writeln!(f)?;
 
@@ -742,21 +751,13 @@ impl TracePrinter {
             write!(
                 f,
                 "           {}{}",
-                "at ".style(theme.separator.into_owo()),
-                display_path.display().style(theme.file_path.into_owo())
+                "at ".style(theme.separator),
+                display_path.display().style(theme.file_path)
             )?;
             if let Some(lineno) = frame.lineno {
-                write!(
-                    f,
-                    "{}",
-                    format_args!(":{lineno}").style(theme.line_number.into_owo())
-                )?;
+                write!(f, "{}", format_args!(":{lineno}").style(theme.line_number))?;
                 if let Some(colno) = frame.colno {
-                    write!(
-                        f,
-                        "{}",
-                        format_args!(":{colno}").style(theme.line_number.into_owo())
-                    )?;
+                    write!(f, "{}", format_args!(":{colno}").style(theme.line_number))?;
                 }
             }
             writeln!(f)?;
@@ -779,22 +780,40 @@ impl TracePrinter {
         writeln!(
             f,
             "{}",
-            format_args!("{:━^80}", " SPANTRACE ").style(theme.header.into_owo())
+            format_args!("{:━^80}", " SPANTRACE ").style(theme.header)
         )?;
 
-        let mut index = 1usize;
-        let mut err = Ok(());
+        match st.status() {
+            SpanTraceStatus::Captured => {
+                let mut index = 1usize;
+                let mut err = Ok(());
 
-        st.with_spans(&mut |meta, fields| {
-            if let Err(e) = Self::write_span_frame(f, index, meta, fields, &theme) {
-                err = Err(e);
-                return false;
+                st.with_spans(&mut |meta, fields| {
+                    if let Err(e) = Self::write_span_frame(f, index, meta, fields, &theme) {
+                        err = Err(e);
+                        return false;
+                    }
+                    index += 1;
+                    true
+                });
+
+                err
             }
-            index += 1;
-            true
-        });
-
-        err
+            SpanTraceStatus::Empty => {
+                writeln!(
+                    f,
+                    "{}",
+                    "   ... no spans captured ...".style(theme.frames_hidden)
+                )
+            }
+            SpanTraceStatus::Unsupported => {
+                writeln!(
+                    f,
+                    "{}",
+                    "   ... span traces unsupported ...".style(theme.frames_hidden)
+                )
+            }
+        }
     }
 
     /// Render a single span trace frame.
@@ -809,36 +828,32 @@ impl TracePrinter {
         write!(
             f,
             "{}",
-            format_args!("{index:>3}").style(theme.frame_number.into_owo())
+            format_args!("{index:>3}").style(theme.frame_number)
         )?;
-        write!(f, "{}", ": ".style(theme.separator.into_owo()))?;
+        write!(f, "{}", ": ".style(theme.separator))?;
 
         // target::name
         write!(
             f,
             "{}",
-            format_args!("{}::{}", meta.target, meta.name).style(theme.function_name.into_owo())
+            format_args!("{}::{}", meta.target, meta.name).style(theme.function_name)
         )?;
         writeln!(f)?;
 
         // Fields line (only if non-empty)
         if !fields.is_empty() {
             write!(f, "           ")?; // 11 spaces
-            write!(f, "{}", "with ".style(theme.separator.into_owo()))?;
-            writeln!(f, "{}", fields.style(theme.fields.into_owo()))?;
+            write!(f, "{}", "with ".style(theme.separator))?;
+            writeln!(f, "{}", fields.style(theme.fields))?;
         }
 
         // File location
         if let Some(file) = &meta.file {
             write!(f, "           ")?; // 11 spaces
-            write!(f, "{}", "at ".style(theme.separator.into_owo()))?;
-            write!(f, "{}", file.style(theme.file_path.into_owo()))?;
+            write!(f, "{}", "at ".style(theme.separator))?;
+            write!(f, "{}", file.style(theme.file_path))?;
             if let Some(line) = meta.line {
-                write!(
-                    f,
-                    "{}",
-                    format_args!(":{line}").style(theme.line_number.into_owo())
-                )?;
+                write!(f, "{}", format_args!(":{line}").style(theme.line_number))?;
             }
             writeln!(f)?;
         }

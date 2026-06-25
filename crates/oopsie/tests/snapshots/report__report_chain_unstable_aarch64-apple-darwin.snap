@@ -6,6 +6,9 @@ Error[report::OuterError]: Outer error
   at crates/oopsie/tests/report.rs:[LOC]
   ╰─▶ Test error: root cause
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ... no spans captured ...
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 9 frames hidden ...
   1: report[[HASH]]::test_report_chain

@@ -5,6 +5,9 @@ expression: report
 Error[report::TestError]: Test error: something failed
   at crates/oopsie/tests/report.rs:[LOC]
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ... no spans captured ...
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 9 frames hidden ...
   1: report::test_report_basic::h[HASH]

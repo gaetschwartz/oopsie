@@ -8,7 +8,7 @@
 use oopsie::{ResultExt as _, oopsie};
 pub use oopsie_core::test_utils::force_backtrace;
 #[cfg(feature = "tracing")]
-pub use oopsie_core::test_utils::init_test_subscriber;
+pub use oopsie_core::test_utils::{init_test_subscriber, init_test_subscriber_without_error_layer};
 #[cfg(feature = "tracing")]
 use tracing::instrument;
 

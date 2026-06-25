@@ -6,6 +6,9 @@ Error[report::FwdWrapError]: forward wrap
   at crates/oopsie/tests/report.rs:[LOC]
   ╰─▶ forward leaf: root cause
 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   ... no spans captured ...
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 9 frames hidden ...
   1: report[[HASH]]::test_report_forward_chain
