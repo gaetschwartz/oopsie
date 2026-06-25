@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.16] - 2026-06-25
+
+### Added
+
+- Reports now render a placeholder in the `SPANTRACE` section when a span trace
+  is present but not captured, instead of omitting the section. Empty traces
+  (captured with no active span) show `... no spans captured ...`, and
+  unsupported ones (no `ErrorLayer` installed) show
+  `... span traces unsupported ...`.
+- New `SpanTraceStatus` enum (`Captured`, `Empty`, `Unsupported`) describing why
+  a span trace is or isn't populated.
+
+### Changed
+
+- `SpanTrace::status()` now returns oopsie's own `SpanTraceStatus` instead of
+  re-exposing `tracing-error`'s type.
+
 ## [0.1.0-rc.15] - 2026-06-24
 
 ### Added
