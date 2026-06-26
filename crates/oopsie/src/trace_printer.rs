@@ -376,9 +376,17 @@ fn matches_site(
     site_file: &str,
     site_line: u32,
 ) -> bool {
-    if frame_krate != site_krate || frame_line != site_line {
-        return false;
-    }
+    frame_krate == site_krate && frame_line == site_line && frame_file_matches(frame_file, site_file)
+}
+
+/// Whether a DWARF frame path refers to the same source file as a
+/// compiler-relative `site_file` (a `file!()` / [`Location::file`] string):
+/// either an exact match, or the frame's (often absolute) path ending with the
+/// relative one on a path-separator boundary. Tolerates both `/` and `\`, so a
+/// Windows DWARF path matches a forward-slash `file!()` suffix.
+///
+/// [`Location::file`]: std::panic::Location::file
+fn frame_file_matches(frame_file: &path::Path, site_file: &str) -> bool {
     let frame_file = frame_file.to_string_lossy();
     frame_file.as_ref() == site_file
         || (frame_file.ends_with(site_file)
@@ -386,6 +394,17 @@ fn matches_site(
                 .as_bytes()
                 .get(frame_file.len() - site_file.len() - 1)
                 .is_some_and(|&b| b == b'/' || b == b'\\'))
+}
+
+/// Whether `frame` was compiled from source position `(file, line)`: the line
+/// matches exactly and the file matches [`frame_file_matches`]. Used to anchor
+/// a backtrace to a captured caller `Location` (see [`location_anchor_filter`]).
+fn frame_matches_location(frame: &BacktraceFrame, file: &str, line: u32) -> bool {
+    frame.lineno == Some(line)
+        && frame
+            .filename
+            .as_deref()
+            .is_some_and(|f| frame_file_matches(f, file))
 }
 
 /// Check if a frame name matches panic-runtime code that sits above the user's
@@ -910,6 +929,40 @@ pub fn marker_strip_filter(cut: usize) -> impl Fn(&mut [Option<&BacktraceFrame>]
     }
 }
 
+/// Frame filter that hides everything *above* a captured caller `Location`.
+///
+/// An error's `&'static Location` (from `Diagnostic::oopsie_location`) marks
+/// the user's `.fail()` / `.welp()` call site, captured at the same instant as
+/// the backtrace. The matching frame is the topmost one the user cares about;
+/// the construction and capture machinery sits above it. This finds that frame
+/// by `(file, line)` and masks every frame before it — catching capture or
+/// macro-generated frames the symbol-based [`error_backtrace_frame_filter`]
+/// did not recognize.
+///
+/// Best-effort and purely additive. When no frame matches — a wrap chain whose
+/// surfaced backtrace and location originate at different sites, an inlined
+/// call site, or a `trim-paths` build that rewrote the path — it does nothing
+/// and leaves the symbol-based trim standing. The *topmost* match is chosen so
+/// recursion that re-enters the same line never lets the cut reach down into
+/// the user frames below it.
+pub fn location_anchor_filter(
+    file: &'static str,
+    line: u32,
+) -> impl Fn(&mut [Option<&BacktraceFrame>]) + Send + Sync {
+    move |frames: &mut [Option<&BacktraceFrame>]| {
+        let anchor = frames
+            .iter()
+            .position(|slot| slot.is_some_and(|frame| frame_matches_location(frame, file, line)));
+        // The anchor frame itself is user code and stays; only the strictly
+        // higher frames are masked, so the list can never empty out.
+        if let Some(idx) = anchor {
+            for slot in &mut frames[..idx] {
+                *slot = None;
+            }
+        }
+    }
+}
+
 fn overlay_frame_filters(under: FrameFilterBox, above: FrameFilterBox) -> FrameFilterBox {
     BoxOrBorrow::Box(Box::new(move |frames: &mut [Option<&BacktraceFrame>]| {
         under.as_ref()(frames);
@@ -1290,6 +1343,95 @@ mod tests {
             "src/lib.rs",
             17
         ));
+    }
+
+    fn frame_with_loc(name: &str, file: &str, line: u32) -> BacktraceFrame {
+        BacktraceFrame {
+            ip: 0,
+            name: Some(name.to_owned().into_boxed_str()),
+            filename: Some(path::PathBuf::from(file).into_boxed_path()),
+            lineno: Some(line),
+            colno: None,
+        }
+    }
+
+    #[test]
+    fn location_anchor_hides_frames_above_the_call_site() {
+        // Capture + a macro-generated frame (which the symbol filter might not
+        // recognize) sit above the user's `.fail()` site.
+        let capture = frame_with_loc("oopsie_core::backtrace::capture", "src/backtrace.rs", 196);
+        let generated = frame_with_loc("my_crate::query_oopsies::fail", "src/lib.rs", 99);
+        let user = frame_with_loc("my_crate::fetch_user", "src/lib.rs", 21);
+        let caller = frame_with_loc("my_crate::main", "src/lib.rs", 27);
+
+        let filter = location_anchor_filter("src/lib.rs", 21);
+        let mut frames: Vec<Option<&BacktraceFrame>> =
+            vec![Some(&capture), Some(&generated), Some(&user), Some(&caller)];
+        filter(&mut frames);
+
+        assert_eq!(kept_names(&frames), ["my_crate::fetch_user", "my_crate::main"]);
+    }
+
+    #[test]
+    fn location_anchor_matches_absolute_dwarf_path_against_relative_location() {
+        // DWARF paths are usually absolute; `Location::file` is compiler-relative.
+        let capture = frame_with_loc("capture", "/abs/proj/src/internal.rs", 5);
+        let user = frame_with_loc("my_crate::work", "/abs/proj/src/lib.rs", 21);
+
+        let filter = location_anchor_filter("src/lib.rs", 21);
+        let mut frames: Vec<Option<&BacktraceFrame>> = vec![Some(&capture), Some(&user)];
+        filter(&mut frames);
+
+        assert_eq!(kept_names(&frames), ["my_crate::work"]);
+    }
+
+    #[test]
+    fn location_anchor_picks_topmost_match_under_recursion() {
+        // The same `(file, line)` recurs (a recursive fn that fails on re-entry).
+        // The topmost match is the capturing call; the cut must not reach the
+        // deeper occurrences.
+        let machinery = frame_with_loc("oopsie_core::capture", "src/bt.rs", 1);
+        let recur_top = frame_with_loc("my_crate::recur", "src/lib.rs", 42);
+        let recur_mid = frame_with_loc("my_crate::recur", "src/lib.rs", 42);
+        let recur_low = frame_with_loc("my_crate::recur", "src/lib.rs", 42);
+
+        let filter = location_anchor_filter("src/lib.rs", 42);
+        let mut frames: Vec<Option<&BacktraceFrame>> = vec![
+            Some(&machinery),
+            Some(&recur_top),
+            Some(&recur_mid),
+            Some(&recur_low),
+        ];
+        filter(&mut frames);
+
+        // Only the single machinery frame above the topmost match is hidden.
+        assert_eq!(kept_names(&frames).len(), 3);
+        assert_eq!(frames.iter().filter(|s| s.is_none()).count(), 1);
+    }
+
+    #[test]
+    fn location_anchor_is_a_noop_when_nothing_matches() {
+        // Right file, wrong line — and a line with no matching file — both miss,
+        // leaving the symbol-based trim untouched.
+        let a = frame_with_loc("my_crate::a", "src/lib.rs", 10);
+        let b = frame_with_loc("my_crate::b", "src/lib.rs", 20);
+
+        let filter = location_anchor_filter("src/lib.rs", 999);
+        let mut frames: Vec<Option<&BacktraceFrame>> = vec![Some(&a), Some(&b)];
+        filter(&mut frames);
+
+        assert_eq!(kept_names(&frames), ["my_crate::a", "my_crate::b"]);
+    }
+
+    #[test]
+    fn frame_matches_location_requires_both_file_and_line() {
+        let frame = frame_with_loc("my_crate::work", "/abs/src/lib.rs", 21);
+        assert!(frame_matches_location(&frame, "src/lib.rs", 21));
+        // Same file, wrong line.
+        assert!(!frame_matches_location(&frame, "src/lib.rs", 22));
+        // A frame missing its line or file can never anchor.
+        let nameless = make_frame(None::<String>, None);
+        assert!(!frame_matches_location(&nameless, "src/lib.rs", 21));
     }
 
     #[test]

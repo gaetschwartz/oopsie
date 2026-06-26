@@ -13,7 +13,9 @@ use crate::Diagnostic;
 
 use crate::color::style;
 use crate::theme::{Theme, get_theme};
-use crate::trace_printer::{TracePrinter, error_backtrace_frame_filter, marker_strip_filter};
+use crate::trace_printer::{
+    TracePrinter, error_backtrace_frame_filter, location_anchor_filter, marker_strip_filter,
+};
 
 /// A wrapper around an error that provides rich, colorized output.
 ///
@@ -289,13 +291,23 @@ impl<E: Diagnostic> Report<E> {
         writeln!(f)?;
         let mut printer = if oopsie_core::rust_backtrace().is_full() {
             TracePrinter::unfiltered()
-        } else if let Some(cut) = backtrace.marker_hidden_frames() {
-            // Marker cut first (exact bottom); the name filter then trims the
-            // runtime frames left above the cut.
-            TracePrinter::with_filter(marker_strip_filter(cut))
-                .add_frame_filter(error_backtrace_frame_filter)
         } else {
-            TracePrinter::new()
+            let printer = if let Some(cut) = backtrace.marker_hidden_frames() {
+                // Marker cut first (exact bottom); the name filter then trims the
+                // runtime frames left above the cut.
+                TracePrinter::with_filter(marker_strip_filter(cut))
+                    .add_frame_filter(error_backtrace_frame_filter)
+            } else {
+                TracePrinter::new()
+            };
+            // Augment the symbol-based top trim with the captured call-site
+            // location: it anchors the user's `.fail()`/`.welp()` frame and
+            // masks any capture/generated frames left above it.
+            match self.error().and_then(Diagnostic::oopsie_location) {
+                Some(location) => printer
+                    .add_frame_filter(location_anchor_filter(location.file(), location.line())),
+                None => printer,
+            }
         };
         printer = if self.color_config.should_colorize() {
             printer.with_theme(self.resolved_theme().trace())
