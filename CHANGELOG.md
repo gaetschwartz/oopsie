@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.17] - 2026-06-26
+
+### Changed
+
+- Error backtraces now use the captured caller location to anchor frame
+  trimming. The frame at the `.fail()` / `.welp()` / `.new()` call site marks
+  the top of the user-relevant stack, so any capture or macro-generated frames
+  left above it are hidden even when symbol-based filtering doesn't recognize
+  them. It is best-effort and purely additive: when no frame matches the
+  location — for example a wrapped-error chain whose surfaced backtrace and
+  location originate at different sites — the existing trimming is left
+  untouched.
+
 ## [0.1.0-rc.16] - 2026-06-25
 
 ### Added
