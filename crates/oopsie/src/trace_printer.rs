@@ -376,7 +376,9 @@ fn matches_site(
     site_file: &str,
     site_line: u32,
 ) -> bool {
-    frame_krate == site_krate && frame_line == site_line && frame_file_matches(frame_file, site_file)
+    frame_krate == site_krate
+        && frame_line == site_line
+        && frame_file_matches(frame_file, site_file)
 }
 
 /// Whether a DWARF frame path refers to the same source file as a
@@ -561,8 +563,59 @@ fn split_function_hash(name: &str) -> (&str, Option<&str>) {
 // TracePrinter
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// A closure that filters backtrace frames in-place.
-type FrameFilterBox = BoxOrBorrow<'static, dyn Fn(&mut [Option<&BacktraceFrame>]) + Send + Sync>;
+/// A boxed or borrowed [`FrameFilter`] held by a [`TracePrinter`].
+type FrameFilterBox = BoxOrBorrow<'static, dyn FrameFilter + Send + Sync + 'static>;
+
+/// In-place masking of backtrace frames before rendering.
+///
+/// A filter sets unwanted slots to `None`; the renderer collapses contiguous
+/// runs of `None` into a "… N frames hidden …" notice. Implemented for any
+/// `Fn(&mut [Option<&BacktraceFrame>])` closure, and composed without
+/// allocating via `Option<F>` (a no-op when `None`) and `(F1, F2)` tuples
+/// (apply `F1` then `F2`) — so several filters collapse into one boxed value
+/// rather than a chain of boxed closures.
+pub trait FrameFilter {
+    /// Mask frames in `frames`, leaving kept frames as `Some` and hidden ones
+    /// as `None`.
+    fn apply(&self, frames: &mut [Option<&BacktraceFrame>]);
+}
+impl<F> FrameFilter for F
+where
+    F: Fn(&mut [Option<&BacktraceFrame>]),
+{
+    #[inline]
+    fn apply(&self, frames: &mut [Option<&BacktraceFrame>]) {
+        self(frames);
+    }
+}
+impl<F> FrameFilter for Option<F>
+where
+    F: FrameFilter,
+{
+    #[inline]
+    fn apply(&self, frames: &mut [Option<&BacktraceFrame>]) {
+        if let Some(filter) = self {
+            filter.apply(frames);
+        }
+    }
+}
+impl<F1, F2> FrameFilter for (F1, F2)
+where
+    F1: FrameFilter,
+    F2: FrameFilter,
+{
+    #[inline]
+    fn apply(&self, frames: &mut [Option<&BacktraceFrame>]) {
+        self.0.apply(frames);
+        self.1.apply(frames);
+    }
+}
+impl FrameFilter for FrameFilterBox {
+    #[inline]
+    fn apply(&self, frames: &mut [Option<&BacktraceFrame>]) {
+        self.as_ref().apply(frames);
+    }
+}
 
 /// Renders backtraces and span traces with colors.
 pub struct TracePrinter {
@@ -596,9 +649,7 @@ impl TracePrinter {
     /// current global theme.
     #[must_use]
     #[inline]
-    pub fn with_filter(
-        filter: impl Fn(&mut [Option<&BacktraceFrame>]) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn with_filter(filter: impl FrameFilter + Send + Sync + 'static) -> Self {
         Self {
             frame_filter: BoxOrBorrow::Box(Box::new(filter)),
             theme: None,
@@ -610,7 +661,7 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn with_const_filter(
-        filter: &'static (dyn Fn(&mut [Option<&BacktraceFrame>]) + Send + Sync + 'static),
+        filter: &'static (impl FrameFilter + Send + Sync + 'static),
     ) -> Self {
         Self {
             frame_filter: BoxOrBorrow::Borrow(filter),
@@ -676,7 +727,7 @@ impl TracePrinter {
         let theme = self.resolved_theme();
 
         let mut filtered: Vec<_> = all_frames.iter().map(Some).collect();
-        (self.frame_filter)(&mut filtered);
+        (self.frame_filter).apply(&mut filtered);
 
         // An all-masked trace would render a lone banner above a hidden-frames
         // notice and no frames; suppress the whole section instead.
@@ -892,7 +943,7 @@ enum BoxOrBorrow<'a, T: ?Sized> {
     Borrow(&'a T),
     Box(Box<T>),
 }
-impl<T: ?Sized> BoxOrBorrow<'_, T> {
+impl<T: ?Sized> AsRef<T> for BoxOrBorrow<'_, T> {
     #[inline]
     fn as_ref(&self) -> &T {
         match self {
@@ -964,10 +1015,7 @@ pub fn location_anchor_filter(
 }
 
 fn overlay_frame_filters(under: FrameFilterBox, above: FrameFilterBox) -> FrameFilterBox {
-    BoxOrBorrow::Box(Box::new(move |frames: &mut [Option<&BacktraceFrame>]| {
-        under.as_ref()(frames);
-        above.as_ref()(frames);
-    }))
+    BoxOrBorrow::Box(Box::new((under, above)))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1369,7 +1417,10 @@ mod tests {
             vec![Some(&capture), Some(&generated), Some(&user), Some(&caller)];
         filter(&mut frames);
 
-        assert_eq!(kept_names(&frames), ["my_crate::fetch_user", "my_crate::main"]);
+        assert_eq!(
+            kept_names(&frames),
+            ["my_crate::fetch_user", "my_crate::main"]
+        );
     }
 
     #[test]

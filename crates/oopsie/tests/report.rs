@@ -633,7 +633,7 @@ fn test_trace_printer_with_filter_custom_filter() {
     ]);
 
     // Custom filter: drop any frame whose name starts with "drop::".
-    let printer = TracePrinter::with_filter(|frames| {
+    let printer = TracePrinter::with_filter(|frames: &mut [Option<&BacktraceFrame>]| {
         for slot in frames.iter_mut() {
             if slot.is_some_and(|frame| {
                 frame
