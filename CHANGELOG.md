@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.18] - 2026-06-29
+
+### Changed
+
+- The `fancy` feature is no longer enabled by default. Colorized, richly
+  formatted reports (and their `owo-colors` / `linkme` dependencies) are now
+  opt-in — add `features = ["fancy"]` to keep the previous behavior. The default
+  build is now dependency-light and renders plain reports.
+
 ## [0.1.0-rc.17] - 2026-06-26
 
 ### Changed
