@@ -1,5 +1,8 @@
+use alloc::boxed::Box;
+use alloc::rc::Rc;
+use alloc::sync::Arc;
 use core::error;
-use std::{panic::Location, rc::Rc, sync::Arc};
+use core::panic::Location;
 
 /// Builds a target error from a context selector and a source error of type `E`.
 ///
@@ -132,6 +135,7 @@ macro_rules! impl_capturable_tuples {
 }
 impl_capturable_tuples!(A, B, C, D, E, F, G, H, I);
 
+#[cfg(feature = "std")]
 impl Capturable for std::time::SystemTime {
     #[inline]
     fn capture() -> Self {
@@ -139,6 +143,7 @@ impl Capturable for std::time::SystemTime {
     }
 }
 
+#[cfg(feature = "std")]
 impl Capturable for std::time::Instant {
     #[inline]
     fn capture() -> Self {

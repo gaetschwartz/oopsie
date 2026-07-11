@@ -1,6 +1,6 @@
 //! SpanTrace wrapper with `Capturable` support.
 
-use std::fmt;
+use core::fmt;
 
 /// A wrapper around `tracing_error::SpanTrace`.
 #[cfg(feature = "tracing")]

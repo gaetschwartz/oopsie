@@ -1,6 +1,6 @@
 //! Iterating an error and its transitive [`source`](std::error::Error::source) causes.
 
-use std::error::Error as StdError;
+use core::error::Error as StdError;
 
 /// An iterator over an error and its chain of [`source`](StdError::source) causes.
 ///
@@ -36,7 +36,7 @@ impl<'a> Iterator for Chain<'a> {
     }
 }
 
-impl std::iter::FusedIterator for Chain<'_> {}
+impl core::iter::FusedIterator for Chain<'_> {}
 
 /// Walk an error and its [`source`](StdError::source) chain.
 ///

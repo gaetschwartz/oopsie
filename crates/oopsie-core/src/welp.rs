@@ -1,7 +1,9 @@
 //! See [`Welp`] for the overview.
 
-use std::error::Error as StdError;
-use std::fmt;
+use alloc::boxed::Box;
+use alloc::string::String;
+use core::error::Error as StdError;
+use core::fmt;
 
 use crate::{Backtrace, Capturable as _, Diagnostic, SpanTrace};
 
@@ -73,12 +75,12 @@ enum WelpRepr {
         message: Option<Box<str>>,
         source: BoxError,
         traces: Box<(Backtrace, SpanTrace)>,
-        location: &'static std::panic::Location<'static>,
+        location: &'static core::panic::Location<'static>,
     },
     Traced {
         message: Box<str>,
         traces: Box<(Backtrace, SpanTrace)>,
-        location: &'static std::panic::Location<'static>,
+        location: &'static core::panic::Location<'static>,
     },
 }
 
@@ -97,7 +99,7 @@ impl Welp {
         Self(WelpRepr::Traced {
             message: message.into().into_boxed_str(),
             traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
-            location: std::panic::Location::caller(),
+            location: core::panic::Location::caller(),
         })
     }
 
@@ -131,7 +133,7 @@ impl Welp {
             message: Some(message.into().into_boxed_str()),
             source: Box::new(source),
             traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
-            location: std::panic::Location::caller(),
+            location: core::panic::Location::caller(),
         })
     }
 
@@ -157,7 +159,7 @@ impl Welp {
             message: Some(message.into().into_boxed_str()),
             source,
             traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
-            location: std::panic::Location::caller(),
+            location: core::panic::Location::caller(),
         })
     }
 
@@ -192,7 +194,7 @@ impl Welp {
             message: None,
             source: Box::new(source),
             traces: Box::new((Backtrace::capture(), SpanTrace::capture())),
-            location: std::panic::Location::caller(),
+            location: core::panic::Location::caller(),
         })
     }
 
@@ -381,7 +383,7 @@ impl Diagnostic for Welp {
         }
     }
 
-    fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+    fn oopsie_location(&self) -> Option<&'static core::panic::Location<'static>> {
         match &self.0 {
             WelpRepr::Sourced { location, .. } | WelpRepr::Traced { location, .. } => {
                 Some(location)

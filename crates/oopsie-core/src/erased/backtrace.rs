@@ -1,6 +1,11 @@
 //! Serializable backtrace representation.
 
-use std::fmt;
+use alloc::boxed::Box;
+#[cfg(feature = "std")]
+use alloc::string::ToString as _;
+#[cfg(feature = "std")]
+use alloc::vec::Vec;
+use core::fmt;
 
 use serde::{Deserialize, Serialize};
 
@@ -58,6 +63,7 @@ impl ErasedBacktrace {
     /// OS/libc entry points, and unresolvable frames. Hiding
     /// implementation/platform detail is a render-time concern; this snapshot
     /// stays raw so a consumer can still render the full stack later.
+    #[cfg(feature = "std")]
     #[must_use]
     pub fn from_backtrace(bt: &crate::Backtrace) -> Self {
         bt.resolve();
@@ -95,12 +101,14 @@ impl ErasedBacktrace {
     }
 }
 
+#[cfg(feature = "std")]
 impl From<&crate::Backtrace> for ErasedBacktrace {
     #[inline]
     fn from(bt: &crate::Backtrace) -> Self {
         Self::from_backtrace(bt)
     }
 }
+#[cfg(feature = "std")]
 impl From<crate::Backtrace> for ErasedBacktrace {
     #[inline]
     fn from(bt: crate::Backtrace) -> Self {

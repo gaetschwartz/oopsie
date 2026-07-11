@@ -67,6 +67,8 @@ pub mod params {
 /// the `#[oopsie::oopsie]` macro. The full overview lives on the `oopsie` fn,
 /// which is what hover surfaces.
 pub mod helper {
+    use alloc::vec::Vec;
+
     use super::params::OopsieArg;
 
     /// The `oopsie` configuration attribute, read by `#[derive(Oopsie)]` and the
@@ -116,6 +118,8 @@ pub mod container {
 /// Keywords accepted in `#[oopsie(...)]` on an enum variant (or on a struct,
 /// which plays both container and variant roles).
 pub mod variant {
+    use alloc::vec::Vec;
+
     use super::params::{ExitCode, FmtArg, FormatString, TypeArrowExpr, Vis};
 
     #[doc = include_str!("keyword_docs/variant/display.md")]

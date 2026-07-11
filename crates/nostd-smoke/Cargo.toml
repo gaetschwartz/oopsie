@@ -1,0 +1,8 @@
+[package]
+name = "nostd-smoke"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+oopsie = { path = "../oopsie", default-features = false }

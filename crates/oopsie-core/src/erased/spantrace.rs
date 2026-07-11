@@ -1,6 +1,8 @@
 //! Serializable span trace representation.
 
-use std::fmt;
+use alloc::boxed::Box;
+use alloc::vec::Vec;
+use core::fmt;
 
 use serde::{Deserialize, Serialize};
 
@@ -42,8 +44,8 @@ impl fmt::Display for TracingLevel {
     }
 }
 
-impl std::str::FromStr for TracingLevel {
-    type Err = std::convert::Infallible;
+impl core::str::FromStr for TracingLevel {
+    type Err = core::convert::Infallible;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let level = if s.eq_ignore_ascii_case("TRACE") {
@@ -70,7 +72,7 @@ impl<'de> Deserialize<'de> for TracingLevel {
     {
         // A level is cosmetic metadata; a transport for error reports must
         // degrade on a bad value rather than drop the whole error.
-        let s = std::borrow::Cow::<str>::deserialize(deserializer)?;
+        let s = alloc::borrow::Cow::<str>::deserialize(deserializer)?;
         Ok(s.parse().unwrap_or(Self::UNKNOWN))
     }
 }

@@ -3,6 +3,7 @@
     feature(error_generic_member_access)
 )]
 #![cfg_attr(feature = "unstable-try-trait-v2", feature(try_trait_v2))]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![warn(missing_docs)]
 // Doctests that use `#[oopsie::oopsie]` may generate `fn provide(...)` when the
 // `unstable-error-generic-member-access` feature is active; inject the corresponding
@@ -330,6 +331,16 @@ e.g. API error responses."
 //! | `unstable-error-generic-member-access` | no | nightly | trace and diagnostic surfacing through the Provider API |
 //! | `unstable-try-trait-v2` | no | nightly | `?` converts a failed `Result` directly into a `Report` |
 //!
+//! # no_std
+//!
+//! `std` is on by default; build with `default-features = false` for `no_std` +
+//! `alloc` targets (the crate always needs an allocator — bring your own with
+//! `extern crate alloc` and a global allocator in the consumer). `fancy`
+//! requires `std` and fails to compile without it. Panic hooks, backtraces,
+//! `tracing`, and clock-based timestamps (`chrono` / `jiff`) are also
+//! `std`-only; everything else — the derive, `Welp`, error chains, and
+//! `Diagnostic`/`Display` rendering — works unchanged.
+//!
 //! # Project-wide settings
 //!
 //! With the `settings` feature, a `[package.metadata.oopsie]` table in a crate's
@@ -400,6 +411,11 @@ e.g. API error responses."
 //! identifier fragments and `default-vis` a valid visibility, else the build
 //! fails with a clear message.
 
+extern crate alloc;
+
+#[cfg(all(feature = "fancy", not(feature = "std")))]
+compile_error!("the `fancy` feature requires `std`; disable `fancy` for no_std builds");
+
 // Re-export the proc-macro attribute and derive.
 pub use oopsie_macros::Oopsie;
 pub use oopsie_macros::oopsie;
@@ -412,9 +428,11 @@ pub use oopsie_macros::oopsie;
 pub use oopsie_core::extras;
 pub use oopsie_core::{
     AsErrorSource, Backtrace, Capturable, Chain, Contextual, Diagnostic, ErrorChainExt, ErrorCode,
-    HelpText, NoSource, OptionExt, OptionalSpanTrace, ResultExt, RustBacktrace, SpanTrace,
-    SpanTraceStatus, Welp, WelpOptionExt, WelpResultExt, start_marker,
+    HelpText, NoSource, OptionExt, OptionalSpanTrace, ResultExt, SpanTrace, SpanTraceStatus, Welp,
+    WelpOptionExt, WelpResultExt,
 };
+#[cfg(feature = "std")]
+pub use oopsie_core::{RustBacktrace, start_marker};
 
 /// Thread-local control over backtrace capture.
 ///
@@ -425,6 +443,7 @@ pub use oopsie_core::{
 /// thread, taking precedence over the environment.
 /// [`current_panic`](backtrace::current_panic) reports the setting that applies to
 /// panic backtraces, which honor `RUST_BACKTRACE` only.
+#[cfg(feature = "std")]
 pub mod backtrace {
     pub use oopsie_core::{
         clear_rust_backtrace_override as clear_override, rust_backtrace as current,

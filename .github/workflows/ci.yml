@@ -140,6 +140,33 @@ jobs:
           cargo check --workspace --all-targets --locked --no-default-features
           --features fancy,serde,tracing,chrono,jiff,extras
 
+  no_std:
+    name: no_std
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Get Rust toolchain version
+        id: get_rust_version
+        run: echo "version=$(rustup show active-toolchain | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.get_rust_version.outputs.version }}
+          targets: thumbv7em-none-eabihf
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: no_std
+      - name: cargo build (oopsie-core, bare)
+        run: cargo build -p oopsie-core --no-default-features
+      - name: cargo build (oopsie-core, serde)
+        run: cargo build -p oopsie-core --no-default-features --features serde
+      - name: cargo build (oopsie, bare)
+        run: cargo build -p oopsie --no-default-features
+      - name: cargo build (nostd-smoke, thumbv7em-none-eabihf)
+        run: cargo build --manifest-path crates/nostd-smoke/Cargo.toml --target thumbv7em-none-eabihf
+      - name: assert fancy + no_std is rejected
+        run: "! cargo build -p oopsie --no-default-features --features fancy 2>/dev/null"
+
   docs:
     name: Docs (rustdoc, -D warnings)
     runs-on: ubuntu-latest

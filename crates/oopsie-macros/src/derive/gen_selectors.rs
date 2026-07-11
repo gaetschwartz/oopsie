@@ -411,6 +411,10 @@ pub fn gen_enum_selectors(
                     quote! { #source_type },
                     quote! { let #source_ident = (#transform)(source); },
                 ),
+                SourceKind::AutoBoxed { source_type } => (
+                    quote! { #source_type },
+                    quote! { let #source_ident = #oopsie_path::__private::alloc::boxed::Box::new(source); },
+                ),
                 SourceKind::Yes => {
                     let ty = &source.ty;
                     (quote! { #ty }, quote! { let #source_ident = source; })
@@ -583,6 +587,10 @@ pub fn gen_struct_selector(
             } => (
                 quote! { #source_type },
                 quote! { let #source_ident = (#transform)(source); },
+            ),
+            SourceKind::AutoBoxed { source_type } => (
+                quote! { #source_type },
+                quote! { let #source_ident = #oopsie_path::__private::alloc::boxed::Box::new(source); },
             ),
             SourceKind::Yes => {
                 let ty = &source.ty;
@@ -768,7 +776,9 @@ fn sourced_impl_source_type(source_field: &super::parse::SourceField) -> &Type {
             unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
         }
         SourceKind::Yes => &source_field.ty,
-        SourceKind::Transformed { source_type, .. } => source_type,
+        SourceKind::Transformed { source_type, .. } | SourceKind::AutoBoxed { source_type } => {
+            source_type
+        }
     }
 }
 
@@ -829,6 +839,10 @@ fn gen_build_error(
             source_type,
             transform,
         } => (quote! { #source_type }, Some(quote! { (#transform) })),
+        SourceKind::AutoBoxed { source_type } => (
+            quote! { #source_type },
+            Some(quote! { #oopsie_path::__private::alloc::boxed::Box::new }),
+        ),
     };
 
     let auto_inits = gen_auto_inits(categorized, oopsie_path, true);

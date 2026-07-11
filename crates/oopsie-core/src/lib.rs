@@ -1,4 +1,11 @@
 //! Core error types and utilities.
+//!
+//! `std` is on by default; build with `default-features = false` for `no_std` +
+//! `alloc` targets (an allocator is always required — bring your own with
+//! `extern crate alloc` and a global allocator in the consumer). Backtrace
+//! capture, panic-hook integration, `tracing`, and clock-based timestamps
+//! (`chrono` / `jiff`) require `std`; under `no_std`, [`Backtrace`] is an
+//! always-empty stub so the rest of the API keeps its shape.
 
 #![warn(missing_docs)]
 #![cfg_attr(
@@ -12,7 +19,11 @@
     feature = "unstable-error-generic-member-access",
     doc(test(attr(feature(error_generic_member_access))))
 )]
+#![cfg_attr(not(feature = "std"), no_std)]
 
+pub extern crate alloc;
+
+#[cfg(feature = "std")]
 mod backtrace;
 mod chain;
 mod diagnostic;
@@ -20,22 +31,30 @@ mod diagnostic;
 pub mod erased;
 #[cfg(feature = "extras")]
 pub mod extras;
+#[cfg(feature = "std")]
 mod marker;
+#[cfg(not(feature = "std"))]
+mod nostd_stubs;
 mod spantrace;
 #[cfg(feature = "test-utils")]
 pub mod test_utils;
 mod traits;
 mod welp;
 
-use std::borrow::{Borrow, Cow};
-use std::ops::Deref;
+use alloc::borrow::Cow;
+use alloc::string::String;
+use core::borrow::Borrow;
+use core::ops::Deref;
 
+#[cfg(feature = "std")]
 pub use backtrace::{
     Backtrace, RustBacktrace, clear_rust_backtrace_override, rust_backtrace, rust_panic_backtrace,
     set_rust_backtrace_override, with_rust_backtrace_override,
 };
 pub use chain::{Chain, ErrorChainExt};
 pub use diagnostic::Diagnostic;
+#[cfg(not(feature = "std"))]
+pub use nostd_stubs::Backtrace;
 pub use spantrace::{OptionalSpanTrace, SpanTrace, SpanTraceStatus};
 #[cfg(feature = "tracing")]
 pub mod tracing;
@@ -45,6 +64,7 @@ pub use welp::{Welp, WelpOptionExt, WelpResultExt};
 /// Private helpers used by macro-generated code. Not part of the public API.
 #[doc(hidden)]
 pub mod __private {
+    #[cfg(feature = "std")]
     pub use crate::backtrace::CORE_SRC_PATH;
     /// Autoref probe for capture deduplication.
     ///
@@ -98,7 +118,7 @@ pub mod __private {
         fn fwd_help(&self) -> Option<crate::HelpText>;
         fn fwd_backtrace(&self) -> Option<&'a crate::Backtrace>;
         fn fwd_spantrace(&self) -> Option<&'a crate::SpanTrace>;
-        fn fwd_location(&self) -> Option<&'static std::panic::Location<'static>>;
+        fn fwd_location(&self) -> Option<&'static core::panic::Location<'static>>;
         fn fwd_exit_code(&self) -> Option<core::num::NonZeroU8>;
     }
 
@@ -120,7 +140,7 @@ pub mod __private {
             self.0.oopsie_spantrace()
         }
         #[inline]
-        fn fwd_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        fn fwd_location(&self) -> Option<&'static core::panic::Location<'static>> {
             self.0.oopsie_location()
         }
         #[inline]
@@ -148,7 +168,7 @@ pub mod __private {
             None
         }
         #[inline]
-        fn fwd_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        fn fwd_location(&self) -> Option<&'static core::panic::Location<'static>> {
             None
         }
         #[inline]
@@ -174,7 +194,7 @@ pub mod __private {
     #[inline]
     #[must_use]
     pub fn source_trace<'a, T: 'static>(
-        source: &'a (dyn std::error::Error + 'static),
+        source: &'a (dyn core::error::Error + 'static),
     ) -> Option<&'a T> {
         #[cfg(feature = "unstable-error-generic-member-access")]
         {
@@ -193,7 +213,7 @@ pub mod __private {
     #[inline]
     #[must_use]
     pub fn source_backtrace<'a>(
-        source: &'a (dyn std::error::Error + 'static),
+        source: &'a (dyn core::error::Error + 'static),
     ) -> Option<&'a crate::Backtrace> {
         source_trace::<crate::Backtrace>(source).filter(|bt| bt.is_captured())
     }
@@ -202,12 +222,15 @@ pub mod __private {
     #[inline]
     #[must_use]
     pub fn source_spantrace<'a>(
-        source: &'a (dyn std::error::Error + 'static),
+        source: &'a (dyn core::error::Error + 'static),
     ) -> Option<&'a crate::SpanTrace> {
         source_trace::<crate::SpanTrace>(source).filter(|st| st.is_captured())
     }
 
+    #[cfg(feature = "std")]
     pub use crate::marker::{TraceMarker, restore_marker, set_marker};
+    #[cfg(not(feature = "std"))]
+    pub use crate::nostd_stubs::{TraceMarker, restore_marker, set_marker};
 
     /// The exit code a type-erased source declares, reached through the Provider
     /// API. Returns `None` on stable (descending into a `dyn Error` is not
@@ -215,7 +238,7 @@ pub mod __private {
     #[inline]
     #[must_use]
     pub fn source_exit_code(
-        source: &(dyn std::error::Error + 'static),
+        source: &(dyn core::error::Error + 'static),
     ) -> Option<core::num::NonZeroU8> {
         #[cfg(feature = "unstable-error-generic-member-access")]
         {
@@ -318,6 +341,20 @@ pub mod __private {
 
     #[cfg(feature = "chrono")]
     pub use chrono;
+
+    /// `SystemTime` facade for macro-generated timestamp capture: routes
+    /// through here so generated code names one path regardless of std
+    /// availability, rather than `::std::time::SystemTime` directly.
+    #[cfg(feature = "std")]
+    pub use std::time::SystemTime;
+
+    /// `alloc` facade for macro-generated code: a bare `::alloc::` path only
+    /// resolves in a crate that declared `extern crate alloc;` itself, which
+    /// std-linked consumers of `#[oopsie]`/`#[derive(Oopsie)]` never do.
+    /// Routing through here instead names one path that resolves in both std
+    /// and no_std consumers, since this crate always declares `extern crate
+    /// alloc;`.
+    pub use alloc;
 }
 
 macro_rules! impl_string_newtypes {
@@ -392,9 +429,9 @@ macro_rules! impl_string_newtypes {
             }
         }
 
-        impl std::fmt::Display for $ident {
+        impl core::fmt::Display for $ident {
             #[inline]
-            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 self.0.fmt(f)
             }
         }

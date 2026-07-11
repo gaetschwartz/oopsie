@@ -15,7 +15,8 @@ categories.workspace = true
 all-features = true
 
 [features]
-default = []
+default = ["std"]
+std = ["oopsie-core/std", "serde_json?/std"]
 unstable-error-generic-member-access = [
     "oopsie-macros/unstable-error-generic-member-access",
     "oopsie-core/unstable-error-generic-member-access",
@@ -28,10 +29,10 @@ unstable = [
 ]
 fancy = ["dep:owo-colors", "dep:linkme"]
 serde = ["oopsie-core/serde", "dep:serde_json"]
-tracing = ["oopsie-core/tracing"]
-chrono = ["oopsie-core/chrono"]
-jiff = ["oopsie-core/jiff"]
-extras = ["oopsie-core/extras"]
+tracing = ["std", "oopsie-core/tracing"]
+chrono = ["std", "oopsie-core/chrono"]
+jiff = ["std", "oopsie-core/jiff"]
+extras = ["std", "oopsie-core/extras"]
 settings = ["oopsie-macros/settings"]
 
 [dependencies]
@@ -39,7 +40,9 @@ linkme = { version = "0.3.36", optional = true }
 oopsie-core = { workspace = true }
 oopsie-macros = { workspace = true }
 owo-colors = { version = "4", optional = true }
-serde_json = { version = "1", optional = true }
+serde_json = { version = "1", default-features = false, features = [
+    "alloc",
+], optional = true }
 
 [lints]
 workspace = true

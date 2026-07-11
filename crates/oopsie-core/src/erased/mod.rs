@@ -5,9 +5,14 @@ pub use backtrace::{ErasedBacktrace, ErasedFrame};
 mod spantrace;
 pub use spantrace::{ErasedMetadata, ErasedSpan, ErasedSpanTrace, TracingLevel};
 
-use std::fmt;
+use alloc::boxed::Box;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::fmt;
+use core::num::NonZeroU8;
+#[cfg(feature = "std")]
 use std::io;
-use std::num::NonZeroU8;
+#[cfg(feature = "std")]
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
@@ -66,27 +71,36 @@ pub struct ErasedError {
     /// Source-chain re-materialization, populated lazily on the first
     /// `Error::source()` call. `source_chain` is immutable after construction,
     /// so this snapshot can never go stale.
+    #[cfg(feature = "std")]
     #[serde(skip)]
     source: OnceLock<Option<Box<ChainNode>>>,
 }
 
-impl std::error::Error for ErasedError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+impl core::error::Error for ErasedError {
+    #[cfg(feature = "std")]
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         self.source
             .get_or_init(|| ChainNode::build(&self.source_chain))
             .as_deref()
-            .map(|node| node as &(dyn std::error::Error + 'static))
+            .map(|node| node as &(dyn core::error::Error + 'static))
+    }
+
+    #[cfg(not(feature = "std"))]
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
+        None
     }
 }
 
 /// One transported cause, re-materialized as a real error value so generic
 /// `Error::source()` walkers see the chain instead of bare data.
+#[cfg(feature = "std")]
 #[derive(Clone, Debug)]
 struct ChainNode {
     message: Box<str>,
     source: Option<Box<Self>>,
 }
 
+#[cfg(feature = "std")]
 impl ChainNode {
     fn build(messages: &[Box<str>]) -> Option<Box<Self>> {
         messages.iter().rev().fold(None, |source, message| {
@@ -98,17 +112,19 @@ impl ChainNode {
     }
 }
 
+#[cfg(feature = "std")]
 impl fmt::Display for ChainNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)
     }
 }
 
-impl std::error::Error for ChainNode {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+#[cfg(feature = "std")]
+impl core::error::Error for ChainNode {
+    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         self.source
             .as_deref()
-            .map(|node| node as &(dyn std::error::Error + 'static))
+            .map(|node| node as &(dyn core::error::Error + 'static))
     }
 }
 
@@ -163,8 +179,8 @@ impl fmt::Display for ErasedLocation {
     }
 }
 
-impl From<&'static std::panic::Location<'static>> for ErasedLocation {
-    fn from(location: &'static std::panic::Location<'static>) -> Self {
+impl From<&'static core::panic::Location<'static>> for ErasedLocation {
+    fn from(location: &'static core::panic::Location<'static>) -> Self {
         Self {
             file: location.file().into(),
             line: location.line(),
@@ -228,7 +244,7 @@ impl ErasedError {
         // `self` or an ancestor); the std contract does not forbid it. Cap the
         // eager walk so a foreign cyclic chain can't hang or OOM this
         // serialization entry point.
-        let mut source_chain: Vec<Box<str>> = std::iter::successors(err.source(), |e| e.source())
+        let mut source_chain: Vec<Box<str>> = core::iter::successors(err.source(), |e| e.source())
             .take(MAX_SOURCE_CHAIN_DEPTH + 1)
             .map(ToString::to_string)
             .map(Box::from)
@@ -253,10 +269,13 @@ impl ErasedError {
         let spantrace: Option<ErasedSpanTrace> = None;
         // Omit a captured-but-empty backtrace: with no frames there is nothing
         // to render, only a bare header.
+        #[cfg(feature = "std")]
         let backtrace = err
             .oopsie_backtrace()
             .map(ErasedBacktrace::from_backtrace)
             .filter(|bt| !bt.frames().is_empty());
+        #[cfg(not(feature = "std"))]
+        let backtrace: Option<ErasedBacktrace> = None;
 
         Self {
             message,
@@ -265,6 +284,7 @@ impl ErasedError {
             location,
             spantrace,
             backtrace,
+            #[cfg(feature = "std")]
             source: OnceLock::new(),
         }
     }
@@ -317,6 +337,7 @@ impl ErasedError {
     ///
     /// Returns the serialization error, including any underlying I/O failure
     /// from the writer.
+    #[cfg(feature = "std")]
     pub fn write_json<W: io::Write>(&self, f: &mut W) -> Result<(), serde_json::Error> {
         use io::Write as _;
         let mut buf = io::BufWriter::new(f);
@@ -326,7 +347,15 @@ impl ErasedError {
     }
 
     /// Write the error in a text format similar to `Report`.
+    #[cfg(feature = "std")]
     pub fn write_text<W: io::Write>(&self, f: &mut W) -> io::Result<()> {
+        f.write_all(self.to_text().as_bytes())
+    }
+
+    /// Renders the same text format as [`write_text`](Self::write_text) into a
+    /// `fmt::Write` sink, so both the `io::Write`-based writer and the no_std
+    /// `to_text`/`String` path share one implementation.
+    fn render_text(&self, f: &mut impl fmt::Write) -> fmt::Result {
         // Write main error header
         match self.diagnostics.code() {
             Some(code) => writeln!(f, "Error[{code}]:")?,
@@ -382,21 +411,18 @@ impl ErasedError {
     /// as a `String`. `Display` intentionally prints only the message so an
     /// `ErasedError` embeds cleanly in another error's source chain.
     #[must_use]
-    #[expect(
-        clippy::missing_panics_doc,
-        reason = "writing to a Vec<u8> cannot fail and write_text emits only UTF-8"
-    )]
+    #[expect(clippy::missing_panics_doc, reason = "writing to a String cannot fail")]
     pub fn to_text(&self) -> String {
-        let mut buf = Vec::new();
-        self.write_text(&mut buf)
-            .expect("Vec<u8> writes are infallible");
-        String::from_utf8(buf).expect("write_text emits UTF-8")
+        let mut out = String::new();
+        self.render_text(&mut out)
+            .expect("String writes are infallible");
+        out
     }
 
     /// Format the error as a short string without backtrace or spantrace.
     #[must_use]
     pub fn format_short(&self) -> String {
-        use std::fmt::Write as _;
+        use core::fmt::Write as _;
         let mut out = String::new();
 
         // Code

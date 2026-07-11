@@ -436,7 +436,7 @@ pub fn gen_enum_error(
                 code_arms.push(quote! {
                     #(#cfg_attrs)*
                     #[allow(unused_variables)]
-                    Self::#variant_ident { #(#code_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*))),
+                    Self::#variant_ident { #(#code_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*))),
                 });
             }
         } else if let Some(provide_attr) = categorized
@@ -501,7 +501,7 @@ pub fn gen_enum_error(
                 help_arms.push(quote! {
                     #(#cfg_attrs)*
                     #[allow(unused_variables)]
-                    Self::#variant_ident { #(#help_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*))),
+                    Self::#variant_ident { #(#help_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*))),
                 });
             }
         } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
@@ -962,7 +962,7 @@ pub fn gen_struct_error(
             quote! {
                 fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
                     #destructure
-                    ::core::option::Option::Some(#oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*)))
+                    ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*)))
                 }
             }
         }
@@ -1045,7 +1045,7 @@ pub fn gen_struct_error(
             quote! {
                 fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
                     #destructure
-                    ::core::option::Option::Some(#oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*)))
+                    ::core::option::Option::Some(#oopsie_path::HelpText::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*)))
                 }
             }
         }
@@ -1124,7 +1124,7 @@ fn gen_help_provide(
         // The enclosing `provide` method already destructures every field, so
         // an inline `{field}` capture in the format string resolves here.
         Ok(quote! {
-            #req.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from(::std::format!(#fmt #(, #args)*)));
+            #req.provide_value_with::<#oopsie_path::HelpText>(|| #oopsie_path::HelpText::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*)));
         })
     }
 }
@@ -1145,7 +1145,7 @@ fn gen_code_provide(
         // The enclosing `provide` method already destructures every field, so
         // an inline `{field}` capture in the format string resolves here.
         Ok(quote! {
-            #req.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(::std::format!(#fmt #(, #args)*)));
+            #req.provide_value_with::<#oopsie_path::ErrorCode>(|| #oopsie_path::ErrorCode::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*)));
         })
     }
 }

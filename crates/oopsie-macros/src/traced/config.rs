@@ -54,7 +54,7 @@ impl FieldInjectorConfig {
 
         let maybe_box = |inner: &TokenStream2, boxed: bool| -> TokenStream2 {
             if boxed {
-                quote! { ::std::boxed::Box<#inner> }
+                quote! { #oopsie_path::__private::alloc::boxed::Box<#inner> }
             } else {
                 quote! { #inner }
             }
@@ -75,7 +75,7 @@ impl FieldInjectorConfig {
                 #oopsie_path::__private::chrono::DateTime<#oopsie_path::__private::chrono::Local>
             }
         } else {
-            parse_quote! { ::std::time::SystemTime }
+            parse_quote! { #oopsie_path::__private::SystemTime }
         };
         // Surface the injected timestamp through the `Provider` API by value
         // (both `SystemTime` and `chrono::DateTime` are `Copy`). The field is

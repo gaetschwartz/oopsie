@@ -6,6 +6,7 @@ members = [
     "crates/oopsie-core",
     "crates/oopsie-macros",
 ]
+exclude = ["crates/nostd-smoke"]
 
 [workspace.package]
 edition = "2024"

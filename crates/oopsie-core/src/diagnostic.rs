@@ -1,6 +1,7 @@
 //! Simple trait for errors that expose diagnostic data.
 
-use std::sync::Arc;
+use alloc::boxed::Box;
+use alloc::sync::Arc;
 
 use crate::{Backtrace, ErrorCode, HelpText, SpanTrace};
 
@@ -9,7 +10,7 @@ use crate::{Backtrace, ErrorCode, HelpText, SpanTrace};
 /// Always implemented by `#[derive(Oopsie)]`. Provides a stable mechanism
 /// for extracting backtraces, span traces, error codes, and help text
 /// without relying on the unstable `Provide`/`Request` API.
-pub trait Diagnostic: std::error::Error {
+pub trait Diagnostic: core::error::Error {
     /// Returns the backtrace captured when this error was created.
     #[inline]
     fn oopsie_backtrace(&self) -> Option<&Backtrace> {
@@ -24,7 +25,7 @@ pub trait Diagnostic: std::error::Error {
 
     /// Returns the caller location captured when this error was created.
     #[inline]
-    fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+    fn oopsie_location(&self) -> Option<&'static core::panic::Location<'static>> {
         None
     }
 
@@ -64,7 +65,7 @@ impl<T: Diagnostic> Diagnostic for Box<T> {
     }
 
     #[inline]
-    fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+    fn oopsie_location(&self) -> Option<&'static core::panic::Location<'static>> {
         (**self).oopsie_location()
     }
 
@@ -99,7 +100,7 @@ impl<T: Diagnostic> Diagnostic for Arc<T> {
     }
 
     #[inline]
-    fn oopsie_location(&self) -> Option<&'static std::panic::Location<'static>> {
+    fn oopsie_location(&self) -> Option<&'static core::panic::Location<'static>> {
         (**self).oopsie_location()
     }
 

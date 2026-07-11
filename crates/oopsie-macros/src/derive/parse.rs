@@ -791,6 +791,12 @@ pub enum SourceKind {
         source_type: Box<Type>,
         transform: Expr,
     },
+    /// Auto-detected `Box<T>` source, unboxed to accept `T`. Distinct from
+    /// `Transformed` because the boxing call must be emitted through the
+    /// `#oopsie_path::__private::alloc` facade (unlike a user-supplied
+    /// `transform`, which is the caller's own expression and already
+    /// resolves in their crate).
+    AutoBoxed { source_type: Box<Type> },
 }
 
 /// Inner shape for `from(Type, transform)`. Used only as a parsing helper.
@@ -930,9 +936,8 @@ impl FieldAttrs {
                 syn::Type::TraitObject(_)
             )
         {
-            result.from = SourceKind::Transformed {
+            result.from = SourceKind::AutoBoxed {
                 source_type: Box::new(inner.clone()),
-                transform: syn::parse_quote! { ::std::boxed::Box::new },
             };
         }
 
@@ -942,7 +947,7 @@ impl FieldAttrs {
     pub const fn is_source(&self) -> bool {
         match self.from {
             SourceKind::No | SourceKind::Disabled => false,
-            SourceKind::Yes | SourceKind::Transformed { .. } => true,
+            SourceKind::Yes | SourceKind::Transformed { .. } | SourceKind::AutoBoxed { .. } => true,
         }
     }
 }

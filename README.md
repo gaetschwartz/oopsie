@@ -74,6 +74,30 @@ Unlike `thiserror`, the attachment points and the renderer come built in; unlike
 
 Feature flags are documented in the [crate docs](https://docs.rs/oopsie/latest/oopsie/#feature-flags).
 
+## no_std support
+
+`std` is on by default. Build with `default-features = false` for `no_std` +
+`alloc` targets — the crate always needs an allocator, so bring your own
+(`extern crate alloc` plus a global allocator) in the consumer. `fancy`
+requires `std` and fails to compile without it — the two are independent
+features so the combination is rejected loudly rather than silently upgraded.
+
+| Feature | no_std? |
+|---------|---------|
+| `serde` | yes (alloc-based `erased` module) |
+| `extras` | implies `std` |
+| `tracing` | implies `std` |
+| `chrono` | implies `std` |
+| `jiff` | implies `std` |
+| `test-utils` | implies `std` |
+| `fancy` | implies `std` (compile error otherwise) |
+
+Under `no_std`, `#[oopsie]`/`#[derive(Oopsie)]`, `Welp`, error chains, and
+`Diagnostic`/`Display` rendering all work unchanged; backtraces are always
+empty, and `Report` — which is `fancy`-only — is unavailable. See
+`crates/nostd-smoke` for a bare-metal (`thumbv7em-none-eabihf`) smoke test,
+and `just nostd` to run it locally.
+
 ## Development
 
 The MSRV is **1.89**. A nightly toolchain is pinned in `rust-toolchain.toml` for the
