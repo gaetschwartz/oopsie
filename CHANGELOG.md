@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.19] - 2026-07-11
+
+### Added
+
+- `no_std` support (alloc-based) for `oopsie-core` and `oopsie`, gated by a new
+  default-on `std` feature. Build with `default-features = false` to target
+  `no_std`; an allocator is required. The error types, `Diagnostic`, `Chain`,
+  `Welp`, `#[derive(Oopsie)]`, and `SpanTrace` are all available without `std`.
+  `serde` (and the `erased` API) work under `no_std` too. The `fancy` feature
+  (colorized `Report` rendering), panic hooks, real backtraces, `tracing`, and
+  clock-based timestamps require `std`; enabling `fancy` on a `no_std` build is
+  a compile error. Under `no_std`, backtraces are always empty.
+
 ## [0.1.0-rc.18] - 2026-06-29
 
 ### Changed
