@@ -336,10 +336,11 @@ e.g. API error responses."
 //! `std` is on by default; build with `default-features = false` for `no_std` +
 //! `alloc` targets (the crate always needs an allocator — bring your own with
 //! `extern crate alloc` and a global allocator in the consumer). `fancy`
-//! requires `std` and fails to compile without it. Panic hooks, backtraces,
-//! `tracing`, and clock-based timestamps (`chrono` / `jiff`) are also
-//! `std`-only; everything else — the derive, `Welp`, error chains, and
-//! `Diagnostic`/`Display` rendering — works unchanged.
+//! enables `std` (colorized `Report` rendering needs it), so it is unavailable
+//! on `no_std` targets. Panic hooks, backtraces, `tracing`, and clock-based
+//! timestamps (`chrono` / `jiff`) are also `std`-only; everything else — the
+//! derive, `Welp`, error chains, and `Diagnostic`/`Display` rendering — works
+//! unchanged.
 //!
 //! # Project-wide settings
 //!
@@ -412,9 +413,6 @@ e.g. API error responses."
 //! fails with a clear message.
 
 extern crate alloc;
-
-#[cfg(all(feature = "fancy", not(feature = "std")))]
-compile_error!("the `fancy` feature requires `std`; disable `fancy` for no_std builds");
 
 // Re-export the proc-macro attribute and derive.
 pub use oopsie_macros::Oopsie;

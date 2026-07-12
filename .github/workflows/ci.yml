@@ -164,8 +164,6 @@ jobs:
         run: cargo build -p oopsie --no-default-features
       - name: cargo build (nostd-smoke, thumbv7em-none-eabihf)
         run: cargo build --manifest-path crates/nostd-smoke/Cargo.toml --target thumbv7em-none-eabihf
-      - name: assert fancy + no_std is rejected
-        run: "! cargo build -p oopsie --no-default-features --features fancy 2>/dev/null"
 
   docs:
     name: Docs (rustdoc, -D warnings)

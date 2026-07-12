@@ -27,7 +27,7 @@ unstable = [
     "unstable-try-trait-v2",
     "oopsie-core/unstable",
 ]
-fancy = ["dep:owo-colors", "dep:linkme"]
+fancy = ["std", "dep:owo-colors", "dep:linkme"]
 serde = ["oopsie-core/serde", "dep:serde_json"]
 tracing = ["std", "oopsie-core/tracing"]
 chrono = ["std", "oopsie-core/chrono"]

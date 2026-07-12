@@ -67,10 +67,9 @@ test-bless *ARGS:
     cargo +stable nextest run --workspace --no-default-features --features fancy,tracing,chrono --no-fail-fast {{ ARGS }} || true
     cargo nextest run --workspace --no-default-features --features unstable,fancy,tracing,chrono --no-fail-fast {{ ARGS }} || true
 
-# Build the runtime crates for no_std (host + bare-metal) and assert fancy+no_std is rejected.
+# Build the runtime crates for no_std (host + bare-metal).
 nostd:
     cargo build -p oopsie-core --no-default-features
     cargo build -p oopsie-core --no-default-features --features serde
     cargo build -p oopsie --no-default-features
     cargo build --manifest-path crates/nostd-smoke/Cargo.toml --target thumbv7em-none-eabihf
-    ! cargo build -p oopsie --no-default-features --features fancy 2>/dev/null

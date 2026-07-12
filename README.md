@@ -79,8 +79,8 @@ Feature flags are documented in the [crate docs](https://docs.rs/oopsie/latest/o
 `std` is on by default. Build with `default-features = false` for `no_std` +
 `alloc` targets — the crate always needs an allocator, so bring your own
 (`extern crate alloc` plus a global allocator) in the consumer. `fancy`
-requires `std` and fails to compile without it — the two are independent
-features so the combination is rejected loudly rather than silently upgraded.
+enables `std` (colorized `Report` rendering needs it), so it is unavailable on
+`no_std` targets.
 
 | Feature | no_std? |
 |---------|---------|
@@ -90,7 +90,7 @@ features so the combination is rejected loudly rather than silently upgraded.
 | `chrono` | implies `std` |
 | `jiff` | implies `std` |
 | `test-utils` | implies `std` |
-| `fancy` | implies `std` (compile error otherwise) |
+| `fancy` | implies `std` |
 
 Under `no_std`, `#[oopsie]`/`#[derive(Oopsie)]`, `Welp`, error chains, and
 `Diagnostic`/`Display` rendering all work unchanged; backtraces are always
