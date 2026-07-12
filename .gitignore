@@ -8,3 +8,6 @@ profile.json.gz
 
 # Playwright MCP scratch output
 .playwright-mcp/
+
+# excluded compile-probe crate builds its own lockfile
+crates/nostd-smoke/Cargo.lock
