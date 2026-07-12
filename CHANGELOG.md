@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.20] - 2026-07-12
+
+### Changed
+
+- The `fancy` feature now enables `std` (`fancy = ["std", …]`) instead of being
+  an independent feature that failed to compile when combined with a `no_std`
+  build. Enabling `fancy` on a `no_std` build now transparently pulls in `std`,
+  matching Rust's usual additive-feature convention (a feature enables what it
+  needs) rather than erroring. `no_std` builds without `fancy` are unaffected.
+
 ## [0.1.0-rc.19] - 2026-07-11
 
 ### Added
