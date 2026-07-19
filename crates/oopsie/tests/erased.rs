@@ -37,8 +37,8 @@ pub struct ErrorWithExitCode {
 }
 
 #[cfg(feature = "tracing")]
-#[test]
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
+#[test]
 fn test_erased_error_text() {
     let error = ErasedError::from_error(common::make_error());
     redact!(backtrace, {
@@ -47,8 +47,8 @@ fn test_erased_error_text() {
 }
 
 #[cfg(feature = "tracing")]
-#[test]
 #[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
+#[test]
 fn test_erased_error_json() {
     let error = ErasedError::from_error(common::make_error());
     redact!(backtrace, {
@@ -97,6 +97,7 @@ fn test_exit_code_survives_erasure_and_round_trip() {
     assert_eq!(restored.diagnostics().exit_code(), Some(expected));
 }
 
+#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 #[test]
 fn test_format_short_includes_help() {
     let error = ErrorWithHelpOopsie {
