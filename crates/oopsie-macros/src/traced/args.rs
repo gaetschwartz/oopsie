@@ -90,7 +90,9 @@ impl TracedArgs {
         let trace_boxed = |trace: &FieldSetting<true, TraceSettings>| {
             trace
                 .opt_settings()
-                .map_or_else(|| manifest_boxed.unwrap_or(true), |s| s.boxed.is_enabled())
+                .and_then(|s| s.boxed.to_option())
+                .or(manifest_boxed)
+                .unwrap_or(true)
         };
         ResolvedTraceArgs {
             backtrace: self.backtrace.is_enabled(),
@@ -457,6 +459,44 @@ mod tests {
             ..TracedDefaults::default()
         });
         assert!(!r.backtrace_boxed && !r.spantrace_boxed);
+    }
+
+    #[test]
+    fn type_only_trace_block_inherits_pair_level_boxed() {
+        // A trace block written only to set `type` must not collapse boxing to
+        // the hardcoded default: both traces inherit the pair-level `boxed`.
+        let a = args(&parse_quote!(traced(
+            boxed = false,
+            backtrace(r#type = MyBt)
+        )));
+        let r = resolve(&a);
+        assert!(!r.backtrace_boxed);
+        assert!(!r.spantrace_boxed);
+        assert!(r.backtrace_type.is_some());
+        r.validate(proc_macro2::Span::call_site()).unwrap();
+    }
+
+    #[test]
+    fn explicit_per_trace_boxed_overrides_pair_level() {
+        let a = args(&parse_quote!(traced(
+            boxed = false,
+            backtrace(boxed = true)
+        )));
+        let r = resolve(&a);
+        assert!(r.backtrace_boxed);
+        assert!(!r.spantrace_boxed);
+        r.validate(proc_macro2::Span::call_site()).unwrap_err();
+    }
+
+    #[test]
+    fn type_only_trace_block_inherits_manifest_boxed() {
+        let a = args(&parse_quote!(traced(backtrace(r#type = MyBt))));
+        let r = a.resolve(&TracedDefaults {
+            boxed: Some(false),
+            ..TracedDefaults::default()
+        });
+        assert!(!r.backtrace_boxed);
+        assert!(!r.spantrace_boxed);
     }
 
     #[test]
