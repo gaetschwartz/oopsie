@@ -32,8 +32,11 @@ struct SelectorShape<'a> {
     /// The parameters the selector itself carries (projected error params plus
     /// the `__T{i}` `Into` params), every one of which appears in `struct_use`.
     selector_params: Vec<GenericParam>,
-    /// The `__T{i}: Into<..>` bounds.
-    into_bounds: Vec<TokenStream2>,
+    /// The `__T{i}: Into<..>` bounds, each paired with the error parameters its
+    /// converted type depends on (`__T0: Into<T::Item>` → `{T}`), so a bound that
+    /// names a *free* parameter can ride the `build`/`fail` method that declares
+    /// it rather than the selector-scoped impl, which does not.
+    into_bounds: Vec<(TokenStream2, std::collections::HashSet<String>)>,
     /// The names of the error parameters the selector's fields reference, to
     /// split the error parameters into selector-bound and free.
     referenced_names: std::collections::HashSet<String>,
@@ -84,7 +87,8 @@ fn selector_shape<'a>(
         if cfg.is_empty() && !references_param {
             let ty_param = format_ident!("__T{}", i);
             into_param_idents.push(ty_param.clone());
-            into_bounds.push(quote! { #ty_param: ::core::convert::Into<#field_ty> });
+            let bound = quote! { #ty_param: ::core::convert::Into<#field_ty> };
+            into_bounds.push((bound, declared.params_for_into_bound(field_ty)));
             fields.push(quote! { #[doc = #field_doc] pub #field_ident: #ty_param });
         } else {
             all_into_params = false;
@@ -144,8 +148,32 @@ impl SelectorShape<'_> {
             quote! { <#(#params),*> }
         };
         let mut predicates = self.scoped_predicates(&self.referenced_names);
-        predicates.extend(self.into_bounds.iter().cloned());
+        predicates.extend(self.scoped_into_bounds(&self.referenced_names));
         (impl_generics, render_where(&predicates))
+    }
+
+    /// The `Into` bounds every one of whose named parameters is in `names`, so
+    /// they fit an impl or method scoped to exactly that parameter set. A bound
+    /// naming a *free* parameter (`__T0: Into<T::Item>` with `T` unprojected) is
+    /// held back for [`SelectorShape::unscoped_into_bounds`].
+    fn scoped_into_bounds(&self, names: &std::collections::HashSet<String>) -> Vec<TokenStream2> {
+        self.into_bounds
+            .iter()
+            .filter(|(_, params)| params.is_subset(names))
+            .map(|(bound, _)| bound.clone())
+            .collect()
+    }
+
+    /// The `Into` bounds naming a parameter outside `names` — i.e. a free error
+    /// parameter the selector-scoped impl cannot see. These ride the `build`/
+    /// `fail` methods, which declare the free parameters (see
+    /// [`SelectorShape::free_params`]).
+    fn unscoped_into_bounds(&self, names: &std::collections::HashSet<String>) -> Vec<TokenStream2> {
+        self.into_bounds
+            .iter()
+            .filter(|(_, params)| !params.is_subset(names))
+            .map(|(bound, _)| bound.clone())
+            .collect()
     }
 
     /// Impl generics and `where` clause for a sourced `Contextual<Source>` impl:
@@ -181,7 +209,7 @@ impl SelectorShape<'_> {
             .flat_map(|wc| wc.predicates.iter())
             .map(|pred| quote! { #pred })
             .collect();
-        predicates.extend(self.into_bounds.iter().cloned());
+        predicates.extend(self.into_bounds.iter().map(|(bound, _)| bound.clone()));
         (impl_generics, render_where(&predicates))
     }
 
@@ -912,7 +940,11 @@ fn gen_build_fail(
     // annotation. The `NoSource` `Contextual` impl, whose `Destination`
     // associated type must be fully concrete, exists only when no parameter is
     // free — otherwise the selector pins every parameter and the impl is exact.
-    let (free_decl, free_preds) = shape.free_params();
+    let (free_decl, mut free_preds) = shape.free_params();
+    // An `Into` bound over a shorthand projection (`__T0: Into<T::Item>`) names a
+    // free error parameter, so it lands on the methods that declare it, not the
+    // selector-scoped impl.
+    free_preds.extend(shape.unscoped_into_bounds(&shape.referenced_names));
     let build_generics = if free_decl.is_empty() {
         quote! {}
     } else {

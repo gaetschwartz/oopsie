@@ -395,6 +395,36 @@ fn leaf_free_of_lifetime_and_const() {
     assert_eq!(res.unwrap_err().to_string(), "free 1");
 }
 
+// ─── shorthand associated-type projection field ───
+// `item: T::Item` names its base param `T` only in the path's leading segment,
+// so `T` stays free (no field pins it) and the field rides `Into<T::Item>`. That
+// bound must land on `build`/`fail`, which declare `T`, not the selector-scoped
+// impl, which does not.
+
+trait HasItem {
+    type Item: fmt::Debug;
+}
+
+impl HasItem for u32 {
+    type Item = u16;
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum ProjectionError<T: HasItem + fmt::Debug> {
+    #[oopsie("item {item:?}")]
+    Projected { item: T::Item },
+}
+
+#[test]
+fn shorthand_associated_type_projection_field() {
+    let err: ProjectionError<u32> = Projected { item: 5u16 }.build();
+    assert_eq!(err.to_string(), "item 5");
+    assert!(matches!(err, ProjectionError::Projected { item } if item == 5u16));
+    let res: Result<(), ProjectionError<u32>> = Projected { item: 7u16 }.fail();
+    assert_eq!(res.unwrap_err().to_string(), "item 7");
+}
+
 // ─── defaulted generic params (type and const) ───
 // A default (`= u8`, `= 4`) is legal only on the type's own declaration; every
 // impl header and method-generic list the derive emits must strip it, or rustc

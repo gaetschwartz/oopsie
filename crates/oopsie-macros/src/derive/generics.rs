@@ -184,6 +184,7 @@ pub fn predicate_named_params(
                     let mut visitor = RefVisitor {
                         declared,
                         found: &mut found,
+                        record_projection_base: false,
                     };
                     visitor.visit_path(&tb.path);
                 }
@@ -248,6 +249,21 @@ impl DeclaredParams {
         probe.add_type(ty, self);
         !probe.types.is_empty() || !probe.consts.is_empty() || !probe.lifetimes.is_empty()
     }
+
+    /// The declared parameters an `Into<ty>` bound depends on, counting the base
+    /// of a shorthand associated-type projection (`T::Item` → `T`) that
+    /// [`type_references_param`] deliberately ignores so the field rides `Into`.
+    /// The bound must land on an impl or method with every one of these in scope.
+    pub fn params_for_into_bound(&self, ty: &Type) -> HashSet<String> {
+        let mut probe = ReferencedParams::default();
+        let mut visitor = RefVisitor {
+            declared: self,
+            found: &mut probe,
+            record_projection_base: true,
+        };
+        visitor.visit_type(ty);
+        probe.names()
+    }
 }
 
 /// The subset of an error's declared parameters that a set of field types
@@ -268,6 +284,7 @@ impl ReferencedParams {
         let mut visitor = RefVisitor {
             declared,
             found: self,
+            record_projection_base: false,
         };
         visitor.visit_type(ty);
     }
@@ -292,6 +309,11 @@ impl ReferencedParams {
 struct RefVisitor<'a> {
     declared: &'a DeclaredParams,
     found: &'a mut ReferencedParams,
+    /// Also record the leading segment of a shorthand associated-type projection
+    /// (`T::Item` → `T`). A single-segment path already lands via `get_ident`;
+    /// segment recursion never re-enters `visit_path` for the bare leading
+    /// segment of a multi-segment path, so it needs recording here.
+    record_projection_base: bool,
 }
 
 impl<'ast> Visit<'ast> for RefVisitor<'_> {
@@ -309,6 +331,13 @@ impl<'ast> Visit<'ast> for RefVisitor<'_> {
             }
             if self.declared.consts.contains(&name) {
                 self.found.consts.insert(name);
+            }
+        } else if self.record_projection_base
+            && let Some(first) = i.segments.first()
+        {
+            let name = first.ident.to_string();
+            if self.declared.types.contains(&name) {
+                self.found.types.insert(name);
             }
         }
         // Recurse so a parameter nested in generic arguments
