@@ -394,3 +394,49 @@ fn leaf_free_of_lifetime_and_const() {
     let res: Result<(), MixedFreeError<'_, u32, 4>> = FreeLeaf { value: 1u32 }.fail();
     assert_eq!(res.unwrap_err().to_string(), "free 1");
 }
+
+// ─── defaulted generic params (type and const) ───
+// A default (`= u8`, `= 4`) is legal only on the type's own declaration; every
+// impl header and method-generic list the derive emits must strip it, or rustc
+// rejects them ("defaults for generic parameters are not allowed here"). The
+// `Payload` leaf projects `T` onto its selector and frees the defaulted const
+// `N`; `Buffer` frees the defaulted type `T`.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum DefaultedError<T: fmt::Debug = u8, const N: usize = 4> {
+    #[oopsie("payload {payload:?}")]
+    DefPayload { payload: T },
+    #[oopsie("buffer of {} bytes", N)]
+    DefBuffer { data: [u8; N] },
+}
+
+#[test]
+fn defaulted_type_and_const_params() {
+    let err: DefaultedError = DefPayload { payload: 9u8 }.build();
+    assert_eq!(err.to_string(), "payload 9");
+    let err: DefaultedError = DefBuffer { data: [1, 2, 3, 4] }.build();
+    assert_eq!(err.to_string(), "buffer of 4 bytes");
+    assert!(matches!(err, DefaultedError::DefBuffer { data } if data == [1, 2, 3, 4]));
+}
+
+// ─── defaulted param on a sourced struct ───
+// The sourced `Contextual` impl carries the error's full generics; the default
+// `= io::Error` on `E` must be stripped from that impl header.
+
+#[derive(Debug, Oopsie)]
+struct DefaultedLoad<E: std::error::Error + 'static = io::Error> {
+    source: E,
+    path: String,
+}
+
+#[test]
+fn defaulted_param_sourced_struct() {
+    let io_err = io::Error::new(io::ErrorKind::NotFound, "gone");
+    let err: DefaultedLoad = DefaultedLoadOopsie {
+        path: "/x".to_owned(),
+    }
+    .build_error(io_err);
+    assert_eq!(err.path, "/x");
+    assert_eq!(err.source().unwrap().to_string(), "gone");
+}

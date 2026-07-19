@@ -57,6 +57,27 @@ impl SelectorGenerics {
     }
 }
 
+/// A copy of `param` with any default (`= u8`, `= 4`) removed, for the
+/// declaration positions that forbid one: an `impl<...>` header or a method's
+/// generic list. Bounds are legal there and left intact; lifetimes have no
+/// default. A default is only ever valid on the original type/struct/enum
+/// declaration, which the derive never re-emits.
+pub fn strip_default(param: &GenericParam) -> GenericParam {
+    let mut param = param.clone();
+    match &mut param {
+        GenericParam::Type(tp) => {
+            tp.eq_token = None;
+            tp.default = None;
+        }
+        GenericParam::Const(cp) => {
+            cp.eq_token = None;
+            cp.default = None;
+        }
+        GenericParam::Lifetime(_) => {}
+    }
+    param
+}
+
 /// The bare name of a generic parameter — the lifetime ident without its tick,
 /// or the type/const ident — for membership checks against a referenced set.
 pub fn param_name(param: &GenericParam) -> String {
@@ -92,12 +113,14 @@ pub fn project(generics: &Generics, referenced: &ReferencedParams) -> SelectorGe
                 let mut bare = tp.clone();
                 bare.bounds.clear();
                 bare.colon_token = None;
+                bare.eq_token = None;
+                bare.default = None;
                 decl_params.push(GenericParam::Type(bare));
                 let ident = &tp.ident;
                 use_args.push(quote! { #ident });
             }
             GenericParam::Const(cp) if referenced.consts.contains(&cp.ident.to_string()) => {
-                decl_params.push(param.clone());
+                decl_params.push(strip_default(param));
                 let ident = &cp.ident;
                 use_args.push(quote! { #ident });
             }

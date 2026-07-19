@@ -158,7 +158,12 @@ impl SelectorShape<'_> {
     /// reject that configuration via [`SelectorShape::unconstrained_error_param`]
     /// before reaching here.
     fn sourced_impl(&self) -> (TokenStream2, TokenStream2) {
-        let mut params: Vec<GenericParam> = self.generics.params.iter().cloned().collect();
+        let mut params: Vec<GenericParam> = self
+            .generics
+            .params
+            .iter()
+            .map(super::generics::strip_default)
+            .collect();
         for param in &self.selector_params {
             if super::generics::param_name(param).starts_with("__T") {
                 params.push(param.clone());
@@ -253,7 +258,7 @@ impl SelectorShape<'_> {
                     .referenced_names
                     .contains(&super::generics::param_name(p))
             })
-            .cloned()
+            .map(super::generics::strip_default)
             .collect();
         let free_names: std::collections::HashSet<String> =
             decl.iter().map(super::generics::param_name).collect();
