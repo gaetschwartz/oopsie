@@ -167,6 +167,35 @@ fn transparent_generic_wrapper() {
     assert_eq!(src.to_string(), "denied");
 }
 
+// ─── transparent generic wrapper forwards leaf diagnostics ───
+// A generic transparent source needs a `<E>: Diagnostic` bound on the
+// `Diagnostic` impl so the help/code probe resolves to the forwarding impl
+// instead of the `None` fallback.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum LeafDiag {
+    #[oopsie(display("leaf failed"), help = "fix the leaf", code = "leaf::boom")]
+    LeafBoom { detail: String },
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum DiagWrap<E: std::error::Error + 'static> {
+    #[oopsie(display("wrapped"), transparent)]
+    Inner { source: E },
+}
+
+#[test]
+fn transparent_generic_wrapper_forwards_diagnostics() {
+    let leaf: LeafDiag = LeafBoom { detail: "x" }.build();
+    let wrapped: DiagWrap<LeafDiag> = DiagWrap::from(leaf);
+    let help = wrapped.oopsie_help_text().expect("forwards leaf help");
+    assert_eq!(&*help, "fix the leaf");
+    let code = wrapped.oopsie_error_code().expect("forwards leaf code");
+    assert_eq!(&*code, "leaf::boom");
+}
+
 // ─── selector field referencing a parameter keeps the parameter's type ───
 // A field whose type names a parameter (`Vec<T>`) takes that type directly on
 // the selector; the `Into` ergonomics apply only to parameter-free fields (the

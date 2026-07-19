@@ -156,15 +156,18 @@ fn diagnostic_where_clause(
     }
 }
 
-/// A forwarded source field's declared type when it names a generic parameter of
-/// `generics` (so the `DiagProbe` bound is needed), else `None`. A concrete type
-/// names no parameter and must keep yielding `None`, so it is skipped.
+/// A source field's declared type when it names a generic parameter of `generics`
+/// and its diagnostics are forwarded (so the `DiagProbe` bound is needed), else
+/// `None`. A `transparent` error forwards diagnostics through the probe just like
+/// an explicit `forward(...)`, so it needs the bound too. A concrete type names no
+/// parameter and must keep yielding `None`, so it is skipped.
 fn forwarded_generic_source_ty<'a>(
     source: Option<&'a super::parse::SourceField>,
+    transparent: bool,
     generics: &syn::Generics,
 ) -> Option<&'a Type> {
     let source = source?;
-    if !source.forward.any() {
+    if !transparent && !source.forward.any() {
         return None;
     }
     let declared = super::generics::DeclaredParams::from_generics(generics);
@@ -667,7 +670,13 @@ pub fn gen_enum_error(
     let forwarded_generic_sources: Vec<&Type> = resolved
         .variants
         .iter()
-        .filter_map(|v| forwarded_generic_source_ty(v.fields.source.as_ref(), &input.generics))
+        .filter_map(|v| {
+            forwarded_generic_source_ty(
+                v.fields.source.as_ref(),
+                v.attrs.transparent,
+                &input.generics,
+            )
+        })
         .collect();
     let diag_where =
         diagnostic_where_clause(&input.generics, &forwarded_generic_sources, oopsie_path);
@@ -1081,10 +1090,13 @@ pub fn gen_struct_error(
         quote! {}
     };
 
-    let forwarded_generic_sources: Vec<&Type> =
-        forwarded_generic_source_ty(categorized.source.as_ref(), &input.generics)
-            .into_iter()
-            .collect();
+    let forwarded_generic_sources: Vec<&Type> = forwarded_generic_source_ty(
+        categorized.source.as_ref(),
+        attrs.transparent,
+        &input.generics,
+    )
+    .into_iter()
+    .collect();
     let diag_where =
         diagnostic_where_clause(&input.generics, &forwarded_generic_sources, oopsie_path);
 
