@@ -767,7 +767,15 @@ pub(super) fn selector_name(base: &Ident, suffix: &SuffixSetting) -> syn::Result
         .unwrap_or(&base_str);
     let name = match suffix {
         SuffixSetting::Off => stripped.to_owned(),
-        SuffixSetting::Custom(s) => format!("{stripped}{s}"),
+        SuffixSetting::Custom(s) => {
+            if !crate::utils::is_ident_fragment(s) {
+                return Err(syn::Error::new(
+                    base.span(),
+                    format!("`#[oopsie(suffix = \"{s}\")]` is not a valid identifier fragment"),
+                ));
+            }
+            format!("{stripped}{s}")
+        }
     };
     ident_maybe_raw(&name, base.span())
 }

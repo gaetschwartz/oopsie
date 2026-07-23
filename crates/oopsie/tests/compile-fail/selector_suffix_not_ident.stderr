@@ -1,0 +1,5 @@
+error: `#[oopsie(suffix = "with space")]` is not a valid identifier fragment
+  --> tests/compile-fail/selector_suffix_not_ident.rs:11:8
+   |
+11 | struct ConnError {
+   |        ^^^^^^^^^

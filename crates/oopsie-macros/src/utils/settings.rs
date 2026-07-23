@@ -73,12 +73,6 @@ fn compile_error(msg: &str) -> proc_macro2::TokenStream {
     quote! { ::core::compile_error!(#msg); }
 }
 
-/// A non-empty run of identifier characters, so appending it to `name_`
-/// yields a valid identifier.
-fn is_ident_fragment(s: &str) -> bool {
-    !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
-}
-
 /// The member crate's manifest directory, canonicalized for symlink-safe
 /// path comparison.
 fn member_dir() -> Result<PathBuf, String> {
@@ -410,7 +404,7 @@ fn resolve_naming(settings: &Settings, section: &str) -> Result<super::NamingDef
         Some(ModuleSetting::Toggle(b)) => (Some(*b), None),
         Some(ModuleSetting::Table(t)) => {
             let suffix = match &t.suffix {
-                Some(s) if !is_ident_fragment(s) => {
+                Some(s) if !super::is_ident_fragment(s) => {
                     return Err(format!(
                         "{section} module.suffix {s:?} is not a valid identifier fragment"
                     ));
@@ -429,7 +423,7 @@ fn resolve_naming(settings: &Settings, section: &str) -> Result<super::NamingDef
                      use a suffix name or `false` to disable"
             ));
         }
-        Some(RawSuffix::Name(s)) if !is_ident_fragment(s) => {
+        Some(RawSuffix::Name(s)) if !super::is_ident_fragment(s) => {
             return Err(format!(
                 "{section} default-suffix {s:?} is not a valid identifier fragment"
             ));
