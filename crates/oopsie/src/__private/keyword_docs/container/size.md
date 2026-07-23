@@ -30,6 +30,8 @@ With the `experimental-settings` feature, `max-size = N` under
 derived in that crate, as if each carried `#[oopsie(size(..=N))]`. The same
 key is also honored from `[workspace.metadata.oopsie]` at the workspace root.
 A per-type `size(...)` always overrides it, and `max-size = 0` is rejected
-(remove the key to disable the cap). See the crate-level docs' "Project-wide
-settings" section for the feature-unification caveat this implies for
-workspaces.
+(remove the key to disable the cap). Generic error types are silently exempt
+from `max-size` — a per-type `size(...)` cannot be applied to them either,
+since their size depends on the type arguments. See the crate-level docs'
+"Project-wide settings" section for the feature-unification caveat this
+implies for workspaces.

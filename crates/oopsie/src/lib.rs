@@ -410,6 +410,9 @@ e.g. API error responses."
 //!   `module(name)` sets the module's full name instead.
 //! - `timestamp = true` records a `SystemTime`; the `chrono` / `provide` forms
 //!   stay per-type (`traced(timestamp(chrono = true))`).
+//! - `max-size` is silently skipped on generic error types: a per-type
+//!   `size(...)` is rejected on them too, since their size depends on the
+//!   type arguments and has no single value to assert.
 //!
 //! `max-size` rejects `0` and `default-suffix = true` is rejected as ambiguous
 //! (use a name or `false`); `module.suffix` / `default-suffix` must be valid
