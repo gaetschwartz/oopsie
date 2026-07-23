@@ -1,0 +1,5 @@
+error: `traced` only takes effect through the `#[oopsie::oopsie(traced)]` attribute macro, not `#[derive(Oopsie)]` alone; wrap the struct with the attribute macro instead
+  --> tests/compile-fail/struct_traced_no_attr_macro.rs:12:10
+   |
+12 | #[oopsie(traced)]
+   |          ^^^^^^

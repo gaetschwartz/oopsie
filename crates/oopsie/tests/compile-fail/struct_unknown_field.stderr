@@ -1,0 +1,5 @@
+error: Unknown field: `bogus_key`. Available values: `code`, `display`, `exit_code`, `help`, `module`, `path`, `provide`, `size`, `suffix`, `transparent`, `vis`
+  --> tests/compile-fail/struct_unknown_field.rs:12:10
+   |
+12 | #[oopsie(bogus_key)]
+   |          ^^^^^^^^^

@@ -678,12 +678,72 @@ impl StructAttrs {
     pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         use darling::FromAttributes as _;
         let (short_display, attrs) = extract_short_display(attrs)?;
-        let mut result = Self::from_attributes(&attrs).map_err(syn::Error::from)?;
+        let mut result =
+            Self::from_attributes(&attrs).map_err(|e| improve_struct_unknown_field(e, &attrs))?;
         if let Some(short) = short_display {
             merge_short_display(&mut result.display, short)?;
         }
         Ok(result)
     }
+}
+
+/// Find the first `#[oopsie(...)]` key on `attrs` that isn't a real
+/// `StructAttrs` field: `traced` (a `VARIANT_KEYWORDS` entry kept there only
+/// for `reject_keyword_args`, but never a field the struct-only derive path
+/// understands) or anything outside the combined container/variant keyword
+/// set.
+fn first_unknown_struct_key(attrs: &[syn::Attribute]) -> Option<Ident> {
+    attrs
+        .iter()
+        .filter(|attr| attr.path().is_ident("oopsie"))
+        .filter_map(|attr| {
+            attr.parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)
+                .ok()
+        })
+        .flatten()
+        .find_map(|meta| {
+            let ident = meta.path().get_ident()?.clone();
+            (ident == "traced" || !DisplayScope::Struct.is_keyword(&ident.to_string()))
+                .then_some(ident)
+        })
+}
+
+/// darling's own "Unknown field" hint silently drops the "Available values"
+/// list once a type has ten or more addressable keys — `StructAttrs` has
+/// eleven — so an unknown key on a struct otherwise loses the guidance an
+/// enum container gets. Reconstruct the message from the keyword tables
+/// instead of leaking the bare darling error, and give `traced` (parsed as a
+/// keyword but never a real field here) a dedicated pointer to the attribute
+/// macro that actually implements it.
+fn improve_struct_unknown_field(err: darling::Error, attrs: &[syn::Attribute]) -> syn::Error {
+    let Some(ident) = first_unknown_struct_key(attrs) else {
+        return err.into();
+    };
+    if ident == "traced" {
+        return syn::Error::new_spanned(
+            &ident,
+            "`traced` only takes effect through the `#[oopsie::oopsie(traced)]` attribute \
+             macro, not `#[derive(Oopsie)]` alone; wrap the struct with the attribute macro \
+             instead",
+        );
+    }
+    let mut keys: Vec<&str> = CONTAINER_KEYWORDS
+        .iter()
+        .chain(VARIANT_KEYWORDS.iter())
+        .copied()
+        .filter(|&k| k != "traced")
+        .collect();
+    keys.sort_unstable();
+    keys.dedup();
+    let available = keys
+        .iter()
+        .map(|k| format!("`{k}`"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    syn::Error::new_spanned(
+        &ident,
+        format!("Unknown field: `{ident}`. Available values: {available}"),
+    )
 }
 
 /// Merge a pre-pass-extracted short-display into the target slot. Errors if
