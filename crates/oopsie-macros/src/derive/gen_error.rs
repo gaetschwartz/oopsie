@@ -453,7 +453,7 @@ pub fn gen_enum_error(
             .iter()
             .map(|(f, p)| (Some(f), p))
             .chain(variant_attrs.provides.iter().map(|p| (None, p)))
-            .find(|(_, p)| is_error_code_provide(p))
+            .find(|(_, p)| is_error_code_provide(p, oopsie_path))
         {
             let expr = &provide_attr.expr;
             // The provide expr may reference fields (it gets the same bindings
@@ -999,7 +999,7 @@ pub fn gen_struct_error(
             .iter()
             .map(|(f, p)| (Some(f), p))
             .chain(attrs.provides.iter().map(|p| (None, p)))
-            .find(|(_, p)| is_error_code_provide(p));
+            .find(|(_, p)| is_error_code_provide(p, oopsie_path));
         if let Some((field_ident, provide_attr)) = code_provide {
             let expr = &provide_attr.expr;
             // The provide expr may reference fields (it gets the same bindings
@@ -1211,9 +1211,10 @@ fn gen_provide_call(attr: &ProvideAttr, req: &syn::Ident) -> TokenStream2 {
 /// provide, through `oopsie_error_code()`).
 ///
 /// Matches a bare `ErrorCode` (the form trace injection emits) or one
-/// qualified by `oopsie`/`oopsie_core`. A foreign `my_crate::ErrorCode` is
+/// qualified by exactly `oopsie_path`, the resolved crate path (honoring a
+/// renamed dependency via `path = "..."`). A foreign `my_crate::ErrorCode` is
 /// deliberately not matched, so it is not hijacked into `oopsie_error_code()`.
-fn is_error_code_provide(attr: &ProvideAttr) -> bool {
+fn is_error_code_provide(attr: &ProvideAttr, oopsie_path: &syn::Path) -> bool {
     let Type::Path(type_path) = &attr.provided_type else {
         return false;
     };
@@ -1227,8 +1228,12 @@ fn is_error_code_provide(attr: &ProvideAttr) -> bool {
     match segments.len() {
         1 => true,
         n => {
-            let qualifier = &segments[n - 2].ident;
-            qualifier == "oopsie" || qualifier == "oopsie_core"
+            n - 1 == oopsie_path.segments.len()
+                && segments
+                    .iter()
+                    .take(n - 1)
+                    .zip(oopsie_path.segments.iter())
+                    .all(|(a, b)| a.ident == b.ident)
         }
     }
 }

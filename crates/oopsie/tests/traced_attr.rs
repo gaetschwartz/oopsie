@@ -814,3 +814,31 @@ fn raw_ident_variant_auto_code_drops_prefix() {
         code.as_str()
     );
 }
+
+// ---- `path = "..."` (renamed crate) must not lose the traced auto-code ----
+
+#[test]
+fn renamed_crate_path_preserves_auto_code() {
+    use oopsie as renamed_oopsie;
+    use oopsie::Diagnostic as _;
+
+    #[oopsie(traced, path = "renamed_oopsie")]
+    #[oopsie(module(false))]
+    pub enum RenamedPathError {
+        #[oopsie("boom: {msg}")]
+        Boom { msg: String },
+    }
+
+    let err = Boom {
+        msg: "x".to_owned(),
+    }
+    .build();
+    let code = err
+        .oopsie_error_code()
+        .expect("auto-code should survive a renamed crate path");
+    assert!(
+        code.as_str().ends_with("::RenamedPathError::Boom"),
+        "auto-code lost under a renamed crate path: {:?}",
+        code.as_str()
+    );
+}
