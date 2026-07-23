@@ -22,7 +22,7 @@ pub fn expand_struct(
     resolved.validate(args_span)?;
     let config = FieldInjectorConfig::new(&resolved, args.code.inner(), oopsie_path);
 
-    let existence = check_existing_fields(&input.fields, &config.timestamp_type);
+    let existence = check_existing_fields(&input.fields, &config.timestamp_type)?;
 
     let forward = input
         .fields

@@ -9,13 +9,16 @@ use super::field_detect::{
 };
 
 /// Check which fields already exist in a `Fields` collection.
-pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type) -> FieldExistence {
+pub(super) fn check_existing_fields(
+    fields: &Fields,
+    timestamp_type: &syn::Type,
+) -> syn::Result<FieldExistence> {
     let mut existence = FieldExistence::default();
 
     let iter: Box<dyn Iterator<Item = &syn::Field>> = match fields {
         Fields::Named(f) => Box::new(f.named.iter()),
         Fields::Unnamed(f) => Box::new(f.unnamed.iter()),
-        Fields::Unit => return existence,
+        Fields::Unit => return Ok(existence),
     };
 
     for field in iter {
@@ -28,7 +31,8 @@ pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type)
             .as_ref()
             .is_some_and(|id| id == "__oopsie_timestamp");
 
-        if is_traces_type(&field.ty) {
+        let has_traces_type = is_traces_type(&field.ty);
+        if has_traces_type {
             // One packed field supplies both traces; mark all three so neither
             // separate field is also injected.
             existence.has_traces = true;
@@ -36,20 +40,53 @@ pub(super) fn check_existing_fields(fields: &Fields, timestamp_type: &syn::Type)
             existence.has_spantrace = true;
         }
 
-        if is_backtrace_type(&field.ty) {
+        let has_backtrace_type = is_backtrace_type(&field.ty);
+        if has_backtrace_type {
             existence.has_backtrace = true;
         }
-        if is_spantrace_type(&field.ty) {
+        let has_spantrace_type = is_spantrace_type(&field.ty);
+        if has_spantrace_type {
             existence.has_spantrace = true;
         }
         if is_injected_timestamp || is_timestamp_type(&field.ty) || field.ty == *timestamp_type {
             existence.has_timestamp = true;
         }
-        if is_location_type(&field.ty) {
+        let has_location_type = is_location_type(&field.ty);
+        if has_location_type {
             existence.has_location = true;
         }
+
+        // A field merely *named* like one of the mangled idents `traced`
+        // injects, but of an unrelated type, would otherwise pass through
+        // unnoticed and collide with the field `inject_fields` pushes later —
+        // rustc then reports the resulting duplicate-field shape, not this
+        // cause. Reject the collision here, at the actual field.
+        reject_mangled_collision(field, "__oopsie_traces", has_traces_type)?;
+        reject_mangled_collision(field, "__oopsie_backtrace", has_backtrace_type)?;
+        reject_mangled_collision(field, "__oopsie_spantrace", has_spantrace_type)?;
+        reject_mangled_collision(field, "__oopsie_location", has_location_type)?;
     }
-    existence
+    Ok(existence)
+}
+
+fn reject_mangled_collision(
+    field: &syn::Field,
+    mangled_name: &str,
+    is_trace_typed: bool,
+) -> syn::Result<()> {
+    if is_trace_typed {
+        return Ok(());
+    }
+    let Some(ident) = field.ident.as_ref() else {
+        return Ok(());
+    };
+    if ident != mangled_name {
+        return Ok(());
+    }
+    Err(syn::Error::new_spanned(
+        ident,
+        format!("`{mangled_name}` conflicts with a field injected by `traced`; rename it"),
+    ))
 }
 
 /// Inject backtrace/spantrace/timestamp fields into a `Fields` collection.
@@ -208,7 +245,7 @@ mod tests {
     fn check_existing_fields_detects_backtrace() {
         let fields = parse_fields(quote! { struct S { backtrace: Backtrace, message: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts);
+        let existence = check_existing_fields(&fields, &ts).unwrap();
         assert!(existence.has_backtrace);
         assert!(!existence.has_spantrace);
         assert!(!existence.has_timestamp);
@@ -218,7 +255,7 @@ mod tests {
     fn check_existing_fields_detects_spantrace() {
         let fields = parse_fields(quote! { struct S { trace: SpanTrace, message: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts);
+        let existence = check_existing_fields(&fields, &ts).unwrap();
         assert!(!existence.has_backtrace);
         assert!(existence.has_spantrace);
         assert!(!existence.has_timestamp);
@@ -228,21 +265,21 @@ mod tests {
     fn wrongly_typed_timestamp_name_does_not_suppress_injection() {
         let fields = parse_fields(quote! { struct S { timestamp: u64, msg: String } });
         let ts: syn::Type = parse_quote!(::std::time::SystemTime);
-        assert!(!check_existing_fields(&fields, &ts).has_timestamp);
+        assert!(!check_existing_fields(&fields, &ts).unwrap().has_timestamp);
     }
 
     #[test]
     fn timestamp_typed_field_suppresses_regardless_of_name() {
         let fields = parse_fields(quote! { struct S { when: SystemTime } });
         let ts: syn::Type = parse_quote!(::std::time::SystemTime);
-        assert!(check_existing_fields(&fields, &ts).has_timestamp);
+        assert!(check_existing_fields(&fields, &ts).unwrap().has_timestamp);
     }
 
     #[test]
     fn check_existing_fields_detects_none() {
         let fields = parse_fields(quote! { struct S { message: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts);
+        let existence = check_existing_fields(&fields, &ts).unwrap();
         assert!(!existence.has_backtrace);
         assert!(!existence.has_spantrace);
         assert!(!existence.has_timestamp);
@@ -252,7 +289,7 @@ mod tests {
     fn check_existing_fields_unit_returns_default() {
         let fields: syn::Fields = syn::Fields::Unit;
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts);
+        let existence = check_existing_fields(&fields, &ts).unwrap();
         assert!(!existence.has_backtrace);
     }
 
@@ -384,9 +421,28 @@ mod tests {
         let fields =
             parse_fields(quote! { struct S { t: Box<(Backtrace, SpanTrace)>, msg: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts);
+        let existence = check_existing_fields(&fields, &ts).unwrap();
         assert!(existence.has_traces);
         // A packed field stands in for both, suppressing separate injection.
         assert!(existence.has_backtrace && existence.has_spantrace);
+    }
+
+    #[test]
+    fn check_existing_fields_rejects_mangled_name_collision() {
+        let fields = parse_fields(quote! { struct S { __oopsie_traces: u8, msg: String } });
+        let ts: syn::Type = parse_quote!(std::time::Instant);
+        let err = check_existing_fields(&fields, &ts).err().unwrap();
+        assert_eq!(
+            err.to_string(),
+            "`__oopsie_traces` conflicts with a field injected by `traced`; rename it"
+        );
+    }
+
+    #[test]
+    fn check_existing_fields_allows_correctly_typed_mangled_field() {
+        let fields = parse_fields(quote! { struct S { __oopsie_backtrace: Box<Backtrace> } });
+        let ts: syn::Type = parse_quote!(std::time::Instant);
+        let existence = check_existing_fields(&fields, &ts).unwrap();
+        assert!(existence.has_backtrace);
     }
 }

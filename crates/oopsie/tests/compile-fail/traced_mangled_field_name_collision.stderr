@@ -1,0 +1,5 @@
+error: `__oopsie_traces` conflicts with a field injected by `traced`; rename it
+  --> tests/compile-fail/traced_mangled_field_name_collision.rs:11:9
+   |
+11 |     A { __oopsie_traces: u8, v: u8 },
+   |         ^^^^^^^^^^^^^^^

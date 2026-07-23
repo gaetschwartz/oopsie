@@ -29,7 +29,7 @@ pub fn expand_enum(
         let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
         let variant_traced_enabled = variant_attrs.traced.is_enabled();
 
-        let existence = check_existing_fields(&variant.fields, &config.timestamp_type);
+        let existence = check_existing_fields(&variant.fields, &config.timestamp_type)?;
 
         let forward = if variant_traced_enabled {
             variant
