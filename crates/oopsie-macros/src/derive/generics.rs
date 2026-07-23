@@ -180,13 +180,21 @@ pub fn predicate_named_params(
         syn::WherePredicate::Type(ty_pred) => {
             found.add_type(&ty_pred.bounded_ty, declared);
             for bound in &ty_pred.bounds {
-                if let syn::TypeParamBound::Trait(tb) = bound {
-                    let mut visitor = RefVisitor {
-                        declared,
-                        found: &mut found,
-                        record_projection_base: false,
-                    };
-                    visitor.visit_path(&tb.path);
+                match bound {
+                    syn::TypeParamBound::Trait(tb) => {
+                        let mut visitor = RefVisitor {
+                            declared,
+                            found: &mut found,
+                            record_projection_base: false,
+                        };
+                        visitor.visit_path(&tb.path);
+                    }
+                    syn::TypeParamBound::Lifetime(lt) => {
+                        if declared.lifetimes.contains(&lt.ident.to_string()) {
+                            found.lifetimes.insert(lt.clone());
+                        }
+                    }
+                    _ => {}
                 }
             }
         }

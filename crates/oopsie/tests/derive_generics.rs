@@ -479,6 +479,44 @@ fn defaulted_type_and_const_params() {
     assert!(matches!(err, DefaultedError::DefBuffer { data } if data == [1, 2, 3, 4]));
 }
 
+// ─── type param bounded by a free lifetime ───
+// `T: 'a` names both `T` and `'a` in its bound, so it must route to
+// `build`/`fail`, which declare `'a`, not to the selector-scoped impl, which
+// only declares `T` (regression: previously E0261).
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum LtBoundInlineError<'a, T: 'a + fmt::Debug> {
+    #[oopsie("value was {value:?}")]
+    LtInlineValue { value: T },
+    #[oopsie("note: {note}")]
+    LtInlineNote { note: &'a str },
+}
+
+#[test]
+fn type_param_bounded_by_free_lifetime_inline() {
+    let err: LtBoundInlineError<'_, u32> = LtInlineValue { value: 5u32 }.build();
+    assert_eq!(err.to_string(), "value was 5");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum LtBoundWhereError<'a, T>
+where
+    T: 'a + fmt::Debug,
+{
+    #[oopsie("value was {value:?}")]
+    LtWhereValue { value: T },
+    #[oopsie("note: {note}")]
+    LtWhereNote { note: &'a str },
+}
+
+#[test]
+fn type_param_bounded_by_free_lifetime_where_clause() {
+    let err: LtBoundWhereError<'_, u32> = LtWhereValue { value: 5u32 }.build();
+    assert_eq!(err.to_string(), "value was 5");
+}
+
 // ─── defaulted param on a sourced struct ───
 // The sourced `Contextual` impl carries the error's full generics; the default
 // `= io::Error` on `E` must be stripped from that impl header.
