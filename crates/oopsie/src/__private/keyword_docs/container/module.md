@@ -7,7 +7,10 @@ Forms: `module`, `module(true)`, `module(false)`, `module(name)`, `module = "nam
 
 An error type declared inside a function body needs `module(false)`: the
 generated module cannot reference items local to a function, so wrapping the
-selectors in one leaves them unable to name the error type.
+selectors in one leaves them unable to name the error type. Forgetting this
+surfaces as rustc error E0425 or E0433 ("cannot find type ... in this scope"),
+typically with a nonsense suggestion to rename the type to one of its own
+variants — that suggestion is a red herring; add `module(false)` instead.
 
 ### Example
 ```
