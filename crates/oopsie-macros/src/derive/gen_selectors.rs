@@ -276,18 +276,16 @@ impl SelectorShape<'_> {
     /// cannot escape to a method generic the way the leaf path does, because
     /// `build_error` returns the fixed associated `Destination` — so this whole
     /// configuration is unexpressible and the caller turns it into a clear error.
-    /// Const params trigger the same rule; lifetimes are not handled here.
+    /// Const and lifetime params trigger the same rule.
     fn unconstrained_error_param(&self, source_type: &Type) -> Option<&GenericParam> {
         let declared = DeclaredParams::from_generics(self.generics);
         let mut from_source = ReferencedParams::default();
         from_source.add_type(source_type, &declared);
         let constrained = &self.referenced_names | &from_source.names();
-        self.generics.params.iter().find(|param| match param {
-            GenericParam::Type(_) | GenericParam::Const(_) => {
-                !constrained.contains(&super::generics::param_name(param))
-            }
-            GenericParam::Lifetime(_) => false,
-        })
+        self.generics
+            .params
+            .iter()
+            .find(|param| !constrained.contains(&super::generics::param_name(param)))
     }
 
     /// The pool of `where` predicates the leaf impls must place: the error's own
