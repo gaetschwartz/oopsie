@@ -26,13 +26,12 @@ use crate::trace_printer::{TracePrinter, marker_strip_filter, panic_frame_filter
 /// follows std's panic semantics: `RUST_BACKTRACE` only. `RUST_LIB_BACKTRACE`
 /// intentionally has no effect on panic output. With capture disabled, only the
 /// message and location are shown plus a hint to enable it.
-#[expect(
-    clippy::print_stderr,
-    reason = "a panic hook renders the crash report to stderr, like std's default hook"
-)]
 pub fn install_panic_hook() {
     std::panic::set_hook(Box::new(|info| {
-        eprint!("{}", PanicReport::new(info));
+        let _ = std::io::Write::write_fmt(
+            &mut std::io::stderr().lock(),
+            format_args!("{}", PanicReport::new(info)),
+        );
     }));
 }
 

@@ -322,15 +322,14 @@ impl<E> Termination for Report<E>
 where
     E: Diagnostic,
 {
-    #[expect(
-        clippy::print_stderr,
-        reason = "Termination renders the error report to stderr at process exit"
-    )]
     fn report(self) -> ExitCode {
         match &self.res {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
-                eprintln!("{self}");
+                let _ = std::io::Write::write_fmt(
+                    &mut std::io::stderr().lock(),
+                    format_args!("{self}\n"),
+                );
 
                 let declared = e
                     .oopsie_exit_code()
