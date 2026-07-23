@@ -80,8 +80,17 @@ pub trait ErrorChainExt {
 
     /// The last error in the chain: the deepest [`source`](StdError::source),
     /// or this error itself when it has none.
+    ///
+    /// Unlike [`chain`](Self::chain), this walk is capped at
+    /// `MAX_SOURCE_CHAIN_DEPTH` hops, so a `source()` cycle (permitted by the
+    /// `Error` contract) yields the node at the cap instead of spinning
+    /// forever.
     fn root_cause(&self) -> &(dyn StdError + 'static);
 }
+
+/// Matches the cap used elsewhere in the crate (report.rs, erased/mod.rs) for
+/// consistency, though this walk has no serialized representation to bound.
+const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 
 /// The shared body, taking an already-erased head so both the blanket impl and
 /// the `dyn Error` impl reuse it — a `?Sized` blanket can't, since `&E` only
@@ -89,7 +98,10 @@ pub trait ErrorChainExt {
 #[inline]
 fn root_cause_of<'a>(head: &'a (dyn StdError + 'static)) -> &'a (dyn StdError + 'static) {
     let mut cause = head;
-    while let Some(source) = cause.source() {
+    for _ in 0..MAX_SOURCE_CHAIN_DEPTH {
+        let Some(source) = cause.source() else {
+            break;
+        };
         cause = source;
     }
     cause
@@ -202,5 +214,27 @@ mod tests {
     fn root_cause_of_leaf_is_itself() {
         let leaf = Leaf;
         assert_eq!(leaf.root_cause().to_string(), "leaf");
+    }
+
+    #[derive(Debug)]
+    struct SelfCycle;
+
+    impl fmt::Display for SelfCycle {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str("cycle")
+        }
+    }
+
+    impl StdError for SelfCycle {
+        fn source(&self) -> Option<&(dyn StdError + 'static)> {
+            Some(self)
+        }
+    }
+
+    #[test]
+    fn root_cause_terminates_on_cyclic_source_chain() {
+        let err = SelfCycle;
+        let root = err.root_cause();
+        assert_eq!(root.to_string(), "cycle");
     }
 }
