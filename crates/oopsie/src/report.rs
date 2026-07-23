@@ -44,19 +44,18 @@ pub struct Report<E> {
     /// Per-report theme; `None` falls back to the process-global [`get_theme`]
     /// at render time.
     theme_override: Option<Theme>,
-    /// Resolved once at construction so repeated rendering never re-symbolicates.
-    /// `None` when there is no error or the captured backtrace is empty.
+    /// Cloned from the error at construction; clones share the same
+    /// `Arc<Lazy>` as the original, so symbol resolution (deferred to the
+    /// first render, in `write_backtrace`) happens at most once no matter
+    /// how many `Report`s wrap this error. `None` when there is no error or
+    /// no backtrace was captured.
     backtrace: Option<oopsie_core::Backtrace>,
 }
 
 impl<E: Diagnostic> Report<E> {
-    /// Resolve the error's backtrace once. Symbol resolution is the expensive
-    /// part of backtrace rendering, so we pay it here rather than on every
-    /// `Display`.
-    fn resolve_backtrace(res: &Result<(), E>) -> Option<oopsie_core::Backtrace> {
-        let backtrace = res.as_ref().err()?.oopsie_backtrace()?.clone();
-        backtrace.resolve();
-        (!backtrace.frames().is_empty()).then_some(backtrace)
+    /// Clone the error's backtrace handle, if any, without resolving it.
+    fn clone_backtrace(res: &Result<(), E>) -> Option<oopsie_core::Backtrace> {
+        res.as_ref().err()?.oopsie_backtrace().cloned()
     }
 
     /// Create a new `Report` wrapping the given error.
@@ -68,7 +67,7 @@ impl<E: Diagnostic> Report<E> {
     pub fn new(error: E) -> Self {
         let res = Err(error);
         Self {
-            backtrace: Self::resolve_backtrace(&res),
+            backtrace: Self::clone_backtrace(&res),
             res,
             color_config: ColorMode::Auto,
             theme_override: None,
@@ -126,7 +125,7 @@ impl<E: Diagnostic> Report<E> {
             Err(payload) => std::panic::resume_unwind(payload),
         };
         Self {
-            backtrace: Self::resolve_backtrace(&result),
+            backtrace: Self::clone_backtrace(&result),
             res: result,
             color_config: ColorMode::Auto,
             theme_override: None,
@@ -288,6 +287,9 @@ impl<E: Diagnostic> Report<E> {
         let Some(backtrace) = &self.backtrace else {
             return Ok(());
         };
+        if backtrace.frames().is_empty() {
+            return Ok(());
+        }
 
         writeln!(f)?;
         let mut printer = if oopsie_core::rust_backtrace().is_full() {
@@ -355,7 +357,7 @@ impl<T, E: Diagnostic> core::ops::FromResidual<Result<T, E>> for Report<E> {
     fn from_residual(residual: Result<T, E>) -> Self {
         let res = residual.map(drop);
         Self {
-            backtrace: Self::resolve_backtrace(&res),
+            backtrace: Self::clone_backtrace(&res),
             res,
             color_config: ColorMode::default(),
             theme_override: None,
