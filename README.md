@@ -14,10 +14,13 @@ reports with automatic backtraces and span traces.
 ## 📦 Install
 
 ```sh
-cargo add oopsie
+cargo add oopsie --features fancy
 ```
 
 ## 🚀 Quick start
+
+The snippet below uses `oopsie::Report`, which needs the `fancy` feature enabled above
+for its colorized rendering.
 
 ```rust
 use oopsie::prelude::*;
