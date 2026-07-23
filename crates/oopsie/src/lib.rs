@@ -413,6 +413,9 @@ e.g. API error responses."
 //! - `max-size` is silently skipped on generic error types: a per-type
 //!   `size(...)` is rejected on them too, since their size depends on the
 //!   type arguments and has no single value to assert.
+//! - Setting the `CARGO_WORKSPACE_DIR` env var overrides workspace-root
+//!   discovery, so `[workspace.metadata.oopsie]` is read from that directory
+//!   instead of the ancestor Cargo detects; Cargo itself never sets it.
 //!
 //! `max-size` rejects `0` and `default-suffix = true` is rejected as ambiguous
 //! (use a name or `false`); `module.suffix` / `default-suffix` must be valid
