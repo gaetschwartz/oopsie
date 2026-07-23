@@ -1,0 +1,5 @@
+error: `module` has no effect on a `transparent` struct: it generates a `From` impl, not a namespaced selector; remove `module` or drop `transparent`
+ --> tests/compile-fail/transparent_struct_module.rs:3:8
+  |
+3 | struct Wrap {
+  |        ^^^^

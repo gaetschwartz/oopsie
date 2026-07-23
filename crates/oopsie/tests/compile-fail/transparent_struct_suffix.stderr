@@ -1,0 +1,5 @@
+error: `suffix` has no effect on a `transparent` struct: it generates a `From` impl, not a named selector; remove `suffix` or drop `transparent`
+ --> tests/compile-fail/transparent_struct_suffix.rs:3:8
+  |
+3 | struct Wrap {
+  |        ^^^^

@@ -10,7 +10,7 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{DeriveInput, Ident, Type};
+use syn::{DeriveInput, Ident, Type, Visibility};
 
 use crate::utils::pretty::Pretty as _;
 
@@ -101,7 +101,7 @@ impl<'a> ResolvedEnum<'a> {
                 .collect();
 
             let selector_ident = if attrs.transparent {
-                validate_transparent(&variant.ident, &input.ident, &fields)?;
+                validate_transparent(&variant.ident, &input.ident, &fields, &attrs)?;
                 // cfg-gated variants may legitimately share a source type under
                 // mutually exclusive cfgs, so only unconditional variants
                 // participate in the collision check.
@@ -211,7 +211,7 @@ impl<'a> ResolvedStruct<'a> {
         reject_cfg_on_source(&fields)?;
 
         if attrs.transparent {
-            validate_transparent(&input.ident, &input.ident, &fields)?;
+            validate_transparent(&input.ident, &input.ident, &fields, attrs)?;
         } else {
             // A transparent struct generates a `From` impl, not a named selector,
             // so the reserved/colliding-name check applies only to the non-
@@ -266,7 +266,29 @@ fn validate_transparent(
     no_source_span: &dyn quote::ToTokens,
     self_ident: &Ident,
     fields: &CategorizedFields,
+    attrs: &impl TransparentInertAttrs,
 ) -> syn::Result<()> {
+    if let Some(vis) = attrs.vis() {
+        return Err(syn::Error::new_spanned(
+            vis,
+            "`vis` has no effect on a `transparent` item: it generates a `From` impl, not a \
+             named selector; remove `vis` or drop `transparent`",
+        ));
+    }
+    if attrs.suffix_set() {
+        return Err(syn::Error::new_spanned(
+            self_ident,
+            "`suffix` has no effect on a `transparent` struct: it generates a `From` impl, not \
+             a named selector; remove `suffix` or drop `transparent`",
+        ));
+    }
+    if attrs.module_set() {
+        return Err(syn::Error::new_spanned(
+            self_ident,
+            "`module` has no effect on a `transparent` struct: it generates a `From` impl, not \
+             a namespaced selector; remove `module` or drop `transparent`",
+        ));
+    }
     if fields.source.is_none() {
         return Err(syn::Error::new_spanned(
             no_source_span,
@@ -426,6 +448,44 @@ fn selector_collision_error(first: &Ident, second: &Ident, selector: &Ident) -> 
         format!("`{first}` also generates selector `{selector}`"),
     ));
     err
+}
+
+/// Selector-naming/visibility knobs that go inert once an item is
+/// `transparent` — it generates a `From` impl rather than a named, visible
+/// selector, so nothing consumes them. `suffix`/`module` are container-scoped
+/// concepts that only apply to structs (an enum's apply to the whole enum, not
+/// to one transparent variant), hence their default `false`.
+trait TransparentInertAttrs {
+    fn vis(&self) -> Option<&Visibility>;
+    fn suffix_set(&self) -> bool {
+        false
+    }
+    fn module_set(&self) -> bool {
+        false
+    }
+}
+
+impl TransparentInertAttrs for VariantAttrs {
+    fn vis(&self) -> Option<&Visibility> {
+        self.visibility()
+    }
+}
+
+impl TransparentInertAttrs for StructAttrs {
+    fn vis(&self) -> Option<&Visibility> {
+        self.visibility()
+    }
+    fn suffix_set(&self) -> bool {
+        self.container.suffix.is_some()
+    }
+    fn module_set(&self) -> bool {
+        // `module(false)` matches a struct's own default (`Off`) regardless of
+        // `transparent`, so it's inert either way and not worth flagging —
+        // only an explicit request that would actually wrap a selector (one
+        // that doesn't exist here) is a dropped request.
+        self.container.module.is_some()
+            && matches!(self.container.effective_module(false), ModuleSetting::On(_))
+    }
 }
 
 /// The `help = ...` attribute slot, abstracted over the variant and struct

@@ -1,0 +1,5 @@
+error: `vis` has no effect on a `transparent` item: it generates a `From` impl, not a named selector; remove `vis` or drop `transparent`
+ --> tests/compile-fail/transparent_variant_vis.rs:3:31
+  |
+3 |     #[oopsie(transparent, vis(pub))]
+  |                               ^^^
