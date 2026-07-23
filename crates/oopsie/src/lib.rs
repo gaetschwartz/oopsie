@@ -74,7 +74,7 @@
 //! Override it per variant with `#[oopsie(code = "...")]`, or disable it with
 //! `#[oopsie::oopsie(traced, code = false)]`.
 //!
-//! Call [`start_marker!`] early in a thread to hide the setup frames below it
+//! Call `start_marker!` early in a thread to hide the setup frames below it
 //! from rendered traces.
 //!
 //! See the [`#[oopsie]` documentation](oopsie) for the full parameter reference.

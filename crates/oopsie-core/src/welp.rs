@@ -419,9 +419,9 @@ impl Diagnostic for Welp {
 pub trait WelpResultExt<T, E>: Sized {
     /// Convert the error into a [`Welp`] with no user message — the kind of
     /// message-free `?`-style conversion `anyhow`/`eyre` give you for free. The
-    /// resulting `Welp`'s [`Display`](std::fmt::Display) delegates to the
+    /// resulting `Welp`'s [`Display`](core::fmt::Display) delegates to the
     /// source's, and the source stays reachable through
-    /// [`Error::source`](std::error::Error::source). Reach for
+    /// [`Error::source`](core::error::Error::source). Reach for
     /// [`welp_context`](Self::welp_context) instead when a string adds
     /// information the source doesn't already carry.
     fn welp(self) -> Result<T, Welp>;

@@ -43,10 +43,9 @@ pub trait Diagnostic: core::error::Error {
 
     /// Returns the process exit code this error should terminate with.
     ///
-    /// Honored by `Report`'s [`Termination`](std::process::Termination) impl on
-    /// stable. `NonZeroU8` is what [`ExitCode::from`](std::process::ExitCode)
-    /// accepts portably, and zero would denote success on a path that is, by
-    /// construction, a failure.
+    /// Honored by `Report`'s `Termination` impl on stable. `NonZeroU8` is what
+    /// `ExitCode::from` accepts portably, and zero would denote success on a
+    /// path that is, by construction, a failure.
     #[inline]
     fn oopsie_exit_code(&self) -> Option<core::num::NonZeroU8> {
         None
