@@ -10,10 +10,13 @@
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
-use syn::{DeriveInput, Ident};
+use syn::{DeriveInput, Ident, Type};
+
+use crate::utils::pretty::Pretty as _;
 
 use super::parse::{
-    CategorizedFields, EnumContainerAttrs, ModuleSetting, StructAttrs, VariantAttrs,
+    CategorizedFields, EnumContainerAttrs, ModuleSetting, SourceField, SourceKind, StructAttrs,
+    VariantAttrs,
 };
 
 /// One enum variant with its attributes, fields, and derived facts resolved.
@@ -85,6 +88,8 @@ impl<'a> ResolvedEnum<'a> {
         let suffix = container.effective_suffix(true);
         let mut seen_selectors: std::collections::HashMap<String, Ident> =
             std::collections::HashMap::new();
+        let mut seen_transparent_sources: std::collections::HashMap<String, Ident> =
+            std::collections::HashMap::new();
         let mut variants = Vec::with_capacity(data.variants.len());
         for (variant, fields) in data.variants.iter().zip(categorized) {
             let attrs = VariantAttrs::from_attrs(&variant.attrs)?;
@@ -96,7 +101,24 @@ impl<'a> ResolvedEnum<'a> {
                 .collect();
 
             let selector_ident = if attrs.transparent {
-                validate_transparent(&variant.ident, &fields)?;
+                validate_transparent(&variant.ident, &input.ident, &fields)?;
+                // cfg-gated variants may legitimately share a source type under
+                // mutually exclusive cfgs, so only unconditional variants
+                // participate in the collision check.
+                if cfg_attrs.is_empty()
+                    && let Some(source) = &fields.source
+                {
+                    let ty = transparent_source_ty(source);
+                    let key = ty.pretty().to_string();
+                    if let Some(first) = seen_transparent_sources.insert(key, variant.ident.clone())
+                    {
+                        return Err(transparent_source_collision_error(
+                            &first,
+                            &variant.ident,
+                            ty,
+                        ));
+                    }
+                }
                 None
             } else {
                 let ident = super::gen_selectors::selector_name(&variant.ident, &suffix)?;
@@ -189,7 +211,7 @@ impl<'a> ResolvedStruct<'a> {
         reject_cfg_on_source(&fields)?;
 
         if attrs.transparent {
-            validate_transparent(&input.ident, &fields)?;
+            validate_transparent(&input.ident, &input.ident, &fields)?;
         } else {
             // A transparent struct generates a `From` impl, not a named selector,
             // so the reserved/colliding-name check applies only to the non-
@@ -237,9 +259,12 @@ fn reject_cfg_on_source(fields: &CategorizedFields) -> syn::Result<()> {
 
 /// A `transparent` item must have a source and no extra user fields.
 /// `no_source_span` is the node the "requires a source" error points at — the
-/// variant ident for an enum, the struct ident for a struct.
+/// variant ident for an enum, the struct ident for a struct. `self_ident` is
+/// the enclosing enum/struct's own name, checked against an auto-boxed
+/// source's inner type.
 fn validate_transparent(
     no_source_span: &dyn quote::ToTokens,
+    self_ident: &Ident,
     fields: &CategorizedFields,
 ) -> syn::Result<()> {
     if fields.source.is_none() {
@@ -257,6 +282,20 @@ fn validate_transparent(
             "`#[oopsie(forward(...))]` is redundant on a `transparent` error; transparent already forwards all traces",
         ));
     }
+    if let Some(src) = &fields.source
+        && let SourceKind::AutoBoxed { source_type } = &src.kind
+        && type_is_self(source_type, self_ident)
+    {
+        return Err(syn::Error::new_spanned(
+            &src.ident,
+            format!(
+                "`transparent` source `Box<{self_ident}>` auto-unboxes to \
+                 `From<{self_ident}> for {self_ident}`, colliding with the standard \
+                 library's blanket `impl<T> From<T> for T`; box a distinct type or \
+                 drop `transparent`"
+            ),
+        ));
+    }
     if let Some(extra) = fields.user_fields.first() {
         return Err(syn::Error::new_spanned(
             &extra.ident,
@@ -265,6 +304,54 @@ fn validate_transparent(
         ));
     }
     Ok(())
+}
+
+/// Whether `ty`'s last path segment names `self_ident` (an explicit reference
+/// to the enclosing enum/struct) or the literal `Self` keyword.
+fn type_is_self(ty: &Type, self_ident: &Ident) -> bool {
+    let Type::Path(type_path) = ty else {
+        return false;
+    };
+    type_path
+        .path
+        .segments
+        .last()
+        .is_some_and(|seg| seg.ident == "Self" || seg.ident == *self_ident)
+}
+
+/// The type a transparent variant's/struct's `From` impl is generated for —
+/// the pre-transform type for `from(T, transform)` and auto-boxed sources, the
+/// field's own type otherwise. Mirrors the `param_ty` resolution in
+/// `gen_selectors.rs`.
+fn transparent_source_ty(source: &SourceField) -> &Type {
+    match &source.kind {
+        SourceKind::Transformed { source_type, .. } | SourceKind::AutoBoxed { source_type } => {
+            source_type
+        }
+        SourceKind::Yes => &source.ty,
+        SourceKind::No | SourceKind::Disabled => {
+            unreachable!(
+                "a transparent variant's source is validated to be Yes/Transformed/AutoBoxed"
+            )
+        }
+    }
+}
+
+fn transparent_source_collision_error(first: &Ident, second: &Ident, ty: &Type) -> syn::Error {
+    let ty = ty.pretty();
+    let mut err = syn::Error::new_spanned(
+        second,
+        format!(
+            "variants `{first}` and `{second}` are both `transparent` over source type \
+             `{ty}`, generating two `From<{ty}>` impls for the same type (E0119); merge \
+             the variants or give one a distinct source type"
+        ),
+    );
+    err.combine(syn::Error::new_spanned(
+        first,
+        format!("`{first}` also generates `From<{ty}>`"),
+    ));
+    err
 }
 
 /// A dynamic `#[oopsie(help)]` field and a static `help = ...` attribute cannot

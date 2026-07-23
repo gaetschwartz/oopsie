@@ -1,0 +1,5 @@
+error: `transparent` source `Box<SelfBoxed>` auto-unboxes to `From<SelfBoxed> for SelfBoxed`, colliding with the standard library's blanket `impl<T> From<T> for T`; box a distinct type or drop `transparent`
+ --> tests/compile-fail/transparent_boxed_self.rs:4:12
+  |
+4 |     Wrap { source: Box<SelfBoxed> },
+  |            ^^^^^^
