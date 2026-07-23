@@ -314,6 +314,7 @@ const RUNTIME_INIT_SCOPED: &[(&str, &str)] = &[
     ("std", "sys::backtrace::__rust_begin_short_backtrace"),
     ("std", "rt::lang_start"),
     ("test", "__rust_begin_short_backtrace"),
+    ("test", "run_test"),
 ];
 
 /// OS / C-runtime entry symbols at the very bottom of a stack, recognized
@@ -436,8 +437,10 @@ fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
     // peel's common case — checked first. The trait side of an impl shim
     // counts too: the dispatch shim for a user-crate closure is core's
     // `FnOnce::call_once` even though the self type carries the user's
-    // crate.
-    let std_owned = |krate: &str| matches!(krate, "std" | "core" | "alloc" | "test");
+    // crate. `test` is deliberately absent: it is the harness crate, but
+    // also a legal user package name, so the harness is recognized by its
+    // scoped entry paths in `RUNTIME_INIT_SCOPED` instead of by ownership.
+    let std_owned = |krate: &str| matches!(krate, "std" | "core" | "alloc");
     if let Some(symbol) = parse_symbol(name)
         && (std_owned(symbol.krate) || symbol.trait_crate().is_some_and(std_owned))
     {
@@ -1796,6 +1799,13 @@ mod tests {
             "main_loop",
             "mainframe::connect",
         ] {
+            assert!(!is_runtime_tail_code(name, None), "must not match: {name}");
+        }
+    }
+
+    #[test]
+    fn runtime_tail_spares_a_crate_literally_named_test() {
+        for name in ["test::main", "test::work", "test::helper::do_thing"] {
             assert!(!is_runtime_tail_code(name, None), "must not match: {name}");
         }
     }
