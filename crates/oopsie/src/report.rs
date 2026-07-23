@@ -50,6 +50,10 @@ pub struct Report<E> {
     /// how many `Report`s wrap this error. `None` when there is no error or
     /// no backtrace was captured.
     backtrace: Option<oopsie_core::Backtrace>,
+    /// Materialized frames for [`backtrace`](Self::backtrace), populated on
+    /// first render so a second `Display`/`Debug` pass reuses them instead of
+    /// re-cloning every symbol name and filename.
+    backtrace_frames: std::sync::OnceLock<Vec<crate::trace_printer::BacktraceFrame>>,
 }
 
 impl<E: Diagnostic> Report<E> {
@@ -71,6 +75,7 @@ impl<E: Diagnostic> Report<E> {
             res,
             color_config: ColorMode::Auto,
             theme_override: None,
+            backtrace_frames: std::sync::OnceLock::new(),
         }
     }
 
@@ -83,6 +88,7 @@ impl<E: Diagnostic> Report<E> {
             color_config: ColorMode::Auto,
             theme_override: None,
             backtrace: None,
+            backtrace_frames: std::sync::OnceLock::new(),
         }
     }
 
@@ -129,6 +135,7 @@ impl<E: Diagnostic> Report<E> {
             res: result,
             color_config: ColorMode::Auto,
             theme_override: None,
+            backtrace_frames: std::sync::OnceLock::new(),
         }
     }
 
@@ -315,7 +322,10 @@ impl<E: Diagnostic> Report<E> {
         } else {
             TraceTheme::PLAIN
         });
-        printer.write_backtrace(f, backtrace)?;
+        let frames = self
+            .backtrace_frames
+            .get_or_init(|| crate::trace_printer::BacktraceProvider::frames(backtrace));
+        printer.write_backtrace_frames(f, frames)?;
         Ok(())
     }
 }
@@ -361,6 +371,7 @@ impl<T, E: Diagnostic> core::ops::FromResidual<Result<T, E>> for Report<E> {
             res,
             color_config: ColorMode::default(),
             theme_override: None,
+            backtrace_frames: std::sync::OnceLock::new(),
         }
     }
 }

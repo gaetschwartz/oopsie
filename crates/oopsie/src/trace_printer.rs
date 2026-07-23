@@ -723,7 +723,20 @@ impl TracePrinter {
         f: &mut fmt::Formatter<'_>,
         bt: &impl BacktraceProvider,
     ) -> fmt::Result {
-        let all_frames = bt.frames();
+        self.write_backtrace_frames(f, &bt.frames())
+    }
+
+    /// Render a colored backtrace from already-materialized frames.
+    ///
+    /// Lets a caller that holds onto the same [`BacktraceProvider`] across
+    /// several renders materialize its frames once and reuse them here,
+    /// instead of paying [`BacktraceProvider::frames`]'s per-symbol cloning
+    /// cost again on every render.
+    pub(crate) fn write_backtrace_frames(
+        &self,
+        f: &mut fmt::Formatter<'_>,
+        all_frames: &[BacktraceFrame],
+    ) -> fmt::Result {
         let theme = self.resolved_theme();
 
         let mut filtered: Vec<_> = all_frames.iter().map(Some).collect();
