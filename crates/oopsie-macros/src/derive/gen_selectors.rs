@@ -57,6 +57,13 @@ struct SelectorShape<'a> {
 /// gated alongside the field; only unconditional fields contribute a parameter.
 /// A concrete-typed field also can't ride a blanket `Copy`/`Clone` derive (its
 /// type may be neither), so any cfg-gated field drops both from the selector.
+///
+/// A cfg-gated field's type still projects its error parameter onto the
+/// selector (the struct must declare it to name the field at all before
+/// stripping), but stripping the field would then leave that parameter
+/// declared and unused (E0392) whenever no unconditional field also names it.
+/// A hidden `PhantomData` field carries every such parameter unconditionally
+/// so the struct keeps compiling regardless of which cfg-gated fields survive.
 fn selector_shape<'a>(
     user_fields: &[UserField],
     generics: &'a Generics,
@@ -64,6 +71,7 @@ fn selector_shape<'a>(
 ) -> SelectorShape<'a> {
     let declared = DeclaredParams::from_generics(generics);
     let mut referenced = ReferencedParams::default();
+    let mut unconditionally_referenced = ReferencedParams::default();
     let mut into_param_idents = Vec::new();
     let mut into_bounds = Vec::new();
     let mut fields = Vec::new();
@@ -77,6 +85,9 @@ fn selector_shape<'a>(
         let cfg = &uf.cfg_attrs;
         let field_doc = doc(uf);
         referenced.add_type(field_ty, &declared);
+        if cfg.is_empty() {
+            unconditionally_referenced.add_type(field_ty, &declared);
+        }
         // A field whose type names a generic parameter takes that parameter's
         // type directly: an `Into`-converted `__T{i}: Into<FieldTy>` would leave
         // the parameter used only in a `where` bound, never in a struct field —
@@ -94,6 +105,15 @@ fn selector_shape<'a>(
             all_into_params = false;
             fields.push(quote! { #(#cfg)* #[doc = #field_doc] pub #field_ident: #field_ty });
         }
+    }
+
+    let cfg_only_names: std::collections::HashSet<String> = referenced
+        .names()
+        .difference(&unconditionally_referenced.names())
+        .cloned()
+        .collect();
+    if let Some(phantom_ty) = cfg_only_phantom_field(generics, &cfg_only_names) {
+        fields.push(quote! { #[doc(hidden)] pub __oopsie_phantom: #phantom_ty });
     }
 
     let projected = super::generics::project(generics, &referenced);
@@ -128,6 +148,41 @@ fn selector_shape<'a>(
         referenced_names,
         struct_fields: quote! { { #(#fields),* } },
         derives,
+    }
+}
+
+/// The `PhantomData` marker field for the parameters in `cfg_only_names` — each
+/// projected only by a cfg-gated field, so it would dangle once that field is
+/// stripped. Every such parameter rides as one element of a tuple (a lifetime
+/// as `&'a ()`, a const as `[(); N]`), so a single field covers them all;
+/// `None` when no parameter needs one.
+fn cfg_only_phantom_field(
+    generics: &Generics,
+    cfg_only_names: &std::collections::HashSet<String>,
+) -> Option<TokenStream2> {
+    let elems: Vec<TokenStream2> = generics
+        .params
+        .iter()
+        .filter(|param| cfg_only_names.contains(&super::generics::param_name(param)))
+        .map(|param| match param {
+            GenericParam::Lifetime(lt) => {
+                let lifetime = &lt.lifetime;
+                quote! { &#lifetime () }
+            }
+            GenericParam::Type(tp) => {
+                let ident = &tp.ident;
+                quote! { #ident }
+            }
+            GenericParam::Const(cp) => {
+                let ident = &cp.ident;
+                quote! { [(); #ident] }
+            }
+        })
+        .collect();
+    if elems.is_empty() {
+        None
+    } else {
+        Some(quote! { ::core::marker::PhantomData<(#(#elems,)*)> })
     }
 }
 

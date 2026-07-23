@@ -167,6 +167,43 @@ fn field_cfg_active_field_is_present_and_usable() {
     assert_eq!(err.to_string(), "v: 4");
 }
 
+// ---- field-level cfg referencing a generic parameter ----
+//
+// `x`'s cfg-gated type is the only reference to `T` in variant `GenV`;
+// stripping it would leave `T` declared on the selector but never named by a
+// surviving field (E0392) unless a `PhantomData` marker keeps it used.
+// `GenW`'s `y` field references `T` unconditionally, so its selector needs no
+// marker.
+
+#[oopsie]
+#[oopsie(module(false), suffix)]
+pub enum CfgGenericFieldError<T: std::fmt::Debug> {
+    #[oopsie("v")]
+    GenV {
+        #[cfg(any())]
+        x: T,
+        keep: u32,
+    },
+    #[oopsie("w: {y:?}")]
+    GenW { y: T },
+}
+
+#[test]
+fn cfg_only_generic_param_gets_phantom_marker() {
+    let err: CfgGenericFieldError<u32> = GenVOopsie {
+        keep: 5u32,
+        __oopsie_phantom: std::marker::PhantomData,
+    }
+    .build();
+    assert!(matches!(err, CfgGenericFieldError::GenV { keep: 5 }));
+}
+
+#[test]
+fn unconditional_generic_field_needs_no_marker() {
+    let err: CfgGenericFieldError<u32> = GenWOopsie { y: 9u32 }.build();
+    assert!(matches!(err, CfgGenericFieldError::GenW { y: 9 }));
+}
+
 // ---- fully cfg-stripped enums under the attribute-macro path ----
 //
 // The attribute macro expands before rustc strips `#[cfg]`, so an enum whose
