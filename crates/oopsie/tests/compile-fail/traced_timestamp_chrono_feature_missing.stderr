@@ -1,0 +1,34 @@
+warning: use of deprecated struct `oopsie::__private::chrono::DateTime`: enable oopsie's `chrono` feature to use `timestamp(chrono = true)`
+ --> tests/compile-fail/traced_timestamp_chrono_feature_missing.rs:8:1
+  |
+8 | #[oopsie(traced(timestamp(chrono = true)))]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(deprecated)]` on by default
+  = note: this warning originates in the attribute macro `oopsie` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: use of deprecated struct `oopsie::__private::chrono::Local`: enable oopsie's `chrono` feature to use `timestamp(chrono = true)`
+ --> tests/compile-fail/traced_timestamp_chrono_feature_missing.rs:8:1
+  |
+8 | #[oopsie(traced(timestamp(chrono = true)))]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: this warning originates in the attribute macro `oopsie` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `oopsie::__private::chrono::DateTime<oopsie::__private::chrono::Local>: Capturable` is not satisfied
+ --> tests/compile-fail/traced_timestamp_chrono_feature_missing.rs:8:1
+  |
+8 | #[oopsie(traced(timestamp(chrono = true)))]
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `Capturable` is not implemented for `oopsie::__private::chrono::DateTime<oopsie::__private::chrono::Local>`
+  |
+  = help: the following other types implement trait `Capturable`:
+            &'static Location<'static>
+            (A, B)
+            (A, B, C)
+            (A, B, C, D)
+            (A, B, C, D, E)
+            (A, B, C, D, E, F)
+            (A, B, C, D, E, F, G)
+            (A, B, C, D, E, F, G, H)
+          and $N others
+  = note: this error originates in the attribute macro `oopsie` (in Nightly builds, run with -Z macro-backtrace for more info)

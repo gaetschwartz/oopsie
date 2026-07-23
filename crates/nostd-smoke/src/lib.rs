@@ -6,6 +6,7 @@ use alloc::string::{String, ToString};
 use core::fmt;
 
 use oopsie::Oopsie;
+use oopsie::oopsie;
 use oopsie::prelude::*;
 
 /// A minimal no_std source error: no allocator-backed message, just a fixed
@@ -54,6 +55,19 @@ pub fn render_welp() -> String {
     let err: Result<(), SensorFault> = Err(SensorFault);
     let err = err.welp_context("could not read sensor").unwrap_err();
     err.to_string()
+}
+
+/// Proves `#[oopsie(traced)]` (backtrace + spantrace, no timestamp) — the
+/// supported no_std surface — builds no_std; `timestamp` stays std/chrono-only.
+#[oopsie(traced)]
+pub enum TracedError {
+    #[oopsie("overheated")]
+    Overheated,
+}
+
+/// Proves the traced selector builds and captures its trace fields no_std.
+pub fn render_traced() -> String {
+    traced_oopsies::Overheated.build().to_string()
 }
 
 #[cfg(test)]

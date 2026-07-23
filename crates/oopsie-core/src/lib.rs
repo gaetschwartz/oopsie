@@ -342,11 +342,35 @@ pub mod __private {
     #[cfg(feature = "chrono")]
     pub use chrono;
 
+    /// Stand-in for the real `chrono` facade when oopsie's `chrono` feature is
+    /// off, so `timestamp(chrono = true)` fails with a diagnostic naming the
+    /// missing feature instead of "cannot find `chrono` in `__private`".
+    #[cfg(not(feature = "chrono"))]
+    pub mod chrono {
+        /// Stand-in for `chrono::Local`. See [`super::chrono`].
+        #[derive(Debug, Clone, Copy)]
+        #[deprecated(note = "enable oopsie's `chrono` feature to use `timestamp(chrono = true)`")]
+        pub struct Local;
+
+        /// Stand-in for `chrono::DateTime`. See [`super::chrono`].
+        #[derive(Debug, Clone, Copy)]
+        #[deprecated(note = "enable oopsie's `chrono` feature to use `timestamp(chrono = true)`")]
+        pub struct DateTime<Tz>(core::marker::PhantomData<Tz>);
+    }
+
     /// `SystemTime` facade for macro-generated timestamp capture: routes
     /// through here so generated code names one path regardless of std
     /// availability, rather than `::std::time::SystemTime` directly.
     #[cfg(feature = "std")]
     pub use std::time::SystemTime;
+
+    /// Stand-in for `std::time::SystemTime` when oopsie's `std` feature is
+    /// off, so `traced(timestamp)` fails with a diagnostic naming the missing
+    /// feature instead of "cannot find `SystemTime` in `__private`".
+    #[cfg(not(feature = "std"))]
+    #[derive(Debug, Clone, Copy)]
+    #[deprecated(note = "enable oopsie's `std` feature to use `traced(timestamp)`")]
+    pub struct SystemTime;
 
     /// `alloc` facade for macro-generated code: a bare `::alloc::` path only
     /// resolves in a crate that declared `extern crate alloc;` itself, which
