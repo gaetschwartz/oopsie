@@ -192,9 +192,16 @@ impl crate::Capturable for Backtrace {
     #[inline]
     fn capture() -> Self {
         if rust_backtrace().is_enabled() {
+            let backtrace = backtrace::Backtrace::new_unresolved();
+            if backtrace.frames().is_empty() {
+                return Self {
+                    inner: Inner::Disabled(backtrace),
+                    marker: None,
+                };
+            }
             Self {
                 inner: Inner::Captured(Arc::new(Lazy::new(helper::lazy_resolve(Capture {
-                    backtrace: backtrace::Backtrace::new_unresolved(),
+                    backtrace,
                 })))),
                 marker: crate::marker::current(),
             }
@@ -485,6 +492,16 @@ mod tests {
         let bt = Backtrace::capture_or_extract(&ErrorWithoutBacktrace);
         clear_rust_backtrace_override();
         assert!(bt.frames().is_empty());
+    }
+
+    #[test]
+    fn is_captured_matches_frame_emptiness() {
+        let enabled = with_rust_backtrace_override(RustBacktrace::Enabled, Backtrace::capture);
+        assert_eq!(enabled.is_captured(), !enabled.frames().is_empty());
+
+        let disabled = with_rust_backtrace_override(RustBacktrace::Disabled, Backtrace::capture);
+        assert_eq!(disabled.is_captured(), !disabled.frames().is_empty());
+        assert!(!disabled.is_captured());
     }
 
     #[test]
