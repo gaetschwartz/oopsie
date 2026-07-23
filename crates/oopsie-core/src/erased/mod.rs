@@ -12,8 +12,6 @@ use core::fmt;
 use core::num::NonZeroU8;
 #[cfg(feature = "std")]
 use std::io;
-#[cfg(feature = "std")]
-use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -52,42 +50,64 @@ const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 /// [`Location`]: std::panic::Location
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 #[non_exhaustive]
+#[serde(from = "ErasedErrorData")]
 pub struct ErasedError {
     message: Box<str>,
 
-    #[serde(default, deserialize_with = "deserialize_capped_source_chain")]
     source_chain: Vec<Box<str>>,
 
-    #[serde(default)]
     diagnostics: Diagnostics,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     location: Option<ErasedLocation>,
 
     spantrace: Option<ErasedSpanTrace>,
 
     backtrace: Option<ErasedBacktrace>,
 
-    /// Source-chain re-materialization, populated lazily on the first
-    /// `Error::source()` call. `source_chain` is immutable after construction,
-    /// so this snapshot can never go stale.
-    #[cfg(feature = "std")]
+    /// Source-chain re-materialization, built eagerly from `source_chain` at
+    /// construction (`from_error_ref`) and deserialization (`ErasedErrorData`)
+    /// so `Error::source()` works without a `std`-only lazy cell.
     #[serde(skip)]
-    source: OnceLock<Option<Box<ChainNode>>>,
+    source: Option<Box<ChainNode>>,
 }
 
 impl core::error::Error for ErasedError {
-    #[cfg(feature = "std")]
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         self.source
-            .get_or_init(|| ChainNode::build(&self.source_chain))
             .as_deref()
             .map(|node| node as &(dyn core::error::Error + 'static))
     }
+}
 
-    #[cfg(not(feature = "std"))]
-    fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
-        None
+/// Deserialization shadow for [`ErasedError`]: carries the wire-format
+/// defaults, then [`From`] materializes `source` from `source_chain` so it
+/// doesn't rely on a `std`-only lazy cell.
+#[derive(Deserialize)]
+struct ErasedErrorData {
+    message: Box<str>,
+    #[serde(default, deserialize_with = "deserialize_capped_source_chain")]
+    source_chain: Vec<Box<str>>,
+    #[serde(default)]
+    diagnostics: Diagnostics,
+    #[serde(default)]
+    location: Option<ErasedLocation>,
+    spantrace: Option<ErasedSpanTrace>,
+    backtrace: Option<ErasedBacktrace>,
+}
+
+impl From<ErasedErrorData> for ErasedError {
+    fn from(data: ErasedErrorData) -> Self {
+        let source = ChainNode::build(&data.source_chain);
+        Self {
+            message: data.message,
+            source_chain: data.source_chain,
+            diagnostics: data.diagnostics,
+            location: data.location,
+            spantrace: data.spantrace,
+            backtrace: data.backtrace,
+            source,
+        }
     }
 }
 
@@ -112,13 +132,11 @@ where
 /// `Drop`, `Clone`, and `Debug` are hand-rolled as iterative walks over the
 /// linked list: the derived versions recurse one stack frame per link, and
 /// this list's length comes from an untrusted `source_chain`.
-#[cfg(feature = "std")]
 struct ChainNode {
     message: Box<str>,
     source: Option<Box<Self>>,
 }
 
-#[cfg(feature = "std")]
 impl ChainNode {
     fn build(messages: &[Box<str>]) -> Option<Box<Self>> {
         messages.iter().rev().fold(None, |source, message| {
@@ -130,7 +148,6 @@ impl ChainNode {
     }
 }
 
-#[cfg(feature = "std")]
 impl Drop for ChainNode {
     fn drop(&mut self) {
         let mut next = self.source.take();
@@ -140,7 +157,6 @@ impl Drop for ChainNode {
     }
 }
 
-#[cfg(feature = "std")]
 impl Clone for ChainNode {
     fn clone(&self) -> Self {
         let mut messages = Vec::new();
@@ -162,7 +178,6 @@ impl Clone for ChainNode {
     }
 }
 
-#[cfg(feature = "std")]
 impl fmt::Debug for ChainNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut list = f.debug_list();
@@ -175,14 +190,12 @@ impl fmt::Debug for ChainNode {
     }
 }
 
-#[cfg(feature = "std")]
 impl fmt::Display for ChainNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.message)
     }
 }
 
-#[cfg(feature = "std")]
 impl core::error::Error for ChainNode {
     fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
         self.source
@@ -340,6 +353,8 @@ impl ErasedError {
         #[cfg(not(feature = "std"))]
         let backtrace: Option<ErasedBacktrace> = None;
 
+        let source = ChainNode::build(&source_chain);
+
         Self {
             message,
             source_chain,
@@ -347,8 +362,7 @@ impl ErasedError {
             location,
             spantrace,
             backtrace,
-            #[cfg(feature = "std")]
-            source: OnceLock::new(),
+            source,
         }
     }
 
@@ -682,7 +696,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let mut buf = Vec::new();
@@ -713,7 +727,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
         let err = erased.write_json(&mut FailingWriter).unwrap_err();
         assert!(err.is_io(), "{err}");
@@ -732,7 +746,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let mut buf = Vec::new();
@@ -758,7 +772,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let mut buf = Vec::new();
@@ -784,7 +798,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let mut buf = Vec::new();
@@ -811,7 +825,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let short = erased.format_short();
@@ -834,7 +848,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let short = erased.format_short();
@@ -857,7 +871,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let short = erased.format_short();
@@ -884,7 +898,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let displayed = erased.to_string();
@@ -912,7 +926,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let text = erased.to_text();
@@ -944,7 +958,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let text = erased.to_text();
@@ -964,7 +978,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         assert_eq!(erased.to_text().lines().next(), Some("Error:"));
@@ -1042,7 +1056,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
         assert!(
             erased.diagnostics.code().is_none(),
@@ -1146,7 +1160,7 @@ mod tests {
             location: None,
             spantrace: None,
             backtrace: None,
-            source: OnceLock::new(),
+            source: None,
         };
 
         let cloned = original.clone();
