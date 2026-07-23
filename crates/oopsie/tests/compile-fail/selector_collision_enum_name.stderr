@@ -1,0 +1,5 @@
+error: variant `Config` generates a selector named `Config`, colliding with the enum's own name; rename the variant or set `#[oopsie(suffix = "...")]`
+ --> tests/compile-fail/selector_collision_enum_name.rs:6:5
+  |
+6 |     Config,
+  |     ^^^^^^

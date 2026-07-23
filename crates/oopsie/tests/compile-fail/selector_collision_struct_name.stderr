@@ -1,0 +1,5 @@
+error: the selector for `Failure` would also be named `Failure` (no `Error` suffix to strip, and `suffix(false)`); set `#[oopsie(suffix = "...")]` or enable `module`
+ --> tests/compile-fail/selector_collision_struct_name.rs:6:12
+  |
+6 | pub struct Failure {
+  |            ^^^^^^^

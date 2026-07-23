@@ -12,7 +12,9 @@ use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{DeriveInput, Ident};
 
-use super::parse::{CategorizedFields, EnumContainerAttrs, StructAttrs, VariantAttrs};
+use super::parse::{
+    CategorizedFields, EnumContainerAttrs, ModuleSetting, StructAttrs, VariantAttrs,
+};
 
 /// One enum variant with its attributes, fields, and derived facts resolved.
 pub struct ResolvedVariant<'a> {
@@ -101,11 +103,15 @@ impl<'a> ResolvedEnum<'a> {
                 // cfg-gated variants may legitimately share a selector name
                 // under mutually exclusive cfgs, so only unconditional variants
                 // participate in the collision check.
-                if cfg_attrs.is_empty()
-                    && let Some(first) =
+                if cfg_attrs.is_empty() {
+                    if ident == input.ident {
+                        return Err(selector_matches_enum_error(&variant.ident, &input.ident));
+                    }
+                    if let Some(first) =
                         seen_selectors.insert(ident.to_string(), variant.ident.clone())
-                {
-                    return Err(selector_collision_error(&first, &variant.ident, &ident));
+                    {
+                        return Err(selector_collision_error(&first, &variant.ident, &ident));
+                    }
                 }
                 Some(ident)
             };
@@ -188,7 +194,19 @@ impl<'a> ResolvedStruct<'a> {
             // A transparent struct generates a `From` impl, not a named selector,
             // so the reserved/colliding-name check applies only to the non-
             // transparent path.
-            let _ = selector_name_for_struct(input, attrs)?;
+            let selector_ident = selector_name_for_struct(input, attrs)?;
+            // Without a module wrapping the selector, a selector sharing the
+            // struct's own name collides at the same scope (E0428); the
+            // module-wrapped path is safe because the selector lives in a
+            // child module and is reached through `super::` (gen_selectors.rs).
+            if selector_ident == input.ident
+                && !matches!(
+                    attrs.container.effective_module(false),
+                    ModuleSetting::On(_)
+                )
+            {
+                return Err(selector_matches_struct_error(&input.ident));
+            }
         }
 
         reject_display_keywords_struct(input, attrs)?;
@@ -285,6 +303,26 @@ fn reject_display_keywords_struct(input: &DeriveInput, attrs: &StructAttrs) -> s
 
 fn selector_name_for_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<Ident> {
     super::gen_selectors::selector_name(&input.ident, &attrs.container.effective_suffix(false))
+}
+
+fn selector_matches_enum_error(variant: &Ident, enum_ident: &Ident) -> syn::Error {
+    syn::Error::new_spanned(
+        variant,
+        format!(
+            "variant `{variant}` generates a selector named `{enum_ident}`, colliding with the \
+             enum's own name; rename the variant or set `#[oopsie(suffix = \"...\")]`"
+        ),
+    )
+}
+
+fn selector_matches_struct_error(ident: &Ident) -> syn::Error {
+    syn::Error::new_spanned(
+        ident,
+        format!(
+            "the selector for `{ident}` would also be named `{ident}` (no `Error` suffix to \
+             strip, and `suffix(false)`); set `#[oopsie(suffix = \"...\")]` or enable `module`"
+        ),
+    )
 }
 
 fn selector_collision_error(first: &Ident, second: &Ident, selector: &Ident) -> syn::Error {
