@@ -69,6 +69,13 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
     }
 
     let args = OopsieAttrArgs::from_list(&meta)?;
+    // Spans the coherence errors `validate` raises (e.g. packed/boxed conflicts) at the
+    // `traced(...)` meta itself, falling back to the item when tracing comes from the
+    // manifest default and there's no attribute token to point at.
+    let traced_span = meta.iter().find_map(|m| match m {
+        NestedMeta::Meta(inner) if inner.path().is_ident("traced") => Some(inner.span()),
+        NestedMeta::Meta(_) | NestedMeta::Lit(_) => None,
+    });
     let (traced_defaults, manifest_err) = crate::utils::manifest_traced();
     // Precedence: a per-attribute `traced(...)` (including `traced = false`)
     // wins; otherwise the manifest `traced` default decides. When the manifest
@@ -88,6 +95,7 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
         syn::Item::Enum(item_enum) => expand_enum(
             &args,
             effective_traced.as_deref(),
+            traced_span,
             &traced_defaults,
             &manifest_err,
             &keywords,
@@ -96,6 +104,7 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
         syn::Item::Struct(item_struct) => expand_struct(
             &args,
             effective_traced.as_deref(),
+            traced_span,
             &traced_defaults,
             &manifest_err,
             &keywords,
@@ -111,6 +120,7 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
 fn expand_enum(
     args: &OopsieAttrArgs,
     traced: Option<&TracedArgs>,
+    traced_span: Option<proc_macro2::Span>,
     defaults: &TracedDefaults,
     manifest_err: &TokenStream2,
     keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
@@ -124,7 +134,13 @@ fn expand_enum(
 
     // Step 1: inject diagnostic fields in place if requested.
     if let Some(traced) = traced {
-        crate::traced::expand_enum::expand_enum(traced, defaults, &oopsie_path, span, &mut item)?;
+        crate::traced::expand_enum::expand_enum(
+            traced,
+            defaults,
+            &oopsie_path,
+            traced_span.unwrap_or(span),
+            &mut item,
+        )?;
     }
 
     // Step 2: generate Oopsie impls from the injected item. The derive layer
@@ -167,6 +183,7 @@ fn expand_enum(
 fn expand_struct(
     args: &OopsieAttrArgs,
     traced: Option<&TracedArgs>,
+    traced_span: Option<proc_macro2::Span>,
     defaults: &TracedDefaults,
     manifest_err: &TokenStream2,
     keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
@@ -184,7 +201,7 @@ fn expand_struct(
             traced,
             defaults,
             &oopsie_path,
-            span,
+            traced_span.unwrap_or(span),
             &mut item,
         )?;
     }
