@@ -320,7 +320,8 @@ e.g. API error responses."
 //!
 //! | Feature | Default | Toolchain | Effect |
 //! |---------|---------|-----------|--------|
-//! | `fancy` | yes | stable | `Report`, colorized output, and the panic hook |
+//! | `std` | yes | stable | standard-library support (allocator, `std::error::Error`, …) |
+//! | `fancy` | no | stable | `Report`, colorized output, and the panic hook |
 //! | `tracing` | no | stable | span-trace capture and the `tracing-subscriber` error layer |
 //! | `serde` | no | stable | the `erased` module: serialize any error as a type-erased value |
 //! | `chrono` | no | stable | `chrono::DateTime<Local>` timestamps for `traced(timestamp(chrono = true))` |
