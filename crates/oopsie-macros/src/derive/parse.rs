@@ -1545,6 +1545,26 @@ mod tests {
     }
 
     #[test]
+    fn categorize_does_not_dual_classify_source_field_by_trace_type() {
+        // A `source` field whose own error type happens to be named
+        // `Backtrace`/`SpanTrace` (by last path segment) must stay a plain
+        // source field — never also `backtrace_field`/`spantrace_field`.
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { source: Backtrace, other: SpanTrace }
+        };
+        let categorized = CategorizedFields::from_fields(&item.fields).unwrap();
+        assert!(categorized.source.is_some());
+        assert!(categorized.backtrace_field.is_none());
+        assert_eq!(
+            categorized
+                .spantrace_field
+                .as_ref()
+                .map(ToString::to_string),
+            Some("other".to_owned())
+        );
+    }
+
+    #[test]
     fn categorize_rejects_explicit_backtrace_attr_on_wrong_type() {
         let item: syn::ItemStruct = parse_quote! {
             struct S { #[oopsie(backtrace)] b: String }
@@ -1693,7 +1713,10 @@ impl CategorizedFields {
             // one carrying an explicit `#[oopsie(...)]` attribute or whose type
             // matches (by last path segment). A field merely *named* `backtrace`
             // of the wrong type is an ordinary field — the real trace is injected
-            // separately under a mangled name.
+            // separately under a mangled name. The type-based match is skipped
+            // for the source field: a real `oopsie::Backtrace`/`SpanTrace` can
+            // never implement `Error`, so a source field whose own error type
+            // merely happens to share that last segment is never a real trace.
             if attrs.backtrace && !is_backtrace_type(&field.ty) {
                 return Err(syn::Error::new_spanned(
                     field,
@@ -1718,8 +1741,8 @@ impl CategorizedFields {
                     "`#[oopsie(location)]` requires a field of type `&'static Location<'static>`",
                 ));
             }
-            let is_traces = attrs.traces || is_traces_type(&field.ty);
-            if attrs.backtrace || is_backtrace_type(&field.ty) {
+            let is_traces = attrs.traces || (!attrs.is_source() && is_traces_type(&field.ty));
+            if attrs.backtrace || (!attrs.is_source() && is_backtrace_type(&field.ty)) {
                 if backtrace_field.is_some() {
                     return Err(syn::Error::new_spanned(
                         field,
@@ -1728,7 +1751,7 @@ impl CategorizedFields {
                 }
                 backtrace_field = Some(ident.clone());
             }
-            if attrs.spantrace || is_spantrace_type(&field.ty) {
+            if attrs.spantrace || (!attrs.is_source() && is_spantrace_type(&field.ty)) {
                 if spantrace_field.is_some() {
                     return Err(syn::Error::new_spanned(
                         field,

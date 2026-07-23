@@ -108,3 +108,33 @@ fn struct_paren_boxed_dyn_source_chain_intact() {
     let s = StdError::source(&e).expect("source missing");
     assert_eq!(s.to_string(), "disk full");
 }
+
+// A source field whose own error type happens to be named `Backtrace` (last
+// path segment match) must not be dual-classified as a trace field — the
+// real `oopsie::Backtrace` never implements `Error`, so this can only ever
+// be a user type coincidentally sharing the name.
+#[derive(Debug)]
+struct Backtrace(String);
+
+impl std::fmt::Display for Backtrace {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl StdError for Backtrace {}
+
+#[derive(Debug, Oopsie)]
+#[oopsie("source named like a trace type")]
+pub struct SourceNamedLikeBacktrace {
+    source: Backtrace,
+}
+
+#[test]
+fn source_named_like_backtrace_type_chain_intact() {
+    let e = SourceNamedLikeBacktrace {
+        source: Backtrace("disk full".to_owned()),
+    };
+    let s = StdError::source(&e).expect("source missing");
+    assert_eq!(s.to_string(), "disk full");
+}
