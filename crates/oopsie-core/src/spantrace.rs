@@ -88,30 +88,6 @@ impl From<tracing_error::SpanTraceStatus> for SpanTraceStatus {
     }
 }
 
-// Span fields carry no stable identity, so only debug builds keep them around to
-// tighten equality; release builds drop them and compare callsites alone.
-#[cfg(all(feature = "tracing", debug_assertions))]
-#[inline]
-fn capture_fields(fields: &str) -> String {
-    fields.to_owned()
-}
-
-#[cfg(all(feature = "tracing", not(debug_assertions)))]
-#[inline]
-fn capture_fields(_fields: &str) {}
-
-#[cfg(all(feature = "tracing", debug_assertions))]
-#[inline]
-fn fields_eq(stored: &str, current: &str) -> bool {
-    stored == current
-}
-
-#[cfg(all(feature = "tracing", not(debug_assertions)))]
-#[inline]
-fn fields_eq(_stored: &(), _current: &str) -> bool {
-    true
-}
-
 #[cfg(feature = "tracing")]
 impl PartialEq for SpanTrace {
     fn eq(&self, other: &Self) -> bool {
@@ -120,23 +96,56 @@ impl PartialEq for SpanTrace {
         let a = &self.inner;
         let b = &other.inner;
 
-        let mut a_frames = VecDeque::with_capacity(2);
-        a.with_spans(|a_md, a_fields| {
-            a_frames.push_back((a_md.callsite(), capture_fields(a_fields)));
+        // Callsites are cheap `&'static` identifiers, so this pass costs no
+        // allocation; it also settles the common case where traces diverge
+        // before ever needing to look at field values.
+        let mut a_callsites = VecDeque::with_capacity(2);
+        a.with_spans(|a_md, _| {
+            a_callsites.push_back(a_md.callsite());
             true
         });
-        let mut equal = true;
-        b.with_spans(|b_md, b_fields| {
-            equal = match a_frames.pop_front() {
-                Some((a_callsite, a_fields)) => {
-                    a_callsite == b_md.callsite() && fields_eq(&a_fields, b_fields)
-                }
+        let mut same_shape = true;
+        b.with_spans(|b_md, _| {
+            same_shape = match a_callsites.pop_front() {
+                Some(a_callsite) => a_callsite == b_md.callsite(),
                 None => false,
             };
-            equal
+            same_shape
         });
-        equal && a_frames.is_empty()
+        if !same_shape || !a_callsites.is_empty() {
+            return false;
+        }
+
+        fields_match(a, b)
     }
+}
+
+// Span fields carry no stable identity, so only debug builds keep them around to
+// tighten equality; release builds drop them and compare callsites alone.
+#[cfg(all(feature = "tracing", debug_assertions))]
+fn fields_match(a: &tracing_error::SpanTrace, b: &tracing_error::SpanTrace) -> bool {
+    use std::collections::VecDeque;
+
+    let mut a_fields: VecDeque<String> = VecDeque::with_capacity(2);
+    a.with_spans(|_, fields| {
+        a_fields.push_back(fields.to_owned());
+        true
+    });
+    let mut equal = true;
+    b.with_spans(|_, b_fields| {
+        equal = match a_fields.pop_front() {
+            Some(a_fields) => a_fields == b_fields,
+            None => false,
+        };
+        equal
+    });
+    equal
+}
+
+#[cfg(all(feature = "tracing", not(debug_assertions)))]
+#[inline]
+fn fields_match(_a: &tracing_error::SpanTrace, _b: &tracing_error::SpanTrace) -> bool {
+    true
 }
 
 #[cfg(feature = "tracing")]
@@ -547,7 +556,7 @@ mod tests {
         assert_eq!(c, d);
 
         // Debug builds compare recorded field values; release builds compare
-        // callsites only (see `capture_fields`/`fields_eq`).
+        // callsites only (see `fields_match`).
         #[cfg(debug_assertions)]
         assert_ne!(a, b, "debug builds must distinguish differing field values");
         #[cfg(not(debug_assertions))]
