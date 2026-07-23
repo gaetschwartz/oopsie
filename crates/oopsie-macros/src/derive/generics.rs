@@ -249,6 +249,13 @@ impl DeclaredParams {
         }
     }
 
+    /// Whether `name` is already taken by a declared type or const parameter.
+    /// Used to probe for a synthetic parameter name that cannot collide with
+    /// the error's own declaration (E0403).
+    pub fn contains(&self, name: &str) -> bool {
+        self.types.contains(name) || self.consts.contains(name)
+    }
+
     /// Whether `ty` references any declared parameter (type, const, or
     /// lifetime). Used per-field to decide whether the field keeps its concrete
     /// type on the selector or rides an `Into` parameter.

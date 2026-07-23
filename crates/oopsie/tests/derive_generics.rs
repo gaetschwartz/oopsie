@@ -537,3 +537,44 @@ fn defaulted_param_sourced_struct() {
     assert_eq!(err.path, "/x");
     assert_eq!(err.source().unwrap().to_string(), "gone");
 }
+
+// ─── synthetic parameter names avoid a user parameter of the same shape ───
+// `fail`'s own `Ok`-type parameter is internally named `__T`; a user parameter
+// literally named `__T` must not collide with it (regression: previously
+// E0403).
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum DunderT2<T: fmt::Debug, __T: fmt::Debug> {
+    #[oopsie("value {value:?}")]
+    A { value: T },
+    #[oopsie("other {other:?}")]
+    B { other: __T },
+}
+
+#[test]
+fn synthetic_ok_type_param_avoids_user_dunder_t() {
+    let err: DunderT2<u32, bool> = A { value: 5u32 }.build();
+    assert_eq!(err.to_string(), "value 5");
+    let res: Result<(), DunderT2<u32, bool>> = B { other: true }.fail();
+    assert_eq!(res.unwrap_err().to_string(), "other true");
+}
+
+// A field with no matching parameter rides a synthetic `__T{i}` `Into`
+// parameter; a user parameter literally named `__T0` must not collide with
+// it, and the sourced `Contextual` impl — which used to spot synthetic
+// params by a `__T` name prefix — must not re-declare it either.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum DunderT0Error<__T0: std::error::Error + 'static> {
+    #[oopsie("dundered {count}")]
+    Sourced { source: __T0, count: u32 },
+}
+
+#[test]
+fn synthetic_into_param_avoids_user_dunder_t0() {
+    let io_err = io::Error::new(io::ErrorKind::NotFound, "missing");
+    let err: DunderT0Error<io::Error> = Sourced { count: 3u32 }.build_error(io_err);
+    assert_eq!(err.to_string(), "dundered 3");
+}

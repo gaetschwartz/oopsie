@@ -31,7 +31,14 @@ struct SelectorShape<'a> {
     struct_use: TokenStream2,
     /// The parameters the selector itself carries (projected error params plus
     /// the `__T{i}` `Into` params), every one of which appears in `struct_use`.
+    /// The `Into` params are exactly the trailing `into_param_idents.len()`
+    /// entries, in the same order (see [`selector_shape`]).
     selector_params: Vec<GenericParam>,
+    /// The idents assigned to the synthetic `Into` parameters, probed against
+    /// the error's declared parameters so none collides with a user-named one
+    /// (E0403). Tracked separately so callers can identify them structurally
+    /// rather than by name prefix.
+    into_param_idents: Vec<Ident>,
     /// The `__T{i}: Into<..>` bounds, each paired with the error parameters its
     /// converted type depends on (`__T0: Into<T::Item>` → `{T}`), so a bound that
     /// names a *free* parameter can ride the `build`/`fail` method that declares
@@ -96,7 +103,7 @@ fn selector_shape<'a>(
         // no parameter rides the `Into` ergonomics.
         let references_param = declared.type_references_param(field_ty);
         if cfg.is_empty() && !references_param {
-            let ty_param = format_ident!("__T{}", i);
+            let ty_param = fresh_into_param(i, &declared, &into_param_idents);
             into_param_idents.push(ty_param.clone());
             let bound = quote! { #ty_param: ::core::convert::Into<#field_ty> };
             into_bounds.push((bound, declared.params_for_into_bound(field_ty)));
@@ -144,10 +151,25 @@ fn selector_shape<'a>(
         struct_decl,
         struct_use,
         selector_params,
+        into_param_idents,
         into_bounds,
         referenced_names,
         struct_fields: quote! { { #(#fields),* } },
         derives,
+    }
+}
+
+/// The next `__T{n}` ident, starting from field index `i`, that names neither a
+/// declared error parameter nor a synthetic parameter already assigned to an
+/// earlier field — so it can't collide with a user-declared one (E0403).
+fn fresh_into_param(i: usize, declared: &DeclaredParams, assigned: &[Ident]) -> Ident {
+    let mut n = i;
+    loop {
+        let candidate = format_ident!("__T{}", n);
+        if !declared.contains(&candidate.to_string()) && !assigned.contains(&candidate) {
+            return candidate;
+        }
+        n += 1;
     }
 }
 
@@ -247,11 +269,8 @@ impl SelectorShape<'_> {
             .iter()
             .map(super::generics::strip_default)
             .collect();
-        for param in &self.selector_params {
-            if super::generics::param_name(param).starts_with("__T") {
-                params.push(param.clone());
-            }
-        }
+        let synthetic_start = self.selector_params.len() - self.into_param_idents.len();
+        params.extend(self.selector_params[synthetic_start..].iter().cloned());
         let impl_generics = if params.is_empty() {
             quote! {}
         } else {
@@ -1014,15 +1033,16 @@ fn gen_build_fail(
     let build_where = render_where(&free_preds);
     // `fail` adds its own `Ok`-type parameter alongside the destination's free
     // ones; both sets carry the destination's `where` predicates.
+    let ok_ty = fresh_ok_type_param(shape);
     let fail_generics = if free_decl.is_empty() {
-        quote! { <__T> }
+        quote! { <#ok_ty> }
     } else {
         // Lifetimes must precede type/const params: emit free lifetimes, then the
-        // `Ok`-type `__T`, then the remaining free params.
+        // `Ok`-type param, then the remaining free params.
         let (free_lts, free_rest): (Vec<_>, Vec<_>) = free_decl
             .iter()
             .partition(|p| matches!(p, GenericParam::Lifetime(_)));
-        quote! { <#(#free_lts,)* __T, #(#free_rest),*> }
+        quote! { <#(#free_lts,)* #ok_ty, #(#free_rest),*> }
     };
     let fail_where = render_where(&free_preds);
 
@@ -1062,11 +1082,26 @@ fn gen_build_fail(
 
             #[doc = #fail_doc]
             #[track_caller]
-            pub fn fail #fail_generics (self) -> ::core::result::Result<__T, #dest_ty> #fail_where {
+            pub fn fail #fail_generics (self) -> ::core::result::Result<#ok_ty, #dest_ty> #fail_where {
                 ::core::result::Result::Err(self.build())
             }
         }
 
         #none_error_impl
     }
+}
+
+/// The `fail` method's `Ok`-type parameter, probed so it collides with neither
+/// a declared error parameter nor one of the selector's synthetic `Into`
+/// params (E0403).
+fn fresh_ok_type_param(shape: &SelectorShape) -> Ident {
+    let declared = DeclaredParams::from_generics(shape.generics);
+    let mut candidate = format_ident!("__T");
+    let mut n = 0u32;
+    while declared.contains(&candidate.to_string()) || shape.into_param_idents.contains(&candidate)
+    {
+        candidate = format_ident!("__T{}", n);
+        n += 1;
+    }
+    candidate
 }
