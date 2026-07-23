@@ -92,8 +92,8 @@ enables `std` (colorized `Report` rendering needs it), so it is unavailable on
 | `tracing` | implies `std` |
 | `chrono` | implies `std` |
 | `jiff` | implies `std` |
-| `test-utils` | implies `std` |
 | `fancy` | implies `std` |
+| `experimental-settings` | yes |
 
 Under `no_std`, `#[oopsie]`/`#[derive(Oopsie)]`, `Welp`, error chains, and
 `Diagnostic`/`Display` rendering all work unchanged; backtraces are always
