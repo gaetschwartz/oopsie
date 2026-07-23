@@ -29,7 +29,8 @@ impl<const DEFAULT: bool, T: FromMeta> Tristate<DEFAULT, T> {
     }
 
     /// `Some(state)` when the user wrote the toggle; `None` when it defaulted.
-    /// A settings block (`key(...)`) always counts as explicit-on.
+    /// A settings block (`key(...)`) counts as explicit, with the state taken
+    /// from its `enabled` key (default on).
     pub fn explicit(&self) -> Option<bool> {
         self.explicit.then(|| self.inner.is_enabled())
     }
