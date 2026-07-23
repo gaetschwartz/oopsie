@@ -245,6 +245,23 @@ Initial release candidate.
 - Feature flags: `fancy`, `serde`, `tracing`, `chrono`, `jiff`, `extras`, and
   the nightly `unstable-*` set.
 
+[0.1.0-rc.20]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.20
+[0.1.0-rc.19]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.19
+[0.1.0-rc.18]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.18
+[0.1.0-rc.17]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.17
+[0.1.0-rc.16]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.16
+[0.1.0-rc.15]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.15
+[0.1.0-rc.14]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.14
+[0.1.0-rc.13]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.13
+[0.1.0-rc.12]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.12
+[0.1.0-rc.11]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.11
+[0.1.0-rc.10]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.10
+[0.1.0-rc.9]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.9
+[0.1.0-rc.8]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.8
+[0.1.0-rc.7]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.7
+[0.1.0-rc.6]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.6
+[0.1.0-rc.5]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.5
+[0.1.0-rc.4]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.4
 [0.1.0-rc.3]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.3
 [0.1.0-rc.2]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.2
 [0.1.0-rc.1]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.1
