@@ -189,10 +189,10 @@ pub fn predicate_named_params(
                         };
                         visitor.visit_path(&tb.path);
                     }
-                    syn::TypeParamBound::Lifetime(lt) => {
-                        if declared.lifetimes.contains(&lt.ident.to_string()) {
-                            found.lifetimes.insert(lt.clone());
-                        }
+                    syn::TypeParamBound::Lifetime(lt)
+                        if declared.lifetimes.contains(&lt.ident.to_string()) =>
+                    {
+                        found.lifetimes.insert(lt.clone());
                     }
                     _ => {}
                 }

@@ -54,7 +54,9 @@ pub(super) fn check_existing_fields(
             existence.has_timestamp = true;
         }
         if is_timestamp_typed && !is_injected_timestamp {
-            existence.timestamp_conflict.get_or_insert(field.span());
+            existence
+                .timestamp_conflict
+                .get_or_insert_with(|| field.span());
         }
         let has_location_type = is_location_type(&field.ty);
         if has_location_type {

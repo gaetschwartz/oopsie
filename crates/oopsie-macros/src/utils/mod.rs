@@ -13,7 +13,7 @@ use syn::MetaNameValue;
 
 /// A non-empty run of identifier characters, so appending it to a stem
 /// yields a valid identifier.
-pub(crate) fn is_ident_fragment(s: &str) -> bool {
+pub fn is_ident_fragment(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
