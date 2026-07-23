@@ -1,5 +1,5 @@
 error: this field's type suppresses `traced(timestamp)` injection, but the field is not auto-captured or wired to `provide` like a backtrace/spantrace field would be; `timestamp` has no effect here — rename or retype this field, or drop `timestamp` from `traced`
-  --> tests/compile-fail/traced_timestamp_suppressed_by_existing_field.rs:10:5
+  --> tests/compile-fail/nightly/traced_timestamp_suppressed_by_existing_field.rs:10:5
    |
 10 |     pub at: std::time::SystemTime,
    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

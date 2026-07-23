@@ -5,10 +5,10 @@
 
 use oopsie::oopsie;
 
-#[oopsie(traced(timestamp(chrono = true)))]
-pub enum AppError {
-    #[oopsie("boom")]
-    Boom,
+#[oopsie(traced(timestamp))]
+pub struct E {
+    pub at: std::time::SystemTime,
+    pub msg: String,
 }
 
 fn main() {}
