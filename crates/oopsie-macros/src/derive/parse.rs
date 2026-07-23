@@ -291,7 +291,8 @@ impl EnumContainerAttrsInner {
 /// quoted form `vis = "pub(crate)"` is also accepted as a fallback. The
 /// bare `vis = pub(crate)` form is **not** accepted — `syn::Expr::parse`
 /// rejects `pub` upstream of darling, and there's no FromMeta-side hook
-/// to intercept it.
+/// to intercept it; `reject_bare_vis_pub` pre-scans for it instead, ahead
+/// of darling, to give a diagnostic naming the two accepted spellings.
 #[derive(Debug, Default, darling::FromAttributes)]
 #[darling(attributes(oopsie))]
 pub struct EnumContainerAttrs {
@@ -317,6 +318,7 @@ impl EnumContainerAttrs {
     /// darling's generic literal error.
     pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         use darling::FromAttributes as _;
+        reject_bare_vis_pub(attrs)?;
         let (short_display, attrs) = extract_short_display(attrs)?;
         if let Some(short) = short_display {
             return Err(syn::Error::new_spanned(
@@ -644,6 +646,7 @@ impl VariantAttrs {
     /// duplicate display (short + long form) errors.
     pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         use darling::FromAttributes as _;
+        reject_bare_vis_pub(attrs)?;
         let (short_display, attrs) = extract_short_display(attrs)?;
         let mut result = Self::from_attributes(&attrs).map_err(syn::Error::from)?;
         if let Some(short) = short_display {
@@ -694,6 +697,7 @@ impl StructAttrs {
     /// Parse `#[oopsie(...)]` on a struct definition. Strict on unknown keys.
     pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         use darling::FromAttributes as _;
+        reject_bare_vis_pub(attrs)?;
         let (short_display, attrs) = extract_short_display(attrs)?;
         let mut result =
             Self::from_attributes(&attrs).map_err(|e| improve_struct_unknown_field(e, &attrs))?;
@@ -1076,6 +1080,42 @@ pub fn extract_short_display(
         }
     }
     Ok((display, kept))
+}
+
+/// Rejects the bare `vis = pub(...)` form. `Meta::NameValue`'s value parses
+/// as `syn::Expr`, and `pub` isn't one, so this fails deep inside darling's
+/// own meta-list parsing with a generic "expected an expression" pointing at
+/// `pub` — before darling ever learns the key was `vis`. Scanning the raw
+/// tokens here, ahead of that parse, lets us name the two accepted
+/// spellings instead: `vis(pub(crate))` and `vis = "pub(crate)"`.
+fn reject_bare_vis_pub(attrs: &[syn::Attribute]) -> syn::Result<()> {
+    for attr in attrs {
+        let syn::Meta::List(list) = &attr.meta else {
+            continue;
+        };
+        if !list.path.is_ident("oopsie") {
+            continue;
+        }
+        let trees: Vec<proc_macro2::TokenTree> = list.tokens.clone().into_iter().collect();
+        for window in trees.windows(3) {
+            let [key, eq, val] = window else { continue };
+            let (
+                proc_macro2::TokenTree::Ident(key),
+                proc_macro2::TokenTree::Punct(eq),
+                proc_macro2::TokenTree::Ident(val),
+            ) = (key, eq, val)
+            else {
+                continue;
+            };
+            if key == "vis" && eq.as_char() == '=' && val == "pub" {
+                return Err(syn::Error::new(
+                    key.span(),
+                    "`vis` takes `vis(pub(crate))` or `vis = \"pub(crate)\"`, not a bare expression",
+                ));
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]

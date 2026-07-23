@@ -1,0 +1,5 @@
+error: `vis` takes `vis(pub(crate))` or `vis = "pub(crate)"`, not a bare expression
+ --> tests/compile-fail/vis_bare_pub.rs:2:10
+  |
+2 | #[oopsie(vis = pub(crate))]
+  |          ^^^
