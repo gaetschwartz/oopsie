@@ -18,7 +18,7 @@ use crate::trace_printer::TraceTheme;
 ///
 /// Choose one of the shipped presets (the associated constants) and install it
 /// with [`set_theme`]; the palette colors are intentionally opaque.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Theme {
     red: (u8, u8, u8),
     peach: (u8, u8, u8),
