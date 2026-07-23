@@ -8,6 +8,9 @@
 //!   in the generated `Display::fmt`.
 //! - a user field literally named `request` shadowed the `&mut Request`
 //!   parameter in the generated `Error::provide` (unstable feature only).
+//! - a user field literally named `__request` shadowed the *mangled*
+//!   `&mut Request` parameter itself, so another field's `#[oopsie(backtrace)]`
+//!   was never provided (unstable feature only).
 #![cfg_attr(
     feature = "unstable-error-generic-member-access",
     feature(error_generic_member_access)
@@ -108,4 +111,30 @@ fn c7_field_named_request_in_provide() {
     };
     let help = core::error::request_value::<oopsie::HelpText>(&err);
     assert_eq!(help.as_deref(), Some("payload"));
+}
+
+// ── user field literally named `__request` (shadows the mangled provide
+//    parameter itself; unstable only) ───────────────────────────────────────
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum FieldNamedDunderRequestEnum {
+    #[oopsie("dunder-request error")]
+    DunderReq {
+        __request: u32,
+        #[oopsie(backtrace)]
+        bt: oopsie::Backtrace,
+    },
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn c8_field_named_dunder_request_in_provide() {
+    oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
+    let err = DunderReq { __request: 9u32 }.build();
+    let bt = core::error::request_ref::<oopsie::Backtrace>(&err);
+    assert!(
+        bt.is_some(),
+        "should provide the Backtrace field, not shadow it"
+    );
 }

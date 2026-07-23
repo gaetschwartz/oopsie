@@ -176,6 +176,37 @@ fn forwarded_generic_source_ty<'a>(
         .then_some(&source.ty)
 }
 
+/// The mangled `Error::provide` parameter name, probed against every field
+/// name across all variants (mirroring `gen_display::formatter`'s probe for
+/// `f`) so a field named `__request` cannot shadow it.
+fn provide_param(data: &syn::Data) -> syn::Ident {
+    let field_names = match data {
+        syn::Data::Struct(ds) => ds
+            .fields
+            .iter()
+            .filter_map(|f| f.ident.as_ref())
+            .collect::<Vec<_>>(),
+        syn::Data::Enum(de) => de
+            .variants
+            .iter()
+            .filter_map(|v| match &v.fields {
+                syn::Fields::Named(f) => Some(f.named.iter().filter_map(|f| f.ident.as_ref())),
+                syn::Fields::Unnamed(_) | syn::Fields::Unit => None,
+            })
+            .flatten()
+            .collect::<Vec<_>>(),
+        syn::Data::Union(_) => unreachable!(),
+    };
+
+    let mut candidate = format_ident!("__request");
+    let mut n = 0u32;
+    while field_names.contains(&&candidate) {
+        candidate = format_ident!("__request_{n}");
+        n += 1;
+    }
+    candidate
+}
+
 /// Generate `std::error::Error` impl for an enum.
 pub fn gen_enum_error(
     resolved: &ResolvedEnum,
@@ -188,7 +219,7 @@ pub fn gen_enum_error(
     // Mangled `provide` parameter: the arm destructures every field name (so
     // provide exprs can reference fields), which would shadow a parameter named
     // `request` if a user field is also named `request`.
-    let req = format_ident!("__request");
+    let req = provide_param(&input.data);
 
     let mut source_arms = Vec::new();
     let mut provide_arms = Vec::new();
@@ -730,7 +761,7 @@ pub fn gen_struct_error(
 
     // Mangled `provide` parameter (see `gen_enum_error`): the destructure binds
     // every field name, which would shadow a parameter named `request`.
-    let req = format_ident!("__request");
+    let req = provide_param(&input.data);
 
     let source_body = if let Some(source_field) = &categorized.source {
         let source_ident = &source_field.ident;
