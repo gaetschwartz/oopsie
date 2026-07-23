@@ -43,7 +43,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The `fancy` feature is no longer enabled by default. Colorized, richly
   formatted reports (and their `owo-colors` / `linkme` dependencies) are now
   opt-in — add `features = ["fancy"]` to keep the previous behavior. The default
-  build is now dependency-light and renders plain reports.
+  build is now dependency-light and no longer includes any report renderer.
 
 ## [0.1.0-rc.17] - 2026-06-26
 
