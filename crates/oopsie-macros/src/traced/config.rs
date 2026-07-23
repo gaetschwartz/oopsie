@@ -131,6 +131,11 @@ pub(super) struct FieldExistence {
     pub has_timestamp: bool,
     pub has_traces: bool,
     pub has_location: bool,
+    /// Span of a pre-existing, user-authored SystemTime/DateTime-typed field
+    /// that set `has_timestamp`; `None` when the re-expansion of an
+    /// already-injected field set it instead. Lets callers diagnose a
+    /// requested-but-suppressed `timestamp` without misfiring on re-expansion.
+    pub timestamp_conflict: Option<proc_macro2::Span>,
 }
 
 /// Tracks which fields should be injected.

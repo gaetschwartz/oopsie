@@ -5,7 +5,9 @@ use syn::ext::IdentExt as _;
 
 use super::args::TracedArgs;
 use super::config::{FieldInjectorConfig, FieldsToInject};
-use super::inject::{add_provide_attrs, check_existing_fields, inject_fields};
+use super::inject::{
+    add_provide_attrs, check_existing_fields, inject_fields, timestamp_conflict_error,
+};
 use crate::derive::parse::{StructAttrs, field_forward};
 use crate::utils::TracedDefaults;
 
@@ -23,6 +25,11 @@ pub fn expand_struct(
     let config = FieldInjectorConfig::new(&resolved, args.code.inner(), oopsie_path);
 
     let existence = check_existing_fields(&input.fields, &config.timestamp_type)?;
+    if resolved.timestamp
+        && let Some(span) = existence.timestamp_conflict
+    {
+        return Err(timestamp_conflict_error(span));
+    }
 
     let forward = input
         .fields

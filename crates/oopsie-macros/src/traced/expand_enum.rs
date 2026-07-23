@@ -5,7 +5,9 @@ use syn::ext::IdentExt as _;
 
 use super::args::TracedArgs;
 use super::config::{FieldInjectorConfig, FieldsToInject};
-use super::inject::{add_provide_attrs, check_existing_fields, inject_fields};
+use super::inject::{
+    add_provide_attrs, check_existing_fields, inject_fields, timestamp_conflict_error,
+};
 use crate::derive::parse::{ResolvedForward, VariantAttrs, field_forward};
 use crate::utils::TracedDefaults;
 
@@ -30,6 +32,12 @@ pub fn expand_enum(
         let variant_traced_enabled = variant_attrs.traced.is_enabled();
 
         let existence = check_existing_fields(&variant.fields, &config.timestamp_type)?;
+        if variant_traced_enabled
+            && resolved.timestamp
+            && let Some(span) = existence.timestamp_conflict
+        {
+            return Err(timestamp_conflict_error(span));
+        }
 
         let forward = if variant_traced_enabled {
             variant

@@ -1,6 +1,7 @@
 //! Field injection helpers.
 
 use syn::punctuated::Punctuated;
+use syn::spanned::Spanned as _;
 use syn::{Fields, FieldsNamed, parse_quote, token};
 
 use super::config::{FieldExistence, FieldInjectorConfig, FieldsToInject};
@@ -48,8 +49,12 @@ pub(super) fn check_existing_fields(
         if has_spantrace_type {
             existence.has_spantrace = true;
         }
-        if is_injected_timestamp || is_timestamp_type(&field.ty) || field.ty == *timestamp_type {
+        let is_timestamp_typed = is_timestamp_type(&field.ty) || field.ty == *timestamp_type;
+        if is_injected_timestamp || is_timestamp_typed {
             existence.has_timestamp = true;
+        }
+        if is_timestamp_typed && !is_injected_timestamp {
+            existence.timestamp_conflict.get_or_insert(field.span());
         }
         let has_location_type = is_location_type(&field.ty);
         if has_location_type {
@@ -67,6 +72,21 @@ pub(super) fn check_existing_fields(
         reject_mangled_collision(field, "__oopsie_location", has_location_type)?;
     }
     Ok(existence)
+}
+
+/// Error for `traced(timestamp)` requested on a struct/variant whose
+/// pre-existing SystemTime/DateTime-typed field suppresses injection: unlike
+/// backtrace/spantrace fields, such a field is an ordinary selector, not
+/// auto-captured or wired to `provide`, so the request would otherwise be a
+/// silent no-op.
+pub(super) fn timestamp_conflict_error(span: proc_macro2::Span) -> syn::Error {
+    syn::Error::new(
+        span,
+        "this field's type suppresses `traced(timestamp)` injection, but the field is not \
+         auto-captured or wired to `provide` like a backtrace/spantrace field would be; \
+         `timestamp` has no effect here — rename or retype this field, or drop `timestamp` \
+         from `traced`",
+    )
 }
 
 fn reject_mangled_collision(
@@ -273,6 +293,27 @@ mod tests {
         let fields = parse_fields(quote! { struct S { when: SystemTime } });
         let ts: syn::Type = parse_quote!(::std::time::SystemTime);
         assert!(check_existing_fields(&fields, &ts).unwrap().has_timestamp);
+    }
+
+    #[test]
+    fn timestamp_typed_field_records_conflict_span() {
+        let fields = parse_fields(quote! { struct S { when: SystemTime } });
+        let ts: syn::Type = parse_quote!(::std::time::SystemTime);
+        assert!(
+            check_existing_fields(&fields, &ts)
+                .unwrap()
+                .timestamp_conflict
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn reexpanded_injected_timestamp_field_does_not_record_conflict() {
+        let fields = parse_fields(quote! { struct S { __oopsie_timestamp: SystemTime } });
+        let ts: syn::Type = parse_quote!(::std::time::SystemTime);
+        let existence = check_existing_fields(&fields, &ts).unwrap();
+        assert!(existence.has_timestamp);
+        assert!(existence.timestamp_conflict.is_none());
     }
 
     #[test]
