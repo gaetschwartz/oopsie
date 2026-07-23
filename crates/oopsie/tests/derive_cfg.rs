@@ -499,3 +499,88 @@ fn enum_cfg_kept_help_field_returns_some() {
     .build();
     assert_eq!(&*err.oopsie_help_text().unwrap(), "fix it");
 }
+
+// ---- field-level `provide(ErrorCode)` under field-level cfg ----
+//
+// The provide expr references the field itself, so a cfg-stripped field's
+// binding drops from the destructure while the expr still names it — unless
+// the whole arm/method drops with the field (the enum drops to `_ => None`;
+// the struct method drops entirely with the field's cfg). Before the fix this
+// failed with E0425 ("cannot find value `code`") on the stable accessor.
+
+#[oopsie]
+#[oopsie(module(false), suffix = "Ec")]
+pub enum ErrorCodeFieldCfgError {
+    #[oopsie("stripped: {keep}")]
+    Stripped {
+        #[cfg(any())]
+        #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from(code.clone())))]
+        code: String,
+        keep: u32,
+    },
+
+    #[oopsie("kept: {keep}")]
+    Kept {
+        #[cfg(all())]
+        #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from(code.clone())))]
+        code: String,
+        keep: u32,
+    },
+}
+
+#[test]
+fn cfg_stripped_error_code_field_falls_through_to_none() {
+    use oopsie::Diagnostic as _;
+    let err = StrippedEc { keep: 1u32 }.build();
+    assert!(err.oopsie_error_code().is_none());
+}
+
+#[test]
+fn cfg_kept_error_code_field_accessor_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = KeptEc {
+        code: "kept::code".to_owned(),
+        keep: 2u32,
+    }
+    .build();
+    assert_eq!(err.oopsie_error_code().unwrap().as_str(), "kept::code");
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructErrorCodeStrippedError {
+    #[cfg(any())]
+    #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from(code.clone())))]
+    code: String,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_stripped_error_code_field_yields_none() {
+    use oopsie::Diagnostic as _;
+    let err = StructErrorCodeStrippedOopsie { keep: 1u32 }.build();
+    assert!(err.oopsie_error_code().is_none());
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructErrorCodeKeptError {
+    #[cfg(all())]
+    #[oopsie(provide(::oopsie::ErrorCode => ::oopsie::ErrorCode::from(code.clone())))]
+    code: String,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_kept_error_code_field_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = StructErrorCodeKeptOopsie {
+        code: "struct::kept::code".to_owned(),
+        keep: 2u32,
+    }
+    .build();
+    assert_eq!(
+        err.oopsie_error_code().unwrap().as_str(),
+        "struct::kept::code"
+    );
+}

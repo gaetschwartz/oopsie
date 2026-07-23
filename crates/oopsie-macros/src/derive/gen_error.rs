@@ -241,9 +241,15 @@ pub fn gen_enum_error(
             });
         }
 
-        // Provide from field-level provide attrs
-        for (_field_ident, provide_attr) in &categorized.provides {
-            provide_stmts.push(gen_provide_call(provide_attr, &req));
+        // Provide from field-level provide attrs. A cfg-stripped field's stmt
+        // must drop with it (its destructure binding already does).
+        for (field_ident, provide_attr) in &categorized.provides {
+            let field_cfg = field_cfg_for(categorized, field_ident);
+            let call = gen_provide_call(provide_attr, &req);
+            provide_stmts.push(quote! {
+                #(#field_cfg)*
+                #call
+            });
         }
 
         // Provide backtrace/spantrace refs from detected fields. An empty
@@ -442,12 +448,12 @@ pub fn gen_enum_error(
                     Self::#variant_ident { #(#code_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*))),
                 });
             }
-        } else if let Some(provide_attr) = categorized
+        } else if let Some((field_ident, provide_attr)) = categorized
             .provides
             .iter()
-            .map(|(_, p)| p)
-            .chain(variant_attrs.provides.iter())
-            .find(|p| is_error_code_provide(p))
+            .map(|(f, p)| (Some(f), p))
+            .chain(variant_attrs.provides.iter().map(|p| (None, p)))
+            .find(|(_, p)| is_error_code_provide(p))
         {
             let expr = &provide_attr.expr;
             // The provide expr may reference fields (it gets the same bindings
@@ -460,8 +466,12 @@ pub fn gen_enum_error(
             } else {
                 quote! { ::core::option::Option::Some(#expr) }
             };
+            // A field-level provide's arm names the field, so a cfg-stripped
+            // field takes the whole arm with it (mirroring the help arm above).
+            let field_cfg = trace_field_cfg(categorized, field_ident);
             code_arms.push(quote! {
                 #(#cfg_attrs)*
+                #(#field_cfg)*
                 #[allow(unused_variables)]
                 Self::#variant_ident { #(#binds)* .. } => #value,
             });
@@ -745,9 +755,15 @@ pub fn gen_struct_error(
         });
     }
 
-    // Field-level provides
-    for (_field_ident, provide_attr) in &categorized.provides {
-        provide_stmts.push(gen_provide_call(provide_attr, &req));
+    // Field-level provides. A cfg-stripped field's stmt must drop with it (its
+    // destructure binding already does).
+    for (field_ident, provide_attr) in &categorized.provides {
+        let field_cfg = field_cfg_for(categorized, field_ident);
+        let call = gen_provide_call(provide_attr, &req);
+        provide_stmts.push(quote! {
+            #(#field_cfg)*
+            #call
+        });
     }
 
     // Provide backtrace/spantrace refs from detected fields. An empty trace
@@ -981,10 +997,10 @@ pub fn gen_struct_error(
         let code_provide = categorized
             .provides
             .iter()
-            .map(|(_, p)| p)
-            .chain(attrs.provides.iter())
-            .find(|p| is_error_code_provide(p));
-        if let Some(provide_attr) = code_provide {
+            .map(|(f, p)| (Some(f), p))
+            .chain(attrs.provides.iter().map(|p| (None, p)))
+            .find(|(_, p)| is_error_code_provide(p));
+        if let Some((field_ident, provide_attr)) = code_provide {
             let expr = &provide_attr.expr;
             // The provide expr may reference fields (it gets the same bindings
             // inside the generated `provide()`), so destructure them here too.
@@ -1001,7 +1017,12 @@ pub fn gen_struct_error(
             } else {
                 quote! { ::core::option::Option::Some(#expr) }
             };
+            // A field-level provide's body names the field, so a cfg-stripped
+            // field takes the whole accessor with it, degrading to the trait
+            // default (mirroring the help accessor above).
+            let field_cfg = trace_field_cfg(categorized, field_ident);
             quote! {
+                #(#field_cfg)*
                 fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
                     #code_destructure
                     #value
