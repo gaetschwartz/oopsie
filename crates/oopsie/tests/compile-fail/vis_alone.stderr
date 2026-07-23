@@ -1,0 +1,5 @@
+error: expected a value, e.g. `vis(...)` or `vis = "..."`
+ --> tests/compile-fail/vis_alone.rs:2:10
+  |
+2 | #[oopsie(vis)]
+  |          ^^^

@@ -157,9 +157,11 @@ impl<const DEFAULT: bool> FromMeta for BetterFlag<DEFAULT> {
 
 /// Bridge `syn::Parse → darling::FromMeta`.
 ///
-/// Accepts `key(tokens)` (parses tokens via `syn::parse2::<T>`) and
-/// `key = "tokens"` (parses the string literal's contents as `T`). Bare-flag
-/// form (`key` alone) is an error; use a flag/tristate type when you need it.
+/// Accepts `vis(tokens)` (parses tokens via `syn::parse2::<T>`) and
+/// `vis = "tokens"` (parses the string literal's contents as `T`). Bare-flag
+/// form (`vis` alone) is an error; use a flag/tristate type when you need it.
+/// Error text names `vis` literally — it's the only field that uses this
+/// bridge; re-parameterize if a second one shows up.
 pub struct SynParse<T: syn::parse::Parse>(pub T);
 
 impl<T: syn::parse::Parse + std::fmt::Debug> std::fmt::Debug for SynParse<T> {
@@ -190,12 +192,12 @@ impl<T: syn::parse::Parse> FromMeta for SynParse<T> {
                     .map(Self)
                     .map_err(|e| darling::Error::custom(e).with_span(s)),
                 other => Err(
-                    darling::Error::custom("expected `key(...)` or `key = \"...\"`")
+                    darling::Error::custom("expected `vis(...)` or `vis = \"...\"`")
                         .with_span(other),
                 ),
             },
             syn::Meta::Path(p) => Err(darling::Error::custom(
-                "expected a value, e.g. `key(...)` or `key = \"...\"`",
+                "expected a value, e.g. `vis(...)` or `vis = \"...\"`",
             )
             .with_span(p)),
         }
