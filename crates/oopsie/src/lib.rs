@@ -338,10 +338,10 @@ e.g. API error responses."
 //! `alloc` targets (the crate always needs an allocator — bring your own with
 //! `extern crate alloc` and a global allocator in the consumer). `fancy`
 //! enables `std` (colorized `Report` rendering needs it), so it is unavailable
-//! on `no_std` targets. Panic hooks, backtraces, `tracing`, and clock-based
-//! timestamps (`chrono` / `jiff`) are also `std`-only; everything else — the
-//! derive, `Welp`, error chains, and `Diagnostic`/`Display` rendering — works
-//! unchanged.
+//! on `no_std` targets. Panic hooks, backtraces, `tracing`, clock-based
+//! timestamps (`chrono` / `jiff`), and `extras` are also `std`-only;
+//! everything else — the derive, `Welp`, error chains, and
+//! `Diagnostic`/`Display` rendering — works unchanged.
 //!
 //! # Project-wide settings (experimental)
 //!
