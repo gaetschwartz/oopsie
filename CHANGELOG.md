@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Renamed the `settings` cargo feature to `experimental-settings` and
+  documented it as an experimental debug tool, including the caveat that
+  Cargo's feature unification can apply workspace defaults to a crate that
+  did not itself opt in.
+
 ## [0.1.0-rc.20] - 2026-07-12
 
 ### Changed

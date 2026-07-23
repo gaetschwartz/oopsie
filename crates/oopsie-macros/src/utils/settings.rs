@@ -1,4 +1,4 @@
-#![cfg(feature = "settings")]
+#![cfg(feature = "experimental-settings")]
 
 use std::path::{Path, PathBuf};
 use std::str::FromStr as _;

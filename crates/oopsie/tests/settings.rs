@@ -1,4 +1,4 @@
-//! End-to-end coverage for the `settings` feature, in the style of `trybuild`:
+//! End-to-end coverage for the `experimental-settings` feature, in the style of `trybuild`:
 //! fixtures under `tests/settings/<group>/`. Each group becomes ONE generated
 //! crate with a `[[bin]]` per `<case>.rs`, sharing that group's
 //! `[package.metadata.oopsie]` (the optional `<group>/oopsie.toml`, merged into a
@@ -98,7 +98,7 @@ fn package_manifest(
          \n\
          {workspace_table}\
          [dependencies]\n\
-         oopsie = {{ path = {oopsie_path:?}, default-features = false, features = [\"settings\"] }}\n",
+         oopsie = {{ path = {oopsie_path:?}, default-features = false, features = [\"experimental-settings\"] }}\n",
     );
     for case in cases {
         // infallible into a String

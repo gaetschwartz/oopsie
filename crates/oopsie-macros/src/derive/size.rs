@@ -46,9 +46,9 @@ pub(super) fn wrap_size_assertion_in_const(assertion: &TokenStream2) -> TokenStr
 /// The validated project-wide size cap from `[package.metadata.oopsie]` or
 /// `[workspace.metadata.oopsie]`, paired with its source section label, plus any
 /// `compile_error!` to surface a malformed manifest. `(None, empty)` when the
-/// `settings` feature is off or no cap is configured.
+/// `experimental-settings` feature is off or no cap is configured.
 pub(super) fn manifest_size_cap() -> (Option<(usize, &'static str)>, TokenStream2) {
-    #[cfg(feature = "settings")]
+    #[cfg(feature = "experimental-settings")]
     {
         match crate::utils::settings::cap() {
             Ok(Some((cap, section))) => (Some((cap, section)), quote! {}),
@@ -56,7 +56,7 @@ pub(super) fn manifest_size_cap() -> (Option<(usize, &'static str)>, TokenStream
             Err(msg) => (None, quote! { ::core::compile_error!(#msg); }),
         }
     }
-    #[cfg(not(feature = "settings"))]
+    #[cfg(not(feature = "experimental-settings"))]
     {
         (None, quote! {})
     }

@@ -33,7 +33,7 @@ tracing = ["std", "oopsie-core/tracing"]
 chrono = ["std", "oopsie-core/chrono"]
 jiff = ["std", "oopsie-core/jiff"]
 extras = ["std", "oopsie-core/extras"]
-settings = ["oopsie-macros/settings"]
+experimental-settings = ["oopsie-macros/experimental-settings"]
 
 [dependencies]
 linkme = { version = "0.3.36", optional = true }

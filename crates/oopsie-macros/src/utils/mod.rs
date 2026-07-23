@@ -234,11 +234,11 @@ impl<T: FromMeta> FromMeta for MaybeAloneOopsieValue<T> {
 /// A token tying generated code to the consumer's `Cargo.toml` so editing
 /// `[package.metadata.oopsie]` re-runs the macro; nothing when `settings` is off.
 pub fn manifest_dep_token() -> proc_macro2::TokenStream {
-    #[cfg(feature = "settings")]
+    #[cfg(feature = "experimental-settings")]
     {
         settings::manifest_dep_token()
     }
-    #[cfg(not(feature = "settings"))]
+    #[cfg(not(feature = "experimental-settings"))]
     {
         quote::quote! {}
     }
@@ -308,26 +308,26 @@ impl TracedDefaults {
 }
 
 /// Naming/visibility defaults plus a `compile_error!` for an invalid manifest
-/// (empty when the `settings` feature is off or nothing is configured).
+/// (empty when the `experimental-settings` feature is off or nothing is configured).
 pub fn manifest_naming() -> (NamingDefaults, proc_macro2::TokenStream) {
-    #[cfg(feature = "settings")]
+    #[cfg(feature = "experimental-settings")]
     {
         settings::naming_defaults()
     }
-    #[cfg(not(feature = "settings"))]
+    #[cfg(not(feature = "experimental-settings"))]
     {
         (NamingDefaults::default(), quote::quote! {})
     }
 }
 
 /// `traced` defaults plus a `compile_error!` for an invalid manifest (empty when
-/// the `settings` feature is off or nothing is configured).
+/// the `experimental-settings` feature is off or nothing is configured).
 pub fn manifest_traced() -> (TracedDefaults, proc_macro2::TokenStream) {
-    #[cfg(feature = "settings")]
+    #[cfg(feature = "experimental-settings")]
     {
         settings::traced_defaults()
     }
-    #[cfg(not(feature = "settings"))]
+    #[cfg(not(feature = "experimental-settings"))]
     {
         (TracedDefaults::default(), quote::quote! {})
     }

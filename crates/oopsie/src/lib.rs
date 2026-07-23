@@ -326,7 +326,7 @@ e.g. API error responses."
 //! | `chrono` | no | stable | `chrono::DateTime<Local>` timestamps for `traced(timestamp(chrono = true))` |
 //! | `jiff` | no | stable | `jiff::Timestamp` / `jiff::Zoned` timestamp capture |
 //! | `extras` | no | stable | the `extras` module: environment-snapshot `Capturable` helpers |
-//! | `settings` | no | stable | read project-wide defaults from `[package.metadata.oopsie]` |
+//! | `experimental-settings` | no | stable | *(experimental)* read project-wide defaults from `[package.metadata.oopsie]` |
 //! | `unstable` | no | nightly | umbrella for the two unstable features below |
 //! | `unstable-error-generic-member-access` | no | nightly | trace and diagnostic surfacing through the Provider API |
 //! | `unstable-try-trait-v2` | no | nightly | `?` converts a failed `Result` directly into a `Report` |
@@ -342,14 +342,17 @@ e.g. API error responses."
 //! derive, `Welp`, error chains, and `Diagnostic`/`Display` rendering — works
 //! unchanged.
 //!
-//! # Project-wide settings
+//! # Project-wide settings (experimental)
 //!
-//! With the `settings` feature, a `[package.metadata.oopsie]` table in a crate's
-//! `Cargo.toml` sets a default for every error derived in that crate. The same
-//! keys may also be declared once at the workspace root under
-//! `[workspace.metadata.oopsie]`, so a multi-crate workspace can share a single
-//! set of defaults. Settings are read from each crate's own manifest, never its
-//! dependencies'.
+//! `experimental-settings` is a debug tool, not a stable API: its shape and
+//! behavior may change or be removed in a semver-compatible release.
+//!
+//! With the `experimental-settings` feature, a `[package.metadata.oopsie]`
+//! table in a crate's `Cargo.toml` sets a default for every error derived in
+//! that crate. The same keys may also be declared once at the workspace root
+//! under `[workspace.metadata.oopsie]`, so a multi-crate workspace can share a
+//! single set of defaults. Settings are read from each crate's own manifest,
+//! never its dependencies'.
 //!
 //! | key | per-type equivalent | effect |
 //! |---|---|---|
@@ -411,6 +414,19 @@ e.g. API error responses."
 //! (use a name or `false`); `module.suffix` / `default-suffix` must be valid
 //! identifier fragments and `default-vis` a valid visibility, else the build
 //! fails with a clear message.
+//!
+//! ## Known limitations
+//!
+//! `experimental-settings` is a Cargo feature on the proc-macro crate, and
+//! Cargo unifies features across a build: if *any* crate in the dependency
+//! graph enables it, every crate compiled in that invocation gets the
+//! settings machinery turned on. The macro still reads each expanding crate's
+//! own manifest (never another crate's), but this means workspace defaults
+//! under `[workspace.metadata.oopsie]` can end up applied to a crate that
+//! never listed `experimental-settings` in its own `Cargo.toml` — whether a
+//! crate is affected depends on which other crates share the build. Treat
+//! this as a debug tool for a single crate or a fully-opted-in workspace, not
+//! as a knob safe to enable from just one member of a larger one.
 
 extern crate alloc;
 
