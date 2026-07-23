@@ -55,7 +55,7 @@ const MAX_SOURCE_CHAIN_DEPTH: usize = 128;
 pub struct ErasedError {
     message: Box<str>,
 
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_capped_source_chain")]
     source_chain: Vec<Box<str>>,
 
     #[serde(default)]
@@ -91,10 +91,28 @@ impl core::error::Error for ErasedError {
     }
 }
 
+/// Caps a deserialized `source_chain` at `MAX_SOURCE_CHAIN_DEPTH`, the same
+/// bound `from_error_ref` enforces on the capture side, so an untrusted wire
+/// payload can't hand `ChainNode::build` an unbounded list to materialize.
+fn deserialize_capped_source_chain<'de, D>(deserializer: D) -> Result<Vec<Box<str>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let mut chain = Vec::<Box<str>>::deserialize(deserializer)?;
+    if chain.len() > MAX_SOURCE_CHAIN_DEPTH {
+        chain.truncate(MAX_SOURCE_CHAIN_DEPTH);
+        chain.push("\u{2026} source chain truncated".into());
+    }
+    Ok(chain)
+}
+
 /// One transported cause, re-materialized as a real error value so generic
 /// `Error::source()` walkers see the chain instead of bare data.
+///
+/// `Drop`, `Clone`, and `Debug` are hand-rolled as iterative walks over the
+/// linked list: the derived versions recurse one stack frame per link, and
+/// this list's length comes from an untrusted `source_chain`.
 #[cfg(feature = "std")]
-#[derive(Clone, Debug)]
 struct ChainNode {
     message: Box<str>,
     source: Option<Box<Self>>,
@@ -109,6 +127,51 @@ impl ChainNode {
                 source,
             }))
         })
+    }
+}
+
+#[cfg(feature = "std")]
+impl Drop for ChainNode {
+    fn drop(&mut self) {
+        let mut next = self.source.take();
+        while let Some(mut node) = next {
+            next = node.source.take();
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl Clone for ChainNode {
+    fn clone(&self) -> Self {
+        let mut messages = Vec::new();
+        let mut node = self;
+        loop {
+            messages.push(node.message.clone());
+            match &node.source {
+                Some(next) => node = next,
+                None => break,
+            }
+        }
+
+        let mut messages = messages.into_iter();
+        let message = messages.next().expect("loop pushes at least one message");
+        let source = messages.rev().fold(None, |source, message| {
+            Some(Box::new(Self { message, source }))
+        });
+        Self { message, source }
+    }
+}
+
+#[cfg(feature = "std")]
+impl fmt::Debug for ChainNode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut list = f.debug_list();
+        let mut node = Some(self);
+        while let Some(n) = node {
+            list.entry(&n.message);
+            node = n.source.as_deref();
+        }
+        list.finish()
     }
 }
 
@@ -1033,6 +1096,39 @@ mod tests {
             &*erased.source_chain[MAX_SOURCE_CHAIN_DEPTH], "\u{2026} source chain truncated",
             "last entry must be the truncation sentinel"
         );
+    }
+
+    #[test]
+    fn deserialize_caps_untrusted_source_chain_and_survives_drop_clone() {
+        let long_chain = vec!["cause"; 100_000];
+        let payload = serde_json::json!({ "message": "outer", "source_chain": long_chain });
+
+        let erased: ErasedError = serde_json::from_value(payload).unwrap();
+        assert_eq!(erased.source_chain.len(), MAX_SOURCE_CHAIN_DEPTH + 1);
+        assert_eq!(
+            &*erased.source_chain[MAX_SOURCE_CHAIN_DEPTH],
+            "\u{2026} source chain truncated"
+        );
+
+        assert!(std::error::Error::source(&erased).is_some());
+        let cloned = erased.clone();
+        drop(erased);
+        drop(cloned);
+    }
+
+    // Exercises ChainNode::build directly (bypassing the deserialize cap) to
+    // prove the linked list's Drop/Clone are iterative rather than relying on
+    // the depth cap for stack safety.
+    #[test]
+    fn chain_node_drop_and_clone_do_not_overflow_on_deep_chains() {
+        let messages: Vec<Box<str>> = (0..500_000)
+            .map(|i: u32| i.to_string().into_boxed_str())
+            .collect();
+
+        let head = ChainNode::build(&messages).expect("non-empty messages build a chain");
+        let cloned = head.clone();
+        drop(head);
+        drop(cloned);
     }
 
     // Constructs an ErasedError without tracing (spantrace: None) and verifies
