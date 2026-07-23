@@ -270,7 +270,7 @@ mod tests {
     fn env_var_opt_captures_env_var() {
         #[expect(
             unsafe_code,
-            reason = "test setup requires setting an env var at runtime"
+            reason = "sound under cargo-nextest's process-per-test isolation (used by just test/CI), which guarantees no sibling test thread reads the environment concurrently; unsound under the default libtest harness"
         )]
         unsafe {
             std::env::set_var("__OOPSIE_TEST_ENV_VAR", std::process::id().to_string());
