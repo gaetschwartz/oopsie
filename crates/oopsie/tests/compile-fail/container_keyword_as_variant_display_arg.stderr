@@ -1,0 +1,5 @@
+error: `module` is an `#[oopsie(...)]` container keyword, not a display format argument; it belongs on the enum, not this variant: move it to the enum's own `#[oopsie(module)]` attribute
+ --> tests/compile-fail/container_keyword_as_variant_display_arg.rs:7:19
+  |
+7 |     #[oopsie("x", module)]
+  |                   ^^^^^^

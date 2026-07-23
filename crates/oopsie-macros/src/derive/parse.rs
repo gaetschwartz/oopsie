@@ -422,9 +422,19 @@ impl DisplayScope {
     fn is_keyword(self, ident: &str) -> bool {
         let in_set = |set: &[&str]| set.contains(&ident);
         match self {
-            Self::Variant => in_set(VARIANT_KEYWORDS),
+            Self::Variant => in_set(VARIANT_KEYWORDS) || in_set(CONTAINER_KEYWORDS),
             Self::Struct => in_set(VARIANT_KEYWORDS) || in_set(CONTAINER_KEYWORDS),
         }
+    }
+
+    /// Whether `ident` is a container-only keyword being misused on a variant —
+    /// legal on the enum itself but never on one of its variants — so the
+    /// rejection message can point at the enum-level placement instead of
+    /// suggesting a (nonexistent) variant-level attribute.
+    fn is_container_only_on_variant(self, ident: &str) -> bool {
+        matches!(self, Self::Variant)
+            && CONTAINER_KEYWORDS.contains(&ident)
+            && !VARIANT_KEYWORDS.contains(&ident)
     }
 }
 
@@ -467,18 +477,25 @@ impl DisplayAttr {
             let Some(ident) = bare_path_ident(arg) else {
                 continue;
             };
-            if field_named(ident) || !scope.is_keyword(&ident.to_string()) {
+            let ident_str = ident.to_string();
+            if field_named(ident) || !scope.is_keyword(&ident_str) {
                 continue;
             }
             let fmt = self.format_str.value();
-            return Err(syn::Error::new_spanned(
-                ident,
+            let message = if scope.is_container_only_on_variant(&ident_str) {
+                format!(
+                    "`{ident}` is an `#[oopsie(...)]` container keyword, not a display \
+                     format argument; it belongs on the enum, not this variant: move it \
+                     to the enum's own `#[oopsie({ident})]` attribute"
+                )
+            } else {
                 format!(
                     "`{ident}` is an `#[oopsie(...)]` keyword, not a display format \
                      argument; give it its own attribute: \
                      `#[oopsie(\"{fmt}\")] #[oopsie({ident})]`"
-                ),
-            ));
+                )
+            };
+            return Err(syn::Error::new_spanned(ident, message));
         }
         Ok(())
     }
@@ -1504,11 +1521,20 @@ mod tests {
     fn reject_keyword_args_struct_scope_flags_container_keyword() {
         let d: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(display("x", size))).unwrap();
         let fields = fields_of(parse_quote! { struct S { msg: String } });
-        // `size` is container-only: legal on a struct's list, never on a variant.
+        // `size` is container-only: never legal on a variant either, and the
+        // Variant-scope error should point at the enum-level placement.
         d.reject_keyword_args(&fields, DisplayScope::Variant)
-            .unwrap();
+            .unwrap_err();
         d.reject_keyword_args(&fields, DisplayScope::Struct)
             .unwrap_err();
+    }
+
+    #[test]
+    fn reject_keyword_args_allows_container_keyword_named_field_on_variant() {
+        let d: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(display("{}", module))).unwrap();
+        let fields = fields_of(parse_quote! { struct S { module: String } });
+        d.reject_keyword_args(&fields, DisplayScope::Variant)
+            .unwrap();
     }
 
     #[test]
