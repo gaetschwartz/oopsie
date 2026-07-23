@@ -5,8 +5,8 @@
 //! the same colored machinery as [`oopsie::Report`], with no `color_eyre`
 //! dependency.
 //!
-//! Run with: `cargo run --example panic_hook`
-//! With a backtrace: `RUST_BACKTRACE=1 cargo run --example panic_hook`
+//! Run with: `cargo run --example panic_hook -F fancy,tracing,serde`
+//! With a backtrace: `RUST_BACKTRACE=1 cargo run --example panic_hook -F fancy,tracing,serde`
 
 use oopsie::install_panic_hook;
 use tracing::instrument;

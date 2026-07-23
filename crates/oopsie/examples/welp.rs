@@ -1,7 +1,7 @@
 //! `Welp` — a string-shaped escape hatch when a structured error is overkill,
 //! and `Report<Welp>` as the catch-all `main` story.
 //!
-//! Run with: `cargo run --example welp` (exits non-zero on error).
+//! Run with: `cargo run --example welp -F fancy` (exits non-zero on error).
 
 use oopsie::prelude::*;
 

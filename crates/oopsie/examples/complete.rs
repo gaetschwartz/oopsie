@@ -15,7 +15,7 @@
 //! Complete example showing `oopsie`'s full feature set in action: context selectors,
 //! backtraces, span traces, and caller locations.
 //!
-//! Run with: `RUST_BACKTRACE=1 cargo run --example complete -F fancy,tracing`
+//! Run with: `RUST_BACKTRACE=1 cargo run --example complete -F fancy,tracing,serde`
 
 use oopsie::{Report, ResultExt as _, RustBacktrace, Theme, oopsie};
 
