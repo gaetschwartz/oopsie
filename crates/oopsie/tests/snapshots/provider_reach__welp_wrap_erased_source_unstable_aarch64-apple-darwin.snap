@@ -1,18 +1,20 @@
 ---
-source: crates/oopsie/tests/report.rs
+source: crates/oopsie/tests/provider_reach.rs
 expression: report
 ---
-Error[report::FwdWrapError]: forward wrap
-  at crates/oopsie/tests/report.rs:[LOC]
-  ╰─▶ forward leaf: root cause
+Error: outer
+  at crates/oopsie/tests/provider_reach.rs:[LOC]
+  ╰─▶ inner failed: disk offline
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... no spans captured ...
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 9 frames hidden ...
-  1: report[[HASH]]::test_report_forward_chain
-           at tests/report.rs:[LOC]
-  2: report[[HASH]]::test_report_forward_chain::{closure#0}
-           at tests/report.rs:[LOC]
+  1: provider_reach[[HASH]]::origin_frame
+           at tests/provider_reach.rs:[LOC]
+  2: provider_reach[[HASH]]::test_welp_wrap_reaches_erased_source_trace
+           at tests/provider_reach.rs:[LOC]
+  3: provider_reach[[HASH]]::test_welp_wrap_reaches_erased_source_trace::{closure#0}
+           at tests/provider_reach.rs:[LOC]
    ... 22 frames hidden ...

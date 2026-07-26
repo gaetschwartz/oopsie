@@ -1,17 +1,20 @@
 ---
-source: crates/oopsie/tests/report.rs
+source: crates/oopsie/tests/provider_reach.rs
 expression: report
 ---
-Error[report::TestError]: Test error: something failed
-  at crates/oopsie/tests/report.rs:[LOC]
+Error: outer
+  at crates/oopsie/tests/provider_reach.rs:[LOC]
+  ╰─▶ inner failed: disk offline
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... no spans captured ...
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ... 9 frames hidden ...
-  1: report[[HASH]]::test_report_basic
-           at tests/report.rs:[LOC]
-  2: report[[HASH]]::test_report_basic::{closure#0}
-           at tests/report.rs:[LOC]
+   ... 7 frames hidden ...
+  1: provider_reach[[HASH]]::wrap_site
+           at tests/provider_reach.rs:[LOC]
+  2: provider_reach[[HASH]]::test_welp_wrap_reaches_erased_source_trace
+           at tests/provider_reach.rs:[LOC]
+  3: provider_reach[[HASH]]::test_welp_wrap_reaches_erased_source_trace::{closure#0}
+           at tests/provider_reach.rs:[LOC]
    ... 22 frames hidden ...

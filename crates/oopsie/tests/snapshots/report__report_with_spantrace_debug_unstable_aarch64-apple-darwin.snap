@@ -1,5 +1,0 @@
----
-source: crates/oopsie/tests/report.rs
-expression: "format!(\"{error:#}\")"
----
-Inner error happened
