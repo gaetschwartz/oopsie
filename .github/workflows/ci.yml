@@ -38,13 +38,16 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: nextest
+      # A step-level ternary can't gate this: Actions cannot unset a var, and the
+      # empty string it yields still counts as present at macro-expansion time.
+      - name: Enable backtrace snapshot tests
+        if: matrix.features == 'fancy,serde,tracing,chrono'
+        run: echo "OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1" >> "$GITHUB_ENV"
       - name: cargo nextest
         run: >
           cargo nextest run --workspace --no-default-features
           ${{ matrix.features && format('--features {0}', matrix.features) || '' }}
           ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
-        env:
-          OOPSIE_BACKTRACE_SNAPSHOT_TESTS: ${{ matrix.features == 'fancy,serde,tracing,chrono' && '1' || '' }}
       - name: cargo doctest
         run: >
           cargo test --doc --workspace --no-default-features

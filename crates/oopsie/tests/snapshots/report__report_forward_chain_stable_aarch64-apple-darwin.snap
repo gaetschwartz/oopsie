@@ -11,8 +11,8 @@ Error[report::FwdWrapError]: forward wrap
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 9 frames hidden ...
-  1: report::test_report_forward_chain::h[HASH]
+  1: report[[HASH]]::test_report_forward_chain
            at tests/report.rs:[LOC]
-  2: report::test_report_forward_chain::{{closure}}::h[HASH]
+  2: report[[HASH]]::test_report_forward_chain::{closure#0}
            at tests/report.rs:[LOC]
    ... 22 frames hidden ...

@@ -10,8 +10,8 @@ Error[report::TestError]: Test error: something failed
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 9 frames hidden ...
-  1: report::test_report_basic::h[HASH]
+  1: report[[HASH]]::test_report_basic
            at tests/report.rs:[LOC]
-  2: report::test_report_basic::{{closure}}::h[HASH]
+  2: report[[HASH]]::test_report_basic::{closure#0}
            at tests/report.rs:[LOC]
    ... 22 frames hidden ...

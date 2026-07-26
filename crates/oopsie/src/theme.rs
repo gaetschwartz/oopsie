@@ -33,7 +33,7 @@ pub struct Theme {
 
 const _: () = assert!(
     std::mem::size_of::<Theme>() <= 32,
-    "Theme is cloned on every get_theme(); keep it a small palette",
+    "Theme is copied on every get_theme(); keep it a small palette",
 );
 
 impl Theme {
@@ -241,7 +241,7 @@ pub fn set_theme(theme: Theme) {
 #[must_use]
 #[inline]
 pub fn get_theme() -> Theme {
-    THEME.read().unwrap_or_else(PoisonError::into_inner).clone()
+    *THEME.read().unwrap_or_else(PoisonError::into_inner)
 }
 
 #[cfg(test)]
