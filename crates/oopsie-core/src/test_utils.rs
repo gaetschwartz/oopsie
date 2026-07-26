@@ -1,10 +1,7 @@
 //! Shared helpers for the integration-test suites of the consumer crates.
 //!
-//! Backtrace and spantrace snapshots are platform-specific, so the variance
-//! lives in the snapshot *filename* (see [`snap_name`]) rather than in a
-//! cross-toolchain normalization battery. The filters here are therefore
-//! deliberately light: they only erase build-to-build noise (compilation
-//! hashes, line/column numbers, machine-specific paths).
+//! The snapshot filters are deliberately light: they only erase build-to-build
+//! noise (compilation hashes, line/column numbers, machine-specific paths).
 
 #[cfg(feature = "tracing")]
 use tracing_subscriber::prelude::*;
@@ -15,11 +12,8 @@ pub mod __private {
     pub use target_triple::TARGET;
 }
 
-/// The toolchain channel (`stable` or `unstable`) embedded in the file names of
-/// snapshots whose content genuinely differs between the two.
-// Keyed on the granular feature (not the `unstable` umbrella) because Provider-
-// API reach into a *type-erased* source is the only thing that changes rendered
-// content; a typed source is reached the same way on both channels.
+/// The toolchain channel embedded in file names of snapshots that differ between
+/// the two. Keyed on the granular feature, not the `unstable` umbrella.
 pub const CHANNEL: &str = if cfg!(feature = "unstable-error-generic-member-access") {
     "unstable"
 } else {
@@ -29,13 +23,8 @@ pub const CHANNEL: &str = if cfg!(feature = "unstable-error-generic-member-acces
 #[cfg(feature = "unstable-error-generic-member-access")]
 const _: () = assert!(matches!(CHANNEL.as_bytes(), b"unstable"));
 
-/// Build a snapshot name from a base label plus the target triple, keeping
-/// platform-specific snapshots in separate files.
-///
-/// Deliberately *not* keyed on [`CHANNEL`]: a fixture whose source errors are
-/// concretely typed renders identically on both channels, so a shared snapshot
-/// asserts that the Provider API is inert there. Reach for
-/// [`snap_name_by_channel`] instead when a fixture erases a source.
+/// Build a snapshot name from a base label plus the target triple. Use
+/// [`snap_name_by_channel`](crate::snap_name_by_channel) when a fixture erases a source.
 #[macro_export]
 macro_rules! snap_name {
     ($name:literal) => {{
@@ -46,9 +35,8 @@ macro_rules! snap_name {
     }};
 }
 
-/// [`snap_name`] plus the toolchain [`CHANNEL`], for fixtures that reach a trace
-/// through a type-erased source: the Provider API surfaces the origin-most trace
-/// on nightly, while stable falls back to the wrapper's own capture.
+/// [`snap_name`](crate::snap_name) plus the toolchain [`CHANNEL`], for fixtures
+/// whose trace reach goes through a type-erased source and so differs by channel.
 #[macro_export]
 macro_rules! snap_name_by_channel {
     ($name:literal) => {{

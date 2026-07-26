@@ -1,14 +1,5 @@
-//! Trace reach through a *type-erased* source — the one axis on which the
-//! Provider API changes rendered output.
-//!
-//! `Welp::wrap` is generic, so it cannot extract the source's traces at
-//! construction time and must reach them through `core::error::request_ref` at
-//! accessor time. That reach exists only under
-//! `unstable-error-generic-member-access`: with it, the origin-most capture wins
-//! and the backtrace bottoms out in the frame that built the inner error;
-//! without it, the lookup yields `None` and the wrap-site capture is rendered
-//! instead. These snapshots are therefore keyed on the channel, unlike the
-//! typed-source fixtures elsewhere in this suite.
+//! Trace reach through a type-erased source: the Provider API surfaces the
+//! origin-most capture, while stable falls back to the wrap-site one.
 #![cfg(all(feature = "fancy", feature = "tracing"))]
 #![cfg_attr(
     feature = "unstable-error-generic-member-access",
