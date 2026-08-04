@@ -4,7 +4,7 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0-rc.21] - 2026-08-04
 
 ### Changed
 
@@ -12,6 +12,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   documented it as an experimental debug tool, including the caveat that
   Cargo's feature unification can apply workspace defaults to a crate that
   did not itself opt in.
+- `oopsie-macros` now builds against `syn` 3 and `darling` 0.24. This is an
+  internal dependency upgrade: the macro surface, generated code, and minimum
+  supported Rust version are all unchanged.
 
 ## [0.1.0-rc.20] - 2026-07-12
 
@@ -245,6 +248,7 @@ Initial release candidate.
 - Feature flags: `fancy`, `serde`, `tracing`, `chrono`, `jiff`, `extras`, and
   the nightly `unstable-*` set.
 
+[0.1.0-rc.21]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.21
 [0.1.0-rc.20]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.20
 [0.1.0-rc.19]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.19
 [0.1.0-rc.18]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.18
