@@ -26,12 +26,12 @@ experimental-settings = ["dep:__serde", "dep:toml_edit", "dep:glob"]
 [dependencies]
 __serde = { package = "serde", version = "1.0.228", features = ["derive"], optional = true }
 convert_case = "0.11"
-darling = "0.23"
-derive-syn-parse = "0.2.0"
+darling = "0.24"
+derive-syn-parse = { version = "0.2.0", features = ["full"] }
 glob = { version = "0.3.3", optional = true }
 proc-macro2 = "1"
 quote = "1"
-syn = { version = "2", features = ["full", "visit"] }
+syn = { version = "3", features = ["full", "visit"] }
 toml_edit = { version = "0.25.12", features = ["parse", "serde"], optional = true, default-features = false }
 
 [lints]

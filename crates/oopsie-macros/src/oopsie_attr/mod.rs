@@ -5,6 +5,8 @@
 //! - Injecting diagnostic fields when tracing options are requested
 //! - Generating `Debug` automatically (no need to write `#[derive(Debug)]`)
 
+#![allow(clippy::ref_patterns, reason = "darling's FromMeta derive emits them")]
+
 use darling::FromMeta as _;
 use darling::ast::NestedMeta;
 use proc_macro2::TokenStream as TokenStream2;
@@ -41,7 +43,7 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
 
     if let Some(lit) = meta.iter().find_map(|m| match m {
         NestedMeta::Lit(lit @ syn::Lit::Str(_)) => Some(lit),
-        NestedMeta::Lit(_) | NestedMeta::Meta(_) => None,
+        NestedMeta::Lit(_) | NestedMeta::Meta(_) | NestedMeta::NameValueInvalidExpr(_) => None,
     }) {
         return Err(syn::Error::new_spanned(
             lit,
@@ -74,7 +76,7 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
     // manifest default and there's no attribute token to point at.
     let traced_span = meta.iter().find_map(|m| match m {
         NestedMeta::Meta(inner) if inner.path().is_ident("traced") => Some(inner.span()),
-        NestedMeta::Meta(_) | NestedMeta::Lit(_) => None,
+        NestedMeta::Meta(_) | NestedMeta::Lit(_) | NestedMeta::NameValueInvalidExpr(_) => None,
     });
     let (traced_defaults, manifest_err) = crate::utils::manifest_traced();
     // Precedence: a per-attribute `traced(...)` (including `traced = false`)

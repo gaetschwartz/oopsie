@@ -2,6 +2,7 @@
     dead_code,
     reason = "shared macro-helper utilities; not every helper is used by every derive"
 )]
+#![allow(clippy::ref_patterns, reason = "darling's FromMeta derive emits them")]
 
 pub mod pretty;
 pub mod settings;

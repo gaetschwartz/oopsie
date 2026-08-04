@@ -11,6 +11,7 @@
     clippy::if_not_else,
     clippy::allow_attributes,
     clippy::redundant_closure_call,
+    clippy::ref_patterns,
     reason = "derive macros (darling's FromAttributes, derive_syn_parse's #[call] closures) emit code tripping these lints, unreachable from our own logic"
 )]
 

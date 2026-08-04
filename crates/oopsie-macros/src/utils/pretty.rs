@@ -36,7 +36,7 @@ fn write_path_segment(
         }
         syn::PathArguments::Parenthesized(args) => {
             write!(f, "(")?;
-            write_punct(f, &args.inputs, write_type)?;
+            write_punct(f, &args.inputs, write_named_arg)?;
             write!(f, ")")?;
             if let syn::ReturnType::Type(_, output) = &args.output {
                 write!(f, " -> ")?;
@@ -118,11 +118,9 @@ fn write_type(f: &mut impl std::fmt::Write, ty: &syn::Type) -> std::fmt::Result 
         }
         syn::Type::Ptr(type_ptr) => {
             write!(f, "*")?;
-            if type_ptr.const_token.is_some() {
-                write!(f, "const ")?;
-            }
-            if type_ptr.mutability.is_some() {
-                write!(f, "mut ")?;
+            match &type_ptr.mutability {
+                syn::PointerMutability::Const(_) => write!(f, "const ")?,
+                syn::PointerMutability::Mut(_) => write!(f, "mut ")?,
             }
             write_type(f, &type_ptr.elem)
         }
@@ -141,29 +139,29 @@ fn write_type(f: &mut impl std::fmt::Write, ty: &syn::Type) -> std::fmt::Result 
             write_punct(f, &impl_trait.bounds, make_write_token_stream())?;
             Ok(())
         }
-        syn::Type::BareFn(bare_fn) => {
-            if let Some(lifetimes) = &bare_fn.lifetimes {
+        syn::Type::FnPtr(fn_ptr) => {
+            if let Some(lifetimes) = &fn_ptr.lifetimes {
                 write!(f, "for<")?;
                 write_punct(f, &lifetimes.lifetimes, make_write_token_stream())?;
                 write!(f, "> ")?;
             }
-            if bare_fn.unsafety.is_some() {
+            if fn_ptr.unsafety.is_some() {
                 write!(f, "unsafe ")?;
             }
-            if let Some(abi) = &bare_fn.abi {
+            if let Some(abi) = &fn_ptr.abi {
                 write_token_stream(f, abi)?;
                 write!(f, " ")?;
             }
             write!(f, "fn(")?;
-            write_punct(f, &bare_fn.inputs, write_bare_fn_arg)?;
-            if let Some(v) = &bare_fn.variadic {
-                if !bare_fn.inputs.is_empty() {
+            write_punct(f, &fn_ptr.inputs, write_named_arg)?;
+            if let Some(v) = &fn_ptr.variadic {
+                if !fn_ptr.inputs.is_empty() {
                     write!(f, " ")?;
                 }
                 write_token_stream(f, v)?;
             }
             write!(f, ")")?;
-            if let syn::ReturnType::Type(_, ty) = &bare_fn.output {
+            if let syn::ReturnType::Type(_, ty) = &fn_ptr.output {
                 write!(f, " -> ")?;
                 write_type(f, ty)?;
             }
@@ -178,7 +176,7 @@ fn write_type(f: &mut impl std::fmt::Write, ty: &syn::Type) -> std::fmt::Result 
     }
 }
 
-fn write_bare_fn_arg(f: &mut impl std::fmt::Write, input: &syn::BareFnArg) -> std::fmt::Result {
+fn write_named_arg(f: &mut impl std::fmt::Write, input: &syn::NamedArg) -> std::fmt::Result {
     for attr in &input.attrs {
         write_token_stream(f, attr)?;
         write!(f, " ")?;

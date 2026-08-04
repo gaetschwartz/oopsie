@@ -66,11 +66,9 @@ pub fn strip_default(param: &GenericParam) -> GenericParam {
     let mut param = param.clone();
     match &mut param {
         GenericParam::Type(tp) => {
-            tp.eq_token = None;
             tp.default = None;
         }
         GenericParam::Const(cp) => {
-            cp.eq_token = None;
             cp.default = None;
         }
         GenericParam::Lifetime(_) => {}
@@ -113,7 +111,6 @@ pub fn project(generics: &Generics, referenced: &ReferencedParams) -> SelectorGe
                 let mut bare = tp.clone();
                 bare.bounds.clear();
                 bare.colon_token = None;
-                bare.eq_token = None;
                 bare.default = None;
                 decl_params.push(GenericParam::Type(bare));
                 let ident = &tp.ident;

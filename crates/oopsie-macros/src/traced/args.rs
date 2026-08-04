@@ -1,5 +1,7 @@
 //! Argument types for trace injection options.
 
+#![allow(clippy::ref_patterns, reason = "darling's FromMeta derive emits them")]
+
 use darling::FromMeta;
 
 use crate::utils::{BetterFlag, FieldSetting, TracedDefaults};
