@@ -1760,28 +1760,67 @@ pub struct UserField {
     pub cfg_attrs: Vec<syn::Attribute>,
 }
 
-/// Whether any variant carries a `#[cfg(...)]` gate, meaning the set of variants
-/// rustc keeps is not knowable at macro-expansion time. Generated matches over
-/// `self` then need a wildcard fallback: the attribute-macro path expands before
+/// Whether any variant carries a `#[cfg(...)]` gate or a `#[cfg_attr(...)]`
+/// conditional that could inject one, meaning the set of variants rustc keeps
+/// is not knowable at macro-expansion time. Generated matches over `self` then
+/// need a wildcard fallback: the attribute-macro path expands before
 /// cfg-stripping, so an all-stripped enum would otherwise leave an empty `match`
 /// on a still-inhabited reference.
 pub fn any_variant_has_cfg(data: &syn::DataEnum) -> bool {
-    data.variants
-        .iter()
-        .any(|v| v.attrs.iter().any(|a| a.path().is_ident("cfg")))
+    data.variants.iter().any(|v| {
+        v.attrs
+            .iter()
+            .any(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"))
+    })
 }
 
-/// Field attributes a stripped field would take with it: `#[cfg(...)]` gates and
-/// `#[cfg_attr(...)]` conditionals. Forwarded verbatim onto every generated
-/// reference (selector field, struct-expression field, match-arm binding) so
-/// the reference vanishes together with the field rustc strips.
-fn field_cfg_attrs(field: &syn::Field) -> Vec<syn::Attribute> {
-    field
-        .attrs
+/// Attributes a cfg-stripped field/variant would take with it: `#[cfg(...)]`
+/// gates and `#[cfg_attr(...)]` conditionals. Forwarded verbatim onto every
+/// generated reference (selector field, struct-expression field, match-arm
+/// binding, variant match arm) so the reference vanishes together with what
+/// rustc strips. `oopsie` helper attrs gated inside a `cfg_attr` are consumed
+/// by the macro and unregistered outside the item, so they are pruned rather
+/// than forwarded.
+pub fn forwarded_cfg_attrs(attrs: &[syn::Attribute]) -> Vec<syn::Attribute> {
+    attrs
         .iter()
         .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"))
-        .cloned()
+        .filter_map(|a| {
+            if a.path().is_ident("cfg_attr") {
+                prune_cfg_attr_oopsie(a)
+            } else {
+                Some(a.clone())
+            }
+        })
         .collect()
+}
+
+/// `cfg_attr` with the `oopsie` helper attrs it gates removed; `None` when
+/// nothing gated remains, in which case the attribute gates nothing and must
+/// be dropped.
+pub fn prune_cfg_attr_oopsie(attr: &syn::Attribute) -> Option<syn::Attribute> {
+    let Ok(metas) = attr.parse_args_with(
+        syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
+    ) else {
+        return Some(attr.clone());
+    };
+    let metas: Vec<syn::Meta> = metas.into_iter().collect();
+    let [pred, gated @ ..] = &*metas else {
+        return Some(attr.clone());
+    };
+    let kept: Vec<&syn::Meta> = gated
+        .iter()
+        .filter(|m| !m.path().is_ident("oopsie"))
+        .collect();
+    if kept.is_empty() {
+        return None;
+    }
+    Some(syn::parse_quote! { #[cfg_attr(#pred, #(#kept),*)] })
+}
+
+/// See [`forwarded_cfg_attrs`].
+fn field_cfg_attrs(field: &syn::Field) -> Vec<syn::Attribute> {
+    forwarded_cfg_attrs(&field.attrs)
 }
 
 impl CategorizedFields {

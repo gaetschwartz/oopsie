@@ -27,8 +27,9 @@ pub struct ResolvedVariant<'a> {
     pub attrs: VariantAttrs,
     /// The variant's fields split into source/auto/user plus trace detection.
     pub fields: CategorizedFields,
-    /// `#[cfg(...)]` attrs gating the whole variant, forwarded onto every
-    /// generated mention so a stripped variant takes its impls with it.
+    /// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs gating the whole variant,
+    /// forwarded onto every generated mention so a stripped variant takes its
+    /// impls with it.
     pub cfg_attrs: Vec<syn::Attribute>,
     /// The context selector struct name (variant name with `Error` stripped and
     /// the suffix applied); `None` for a `transparent` variant, which generates
@@ -47,9 +48,10 @@ pub struct ResolvedEnum<'a> {
     pub input: &'a DeriveInput,
     pub container: &'a EnumContainerAttrs,
     pub variants: Vec<ResolvedVariant<'a>>,
-    /// Whether any variant carries a `#[cfg(...)]` gate, so generated matches
-    /// over `self` need a wildcard fallback (the attribute-macro path expands
-    /// before cfg-stripping).
+    /// Whether any variant carries a `#[cfg(...)]` gate or a `#[cfg_attr(...)]`
+    /// conditional that could inject one, so generated matches over `self` need
+    /// a wildcard fallback (the attribute-macro path expands before
+    /// cfg-stripping).
     pub any_variant_cfg: bool,
 }
 
@@ -93,12 +95,7 @@ impl<'a> ResolvedEnum<'a> {
         let mut variants = Vec::with_capacity(data.variants.len());
         for (variant, fields) in data.variants.iter().zip(categorized) {
             let attrs = VariantAttrs::from_attrs(&variant.attrs)?;
-            let cfg_attrs: Vec<syn::Attribute> = variant
-                .attrs
-                .iter()
-                .filter(|a| a.path().is_ident("cfg"))
-                .cloned()
-                .collect();
+            let cfg_attrs = super::parse::forwarded_cfg_attrs(&variant.attrs);
 
             let selector_ident = if attrs.transparent {
                 validate_transparent(&variant.ident, &input.ident, &fields, &attrs)?;
@@ -519,10 +516,7 @@ pub fn field_binding_pats(fields: &syn::Fields) -> Vec<TokenStream2> {
         .iter()
         .filter_map(|f| {
             let ident = f.ident.as_ref()?;
-            let cfg = f
-                .attrs
-                .iter()
-                .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"));
+            let cfg = super::parse::forwarded_cfg_attrs(&f.attrs);
             Some(quote! { #(#cfg)* #ident, })
         })
         .collect()

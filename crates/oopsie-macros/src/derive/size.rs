@@ -139,10 +139,7 @@ fn const_panic_msg(
 /// variants to attribute the blame; the size check itself uses `size_of::<E>()`.
 fn payload_size(variant: &ResolvedVariant<'_>) -> TokenStream2 {
     let terms = variant.variant.fields.iter().map(|f| {
-        let cfg = f
-            .attrs
-            .iter()
-            .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"));
+        let cfg = super::parse::forwarded_cfg_attrs(&f.attrs);
         let ty = &f.ty;
         quote! { #( #cfg )* { __payload += ::core::mem::size_of::<#ty>(); } }
     });

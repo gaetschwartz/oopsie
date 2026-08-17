@@ -621,3 +621,122 @@ fn struct_cfg_kept_error_code_field_returns_some() {
         "struct::kept::code"
     );
 }
+
+// ---- `cfg_attr`-wrapped helper attrs under the attribute-macro path ----
+//
+// The attribute macro strips `#[oopsie(...)]` helper attrs before re-emitting
+// the item (the derive that registered them is gone), but a helper attr nested
+// inside `#[cfg_attr(pred, oopsie(...))]` survives a plain path match. With the
+// predicate true rustc then applies it and errors "cannot find attribute
+// `oopsie`". The nested helper must be carved out of the `cfg_attr` while its
+// siblings (and the `cfg_attr` itself) are kept. A cfg_attr-wrapped helper is
+// invisible to the derive layer, so `hint` below is a plain user field.
+
+#[oopsie]
+#[oopsie(module(false), suffix = "Ca")]
+pub enum CfgAttrHelperError {
+    #[oopsie("kept: {keep}")]
+    Kept {
+        #[cfg_attr(all(), oopsie(help), doc = "sibling attr kept by the strip")]
+        hint: String,
+        keep: u32,
+    },
+
+    #[oopsie("gone: {keep}")]
+    Gone {
+        #[cfg_attr(any(), oopsie(help))]
+        hint: String,
+        keep: u32,
+    },
+}
+
+#[test]
+fn cfg_attr_wrapped_helper_attr_is_stripped_with_predicate_on() {
+    let err = KeptCa {
+        hint: "plain field".to_owned(),
+        keep: 1u32,
+    }
+    .build();
+    assert!(matches!(err, CfgAttrHelperError::Kept { keep: 1, .. }));
+    assert_eq!(err.to_string(), "kept: 1");
+}
+
+#[test]
+fn cfg_attr_wrapped_helper_attr_is_stripped_with_predicate_off() {
+    let err = GoneCa {
+        hint: "plain field".to_owned(),
+        keep: 2u32,
+    }
+    .build();
+    assert!(matches!(err, CfgAttrHelperError::Gone { keep: 2, .. }));
+}
+
+// ---- variant-level `cfg_attr`-wrapped `cfg` (the "requires-both" idiom) ----
+//
+// `#[cfg_attr(not(feature = "x"), cfg(feature = "x"))]` gates a variant on a
+// feature without a literal `#[cfg]`: with the feature off the cfg_attr injects
+// an unsatisfied `cfg`, with it on nothing is applied. Variant-level cfg
+// collection must look through `cfg_attr` the same way the field side does, or
+// the gated-out variant still gets unconditional selectors / From impls / match
+// arms naming a variant (and field types) rustc stripped. `all()`/`any()` pin
+// the two feature states deterministically.
+
+#[cfg(any())]
+pub struct BothGhost;
+
+// Feature off: the cfg_attr predicate holds, so `cfg(any())` is injected and
+// rustc strips the variant.
+#[oopsie]
+#[oopsie(module(false), suffix = "Off")]
+pub enum RequiresBothOffError {
+    #[oopsie("plain: {n}")]
+    Plain { n: u32 },
+
+    #[cfg_attr(all(), cfg(any()))]
+    #[oopsie("gated")]
+    Gated { ghost: BothGhost },
+}
+
+#[test]
+fn cfg_attr_gated_out_variant_emits_no_dangling_refs() {
+    // The real assertion is that this file compiles: without cfg_attr
+    // forwarding, `Gated`'s selector and Display/source arms would reference
+    // the stripped `RequiresBothOffError::Gated` and `BothGhost`.
+    let err = PlainOff { n: 1u32 }.build();
+    assert!(matches!(err, RequiresBothOffError::Plain { n: 1 }));
+}
+
+// Feature on: the cfg_attr predicate fails, nothing is injected, the variant
+// stays and works.
+#[oopsie]
+#[oopsie(module(false), suffix = "On")]
+pub enum RequiresBothOnError {
+    #[oopsie("plain: {n}")]
+    Plain { n: u32 },
+
+    #[cfg_attr(any(), cfg(all()))]
+    #[oopsie("gated: {n}")]
+    Gated { n: u32 },
+}
+
+#[test]
+fn cfg_attr_kept_variant_builds() {
+    let err = GatedOn { n: 7u32 }.build();
+    assert!(matches!(err, RequiresBothOnError::Gated { n: 7 }));
+    assert_eq!(err.to_string(), "gated: 7");
+}
+
+// Every variant stripped through cfg_attr: the generated matches over `self`
+// still need their wildcard fallback.
+#[oopsie]
+#[oopsie(module(false), suffix = "Ag")]
+pub enum AllCfgAttrStrippedError {
+    #[cfg_attr(all(), cfg(any()))]
+    #[oopsie("a: {x}")]
+    A { x: u32 },
+}
+
+#[test]
+fn all_variants_stripped_via_cfg_attr_still_compiles() {
+    fn _accepts(_: &AllCfgAttrStrippedError) {}
+}

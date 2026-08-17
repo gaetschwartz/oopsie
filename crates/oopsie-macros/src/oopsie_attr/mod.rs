@@ -317,10 +317,25 @@ fn fix_derives(attrs: &mut Vec<syn::Attribute>, inject_debug: bool) {
     *attrs = new_attrs;
 }
 
-/// Strip all `#[oopsie(...)]` attributes. Used to remove processed helper attributes
-/// from the output item so Rust doesn't complain about unknown attributes.
+/// Strip all `#[oopsie(...)]` attributes, including ones gated inside
+/// `#[cfg_attr(pred, oopsie(...), ...)]`. Used to remove processed helper
+/// attributes from the output item so Rust doesn't complain about unknown
+/// attributes once the derive that registered them is gone.
 fn strip_oopsie_attrs(attrs: &mut Vec<syn::Attribute>) {
-    attrs.retain(|a| !a.path().is_ident("oopsie"));
+    let mut new_attrs = Vec::with_capacity(attrs.len());
+    for attr in attrs.drain(..) {
+        if attr.path().is_ident("oopsie") {
+            continue;
+        }
+        if attr.path().is_ident("cfg_attr") {
+            if let Some(pruned) = derive::parse::prune_cfg_attr_oopsie(&attr) {
+                new_attrs.push(pruned);
+            }
+            continue;
+        }
+        new_attrs.push(attr);
+    }
+    *attrs = new_attrs;
 }
 
 #[cfg(test)]
