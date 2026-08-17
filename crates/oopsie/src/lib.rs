@@ -418,9 +418,10 @@ e.g. API error responses."
 //!   instead of the ancestor Cargo detects; Cargo itself never sets it.
 //!
 //! `max-size` rejects `0` and `default-suffix = true` is rejected as ambiguous
-//! (use a name or `false`); `module.suffix` / `default-suffix` must be valid
-//! identifier fragments and `default-vis` a valid visibility, else the build
-//! fails with a clear message.
+//! (use a name or `false`); `default-suffix` must be a valid identifier
+//! fragment, `module.suffix` a valid identifier (it can stand in as the whole
+//! module name) and `default-vis` a valid visibility, else the build fails
+//! with a clear message.
 //!
 //! ## Known limitations
 //!

@@ -18,6 +18,12 @@ pub fn is_ident_fragment(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
+/// A fragment that is also an identifier on its own, so it stays valid when
+/// the stem it would be appended to is empty.
+pub fn is_ident(s: &str) -> bool {
+    is_ident_fragment(s) && s != "_" && !s.starts_with(|c: char| c.is_ascii_digit())
+}
+
 #[derive(Clone, Debug)]
 pub enum FieldSetting<const DEFAULT: bool, T: FromMeta> {
     Settings(Settings<T>),
@@ -371,6 +377,26 @@ mod tests {
     use syn::parse_quote;
 
     use super::*;
+
+    // ── identifier predicates ─────────────────────────────────────────
+
+    #[test]
+    fn ident_predicates() {
+        for s in ["e", "_", "2024", "_e", "e2024"] {
+            assert!(is_ident_fragment(s), "fragment: {s}");
+        }
+        for s in ["", "has space", "e-2"] {
+            assert!(!is_ident_fragment(s), "fragment: {s}");
+        }
+
+        for s in ["e", "_e", "e2024"] {
+            assert!(is_ident(s), "ident: {s}");
+        }
+        // Neither survives `Ident::new` as a standalone name.
+        for s in ["_", "2024"] {
+            assert!(!is_ident(s), "ident: {s}");
+        }
+    }
 
     // ── BetterFlag tests ──────────────────────────────────────────────
 

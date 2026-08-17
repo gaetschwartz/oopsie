@@ -418,9 +418,9 @@ fn resolve_naming(settings: &Settings, section: &str) -> Result<super::NamingDef
         Some(ModuleSetting::Toggle(b)) => (Some(*b), None),
         Some(ModuleSetting::Table(t)) => {
             let suffix = match &t.suffix {
-                Some(s) if !super::is_ident_fragment(s) => {
+                Some(s) if !super::is_ident(s) => {
                     return Err(format!(
-                        "{section} module.suffix {s:?} is not a valid identifier fragment"
+                        "{section} module.suffix {s:?} is not a valid identifier"
                     ));
                 }
                 other => other.clone(),
@@ -634,6 +634,30 @@ mod tests {
         assert!(
             naming("[package.metadata.oopsie]\nmodule = { suffix = \"has space\" }\n").is_err()
         );
+    }
+
+    /// A type named exactly `Error` strips to an empty stem, leaving the
+    /// suffix as the whole module name.
+    #[test]
+    fn rejects_module_suffix_that_cannot_stand_alone() {
+        for suffix in ["2024", "_"] {
+            assert!(
+                naming(&format!(
+                    "[package.metadata.oopsie]\nmodule = {{ suffix = \"{suffix}\" }}\n"
+                ))
+                .is_err(),
+                "suffix: {suffix}"
+            );
+        }
+        for suffix in ["_e", "e2024"] {
+            assert!(
+                naming(&format!(
+                    "[package.metadata.oopsie]\nmodule = {{ suffix = \"{suffix}\" }}\n"
+                ))
+                .is_ok(),
+                "suffix: {suffix}"
+            );
+        }
     }
 
     #[test]
