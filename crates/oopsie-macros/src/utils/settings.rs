@@ -120,19 +120,26 @@ fn workspace_string_array(doc: &DocumentMut, key: &str) -> Vec<String> {
 /// beneath it. Its globs match case-sensitively and treat `/` literally (so
 /// `crates/*` does not reach `crates/a/b`). Match the member or any ancestor
 /// so a nested member is covered by a parent entry.
+///
+/// The pattern is built from the entry alone and tested against the member's
+/// path relative to the root, so glob metacharacters in the root's own path
+/// stay literal.
 fn matches_any(root_dir: &Path, entries: &[String], member_dir: &Path) -> bool {
     // `MatchOptions::default()` is case-insensitive; `new()` is not.
     let options = glob::MatchOptions {
         require_literal_separator: true,
         ..glob::MatchOptions::new()
     };
+    let relative = member_dir.strip_prefix(root_dir).ok();
     entries.iter().any(|entry| {
-        let full = root_dir.join(entry);
-        if member_dir.starts_with(&full) {
+        if member_dir.starts_with(root_dir.join(entry)) {
             return true;
         }
-        glob::Pattern::new(&full.to_string_lossy()).is_ok_and(|pattern| {
-            member_dir
+        let Some(relative) = relative else {
+            return false;
+        };
+        glob::Pattern::new(entry).is_ok_and(|pattern| {
+            relative
                 .ancestors()
                 .any(|ancestor| pattern.matches_path_with(ancestor, options))
         })
@@ -717,6 +724,22 @@ mod tests {
         let root = Path::new("/ws");
         let root_doc = doc("[workspace]\nexclude = [\"crates/*\"]\n");
         assert!(member_excluded(root, &root_doc, Path::new("/ws/crates/a")));
+    }
+
+    #[test]
+    fn member_excluded_glob_survives_metachars_in_root_path() {
+        let root = Path::new("/dev/[archive]/ws");
+        let root_doc = doc("[workspace]\nexclude = [\"vend*\"]\n");
+        assert!(member_excluded(
+            root,
+            &root_doc,
+            Path::new("/dev/[archive]/ws/vendor")
+        ));
+        assert!(!member_excluded(
+            root,
+            &root_doc,
+            Path::new("/dev/[archive]/ws/crates/a")
+        ));
     }
 
     #[test]
