@@ -843,7 +843,7 @@ checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
 name = "oopsie"
-version = "0.1.0-rc.21"
+version = "0.1.0-rc.22"
 dependencies = [
  "anyhow",
  "backtrace",
@@ -872,7 +872,7 @@ dependencies = [
 
 [[package]]
 name = "oopsie-core"
-version = "0.1.0-rc.21"
+version = "0.1.0-rc.22"
 dependencies = [
  "backtrace",
  "chrono",
@@ -891,7 +891,7 @@ dependencies = [
 
 [[package]]
 name = "oopsie-macros"
-version = "0.1.0-rc.21"
+version = "0.1.0-rc.22"
 dependencies = [
  "convert_case",
  "darling",
