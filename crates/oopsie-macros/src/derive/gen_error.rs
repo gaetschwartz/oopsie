@@ -337,11 +337,10 @@ pub fn gen_enum_error(
         // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
         if let Some(help_field) = &categorized.help_field {
             let help_cfg = field_cfg_for(categorized, help_field);
+            let help_value = help_text_from_field(help_field, oopsie_path);
             provide_stmts.push(quote! {
                 #(#help_cfg)*
-                #req.provide_value_with::<#oopsie_path::HelpText>(
-                    || #oopsie_path::HelpText::from(#help_field.to_string())
-                );
+                #req.provide_value_with::<#oopsie_path::HelpText>(|| #help_value);
             });
         } else if let Some(help) = &variant_attrs.help {
             provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
@@ -523,10 +522,11 @@ pub fn gen_enum_error(
             // takes the whole arm with it; the trailing `_ => None` arm covers
             // the variant then.
             let field_cfg = field_cfg_for(categorized, help_field);
+            let help_value = help_text_from_field(help_field, oopsie_path);
             help_arms.push(quote! {
                 #(#cfg_attrs)*
                 #(#field_cfg)*
-                Self::#variant_ident { #help_field, .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(#help_field.to_string())),
+                Self::#variant_ident { #help_field, .. } => ::core::option::Option::Some(#help_value),
             });
         } else if let Some(help) = &variant_attrs.help {
             if help.is_static() {
@@ -851,11 +851,10 @@ pub fn gen_struct_error(
     // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
     if let Some(help_field) = &categorized.help_field {
         let help_cfg = field_cfg_for(categorized, help_field);
+        let help_value = help_text_from_field(help_field, oopsie_path);
         provide_stmts.push(quote! {
             #(#help_cfg)*
-            #req.provide_value_with::<#oopsie_path::HelpText>(
-                || #oopsie_path::HelpText::from(#help_field.to_string())
-            );
+            #req.provide_value_with::<#oopsie_path::HelpText>(|| #help_value);
         });
     } else if let Some(help) = &variant_attrs.help {
         provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
@@ -1077,10 +1076,11 @@ pub fn gen_struct_error(
         // whole accessor with it, degrading to the trait default (`None`) — the
         // struct analogue of the enum arm dropping to `_ => None`.
         let help_cfg = field_cfg_for(categorized, help_field);
+        let help_value = help_text_from_field(quote! { self.#help_field }, oopsie_path);
         quote! {
             #(#help_cfg)*
             fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
-                ::core::option::Option::Some(#oopsie_path::HelpText::from(self.#help_field.to_string()))
+                ::core::option::Option::Some(#help_value)
             }
         }
     } else if let Some(help) = &variant_attrs.help {
@@ -1170,6 +1170,17 @@ pub fn gen_struct_error(
             #exit_method
         }
     })
+}
+
+/// `HelpText::from(<field>.to_string())` with `ToString` named through the
+/// `alloc` facade: a method-call `.to_string()` resolves via the std prelude,
+/// which a `no_std` consumer doesn't have (E0599).
+fn help_text_from_field(field: impl quote::ToTokens, oopsie_path: &syn::Path) -> TokenStream2 {
+    quote! {
+        #oopsie_path::HelpText::from(
+            #oopsie_path::__private::alloc::string::ToString::to_string(&#field)
+        )
+    }
 }
 
 fn gen_help_provide(
