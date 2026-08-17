@@ -73,11 +73,16 @@ fn compile_error(msg: &str) -> proc_macro2::TokenStream {
     quote! { ::core::compile_error!(#msg); }
 }
 
+fn env_path(var: &str) -> Option<PathBuf> {
+    std::env::var_os(var).map(PathBuf::from)
+}
+
 /// The member crate's manifest directory, canonicalized for symlink-safe
 /// path comparison.
 fn member_dir() -> Result<PathBuf, String> {
-    let raw = std::env::var(MANIFEST_ENV_VAR).map_err(|e| e.to_string())?;
-    std::fs::canonicalize(&raw).map_err(|e| format!("failed to canonicalize {raw}: {e}"))
+    let raw = env_path(MANIFEST_ENV_VAR).ok_or_else(|| format!("{MANIFEST_ENV_VAR} is not set"))?;
+    std::fs::canonicalize(&raw)
+        .map_err(|e| format!("failed to canonicalize {}: {e}", raw.display()))
 }
 
 /// Lenient read of `<dir>/Cargo.toml` for ancestor probing: any IO or parse
@@ -183,10 +188,8 @@ fn is_workspace_at(dir: &Path) -> bool {
 /// sits under). Reads the environment, then delegates to [`find_root_from`].
 fn find_workspace_root() -> Result<Option<PathBuf>, String> {
     let member_dir = member_dir()?;
-    let workspace_override = std::env::var(WORKSPACE_ENV_VAR).ok().map(PathBuf::from);
-    let cargo_home = std::env::var(CARGO_HOME_ENV_VAR)
-        .ok()
-        .and_then(|home| std::fs::canonicalize(home).ok());
+    let workspace_override = env_path(WORKSPACE_ENV_VAR);
+    let cargo_home = env_path(CARGO_HOME_ENV_VAR).and_then(|home| std::fs::canonicalize(home).ok());
     find_root_from(
         &member_dir,
         workspace_override.as_deref(),
@@ -305,8 +308,9 @@ fn parse_workspace_settings(manifest_toml: &str) -> Result<Settings, String> {
 }
 
 fn read_settings() -> Result<Settings, String> {
-    let manifest_dir = std::env::var(MANIFEST_ENV_VAR).map_err(|e| e.to_string())?;
-    let cargo_toml_path = Path::new(&manifest_dir).join("Cargo.toml");
+    let manifest_dir =
+        env_path(MANIFEST_ENV_VAR).ok_or_else(|| format!("{MANIFEST_ENV_VAR} is not set"))?;
+    let cargo_toml_path = manifest_dir.join("Cargo.toml");
     let content = std::fs::read_to_string(&cargo_toml_path)
         .map_err(|e| format!("failed to read {}: {e}", cargo_toml_path.display()))?;
     parse_settings(&content)
@@ -499,10 +503,7 @@ pub fn manifest_dep_token() -> proc_macro2::TokenStream {
         Ok(Some(root)) => {
             let differs = member_dir().map_or(true, |dir| dir.join("Cargo.toml") != *root);
             if differs {
-                let root_path = root.to_string_lossy().into_owned();
-                quote! {
-                    const _: &[u8] = include_bytes!(#root_path);
-                }
+                workspace_dep_token(root).unwrap_or_else(|e| compile_error(&e))
             } else {
                 quote! {}
             }
@@ -510,6 +511,22 @@ pub fn manifest_dep_token() -> proc_macro2::TokenStream {
         Ok(None) | Err(_) => quote! {},
     };
     quote! { #member #workspace }
+}
+
+/// `include_bytes!` takes a string literal, so a workspace root whose path is
+/// not valid UTF-8 cannot be tracked at all; say so rather than emitting a
+/// lossy path that names no file.
+fn workspace_dep_token(root: &Path) -> Result<proc_macro2::TokenStream, String> {
+    let root_path = root.to_str().ok_or_else(|| {
+        format!(
+            "workspace root {} is not a valid UTF-8 path, so oopsie cannot track it \
+             for rebuilds; edits to [workspace.metadata.oopsie] would go unnoticed",
+            root.display()
+        )
+    })?;
+    Ok(quote! {
+        const _: &[u8] = include_bytes!(#root_path);
+    })
 }
 
 #[cfg(test)]
@@ -849,6 +866,22 @@ mod tests {
         let merged = package.merge_over(workspace);
         assert_eq!(merged.module, Some(false));
         assert!(matches!(merged.suffix, Some(SuffixDefault::Name(s)) if s == "Ctx"));
+    }
+
+    // ── rebuild-tracking token ────────────────────────────────────────
+
+    #[test]
+    fn workspace_dep_token_tracks_utf8_root() {
+        assert!(workspace_dep_token(Path::new("/ws/Cargo.toml")).is_ok());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_dep_token_reports_non_utf8_root() {
+        use std::os::unix::ffi::OsStrExt as _;
+
+        let root = PathBuf::from(std::ffi::OsStr::from_bytes(b"/ws/\xffbad/Cargo.toml"));
+        assert!(workspace_dep_token(&root).is_err());
     }
 
     // ── workspace-root discovery over a temp FS tree ──────────────────
