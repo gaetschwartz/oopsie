@@ -117,13 +117,14 @@ fn workspace_string_array(doc: &DocumentMut, key: &str) -> Vec<String> {
 }
 
 /// A workspace `members`/`exclude` entry covers a directory and everything
-/// beneath it, and its globs treat `/` literally (so `crates/*` does not
-/// reach `crates/a/b`). Match the member or any ancestor so a nested member
-/// is covered by a parent entry.
+/// beneath it. Its globs match case-sensitively and treat `/` literally (so
+/// `crates/*` does not reach `crates/a/b`). Match the member or any ancestor
+/// so a nested member is covered by a parent entry.
 fn matches_any(root_dir: &Path, entries: &[String], member_dir: &Path) -> bool {
+    // `MatchOptions::default()` is case-insensitive; `new()` is not.
     let options = glob::MatchOptions {
         require_literal_separator: true,
-        ..glob::MatchOptions::default()
+        ..glob::MatchOptions::new()
     };
     entries.iter().any(|entry| {
         let full = root_dir.join(entry);
@@ -716,6 +717,14 @@ mod tests {
         let root = Path::new("/ws");
         let root_doc = doc("[workspace]\nexclude = [\"crates/*\"]\n");
         assert!(member_excluded(root, &root_doc, Path::new("/ws/crates/a")));
+    }
+
+    #[test]
+    fn member_excluded_glob_is_case_sensitive() {
+        let root = Path::new("/ws");
+        let root_doc = doc("[workspace]\nexclude = [\"Vendor/*\"]\n");
+        assert!(member_excluded(root, &root_doc, Path::new("/ws/Vendor/a")));
+        assert!(!member_excluded(root, &root_doc, Path::new("/ws/vendor/a")));
     }
 
     #[test]
