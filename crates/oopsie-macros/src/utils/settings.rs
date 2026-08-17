@@ -245,39 +245,34 @@ fn cached_workspace_root() -> &'static Result<Option<PathBuf>, String> {
 
 /// Navigate `path` (e.g. `["package", "metadata", "oopsie"]`) and deserialize
 /// the table found there into [`Settings`]; a missing section yields default
-/// (empty) settings.
+/// (empty) settings. Every table spelling is accepted — a header, a dotted
+/// key, or an inline table.
 fn take_oopsie_table(
-    doc: &mut DocumentMut,
+    doc: &DocumentMut,
     path: &[&str],
     section_label: &str,
 ) -> Result<Settings, String> {
-    let mut table = doc.as_table_mut();
+    let mut item = doc.as_item();
     for key in path {
-        let Some(next) = table.get_mut(key).and_then(|item| item.as_table_mut()) else {
+        let Some(next) = item.as_table_like().and_then(|table| table.get(key)) else {
             return Ok(Settings::default());
         };
-        table = next;
+        item = next;
     }
-    deserialize_oopsie(table, section_label)
-}
-
-fn deserialize_oopsie(
-    table: &mut toml_edit::Table,
-    section_label: &str,
-) -> Result<Settings, String> {
-    Settings::deserialize(
-        toml_edit::Value::from(std::mem::take(table).into_inline_table()).into_deserializer(),
-    )
-    .map_err(|e| format!("invalid {section_label} section: {e}"))
+    let Ok(value) = item.clone().into_value() else {
+        return Ok(Settings::default());
+    };
+    Settings::deserialize(value.into_deserializer())
+        .map_err(|e| format!("invalid {section_label} section: {e}"))
 }
 
 /// Parse `[package.metadata.oopsie]` out of a Cargo manifest. A manifest with
 /// no such section yields default (empty) settings; only a malformed section
 /// or an unknown / invalid key is an error.
 fn parse_settings(manifest_toml: &str) -> Result<Settings, String> {
-    let mut manifest = DocumentMut::from_str(manifest_toml).map_err(|e| e.to_string())?;
+    let manifest = DocumentMut::from_str(manifest_toml).map_err(|e| e.to_string())?;
     take_oopsie_table(
-        &mut manifest,
+        &manifest,
         &["package", "metadata", "oopsie"],
         "[package.metadata.oopsie]",
     )
@@ -286,9 +281,9 @@ fn parse_settings(manifest_toml: &str) -> Result<Settings, String> {
 /// Parse `[workspace.metadata.oopsie]` out of a workspace root manifest; a
 /// missing section yields default (empty) settings.
 fn parse_workspace_settings(manifest_toml: &str) -> Result<Settings, String> {
-    let mut manifest = DocumentMut::from_str(manifest_toml).map_err(|e| e.to_string())?;
+    let manifest = DocumentMut::from_str(manifest_toml).map_err(|e| e.to_string())?;
     take_oopsie_table(
-        &mut manifest,
+        &manifest,
         &["workspace", "metadata", "oopsie"],
         "[workspace.metadata.oopsie]",
     )
@@ -520,6 +515,33 @@ mod tests {
     fn reads_max_size() {
         let settings = parse_settings("[package.metadata.oopsie]\nmax-size = 64\n").unwrap();
         assert_eq!(settings.max_size, Some(64));
+    }
+
+    #[test]
+    fn reads_max_size_from_every_table_spelling() {
+        for toml in [
+            "[package.metadata.oopsie]\nmax-size = 64\n",
+            "[package.metadata]\noopsie = { max-size = 64 }\n",
+            "[package]\nmetadata.oopsie = { max-size = 64 }\n",
+            "[package]\nmetadata.oopsie.max-size = 64\n",
+            "[package]\nmetadata = { oopsie = { max-size = 64 } }\n",
+        ] {
+            assert_eq!(
+                parse_settings(toml).unwrap().max_size,
+                Some(64),
+                "spelling: {toml}"
+            );
+        }
+    }
+
+    #[test]
+    fn workspace_reads_max_size_from_inline_table() {
+        assert_eq!(
+            parse_workspace_settings("[workspace.metadata]\noopsie = { max-size = 16 }\n")
+                .unwrap()
+                .max_size,
+            Some(16)
+        );
     }
 
     #[test]
