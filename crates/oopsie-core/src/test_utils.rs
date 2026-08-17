@@ -91,6 +91,18 @@ pub mod settings {
         sync::LazyLock,
     };
 
+    /// `insta` filter patterns are regexes; escape paths so they match literally.
+    fn regex_escape(text: &str) -> String {
+        let mut escaped = String::with_capacity(text.len());
+        for ch in text.chars() {
+            if ch.is_ascii_punctuation() {
+                escaped.push('\\');
+            }
+            escaped.push(ch);
+        }
+        escaped
+    }
+
     /// `insta::Settings` carrying the light, build-to-build normalization filters
     /// shared by every backtrace/spantrace snapshot. Bind with [`insta::Settings::bind`].
     #[must_use]
@@ -119,17 +131,15 @@ pub mod settings {
                 .into_owned()
         });
 
-        static CARGO_HOME: LazyLock<String> = LazyLock::new(|| {
-            env::var("CARGO_HOME")
-                .map_or_else(
-                    |_| {
-                        PathBuf::from(env::var("HOME").expect("HOME environment variable not set"))
-                            .join(".cargo")
-                    },
-                    PathBuf::from,
-                )
-                .to_string_lossy()
-                .into_owned()
+        static CARGO_HOME: LazyLock<Option<String>> = LazyLock::new(|| {
+            env::var_os("CARGO_HOME")
+                .map(PathBuf::from)
+                .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".cargo")))
+                .or_else(|| {
+                    env::var_os("USERPROFILE").map(|home| PathBuf::from(home).join(".cargo"))
+                })
+                .filter(|path| !path.as_os_str().is_empty())
+                .map(|path| path.to_string_lossy().into_owned())
         });
 
         let mut settings = insta::Settings::clone_current();
@@ -137,9 +147,11 @@ pub mod settings {
         settings.add_filter(r"::h[0-9a-f]{7,16}\b", "::h[HASH]");
         settings.add_filter(r"\/[a-f0-9]+\/", "/[HASH]/");
         settings.add_filter(r"rs:\d+(:\d+)?", "rs:[LOC]");
-        settings.add_filter(&WORKSPACE_ROOT, "[WORKSPACE]");
-        settings.add_filter(&RUSTC_SYSROOT, "[SYS_ROOT]");
-        settings.add_filter(&CARGO_HOME, "[CARGO_HOME]/");
+        settings.add_filter(&regex_escape(&WORKSPACE_ROOT), "[WORKSPACE]");
+        settings.add_filter(&regex_escape(&RUSTC_SYSROOT), "[SYS_ROOT]");
+        if let Some(cargo_home) = CARGO_HOME.as_deref() {
+            settings.add_filter(&regex_escape(cargo_home), "[CARGO_HOME]/");
+        }
         // Stdlib path normalization: local `[SYS_ROOT]/lib/rustlib/src/rust/library/`
         // and CI `/rustc/[HASH]/library/` both → `[STDLIB]/library/`.
         settings.add_filter(
@@ -155,6 +167,83 @@ pub mod settings {
         // erased path serializes raw frames, so normalize it here.
         settings.add_filter(r"__pthread\w*", "[OS_TAIL]");
         settings
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use std::{env, process::Command};
+
+        use super::{backtrace, regex_escape};
+
+        #[test]
+        fn regex_escape_escapes_punctuation_only() {
+            assert_eq!(regex_escape("/home/me/ws"), "\\/home\\/me\\/ws");
+            assert_eq!(
+                regex_escape(r"C:\Users\me\.cargo"),
+                "C\\:\\\\Users\\\\me\\\\\\.cargo"
+            );
+            assert_eq!(
+                regex_escape("/tmp/ws [v2] (x)+/repo"),
+                "\\/tmp\\/ws \\[v2\\] \\(x\\)\\+\\/repo"
+            );
+        }
+
+        #[test]
+        fn windows_style_path_registers_and_redacts() {
+            let mut settings = insta::Settings::clone_current();
+            settings.add_filter(&regex_escape(r"C:\Users\me\.cargo"), "[CARGO_HOME]/");
+            settings.bind(|| {
+                insta::assert_snapshot!(
+                    r"C:\Users\me\.cargo\registry\src",
+                    @r"[CARGO_HOME]/\registry\src"
+                );
+            });
+        }
+
+        #[test]
+        fn metachar_path_registers_and_redacts() {
+            let mut settings = insta::Settings::clone_current();
+            settings.add_filter(&regex_escape("/tmp/ws [v2] (x)+/repo"), "[WORKSPACE]");
+            settings.bind(|| {
+                insta::assert_snapshot!(
+                    "/tmp/ws [v2] (x)+/repo/src/lib.rs",
+                    @"[WORKSPACE]/src/lib.rs"
+                );
+            });
+        }
+
+        const NO_HOME_TRIGGER: &str = "OOPSIE_TEST_UTILS_NO_HOME_PROBE";
+
+        /// Child entry point for [`missing_home_env_does_not_panic`]; a no-op
+        /// unless re-exec'd with the trigger env set.
+        #[test]
+        fn no_home_probe_child() {
+            if env::var_os(NO_HOME_TRIGGER).is_none() {
+                return;
+            }
+            drop(backtrace());
+        }
+
+        /// `std::env::set_var` is unsafe in edition 2024, so the no-HOME case
+        /// runs in a re-exec'd child with every home-dir variable scrubbed.
+        #[test]
+        fn missing_home_env_does_not_panic() {
+            let exe = env::current_exe().expect("locate test binary");
+            let output = Command::new(exe)
+                .arg("test_utils::settings::tests::no_home_probe_child")
+                .args(["--exact", "--nocapture", "--test-threads=1"])
+                .env(NO_HOME_TRIGGER, "1")
+                .env_remove("CARGO_HOME")
+                .env_remove("HOME")
+                .env_remove("USERPROFILE")
+                .output()
+                .expect("spawn child test process");
+            assert!(
+                output.status.success(),
+                "child failed without HOME/CARGO_HOME/USERPROFILE\n--- stderr ---\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
     }
 }
 
