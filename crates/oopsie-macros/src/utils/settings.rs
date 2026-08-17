@@ -116,28 +116,34 @@ fn workspace_string_array(doc: &DocumentMut, key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
-/// A workspace `members`/`exclude` entry covers a directory and everything
-/// beneath it. Its globs match case-sensitively and treat `/` literally (so
-/// `crates/*` does not reach `crates/a/b`). Match the member or any ancestor
-/// so a nested member is covered by a parent entry.
+/// A `members`/`exclude` entry covers, literally, the directory it names and
+/// everything beneath it.
+fn covers_any(root_dir: &Path, entries: &[String], member_dir: &Path) -> bool {
+    entries
+        .iter()
+        .any(|entry| member_dir.starts_with(root_dir.join(entry)))
+}
+
+/// As [`covers_any`], plus glob entries, which match case-sensitively and
+/// treat `/` literally (so `crates/*` does not reach `crates/a/b`). Match the
+/// member or any ancestor so a nested member is covered by a parent entry.
 ///
 /// The pattern is built from the entry alone and tested against the member's
 /// path relative to the root, so glob metacharacters in the root's own path
 /// stay literal.
 fn matches_any(root_dir: &Path, entries: &[String], member_dir: &Path) -> bool {
+    if covers_any(root_dir, entries, member_dir) {
+        return true;
+    }
     // `MatchOptions::default()` is case-insensitive; `new()` is not.
     let options = glob::MatchOptions {
         require_literal_separator: true,
         ..glob::MatchOptions::new()
     };
-    let relative = member_dir.strip_prefix(root_dir).ok();
+    let Ok(relative) = member_dir.strip_prefix(root_dir) else {
+        return false;
+    };
     entries.iter().any(|entry| {
-        if member_dir.starts_with(root_dir.join(entry)) {
-            return true;
-        }
-        let Some(relative) = relative else {
-            return false;
-        };
         glob::Pattern::new(entry).is_ok_and(|pattern| {
             relative
                 .ancestors()
@@ -146,10 +152,11 @@ fn matches_any(root_dir: &Path, entries: &[String], member_dir: &Path) -> bool {
     })
 }
 
-/// Cargo membership: an excluded path is not a member unless it is also
-/// listed explicitly in `members` (an explicit entry beats `exclude`). A
-/// member outside `root_dir` (only reachable via a `package.workspace`
-/// pointer) can't be glob-matched, so it counts as a member.
+/// Cargo membership: an excluded path is not a member unless a *literal*
+/// `members` entry also covers it — Cargo prefix-matches the raw member
+/// strings, so a glob such as `crates/*` never beats `exclude`. A member
+/// outside `root_dir` (only reachable via a `package.workspace` pointer)
+/// can't be glob-matched, so it counts as a member.
 fn member_excluded(root_dir: &Path, root_doc: &DocumentMut, member_dir: &Path) -> bool {
     if !member_dir.starts_with(root_dir) {
         return false;
@@ -159,7 +166,7 @@ fn member_excluded(root_dir: &Path, root_doc: &DocumentMut, member_dir: &Path) -
         &workspace_string_array(root_doc, "exclude"),
         member_dir,
     );
-    let explicit_member = matches_any(
+    let explicit_member = covers_any(
         root_dir,
         &workspace_string_array(root_doc, "members"),
         member_dir,
@@ -717,6 +724,19 @@ mod tests {
             &root_doc,
             Path::new("/ws/crates/drop")
         ));
+    }
+
+    #[test]
+    fn member_excluded_glob_member_does_not_beat_exclude() {
+        let root = Path::new("/ws");
+        let root_doc =
+            doc("[workspace]\nmembers = [\"crates/*\"]\nexclude = [\"crates/legacy\"]\n");
+        assert!(member_excluded(
+            root,
+            &root_doc,
+            Path::new("/ws/crates/legacy")
+        ));
+        assert!(!member_excluded(root, &root_doc, Path::new("/ws/crates/a")));
     }
 
     #[test]
