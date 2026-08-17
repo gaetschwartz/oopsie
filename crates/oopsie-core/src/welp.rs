@@ -1057,6 +1057,9 @@ mod tests {
         // words, with no spare niche for the discriminant. The message-free form
         // reuses `Sourced` with a `None` message — the `Box<str>` null niche
         // absorbs the `Option` tag — so it adds no width.
-        assert_eq!(std::mem::size_of::<Welp>(), 48);
+        assert_eq!(
+            std::mem::size_of::<Welp>(),
+            6 * std::mem::size_of::<usize>()
+        );
     }
 }
