@@ -151,6 +151,38 @@ fn transparent_auto_boxed_source() {
     assert_eq!(err.source().expect("has source").to_string(), "reset");
 }
 
+// ─── transparent variant whose boxed source's last segment matches the enum ───
+//
+// `Box<inner::Wrapper>` inside an enum also named `Wrapper` is not a
+// self-reference: the multi-segment path names a different type, and
+// `From<inner::Wrapper> for Wrapper` does not collide with the blanket
+// `impl<T> From<T> for T`.
+
+mod inner {
+    #[derive(Debug, oopsie::Oopsie)]
+    #[oopsie(module(false))]
+    pub enum Wrapper {
+        #[oopsie("inner leaf")]
+        Leaf,
+    }
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum Wrapper {
+    #[oopsie(display("outer wrapper"), transparent)]
+    Inner { source: Box<inner::Wrapper> },
+}
+
+#[test]
+fn transparent_boxed_source_with_matching_last_segment_is_not_self() {
+    let inner = inner::Wrapper::Leaf;
+    let err: Wrapper = Wrapper::from(inner);
+    assert!(matches!(err, Wrapper::Inner { .. }));
+    assert_eq!(err.to_string(), "outer wrapper");
+    assert_eq!(err.source().expect("has source").to_string(), "inner leaf");
+}
+
 // ─── Mixed transparent and regular variants ───
 
 #[derive(Debug, Oopsie)]

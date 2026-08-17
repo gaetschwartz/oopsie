@@ -325,17 +325,25 @@ fn validate_transparent(
     Ok(())
 }
 
-/// Whether `ty`'s last path segment names `self_ident` (an explicit reference
-/// to the enclosing enum/struct) or the literal `Self` keyword.
+/// Whether `ty` is an unqualified single-segment reference to the enclosing
+/// enum/struct: the literal `Self` keyword, or the bare ident with no leading
+/// colon and no generic arguments. A multi-segment path names a different type
+/// even when its last segment matches (`inner::Wrapper` is not `Wrapper`).
 fn type_is_self(ty: &Type, self_ident: &Ident) -> bool {
     let Type::Path(type_path) = ty else {
         return false;
     };
-    type_path
-        .path
-        .segments
-        .last()
-        .is_some_and(|seg| seg.ident == "Self" || seg.ident == *self_ident)
+    if type_path.qself.is_some() || type_path.path.leading_colon.is_some() {
+        return false;
+    }
+    let Some(seg) = type_path.path.segments.first() else {
+        return false;
+    };
+    if type_path.path.segments.len() != 1 {
+        return false;
+    }
+    matches!(seg.arguments, syn::PathArguments::None)
+        && (seg.ident == "Self" || seg.ident == *self_ident)
 }
 
 /// The type a transparent variant's/struct's `From` impl is generated for —
