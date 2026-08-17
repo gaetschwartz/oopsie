@@ -251,6 +251,44 @@ pub mod __private {
         }
     }
 
+    /// The error code a type-erased source declares, reached through the
+    /// Provider API. Returns `None` on stable (descending into a `dyn Error` is
+    /// not portable there).
+    #[inline]
+    #[must_use]
+    pub fn source_error_code(
+        source: &(dyn core::error::Error + 'static),
+    ) -> Option<crate::ErrorCode> {
+        #[cfg(feature = "unstable-error-generic-member-access")]
+        {
+            core::error::request_value::<crate::ErrorCode>(source)
+        }
+        #[cfg(not(feature = "unstable-error-generic-member-access"))]
+        {
+            let _ = source;
+            None
+        }
+    }
+
+    /// The help text a type-erased source declares, reached through the Provider
+    /// API. Returns `None` on stable (descending into a `dyn Error` is not
+    /// portable there).
+    #[inline]
+    #[must_use]
+    pub fn source_help_text(
+        source: &(dyn core::error::Error + 'static),
+    ) -> Option<crate::HelpText> {
+        #[cfg(feature = "unstable-error-generic-member-access")]
+        {
+            core::error::request_value::<crate::HelpText>(source)
+        }
+        #[cfg(not(feature = "unstable-error-generic-member-access"))]
+        {
+            let _ = source;
+            None
+        }
+    }
+
     /// Build a `NonZeroU8` from a value the macro already validated to be in
     /// `1..=255`. Panics at const-eval if the invariant is ever broken, so the
     /// generated code stays `unsafe`-free.

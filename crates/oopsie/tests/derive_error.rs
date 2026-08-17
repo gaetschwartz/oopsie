@@ -1210,3 +1210,57 @@ fn welp_forwards_source_exit_code() {
         Some(65)
     );
 }
+
+#[oopsie::oopsie]
+pub enum WelpMetaLeafError {
+    #[oopsie("leaf boom")]
+    #[oopsie(code = "welp::leaf", help = "try again")]
+    Boom { detail: String },
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn welp_forwards_source_error_code_and_help() {
+    use oopsie::Diagnostic as _;
+    use oopsie::WelpResultExt as _;
+    let leaf = welp_meta_leaf_oopsies::Boom {
+        detail: "x".to_owned(),
+    }
+    .build();
+    let welp = Err::<(), _>(leaf).welp().unwrap_err();
+    assert_eq!(
+        welp.oopsie_error_code(),
+        Some(oopsie::ErrorCode::from("welp::leaf"))
+    );
+    assert_eq!(
+        welp.oopsie_help_text(),
+        Some(oopsie::HelpText::from_static("try again"))
+    );
+}
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn welp_wrap_keeps_its_own_message_uncoded() {
+    use oopsie::Diagnostic as _;
+    let leaf = welp_meta_leaf_oopsies::Boom {
+        detail: "x".to_owned(),
+    }
+    .build();
+    let welp = oopsie::Welp::wrap(leaf, "outer");
+    assert_eq!(welp.oopsie_error_code(), None);
+    assert_eq!(welp.oopsie_help_text(), None);
+}
+
+#[cfg(not(feature = "unstable-error-generic-member-access"))]
+#[test]
+fn welp_has_no_error_code_or_help_on_stable() {
+    use oopsie::Diagnostic as _;
+    use oopsie::WelpResultExt as _;
+    let leaf = welp_meta_leaf_oopsies::Boom {
+        detail: "x".to_owned(),
+    }
+    .build();
+    let welp = Err::<(), _>(leaf).welp().unwrap_err();
+    assert_eq!(welp.oopsie_error_code(), None);
+    assert_eq!(welp.oopsie_help_text(), None);
+}

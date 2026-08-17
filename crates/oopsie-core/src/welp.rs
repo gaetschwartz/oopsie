@@ -391,6 +391,38 @@ impl Diagnostic for Welp {
         }
     }
 
+    fn oopsie_error_code(&self) -> Option<crate::ErrorCode> {
+        // Only the message-free form is transparent: its `Display` is the
+        // source's, so the source's code labels the message actually rendered.
+        // A wrap message is this error's own — the source's code would misname
+        // it.
+        match &self.0 {
+            WelpRepr::Sourced {
+                message: None,
+                source,
+                ..
+            } => crate::__private::source_error_code(&**source),
+            WelpRepr::Sourced {
+                message: Some(_), ..
+            }
+            | WelpRepr::Traced { .. } => None,
+        }
+    }
+
+    fn oopsie_help_text(&self) -> Option<crate::HelpText> {
+        match &self.0 {
+            WelpRepr::Sourced {
+                message: None,
+                source,
+                ..
+            } => crate::__private::source_help_text(&**source),
+            WelpRepr::Sourced {
+                message: Some(_), ..
+            }
+            | WelpRepr::Traced { .. } => None,
+        }
+    }
+
     fn oopsie_exit_code(&self) -> Option<core::num::NonZeroU8> {
         // Surface the wrapped error's declared exit code, so a `#[oopsie]`
         // origin's code survives `.welp()` wrapping. The source is type-erased,
