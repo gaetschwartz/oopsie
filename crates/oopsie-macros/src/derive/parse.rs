@@ -15,6 +15,7 @@
     reason = "derive macros (darling's FromAttributes, derive_syn_parse's #[call] closures) emit code tripping these lints, unreachable from our own logic"
 )]
 
+use proc_macro2::TokenStream;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{Expr, Ident, LitStr, Path, Token, Type, Visibility};
@@ -1816,6 +1817,43 @@ pub fn prune_cfg_attr_oopsie(attr: &syn::Attribute) -> Option<syn::Attribute> {
         return None;
     }
     Some(syn::parse_quote! { #[cfg_attr(#pred, #(#kept),*)] })
+}
+
+/// The predicate under which an item carrying `attrs` survives cfg-stripping,
+/// or `None` when nothing gates its existence. `#[cfg(P)]` contributes `P`;
+/// `#[cfg_attr(Q, cfg(P))]` contributes `any(not(Q), P)`, since the nested `cfg`
+/// only reaches the item when `Q` holds. A `cfg_attr` gating no `cfg` (however
+/// deeply nested) conditions other attributes without removing the item, so it
+/// contributes nothing.
+pub fn existence_pred(attrs: &[syn::Attribute]) -> Option<TokenStream> {
+    conjunction(attrs.iter().filter_map(|a| meta_existence_pred(&a.meta)))
+}
+
+fn meta_existence_pred(meta: &syn::Meta) -> Option<TokenStream> {
+    let list = meta.require_list().ok()?;
+    if list.path.is_ident("cfg") {
+        let pred = &list.tokens;
+        return Some(quote::quote! { #pred });
+    }
+    if !list.path.is_ident("cfg_attr") {
+        return None;
+    }
+    let metas = list
+        .parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)
+        .ok()?;
+    let mut metas = metas.iter();
+    let pred = metas.next()?;
+    let inner = conjunction(metas.filter_map(meta_existence_pred))?;
+    Some(quote::quote! { any(not(#pred), #inner) })
+}
+
+fn conjunction(preds: impl IntoIterator<Item = TokenStream>) -> Option<TokenStream> {
+    let preds: Vec<TokenStream> = preds.into_iter().collect();
+    match preds.as_slice() {
+        [] => None,
+        [pred] => Some(quote::quote! { #pred }),
+        preds => Some(quote::quote! { all(#(#preds),*) }),
+    }
 }
 
 /// See [`forwarded_cfg_attrs`].

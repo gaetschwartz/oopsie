@@ -740,3 +740,225 @@ pub enum AllCfgAttrStrippedError {
 fn all_variants_stripped_via_cfg_attr_still_compiles() {
     fn _accepts(_: &AllCfgAttrStrippedError) {}
 }
+
+// ---- trace FIELDS gated by a `cfg_attr`-injected `cfg` ----
+//
+// `#[cfg_attr(not(feature = "x"), cfg(feature = "x"))]` gates a field on a
+// feature without a literal `#[cfg]`. The struct path picks between the full
+// accessor (which names `self.<field>`) and a source-only complement from the
+// field's existence predicate, so that predicate must look through `cfg_attr`
+// to the `cfg` it injects — otherwise the stripped field keeps its accessor and
+// fails with E0609. The complement must also stay exactly complementary, or the
+// kept field gets the method defined twice. `all()`/`any()` pin the two feature
+// states deterministically.
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtCfgAttrStrippedError {
+    #[cfg_attr(all(), cfg(any()))]
+    #[oopsie(backtrace)]
+    bt: oopsie::Backtrace,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_attr_stripped_backtrace_field_yields_none() {
+    use oopsie::Diagnostic as _;
+    let err = StructBtCfgAttrStrippedOopsie { keep: 1u32 }.build();
+    assert!(err.oopsie_backtrace().is_none());
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtCfgAttrKeptError {
+    #[cfg_attr(any(), cfg(any()))]
+    #[oopsie(backtrace)]
+    bt: oopsie::Backtrace,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_attr_kept_backtrace_field_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = StructBtCfgAttrKeptOopsie { keep: 2u32 }.build();
+    assert!(err.oopsie_backtrace().is_some());
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructLocCfgAttrStrippedError {
+    #[cfg_attr(all(), cfg(any()))]
+    #[oopsie(location)]
+    at: &'static std::panic::Location<'static>,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_attr_stripped_location_field_yields_none() {
+    use oopsie::Diagnostic as _;
+    let err = StructLocCfgAttrStrippedOopsie { keep: 1u32 }.build();
+    assert!(err.oopsie_location().is_none());
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructLocCfgAttrKeptError {
+    #[cfg_attr(any(), cfg(any()))]
+    #[oopsie(location)]
+    at: &'static std::panic::Location<'static>,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_attr_kept_location_field_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = StructLocCfgAttrKeptOopsie { keep: 2u32 }.build();
+    assert!(err.oopsie_location().is_some());
+}
+
+// A `cfg_attr` nested in a `cfg_attr` still reaches a `cfg`.
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtNestedCfgAttrError {
+    #[cfg_attr(all(), cfg_attr(all(), cfg(any())))]
+    #[oopsie(backtrace)]
+    bt: oopsie::Backtrace,
+    keep: u32,
+}
+
+#[test]
+fn struct_nested_cfg_attr_stripped_backtrace_field_yields_none() {
+    use oopsie::Diagnostic as _;
+    let err = StructBtNestedCfgAttrOopsie { keep: 1u32 }.build();
+    assert!(err.oopsie_backtrace().is_none());
+}
+
+// Only some of the gated attrs are `cfg`s; the siblings gate nothing.
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtMixedCfgAttrError {
+    #[cfg_attr(all(), doc = "sibling", cfg(any()))]
+    #[oopsie(backtrace)]
+    bt: oopsie::Backtrace,
+    keep: u32,
+}
+
+#[test]
+fn struct_mixed_cfg_attr_stripped_backtrace_field_yields_none() {
+    use oopsie::Diagnostic as _;
+    let err = StructBtMixedCfgAttrOopsie { keep: 1u32 }.build();
+    assert!(err.oopsie_backtrace().is_none());
+}
+
+// A `cfg_attr` gating no `cfg` conditions other attributes without removing the
+// field, so it must not be read as an existence gate.
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtNonCfgCfgAttrError {
+    #[cfg_attr(all(), doc = "sibling")]
+    #[oopsie(backtrace)]
+    bt: oopsie::Backtrace,
+    keep: u32,
+}
+
+#[test]
+fn struct_non_cfg_cfg_attr_backtrace_field_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = StructBtNonCfgCfgAttrOopsie { keep: 1u32 }.build();
+    assert!(err.oopsie_backtrace().is_some());
+}
+
+// With a source present the stripped branch emits the source-only complement,
+// so the two branches must partition exactly: a gap loses source forwarding, an
+// overlap defines the accessor twice.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false), suffix = "CaLeaf")]
+pub enum CfgAttrLeafError {
+    #[oopsie("leaf")]
+    Boom {
+        #[oopsie(backtrace)]
+        bt: oopsie::Backtrace,
+    },
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtCfgAttrNoOwnError {
+    source: CfgAttrLeafError,
+    keep: u32,
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtCfgAttrSourceStrippedError {
+    #[cfg_attr(all(), cfg(any()))]
+    #[oopsie(backtrace)]
+    bt: oopsie::Backtrace,
+    source: CfgAttrLeafError,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_attr_stripped_backtrace_field_keeps_source_forwarding() {
+    use oopsie::{Contextual as _, Diagnostic as _};
+    let stripped =
+        StructBtCfgAttrSourceStrippedOopsie { keep: 1u32 }.build_error(BoomCaLeaf {}.build());
+    let baseline = StructBtCfgAttrNoOwnOopsie { keep: 1u32 }.build_error(BoomCaLeaf {}.build());
+    assert_eq!(
+        stripped.oopsie_backtrace().is_some(),
+        baseline.oopsie_backtrace().is_some()
+    );
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub struct StructBtCfgAttrSourceKeptError {
+    #[cfg_attr(any(), cfg(any()))]
+    #[oopsie(backtrace)]
+    bt: oopsie::Backtrace,
+    source: CfgAttrLeafError,
+    keep: u32,
+}
+
+#[test]
+fn struct_cfg_attr_kept_backtrace_field_with_source_returns_some() {
+    use oopsie::{Contextual as _, Diagnostic as _};
+    let err = StructBtCfgAttrSourceKeptOopsie { keep: 2u32 }.build_error(BoomCaLeaf {}.build());
+    assert!(err.oopsie_backtrace().is_some());
+}
+
+// Enum sibling: the accessor arm carries the field's `cfg_attr` and drops to
+// the trailing `_ => None` when the injected `cfg` strips the field.
+#[oopsie]
+#[oopsie(module(false), suffix = "Cb")]
+pub enum EnumBtCfgAttrError {
+    #[oopsie("stripped: {keep}")]
+    Stripped {
+        #[cfg_attr(all(), cfg(any()))]
+        #[oopsie(backtrace)]
+        bt: oopsie::Backtrace,
+        keep: u32,
+    },
+
+    #[oopsie("kept: {keep}")]
+    Kept {
+        #[cfg_attr(any(), cfg(any()))]
+        #[oopsie(backtrace)]
+        bt: oopsie::Backtrace,
+        keep: u32,
+    },
+}
+
+#[test]
+fn enum_cfg_attr_stripped_backtrace_field_falls_through_to_none() {
+    use oopsie::Diagnostic as _;
+    let err = StrippedCb { keep: 1u32 }.build();
+    assert!(err.oopsie_backtrace().is_none());
+}
+
+#[test]
+fn enum_cfg_attr_kept_backtrace_field_accessor_returns_some() {
+    use oopsie::Diagnostic as _;
+    let err = KeptCb { keep: 2u32 }.build();
+    assert!(err.oopsie_backtrace().is_some());
+}

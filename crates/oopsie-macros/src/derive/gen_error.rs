@@ -1005,13 +1005,13 @@ pub fn gen_struct_error(
     let loc_method = match location_accessor_body(loc_own, loc_probe.clone()) {
         Some(body) => {
             let full = quote! { #loc_sig { #body } };
-            if has_existence_cfg(loc_field_cfg) {
-                let not_cfg = negated_existence_cfg(loc_field_cfg);
-                let stripped = location_accessor_body(None, loc_probe)
-                    .map(|b| quote! { #not_cfg #loc_sig { #b } });
-                quote! { #(#loc_field_cfg)* #full #stripped }
-            } else {
-                full
+            match negated_existence_cfg(loc_field_cfg) {
+                Some(not_cfg) => {
+                    let stripped = location_accessor_body(None, loc_probe)
+                        .map(|b| quote! { #not_cfg #loc_sig { #b } });
+                    quote! { #(#loc_field_cfg)* #full #stripped }
+                }
+                None => full,
             }
         }
         None => quote! {},
@@ -1353,27 +1353,12 @@ fn trace_field_cfg<'a>(
     ident.map_or(&[], |ident| field_cfg_for(categorized, ident))
 }
 
-/// Whether a field's cfg attrs gate its existence — only `#[cfg(...)]` does;
-/// `#[cfg_attr(...)]` conditionally adds *other* attrs without removing the
-/// field, so it never strips a generated mention.
-fn has_existence_cfg(field_cfg: &[syn::Attribute]) -> bool {
-    field_cfg.iter().any(|a| a.path().is_ident("cfg"))
-}
-
-/// The `not(...)` complement of a field's existence-gating `#[cfg(...)]` preds,
-/// for emitting a struct accessor that runs only when the own trace field is
-/// stripped. Joined with `all(...)` when several `#[cfg]`s gate one field.
-fn negated_existence_cfg(field_cfg: &[syn::Attribute]) -> TokenStream2 {
-    let preds: Vec<TokenStream2> = field_cfg
-        .iter()
-        .filter(|a| a.path().is_ident("cfg"))
-        .filter_map(|a| a.meta.require_list().ok())
-        .map(|list| list.tokens.clone())
-        .collect();
-    match preds.as_slice() {
-        [pred] => quote! { #[cfg(not(#pred))] },
-        preds => quote! { #[cfg(not(all(#(#preds),*)))] },
-    }
+/// The `not(...)` complement of a field's existence predicate, for emitting a
+/// struct accessor that runs only when the own trace field is stripped. `None`
+/// when nothing gates the field's existence, so the accessor is unconditional.
+fn negated_existence_cfg(field_cfg: &[syn::Attribute]) -> Option<TokenStream2> {
+    let pred = super::parse::existence_pred(field_cfg)?;
+    Some(quote! { #[cfg(not(#pred))] })
 }
 
 /// A struct trace accessor that forwards a cfg-stripped own field's arm to a
@@ -1405,11 +1390,10 @@ fn gen_struct_trace_method(
         oopsie_path,
     )
     .map(with_body);
-    if !has_existence_cfg(field_cfg) {
+    let Some(not_cfg) = negated_existence_cfg(field_cfg) else {
         return full.unwrap_or_default();
-    }
+    };
     let gated = full.map(|m| quote! { #(#field_cfg)* #m });
-    let not_cfg = negated_existence_cfg(field_cfg);
     let stripped =
         trace_accessor_body(None, source_access, probe, source_fn, oopsie_path).map(with_body);
     let stripped = stripped.map(|m| quote! { #not_cfg #m });
