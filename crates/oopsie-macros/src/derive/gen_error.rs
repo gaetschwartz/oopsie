@@ -207,6 +207,24 @@ fn provide_param(data: &syn::Data) -> syn::Ident {
     candidate
 }
 
+/// The named lifetime tying `&self` to `Request<'…>` in the generated
+/// `provide` (elision can't substitute: `Request` is invariant in its
+/// lifetime), probed against the type's declared lifetimes — mirroring
+/// [`provide_param`]'s probe for `__request` — so a user lifetime literally
+/// named `'__a` cannot collide with it (E0403/E0496).
+fn provide_lifetime(generics: &syn::Generics) -> syn::Lifetime {
+    let mut candidate = format_ident!("__a");
+    let mut n = 0u32;
+    while generics
+        .lifetimes()
+        .any(|lt| lt.lifetime.ident == candidate)
+    {
+        candidate = format_ident!("__a_{n}");
+        n += 1;
+    }
+    syn::Lifetime::new(&format!("'{candidate}"), proc_macro2::Span::call_site())
+}
+
 /// Generate `std::error::Error` impl for an enum.
 pub fn gen_enum_error(
     resolved: &ResolvedEnum,
@@ -593,9 +611,10 @@ pub fn gen_enum_error(
         if provide_arms.is_empty() || !cfg!(feature = "unstable-error-generic-member-access") {
             quote! {}
         } else {
+            let lt = provide_lifetime(&input.generics);
             quote! {
                 #[allow(unused_variables)]
-                fn provide<'__a>(&'__a self, #req: &mut ::core::error::Request<'__a>) {
+                fn provide<#lt>(&#lt self, #req: &mut ::core::error::Request<#lt>) {
                     use #oopsie_path::AsErrorSource as _;
                     match self {
                         #(#provide_arms)*
@@ -881,9 +900,10 @@ pub fn gen_struct_error(
         if provide_stmts.is_empty() || !cfg!(feature = "unstable-error-generic-member-access") {
             quote! {}
         } else {
+            let lt = provide_lifetime(&input.generics);
             quote! {
                 #[allow(unused_variables)]
-                fn provide<'__a>(&'__a self, #req: &mut ::core::error::Request<'__a>) {
+                fn provide<#lt>(&#lt self, #req: &mut ::core::error::Request<#lt>) {
                     use #oopsie_path::AsErrorSource as _;
                     #destructure
                     #(#provide_stmts)*

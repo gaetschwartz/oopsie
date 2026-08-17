@@ -93,6 +93,43 @@ fn lifetime_param_borrowed_field() {
     assert_eq!(err.to_string(), "borrowed note: transient");
 }
 
+// ─── lifetime literally named '__a ───
+// The generated `provide` picks a fresh tie lifetime rather than shadowing a
+// declared `'__a` (E0403/E0496 under unstable-error-generic-member-access).
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum TieLifetimeError<'__a> {
+    #[oopsie("tie note: {note}")]
+    TieNote { note: &'__a str },
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+struct TieLifetimeStructError<'__a> {
+    note: &'__a str,
+    #[oopsie(help)]
+    hint: String,
+}
+
+#[test]
+fn lifetime_named_dunder_a() {
+    use oopsie::Diagnostic as _;
+    let text = String::from("transient");
+    let err: TieLifetimeError<'_> = TieNote {
+        note: text.as_str(),
+    }
+    .build();
+    assert_eq!(err.to_string(), "tie note: transient");
+
+    let err: TieLifetimeStructError<'_> = TieLifetimeStructOopsie {
+        note: text.as_str(),
+        hint: String::from("do this"),
+    }
+    .build();
+    assert_eq!(&*err.oopsie_help_text().unwrap(), "do this");
+}
+
 // ─── const param ───
 // `N` is referenced by the `data: [u8; N]` field, so the selector carries it.
 
