@@ -4,6 +4,41 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.22] - 2026-08-17
+
+### Fixed
+
+- A `#[oopsie(help)]` field no longer breaks `no_std` consumers. The generated
+  help accessor called `.to_string()` through the prelude, which resolves only
+  under `std`; it now goes through the same `alloc` facade as the rest of the
+  generated code.
+- `#[oopsie]` now handles helper attributes and gates wrapped in `cfg_attr`.
+  Previously `#[cfg_attr(pred, oopsie(…))]` survived into the emitted item and
+  failed to compile once the predicate held, a `cfg_attr`-injected `cfg` on a
+  variant left generated selectors and `From` impls referring to a stripped
+  variant, and the same on a trace field mis-dropped its accessor arms.
+- A `transparent` source of `Box<other::Name>` is no longer rejected when it
+  merely shares the enclosing type's name. Only an unqualified path now counts
+  as the enclosing type.
+- The generated nightly `provide` method no longer collides with a lifetime
+  parameter the error type itself declares.
+- A message-free `Welp` (`.welp()` / `Welp::from_error`) now surfaces the
+  wrapped error's error code and help text, matching how it already surfaced
+  the exit code and how generated `transparent` wrappers behave. A `Welp`
+  carrying its own message is unchanged: its header stays uncoded.
+- `test-utils` no longer panics on Windows. The redaction profile required
+  `HOME` to be set and passed filesystem paths to `insta` as regular
+  expressions, so a backslashed path aborted the run.
+- `[package.metadata.oopsie]` written as an inline table is now honored instead
+  of silently ignored, so a `max-size` cap written that way is enforced.
+- Workspace member and exclude patterns now match the way Cargo matches them:
+  case-sensitively, with `exclude` pruning glob-matched members, and correctly
+  under a root path containing glob metacharacters.
+- Non-UTF-8 values of `CARGO_MANIFEST_DIR` no longer fail every derive in the
+  crate; a workspace root that cannot be tracked for rebuilds now reports why.
+- A `module-suffix` that cannot form an identifier is now a manifest
+  diagnostic rather than a panic inside the macro.
+
 ## [0.1.0-rc.21] - 2026-08-04
 
 ### Changed
@@ -248,6 +283,7 @@ Initial release candidate.
 - Feature flags: `fancy`, `serde`, `tracing`, `chrono`, `jiff`, `extras`, and
   the nightly `unstable-*` set.
 
+[0.1.0-rc.22]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.22
 [0.1.0-rc.21]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.21
 [0.1.0-rc.20]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.20
 [0.1.0-rc.19]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.19
