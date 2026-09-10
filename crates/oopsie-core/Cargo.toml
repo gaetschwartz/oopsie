@@ -21,7 +21,7 @@ serde = ["dep:serde", "dep:serde_json", "tracing-subscriber?/json"]
 tracing = ["std", "dep:tracing", "dep:tracing-error", "dep:tracing-subscriber"]
 unstable-error-generic-member-access = []
 unstable = ["unstable-error-generic-member-access"]
-test-utils = ["std", "dep:insta", "dep:target-triple", "dep:konst"]
+test-utils = ["std", "dep:insta", "dep:target-tuple", "dep:konst"]
 chrono = ["std", "dep:chrono"]
 jiff = ["std", "dep:jiff"]
 extras = ["std", "dep:pastey"]
@@ -45,7 +45,7 @@ serde = { version = "1", default-features = false, features = [
 serde_json = { version = "1", default-features = false, features = [
     "alloc",
 ], optional = true }
-target-triple = { version = "1.0.0", optional = true }
+target-tuple = { version = "1.0.2", optional = true }
 tracing = { version = "0.1", optional = true }
 tracing-error = { version = "0.2", optional = true }
 tracing-subscriber = { version = "0.3", features = [

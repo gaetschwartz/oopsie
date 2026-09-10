@@ -9,7 +9,7 @@ use tracing_subscriber::prelude::*;
 #[doc(hidden)]
 pub mod __private {
     pub use konst;
-    pub use target_triple::TARGET;
+    pub use target_tuple::TARGET;
 }
 
 /// The toolchain channel embedded in file names of snapshots that differ between
