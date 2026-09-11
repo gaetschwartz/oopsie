@@ -4,6 +4,15 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.23] - 2026-09-11
+
+### Changed
+
+- `test-utils` now reads the compilation target from the `target-tuple` crate
+  (the renamed successor of `target-triple`); the `__private::TARGET` re-export
+  is unchanged.
+- Updated dependencies (`convert_case` 0.12, `rstest` 0.27).
+
 ## [0.1.0-rc.22] - 2026-08-17
 
 ### Fixed
