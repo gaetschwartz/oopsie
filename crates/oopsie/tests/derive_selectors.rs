@@ -426,3 +426,24 @@ fn struct_pub_crate_vis_lifted_into_module() {
     let err = restricted::ScopedOopsie { what: "y" }.build();
     assert_eq!(err.to_string(), "scoped: y");
 }
+
+// A variant named like a prelude type is fine as long as every field names that
+// type through a path the selector can't shadow.
+#[derive(Debug, Oopsie)]
+enum ValueShapeError {
+    #[oopsie("expected string")]
+    String,
+    #[oopsie("bad key {key}")]
+    Key { key: std::string::String },
+    #[oopsie("bad keys")]
+    Keys { keys: Vec<::std::string::String> },
+}
+
+#[test]
+fn variant_named_like_prelude_type_with_qualified_field() {
+    let err = value_shape_oopsies::String.build();
+    assert_eq!(err.to_string(), "expected string");
+    let err = value_shape_oopsies::Key { key: "k" }.build();
+    assert_eq!(err.to_string(), "bad key k");
+    assert!(matches!(err, ValueShapeError::Key { key } if key == "k"));
+}

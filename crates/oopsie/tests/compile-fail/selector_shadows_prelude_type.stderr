@@ -1,0 +1,11 @@
+error: `String` here would resolve to the generated context selector `String` (for `ValueError::String`), shadowing the `String` otherwise in scope; rename the variant or set `#[oopsie(suffix = "...")]`
+  --> tests/compile-fail/selector_shadows_prelude_type.rs:10:16
+   |
+10 |     Key { key: String },
+   |                ^^^^^^
+
+error: `Vec` here would resolve to the generated context selector `Vec` (for `ParseError::Vec`), shadowing the `Vec` otherwise in scope; rename the variant or set `#[oopsie(suffix = "...")]`
+  --> tests/compile-fail/selector_shadows_prelude_type.rs:19:60
+   |
+19 |     Items { items: std::collections::HashMap<u8, &'static [Vec<u8>]> },
+   |                                                            ^^^^^^^

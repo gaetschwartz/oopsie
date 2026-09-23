@@ -3,6 +3,7 @@
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::ext::IdentExt as _;
+use syn::visit::Visit;
 use syn::{GenericParam, Generics, Ident, Type, Visibility};
 
 use crate::utils::pretty::Pretty as _;
@@ -480,6 +481,102 @@ fn lift_into_child_module(vis: &Visibility) -> Visibility {
     }
 }
 
+/// A generated selector, paired with the item it builds for diagnostics.
+struct EmittedSelector<'a> {
+    ident: &'a Ident,
+    builds: String,
+    renamable: &'static str,
+}
+
+/// Reject every type path in the item's fields, generics, and `where` clause
+/// whose leading segment (or, for `self::…`, second segment — `self::` and a
+/// bare path resolve in the same scope) names one of its selectors. The
+/// selectors are declared in the scope those types resolve in — the item's own
+/// module, or a child that glob-imports it — so the selector silently shadows
+/// a glob-imported or prelude type of the same name and rustc reports an
+/// unrelated type error.
+fn reject_selector_shadowing(
+    input: &syn::DeriveInput,
+    selectors: &[EmittedSelector],
+) -> syn::Result<()> {
+    if selectors.is_empty() {
+        return Ok(());
+    }
+    let mut visitor = ShadowVisitor {
+        selectors,
+        error: None,
+    };
+    for param in &input.generics.params {
+        match param {
+            GenericParam::Type(tp) => {
+                for bound in &tp.bounds {
+                    visitor.visit_type_param_bound(bound);
+                }
+            }
+            GenericParam::Const(cp) => visitor.visit_type(&cp.ty),
+            GenericParam::Lifetime(_) => {}
+        }
+    }
+    if let Some(where_clause) = &input.generics.where_clause {
+        visitor.visit_where_clause(where_clause);
+    }
+    let fields: Vec<&syn::Field> = match &input.data {
+        syn::Data::Struct(data) => data.fields.iter().collect(),
+        syn::Data::Enum(data) => data.variants.iter().flat_map(|v| &v.fields).collect(),
+        syn::Data::Union(_) => Vec::new(),
+    };
+    for field in fields {
+        visitor.visit_type(&field.ty);
+    }
+    visitor.error.map_or(Ok(()), Err)
+}
+
+struct ShadowVisitor<'a> {
+    selectors: &'a [EmittedSelector<'a>],
+    error: Option<syn::Error>,
+}
+
+impl<'ast> Visit<'ast> for ShadowVisitor<'_> {
+    fn visit_path(&mut self, i: &'ast syn::Path) {
+        // `self::Selector` resolves in the module the selectors are declared
+        // in (the item's own module, or a child that glob-imports it) exactly
+        // like a bare `Selector`, so it shadows the same way.
+        let leading = i.segments.first().filter(|_| i.leading_colon.is_none());
+        let named_segment = match leading {
+            Some(first) if first.ident == "self" => i.segments.get(1),
+            other => other,
+        };
+        if let Some(named) = named_segment
+            && let Some(selector) = self
+                .selectors
+                .iter()
+                .find(|s| s.ident.unraw() == named.ident.unraw())
+        {
+            let name = named.ident.unraw();
+            let EmittedSelector {
+                builds, renamable, ..
+            } = selector;
+            let err = syn::Error::new_spanned(
+                i,
+                format!(
+                    "`{name}` here would resolve to the generated context selector `{name}` \
+                     (for `{builds}`), shadowing the `{name}` otherwise in scope; rename the \
+                     {renamable} or set `#[oopsie(suffix = \"...\")]`"
+                ),
+            );
+            match &mut self.error {
+                Some(existing) => existing.combine(err),
+                None => self.error = Some(err),
+            }
+        }
+        syn::visit::visit_path(self, i);
+    }
+
+    fn visit_expr(&mut self, _: &'ast syn::Expr) {}
+
+    fn visit_macro(&mut self, _: &'ast syn::Macro) {}
+}
+
 /// Generate context selectors for all variants of an enum.
 pub fn gen_enum_selectors(
     resolved: &ResolvedEnum,
@@ -491,6 +588,19 @@ pub fn gen_enum_selectors(
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let wrapped_in_module = matches!(container.effective_module(true), ModuleSetting::On(_));
     let vis = resolve_selector_vis(container.visibility(), &input.vis, wrapped_in_module);
+
+    let emitted: Vec<EmittedSelector> = resolved
+        .variants
+        .iter()
+        .filter_map(|v| {
+            v.selector_ident.as_ref().map(|ident| EmittedSelector {
+                ident,
+                builds: format!("{enum_ident}::{}", v.ident().unraw()),
+                renamable: "variant",
+            })
+        })
+        .collect();
+    reject_selector_shadowing(input, &emitted)?;
 
     let mut selectors = Vec::new();
     for v in &resolved.variants {
@@ -727,6 +837,14 @@ pub fn gen_struct_selector(
     }
 
     let selector_ident = selector_name(struct_ident, &attrs.container.effective_suffix(false))?;
+    reject_selector_shadowing(
+        input,
+        &[EmittedSelector {
+            ident: &selector_ident,
+            builds: struct_ident.unraw().to_string(),
+            renamable: "struct",
+        }],
+    )?;
     let has_source = categorized.source.is_some();
     let user_fields = &categorized.user_fields;
 

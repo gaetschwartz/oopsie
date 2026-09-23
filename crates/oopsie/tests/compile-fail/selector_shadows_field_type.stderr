@@ -1,0 +1,23 @@
+error: `User` here would resolve to the generated context selector `User` (for `AppError::User`), shadowing the `User` otherwise in scope; rename the variant or set `#[oopsie(suffix = "...")]`
+  --> tests/compile-fail/selector_shadows_field_type.rs:15:20
+   |
+15 |     Denied { user: User },
+   |                    ^^^^
+
+error: `Policy` here would resolve to the generated context selector `Policy` (for `PolicyError::Policy`), shadowing the `Policy` otherwise in scope; rename the variant or set `#[oopsie(suffix = "...")]`
+  --> tests/compile-fail/selector_shadows_field_type.rs:24:8
+   |
+24 |     T: Policy + std::fmt::Debug,
+   |        ^^^^^^
+
+error: `Session` here would resolve to the generated context selector `Session` (for `Session`), shadowing the `Session` otherwise in scope; rename the struct or set `#[oopsie(suffix = "...")]`
+  --> tests/compile-fail/selector_shadows_field_type.rs:33:28
+   |
+33 |     pub parent: Option<Box<Session>>,
+   |                            ^^^^^^^
+
+error: `Nested` here would resolve to the generated context selector `Nested` (for `SelfPathError::Nested`), shadowing the `Nested` otherwise in scope; rename the variant or set `#[oopsie(suffix = "...")]`
+  --> tests/compile-fail/selector_shadows_field_type.rs:42:21
+   |
+42 |     Nested { inner: self::Nested },
+   |                     ^^^^^^^^^^^^
