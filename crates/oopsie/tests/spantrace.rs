@@ -11,6 +11,7 @@
 mod common;
 
 use oopsie::{Contextual as _, Oopsie, SpanTrace, oopsie};
+#[cfg(feature = "fancy")]
 use std::io;
 use tracing::instrument;
 
@@ -113,18 +114,21 @@ fn captured_spantrace_status_is_captured_within_span() {
 // `oopsie_backtrace()` accessor. A plain `#[oopsie(capture)] bt: Box<Backtrace>`
 // field is captured but is NOT surfaced by the stable Diagnostic accessor (that
 // requires the field to carry `#[oopsie(backtrace)]`, which `traced` adds for us).
+#[cfg(feature = "fancy")]
 #[oopsie(traced(spantrace(false)))]
 enum ExtractSrcError {
     #[oopsie("extract src")]
     Src { info: String },
 }
 
+#[cfg(feature = "fancy")]
 #[oopsie(traced(spantrace(false)))]
 enum ExtractWrapDiagError {
     #[oopsie("wrap diag source")]
     WrapDiag { source: ExtractSrcError },
 }
 
+#[cfg(feature = "fancy")]
 #[oopsie(traced(spantrace(false)))]
 enum ExtractWrapIoError {
     #[oopsie("wrap io source")]
@@ -140,6 +144,7 @@ fn symbol_names(bt: &oopsie::Backtrace) -> Vec<String> {
         .collect()
 }
 
+#[cfg(feature = "fancy")]
 #[inline(never)]
 fn build_extract_src() -> ExtractSrcError {
     extract_src_oopsies::Src { info: "x" }.build()
