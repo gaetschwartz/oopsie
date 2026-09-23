@@ -360,6 +360,7 @@ pub fn gen_enum_error(
         } else {
             if let Some(bt_field) = &categorized.backtrace_field {
                 let field_cfg = trace_field_cfg(categorized, Some(bt_field));
+                let bt_field = binding_through_box(bt_field, categorized.backtrace_boxed);
                 provide_stmts.push(quote! {
                     #(#field_cfg)*
                     {
@@ -372,6 +373,7 @@ pub fn gen_enum_error(
             }
             if let Some(st_field) = &categorized.spantrace_field {
                 let field_cfg = trace_field_cfg(categorized, Some(st_field));
+                let st_field = binding_through_box(st_field, categorized.spantrace_boxed);
                 provide_stmts.push(quote! {
                     #(#field_cfg)*
                     {
@@ -417,9 +419,10 @@ pub fn gen_enum_error(
         let (bt_own, bt_bind) = if let Some(tf) = &categorized.traces_field {
             (Some(quote! { &#tf.0 }), Some(tf))
         } else if let Some(bt_field) = &categorized.backtrace_field {
+            let bt_ref = binding_through_box(bt_field, categorized.backtrace_boxed);
             (
                 Some(quote! {
-                    ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field)
+                    ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_ref)
                 }),
                 Some(bt_field),
             )
@@ -454,9 +457,10 @@ pub fn gen_enum_error(
         let (st_own, st_bind) = if let Some(tf) = &categorized.traces_field {
             (Some(quote! { &#tf.1 }), Some(tf))
         } else if let Some(st_field) = &categorized.spantrace_field {
+            let st_ref = binding_through_box(st_field, categorized.spantrace_boxed);
             (
                 Some(quote! {
-                    ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field)
+                    ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_ref)
                 }),
                 Some(st_field),
             )
@@ -907,6 +911,7 @@ pub fn gen_struct_error(
     } else {
         if let Some(bt_field) = &categorized.backtrace_field {
             let field_cfg = trace_field_cfg(categorized, Some(bt_field));
+            let bt_field = binding_through_box(bt_field, categorized.backtrace_boxed);
             provide_stmts.push(quote! {
                 #(#field_cfg)*
                 {
@@ -919,6 +924,7 @@ pub fn gen_struct_error(
         }
         if let Some(st_field) = &categorized.spantrace_field {
             let field_cfg = trace_field_cfg(categorized, Some(st_field));
+            let st_field = binding_through_box(st_field, categorized.spantrace_boxed);
             provide_stmts.push(quote! {
                 #(#field_cfg)*
                 {
@@ -999,8 +1005,9 @@ pub fn gen_struct_error(
         Some(quote! { &self.#tf.0 })
     } else {
         categorized.backtrace_field.as_ref().map(|bt_field| {
+            let bt_ref = self_field_through_box(bt_field, categorized.backtrace_boxed);
             quote! {
-                ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(&self.#bt_field)
+                ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_ref)
             }
         })
     };
@@ -1021,8 +1028,9 @@ pub fn gen_struct_error(
         Some(quote! { &self.#tf.1 })
     } else {
         categorized.spantrace_field.as_ref().map(|st_field| {
+            let st_ref = self_field_through_box(st_field, categorized.spantrace_boxed);
             quote! {
-                ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(&self.#st_field)
+                ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_ref)
             }
         })
     };
@@ -1765,4 +1773,23 @@ fn field_cfg_for<'a>(
         return &uf.cfg_attrs;
     }
     &[]
+}
+
+/// A reference to a trace field's value from its by-ref pattern binding,
+/// looking through a `Box` so the trace is borrowed from the boxed value.
+fn binding_through_box(binding: &syn::Ident, boxed: bool) -> TokenStream2 {
+    if boxed {
+        quote! { &**#binding }
+    } else {
+        quote! { #binding }
+    }
+}
+
+/// `&self.<field>`, looking through a `Box` like [`binding_through_box`].
+fn self_field_through_box(field: &syn::Ident, boxed: bool) -> TokenStream2 {
+    if boxed {
+        quote! { &*self.#field }
+    } else {
+        quote! { &self.#field }
+    }
 }

@@ -1,0 +1,21 @@
+error[E0277]: the trait bound `NotCapturable: Capturable` is not satisfied
+  --> tests/compile-fail/explicit_backtrace_not_capturable.rs:22:16
+   |
+22 |     backtrace: NotCapturable,
+   |                ^^^^^^^^^^^^^ unsatisfied trait bound
+   |
+help: the trait `Capturable` is not implemented for `NotCapturable`
+  --> tests/compile-fail/explicit_backtrace_not_capturable.rs:9:1
+   |
+ 9 | pub struct NotCapturable(oopsie::Backtrace);
+   | ^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: the following other types implement trait `Capturable`:
+             &'static Location<'static>
+             (A, B)
+             (A, B, C)
+             (A, B, C, D)
+             (A, B, C, D, E)
+             (A, B, C, D, E, F)
+             (A, B, C, D, E, F, G)
+             (A, B, C, D, E, F, G, H)
+           and $N others

@@ -3,23 +3,23 @@
 //! The attribute macro runs before `#[cfg]`/`#[cfg_attr]` evaluation, but some
 //! injection decisions read helper attributes that may sit inside a
 //! `cfg_attr(pred, oopsie(...))`, or depend on trace fields that may be
-//! `#[cfg]`-gated. Each such predicate becomes an atom; the decision is made
-//! once per truth assignment of the atoms, and every injected piece is gated by
-//! the predicate under which it was wanted.
+//! `#[cfg]`-gated. Each such predicate is an atom, lowered to an expression
+//! over base predicates (`feature = "x"`, `unix`, ...) so that correlated atoms
+//! such as `a` and `not(a)` never take contradictory values. The decision is
+//! made once per truth assignment of the base predicates, and every injected
+//! piece is gated by the (minimised) predicate under which it was wanted.
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::punctuated::Punctuated;
 use syn::{Attribute, Fields, Meta, Token};
 
-use super::field_detect::{
-    is_backtrace_type, is_location_type, is_spantrace_type, is_timestamp_type, is_traces_type,
-};
+use super::field_detect::TraceRole;
 use crate::derive::parse::existence_pred;
 
-/// Above this many independent predicates the assignment space gets too large
-/// to enumerate at expansion time.
-const MAX_ATOMS: usize = 8;
+/// Above this many base predicates the assignment space gets too large to
+/// enumerate at expansion time.
+const MAX_BASES: usize = 8;
 
 /// Whether an injected piece is present, absent, or present under a predicate.
 #[derive(Clone, Debug)]
@@ -36,7 +36,7 @@ impl Gate {
 
     /// The `#[cfg(...)]` attribute that applies this gate to an item; empty
     /// when the item is unconditional.
-    pub fn cfg_attr(&self) -> TokenStream2 {
+    pub fn cfg_attribute(&self) -> TokenStream2 {
         match self {
             Self::Off | Self::On => TokenStream2::new(),
             Self::Cfg(pred) => quote! { #[cfg(#pred)] },
@@ -50,10 +50,34 @@ impl From<bool> for Gate {
     }
 }
 
-/// The distinct predicates an item's injection decisions depend on.
+/// A cfg predicate lowered over the base predicates of a [`CfgAtoms`] set.
+#[derive(Debug)]
+enum Expr {
+    Const(bool),
+    Base(usize),
+    All(Vec<Self>),
+    Any(Vec<Self>),
+    Not(Box<Self>),
+}
+
+impl Expr {
+    fn eval(&self, bits: u32) -> bool {
+        match self {
+            Self::Const(value) => *value,
+            Self::Base(k) => bits & (1 << k) != 0,
+            Self::All(exprs) => exprs.iter().all(|e| e.eval(bits)),
+            Self::Any(exprs) => exprs.iter().any(|e| e.eval(bits)),
+            Self::Not(expr) => !expr.eval(bits),
+        }
+    }
+}
+
+/// The predicates an item's injection decisions depend on, and the base
+/// predicates they are built from.
 #[derive(Default)]
 pub struct CfgAtoms {
-    atoms: Vec<TokenStream2>,
+    bases: Vec<TokenStream2>,
+    atoms: Vec<(String, Expr)>,
 }
 
 impl CfgAtoms {
@@ -63,6 +87,7 @@ impl CfgAtoms {
     pub fn collect<'a>(
         attr_lists: impl IntoIterator<Item = &'a [Attribute]>,
         fields: &Fields,
+        timestamp_type: &syn::Type,
         span: proc_macro2::Span,
     ) -> syn::Result<Self> {
         let mut atoms = Self::default();
@@ -75,19 +100,22 @@ impl CfgAtoms {
             for attr in &field.attrs {
                 atoms.collect_meta(&attr.meta);
             }
-            if is_injection_relevant(field)
+            if is_injection_relevant(field, timestamp_type)
                 && let Some(pred) = existence_pred(&field.attrs)
             {
-                atoms.intern(pred);
+                atoms.intern(&pred);
             }
         }
-        if atoms.atoms.len() > MAX_ATOMS {
+        if atoms.bases.len() > MAX_BASES {
+            let bases: Vec<String> = atoms.bases.iter().map(|b| format!("`{b}`")).collect();
             return Err(syn::Error::new(
                 span,
                 format!(
-                    "too many distinct `cfg`/`cfg_attr` predicates affect trace injection here \
-                     (at most {MAX_ATOMS}); move some `oopsie(...)` helpers out of `cfg_attr` \
-                     or use `#[derive(Oopsie)]` with explicit trace fields"
+                    "too many distinct `cfg` predicates affect trace injection here \
+                     (at most {MAX_BASES}, found {}: {}); move some `oopsie(...)` helpers out \
+                     of `cfg_attr` or use `#[derive(Oopsie)]` with explicit trace fields",
+                    bases.len(),
+                    bases.join(", "),
                 ),
             ));
         }
@@ -108,27 +136,71 @@ impl CfgAtoms {
             gates_oopsie |= self.collect_meta(inner);
         }
         if gates_oopsie {
-            self.intern(quote! { #pred });
+            self.intern(&quote! { #pred });
         }
         gates_oopsie
     }
 
-    fn intern(&mut self, pred: TokenStream2) {
+    fn intern(&mut self, pred: &TokenStream2) {
         let key = pred.to_string();
-        if !self.atoms.iter().any(|a| a.to_string() == key) {
-            self.atoms.push(pred);
+        if self.atoms.iter().any(|(k, _)| *k == key) {
+            return;
+        }
+        let expr = match syn::parse2::<Meta>(pred.clone()) {
+            Ok(meta) => self.lower(&meta),
+            Err(_) => self.base(pred.clone()),
+        };
+        self.atoms.push((key, expr));
+    }
+
+    fn lower(&mut self, meta: &Meta) -> Expr {
+        match meta {
+            Meta::Path(path) if path.is_ident("true") => Expr::Const(true),
+            Meta::Path(path) if path.is_ident("false") => Expr::Const(false),
+            Meta::List(list)
+                if ["all", "any", "not"]
+                    .iter()
+                    .any(|op| list.path.is_ident(op)) =>
+            {
+                let Ok(args) =
+                    list.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                else {
+                    return self.base(quote! { #meta });
+                };
+                let mut args: Vec<Expr> = args.iter().map(|arg| self.lower(arg)).collect();
+                if list.path.is_ident("all") {
+                    Expr::All(args)
+                } else if list.path.is_ident("any") {
+                    Expr::Any(args)
+                } else if args.len() == 1
+                    && let Some(arg) = args.pop()
+                {
+                    Expr::Not(Box::new(arg))
+                } else {
+                    self.base(quote! { #meta })
+                }
+            }
+            Meta::Path(_) | Meta::List(_) | Meta::NameValue(_) => self.base(quote! { #meta }),
         }
     }
 
-    fn index_of(&self, pred: &TokenStream2) -> Option<usize> {
+    fn base(&mut self, pred: TokenStream2) -> Expr {
         let key = pred.to_string();
-        self.atoms.iter().position(|a| a.to_string() == key)
+        let k = self
+            .bases
+            .iter()
+            .position(|b| b.to_string() == key)
+            .unwrap_or_else(|| {
+                self.bases.push(pred);
+                self.bases.len() - 1
+            });
+        Expr::Base(k)
     }
 
-    /// Every truth assignment of the atoms, in index order: assignment `i`
-    /// sets atom `k` true iff bit `k` of `i` is set.
+    /// Every truth assignment of the base predicates, in index order:
+    /// assignment `i` sets base `k` true iff bit `k` of `i` is set.
     pub fn assignments(&self) -> impl Iterator<Item = Assignment<'_>> {
-        (0..1u32 << self.atoms.len()).map(move |bits| Assignment { atoms: self, bits })
+        (0..1u32 << self.bases.len()).map(move |bits| Assignment { atoms: self, bits })
     }
 
     /// The gate under which a piece wanted in exactly the assignments where
@@ -141,33 +213,24 @@ impl CfgAtoms {
         if !outcomes.iter().any(|o| *o) {
             return Gate::Off;
         }
-        let relevant: Vec<usize> = (0..self.atoms.len())
-            .filter(|&k| (0..outcomes.len()).any(|i| outcomes[i] != outcomes[i ^ (1 << k)]))
-            .collect();
-        let terms: Vec<TokenStream2> = (0..1u32 << relevant.len())
-            .filter_map(|sub| {
-                let bits = relevant
-                    .iter()
-                    .enumerate()
-                    .filter(|&(j, _)| sub & (1 << j) != 0)
-                    .fold(0usize, |acc, (_, &k)| acc | (1 << k));
-                outcomes[bits].then(|| {
-                    let lits: Vec<TokenStream2> = relevant
-                        .iter()
-                        .map(|&k| {
-                            let atom = &self.atoms[k];
-                            if bits & (1 << k) == 0 {
-                                quote! { not(#atom) }
-                            } else {
-                                quote! { #atom }
-                            }
-                        })
-                        .collect();
-                    match lits.as_slice() {
-                        [single] => single.clone(),
-                        lits => quote! { all(#(#lits),*) },
-                    }
-                })
+        let terms: Vec<TokenStream2> = minimal_cover(self.bases.len(), outcomes)
+            .into_iter()
+            .map(|cube| {
+                let lits: Vec<TokenStream2> = (0..self.bases.len())
+                    .filter(|&k| cube.care & (1 << k) != 0)
+                    .map(|k| {
+                        let base = &self.bases[k];
+                        if cube.value & (1 << k) == 0 {
+                            quote! { not(#base) }
+                        } else {
+                            quote! { #base }
+                        }
+                    })
+                    .collect();
+                match lits.as_slice() {
+                    [single] => single.clone(),
+                    lits => quote! { all(#(#lits),*) },
+                }
             })
             .collect();
         match terms.as_slice() {
@@ -177,7 +240,76 @@ impl CfgAtoms {
     }
 }
 
-/// One truth assignment of a [`CfgAtoms`] set.
+/// A product term: the assignments whose `care` bits equal `value`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct Cube {
+    care: u32,
+    value: u32,
+}
+
+impl Cube {
+    const fn covers(self, bits: u32) -> bool {
+        bits & self.care == self.value
+    }
+}
+
+/// A small sum of products covering exactly the assignments where `outcomes`
+/// holds: the prime implicants (Quine–McCluskey), then a greedy cover.
+fn minimal_cover(n: usize, outcomes: &[bool]) -> Vec<Cube> {
+    let minterms: Vec<u32> = (0u32..)
+        .zip(outcomes)
+        .filter_map(|(bits, on)| on.then_some(bits))
+        .collect();
+    let full = (1u32 << n) - 1;
+    let mut current: Vec<Cube> = minterms
+        .iter()
+        .map(|&value| Cube { care: full, value })
+        .collect();
+    let mut primes = Vec::new();
+    while !current.is_empty() {
+        let mut merged = vec![false; current.len()];
+        let mut next: Vec<Cube> = Vec::new();
+        for i in 0..current.len() {
+            for j in i + 1..current.len() {
+                let (a, b) = (current[i], current[j]);
+                let diff = a.value ^ b.value;
+                if a.care == b.care && diff.is_power_of_two() {
+                    merged[i] = true;
+                    merged[j] = true;
+                    let cube = Cube {
+                        care: a.care & !diff,
+                        value: a.value & !diff,
+                    };
+                    if !next.contains(&cube) {
+                        next.push(cube);
+                    }
+                }
+            }
+        }
+        primes.extend(
+            current
+                .iter()
+                .zip(&merged)
+                .filter_map(|(cube, merged)| (!merged).then_some(*cube)),
+        );
+        current = next;
+    }
+
+    let mut uncovered = minterms;
+    let mut cover = Vec::new();
+    while let Some(best) = primes
+        .iter()
+        .copied()
+        .max_by_key(|p| uncovered.iter().filter(|&&m| p.covers(m)).count())
+        .filter(|p| uncovered.iter().any(|&m| p.covers(m)))
+    {
+        uncovered.retain(|&m| !best.covers(m));
+        cover.push(best);
+    }
+    cover
+}
+
+/// One truth assignment of a [`CfgAtoms`] set's base predicates.
 pub struct Assignment<'a> {
     atoms: &'a CfgAtoms,
     bits: u32,
@@ -185,7 +317,12 @@ pub struct Assignment<'a> {
 
 impl Assignment<'_> {
     fn holds(&self, pred: &TokenStream2) -> Option<bool> {
-        self.atoms.index_of(pred).map(|k| self.bits & (1 << k) != 0)
+        let key = pred.to_string();
+        self.atoms
+            .atoms
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map(|(_, expr)| expr.eval(self.bits))
     }
 
     /// `attrs` as rustc would leave them under this assignment: a `cfg_attr`
@@ -261,19 +398,15 @@ fn split_cfg_attr(meta: &Meta) -> Option<(Meta, Vec<Meta>)> {
 }
 
 /// Whether a field's presence can change what gets injected: it carries an
-/// `oopsie` helper (possibly cfg_attr-gated) or has a detectable trace,
-/// timestamp, or location type.
-fn is_injection_relevant(field: &syn::Field) -> bool {
+/// `oopsie` helper (possibly cfg_attr-gated, so its roles are unknown until
+/// resolved) or its type fills an injectable role.
+fn is_injection_relevant(field: &syn::Field, timestamp_type: &syn::Type) -> bool {
     fn mentions_oopsie(meta: &Meta) -> bool {
         meta.path().is_ident("oopsie")
             || split_cfg_attr(meta).is_some_and(|(_, gated)| gated.iter().any(mentions_oopsie))
     }
     field.attrs.iter().any(|a| mentions_oopsie(&a.meta))
-        || is_backtrace_type(&field.ty)
-        || is_spantrace_type(&field.ty)
-        || is_traces_type(&field.ty)
-        || is_timestamp_type(&field.ty)
-        || is_location_type(&field.ty)
+        || TraceRole::of_type(&field.ty, timestamp_type).any()
 }
 
 #[cfg(test)]
@@ -286,10 +419,34 @@ mod tests {
         item.fields
     }
 
+    fn collect(attrs: &[Attribute], fields: &Fields) -> syn::Result<CfgAtoms> {
+        CfgAtoms::collect(
+            [attrs],
+            fields,
+            &parse_quote!(::std::time::SystemTime),
+            proc_macro2::Span::call_site(),
+        )
+    }
+
+    fn atoms(preds: &[TokenStream2]) -> CfgAtoms {
+        let mut atoms = CfgAtoms::default();
+        for pred in preds {
+            atoms.intern(pred);
+        }
+        atoms
+    }
+
+    fn cfg(gate: &Gate) -> String {
+        let Gate::Cfg(pred) = gate else {
+            panic!("expected a conditional gate, got {gate:?}");
+        };
+        pred.to_string()
+    }
+
     #[test]
     fn no_conditionals_yield_a_single_assignment() {
         let f = fields(parse_quote! { struct S { #[cfg(feature = "x")] info: String } });
-        let atoms = CfgAtoms::collect([], &f, proc_macro2::Span::call_site()).unwrap();
+        let atoms = collect(&[], &f).unwrap();
         assert_eq!(atoms.assignments().count(), 1);
     }
 
@@ -297,12 +454,7 @@ mod tests {
     fn cfg_attr_oopsie_is_expanded_or_dropped() {
         let attrs: Vec<Attribute> =
             vec![parse_quote! { #[cfg_attr(feature = "x", oopsie(traced = false), doc = "d")] }];
-        let atoms = CfgAtoms::collect(
-            [attrs.as_slice()],
-            &Fields::Unit,
-            proc_macro2::Span::call_site(),
-        )
-        .unwrap();
+        let atoms = collect(&attrs, &Fields::Unit).unwrap();
         let resolved: Vec<Vec<Attribute>> = atoms
             .assignments()
             .map(|a| a.resolve_attrs(&attrs))
@@ -315,7 +467,7 @@ mod tests {
     #[test]
     fn cfg_gated_trace_field_is_an_atom() {
         let f = fields(parse_quote! { struct S { #[cfg(feature = "x")] bt: Backtrace } });
-        let atoms = CfgAtoms::collect([], &f, proc_macro2::Span::call_site()).unwrap();
+        let atoms = collect(&[], &f).unwrap();
         let counts: Vec<usize> = atoms
             .assignments()
             .map(|a| a.resolve_fields(&f).len())
@@ -324,21 +476,100 @@ mod tests {
     }
 
     #[test]
+    fn cfg_gated_configured_timestamp_type_is_an_atom() {
+        let f = fields(parse_quote! { struct S { #[cfg(feature = "x")] at: Stamp } });
+        let atoms = CfgAtoms::collect([], &f, &parse_quote!(Stamp), proc_macro2::Span::call_site())
+            .unwrap();
+        assert_eq!(atoms.assignments().count(), 2);
+    }
+
+    #[test]
+    fn correlated_predicates_share_their_base() {
+        let attrs: Vec<Attribute> =
+            vec![parse_quote! { #[cfg_attr(feature = "a", oopsie(traced = false))] }];
+        let f = fields(parse_quote! {
+            struct S { #[cfg(all(unix, not(feature = "a")))] bt: Backtrace }
+        });
+        let atoms = collect(&attrs, &f).unwrap();
+        let seen: Vec<(bool, bool)> = atoms
+            .assignments()
+            .map(|a| {
+                (
+                    !a.resolve_attrs(&attrs).is_empty(),
+                    !a.resolve_fields(&f).is_empty(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            seen,
+            [(false, false), (true, false), (false, true), (true, false)]
+        );
+    }
+
+    #[test]
+    fn constant_predicates_add_no_assignments() {
+        let attrs: Vec<Attribute> = vec![
+            parse_quote! { #[cfg_attr(all(), oopsie(traced = false))] },
+            parse_quote! { #[cfg_attr(any(), oopsie(code = "x"))] },
+        ];
+        let f = fields(parse_quote! {
+            struct S { #[cfg(any())] bt: Backtrace, #[cfg(not(any()))] st: SpanTrace }
+        });
+        let atoms = collect(&attrs, &f).unwrap();
+        let resolved: Vec<(usize, usize)> = atoms
+            .assignments()
+            .map(|a| (a.resolve_attrs(&attrs).len(), a.resolve_fields(&f).len()))
+            .collect();
+        assert_eq!(resolved, [(1, 1)]);
+    }
+
+    #[test]
+    fn too_many_bases_are_listed() {
+        let f = fields(parse_quote! {
+            struct S {
+                #[cfg(all(a, b, c))] bt: Backtrace,
+                #[cfg(any(d, e, f))] st: SpanTrace,
+                #[cfg(all(g, h, not(i)))] at: SystemTime,
+            }
+        });
+        let err = collect(&[], &f).err().unwrap();
+        assert_eq!(
+            err.to_string(),
+            "too many distinct `cfg` predicates affect trace injection here (at most 8, found \
+             9: `a`, `b`, `c`, `d`, `e`, `f`, `g`, `h`, `i`); move some `oopsie(...)` helpers \
+             out of `cfg_attr` or use `#[derive(Oopsie)]` with explicit trace fields"
+        );
+    }
+
+    #[test]
     fn gate_drops_atoms_the_outcome_ignores() {
-        let mut atoms = CfgAtoms::default();
-        atoms.intern(quote! { a });
-        atoms.intern(quote! { b });
-        let Gate::Cfg(pred) = atoms.gate(&[true, false, true, false]) else {
-            panic!("expected a conditional gate");
-        };
-        assert_eq!(pred.to_string(), "not (a)");
+        let atoms = atoms(&[quote! { a }, quote! { b }]);
+        assert_eq!(cfg(&atoms.gate(&[true, false, true, false])), "not (a)");
     }
 
     #[test]
     fn gate_is_unconditional_when_outcomes_agree() {
-        let mut atoms = CfgAtoms::default();
-        atoms.intern(quote! { a });
+        let atoms = atoms(&[quote! { a }]);
         assert!(matches!(atoms.gate(&[true, true]), Gate::On));
         assert!(atoms.gate(&[false, false]).is_off());
+    }
+
+    #[test]
+    fn gate_merges_adjacent_terms() {
+        let atoms = atoms(&[quote! { a }, quote! { b }, quote! { c }]);
+        let outcomes: Vec<bool> = (0u32..8)
+            .map(|bits| bits & 1 != 0 || bits & 0b110 == 0b110)
+            .collect();
+        assert_eq!(cfg(&atoms.gate(&outcomes)), "any (a , all (b , c))");
+    }
+
+    #[test]
+    fn gate_names_the_bases_of_a_compound_atom() {
+        let atoms = atoms(&[quote! { all(feature = "x", not(unix)) }]);
+        let outcomes: Vec<bool> = (0u32..4).map(|bits| bits == 0b01).collect();
+        assert_eq!(
+            cfg(&atoms.gate(&outcomes)),
+            "all (feature = \"x\" , not (unix))"
+        );
     }
 }

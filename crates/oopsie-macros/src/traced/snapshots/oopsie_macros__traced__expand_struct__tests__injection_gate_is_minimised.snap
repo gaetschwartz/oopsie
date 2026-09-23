@@ -1,0 +1,5 @@
+---
+source: crates/oopsie-macros/src/traced/expand_struct.rs
+expression: out
+---
+struct S { # [cfg (all (feature = "a" , feature = "b"))] bt : Backtrace , # [cfg (all (feature = "a" , not (feature = "b")))] bt2 : Backtrace , # [cfg (feature = "c")] st : SpanTrace , # [cfg (not (feature = "a"))] # [oopsie (backtrace)] __oopsie_backtrace : :: oopsie :: __private :: alloc :: boxed :: Box < :: oopsie :: Backtrace > , # [cfg (not (feature = "c"))] # [oopsie (spantrace)] __oopsie_spantrace : :: oopsie :: __private :: alloc :: boxed :: Box < :: oopsie :: SpanTrace > , # [oopsie (location)] __oopsie_location : & 'static :: core :: panic :: Location < 'static > }

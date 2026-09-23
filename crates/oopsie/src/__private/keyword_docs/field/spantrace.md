@@ -1,7 +1,9 @@
 Marks this field as the captured span trace, surfaced via
-`Diagnostic::oopsie_spantrace`. The field's type must have `SpanTrace` as its
-last path segment; it is auto-captured (and excluded from the selector). Marking
-a field is only needed when its type isn't recognized automatically.
+`Diagnostic::oopsie_spantrace`. The field may be of any type implementing
+`Capturable` and `Borrow<SpanTrace>`, such as an alias or a wrapper of your own;
+it is auto-captured (and excluded from the selector). Marking a field is only
+needed when its type isn't recognized automatically: unmarked fields are detected
+by a type whose last path segment is `SpanTrace` (optionally boxed).
 
 Forms: `spantrace`, `spantrace = true`, `spantrace = false`.
 

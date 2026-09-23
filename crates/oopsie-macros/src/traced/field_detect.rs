@@ -33,15 +33,16 @@ pub fn extract_boxed_inner(ty: &syn::Type) -> Option<&syn::Type> {
     })
 }
 
-// Trace fields are classified (in `parse.rs`) and detected as already-present
-// (in `check_existing_fields`) by these predicates alone: a field is a trace
-// field iff it carries an explicit `#[oopsie(backtrace|spantrace|traces)]`
-// attribute or its type matches here. Matching is on the type's last path
-// segment only — a proc-macro has no type information, so re-exports
-// (`oopsie::Backtrace`, `oopsie_core::Backtrace`) all match, an opaque alias
-// (`type Bt = Backtrace; field: Bt`) does not, and an unrelated user type whose
-// final segment is `Backtrace` is a false positive. The explicit attribute is
-// the escape hatch for the alias case.
+// A field is a trace field iff it carries an explicit
+// `#[oopsie(backtrace|spantrace|traces)]` attribute or its type matches one of
+// these predicates; both classification (in `parse.rs`) and already-present
+// detection (in `check_existing_fields`) apply that rule. Matching is on the
+// type's last path segment only — a proc-macro has no type information, so
+// re-exports (`oopsie::Backtrace`, `oopsie_core::Backtrace`) all match, an
+// opaque alias (`type Bt = Backtrace; field: Bt`) does not, and an unrelated
+// user type whose final segment is `Backtrace` is a false positive. The
+// explicit backtrace/spantrace attribute accepts any type, which covers
+// aliases and custom trace types.
 pub fn is_backtrace_type(ty: &syn::Type) -> bool {
     is_ident_type(ty, "Backtrace") || is_boxed_ident_type(ty, "Backtrace")
 }
@@ -114,6 +115,55 @@ fn is_boxed_ident_type(ty: &syn::Type, ident: &str) -> bool {
         syn::GenericArgument::Type(inner_ty) => is_ident_type(inner_ty, ident),
         _ => false,
     })
+}
+
+/// The injectable roles a field fills, by explicit `#[oopsie(...)]` role or by
+/// type; a field filling a role suppresses injection of that role's field.
+#[derive(Clone, Copy, Default)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "one flag per injectable trace/diagnostic role"
+)]
+pub struct TraceRole {
+    pub backtrace: bool,
+    pub spantrace: bool,
+    pub traces: bool,
+    pub location: bool,
+    pub timestamp: bool,
+}
+
+impl TraceRole {
+    /// The roles `ty` fills on its own; `timestamp_type` is the configured
+    /// timestamp type, matched exactly on top of the name heuristic.
+    pub fn of_type(ty: &syn::Type, timestamp_type: &syn::Type) -> Self {
+        Self {
+            backtrace: is_backtrace_type(ty),
+            spantrace: is_spantrace_type(ty),
+            traces: is_traces_type(ty),
+            location: is_location_type(ty),
+            timestamp: is_timestamp_type(ty) || ty == timestamp_type,
+        }
+    }
+
+    /// The roles `field` fills, given its parsed helper attributes.
+    pub fn of_field(
+        field: &syn::Field,
+        attrs: &crate::derive::parse::FieldAttrs,
+        timestamp_type: &syn::Type,
+    ) -> Self {
+        let by_type = Self::of_type(&field.ty, timestamp_type);
+        Self {
+            backtrace: attrs.backtrace || by_type.backtrace,
+            spantrace: attrs.spantrace || by_type.spantrace,
+            traces: attrs.traces || by_type.traces,
+            location: attrs.location || by_type.location,
+            timestamp: by_type.timestamp,
+        }
+    }
+
+    pub const fn any(self) -> bool {
+        self.backtrace || self.spantrace || self.traces || self.location || self.timestamp
+    }
 }
 
 #[cfg(test)]

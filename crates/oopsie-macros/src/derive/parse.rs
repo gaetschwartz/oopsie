@@ -1930,11 +1930,21 @@ mod tests {
     }
 
     #[test]
-    fn categorize_rejects_explicit_backtrace_attr_on_wrong_type() {
+    fn categorize_takes_explicit_backtrace_attr_on_any_type() {
         let item: syn::ItemStruct = parse_quote! {
-            struct S { #[oopsie(backtrace)] b: String }
+            struct S { #[oopsie(backtrace)] b: Bt }
         };
-        CategorizedFields::from_fields(&item.fields).unwrap_err();
+        let cats = CategorizedFields::from_fields(&item.fields).unwrap();
+        assert_eq!(cats.backtrace_field, Some(quote::format_ident!("b")));
+    }
+
+    #[test]
+    fn categorize_takes_explicit_traces_attr_on_any_type() {
+        let item: syn::ItemStruct = parse_quote! {
+            struct S { #[oopsie(traces)] t: Pair }
+        };
+        let cats = CategorizedFields::from_fields(&item.fields).unwrap();
+        assert_eq!(cats.traces_field, Some(quote::format_ident!("t")));
     }
 
     #[test]
@@ -1961,6 +1971,11 @@ pub struct CategorizedFields {
     pub backtrace_field: Option<Ident>,
     /// Field identified as spantrace (via `#[oopsie(spantrace)]` or `SpanTrace` type).
     pub spantrace_field: Option<Ident>,
+    /// Whether the backtrace field is a `Box<_>`, so accessors borrow the trace
+    /// from the boxed value rather than the box.
+    pub backtrace_boxed: bool,
+    /// See [`Self::backtrace_boxed`].
+    pub spantrace_boxed: bool,
     /// Field holding the packed `(Backtrace, SpanTrace)` pair (via
     /// `#[oopsie(traces)]` or tuple-type detection).
     pub traces_field: Option<Ident>,
@@ -2071,7 +2086,8 @@ impl CategorizedFields {
     /// Categorize fields of a variant/struct into source, auto, and user fields.
     pub fn from_fields(fields: &syn::Fields) -> syn::Result<Self> {
         use crate::traced::field_detect::{
-            is_backtrace_type, is_location_type, is_spantrace_type, is_traces_type,
+            extract_boxed_inner, is_backtrace_type, is_location_type, is_spantrace_type,
+            is_traces_type,
         };
 
         let mut source = None;
@@ -2080,6 +2096,8 @@ impl CategorizedFields {
         let mut provides = Vec::new();
         let mut backtrace_field = None;
         let mut spantrace_field = None;
+        let mut backtrace_boxed = false;
+        let mut spantrace_boxed = false;
         let mut traces_field = None;
         let mut location_field = None;
         let mut help_field = None;
@@ -2094,6 +2112,8 @@ impl CategorizedFields {
                     provides,
                     backtrace_field,
                     spantrace_field,
+                    backtrace_boxed: false,
+                    spantrace_boxed: false,
                     traces_field,
                     location_field,
                     help_field,
@@ -2121,30 +2141,16 @@ impl CategorizedFields {
 
             // Detect backtrace/spantrace/traces/help fields. A trace field is
             // one carrying an explicit `#[oopsie(...)]` attribute or whose type
-            // matches (by last path segment). A field merely *named* `backtrace`
-            // of the wrong type is an ordinary field — the real trace is injected
-            // separately under a mangled name. The type-based match is skipped
-            // for the source field: a real `oopsie::Backtrace`/`SpanTrace` can
-            // never implement `Error`, so a source field whose own error type
-            // merely happens to share that last segment is never a real trace.
-            if attrs.backtrace && !is_backtrace_type(&field.ty) {
-                return Err(syn::Error::new_spanned(
-                    field,
-                    "`#[oopsie(backtrace)]` requires a field whose type's last path segment is `Backtrace`",
-                ));
-            }
-            if attrs.spantrace && !is_spantrace_type(&field.ty) {
-                return Err(syn::Error::new_spanned(
-                    field,
-                    "`#[oopsie(spantrace)]` requires a field whose type's last path segment is `SpanTrace`",
-                ));
-            }
-            if attrs.traces && !is_traces_type(&field.ty) {
-                return Err(syn::Error::new_spanned(
-                    field,
-                    "`#[oopsie(traces)]` requires a field of type `(Backtrace, SpanTrace)`",
-                ));
-            }
+            // matches (by last path segment). An explicit backtrace/spantrace/
+            // traces attribute accepts any type; the generated accessors then
+            // impose the real requirements (`Capturable`, plus `Borrow` of the
+            // trace or a `(Backtrace, SpanTrace)` pair shape). A field merely
+            // *named* `backtrace` of the wrong type is an ordinary field — the
+            // real trace is injected separately under a mangled name. The
+            // type-based match is skipped for the source field: a real
+            // `oopsie::Backtrace`/`SpanTrace` can never implement `Error`, so a
+            // source field whose own error type merely happens to share that
+            // last segment is never a real trace.
             if attrs.location && !is_location_type(&field.ty) {
                 return Err(syn::Error::new_spanned(
                     field,
@@ -2160,6 +2166,7 @@ impl CategorizedFields {
                     ));
                 }
                 backtrace_field = Some(ident.clone());
+                backtrace_boxed = extract_boxed_inner(&field.ty).is_some();
             }
             if attrs.spantrace || (!attrs.is_source() && is_spantrace_type(&field.ty)) {
                 if spantrace_field.is_some() {
@@ -2169,6 +2176,7 @@ impl CategorizedFields {
                     ));
                 }
                 spantrace_field = Some(ident.clone());
+                spantrace_boxed = extract_boxed_inner(&field.ty).is_some();
             }
             if is_traces {
                 if traces_field.is_some() {
@@ -2286,6 +2294,8 @@ impl CategorizedFields {
             provides,
             backtrace_field,
             spantrace_field,
+            backtrace_boxed,
+            spantrace_boxed,
             traces_field,
             location_field,
             help_field,

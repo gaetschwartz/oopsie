@@ -7,25 +7,20 @@ use syn::{Fields, FieldsNamed, parse_quote, token};
 use super::args::ResolvedTraceArgs;
 use super::cfg_view::{CfgAtoms, Gate};
 use super::config::{FieldExistence, FieldInjectorConfig, FieldsToInject, InjectPlan};
-use super::field_detect::{
-    is_backtrace_type, is_location_type, is_spantrace_type, is_timestamp_type, is_traces_type,
-};
-use crate::derive::parse::{ResolvedForward, field_forward};
+use super::field_detect::TraceRole;
+use crate::derive::parse::{FieldAttrs, ResolvedForward, field_forward};
 
-/// Check which fields already exist in a `Fields` collection.
+/// Check which fields already exist in a `Fields` collection, by explicit
+/// `#[oopsie(backtrace|spantrace|traces|location)]` role or by type. `attrs`
+/// holds each field's parsed helper attributes, in field order.
 pub(super) fn check_existing_fields(
     fields: &Fields,
+    attrs: &[FieldAttrs],
     timestamp_type: &syn::Type,
 ) -> syn::Result<FieldExistence> {
     let mut existence = FieldExistence::default();
 
-    let iter: Box<dyn Iterator<Item = &syn::Field>> = match fields {
-        Fields::Named(f) => Box::new(f.named.iter()),
-        Fields::Unnamed(f) => Box::new(f.unnamed.iter()),
-        Fields::Unit => return Ok(existence),
-    };
-
-    for field in iter {
+    for (field, attrs) in fields.iter().zip(attrs) {
         // The mangled name guards re-expansion of already-injected fields; a
         // user field merely *named* `timestamp` of an unrelated type is an
         // ordinary field and does not suppress injection (same rule as
@@ -35,34 +30,29 @@ pub(super) fn check_existing_fields(
             .as_ref()
             .is_some_and(|id| id == "__oopsie_timestamp");
 
-        let has_traces_type = is_traces_type(&field.ty);
-        if has_traces_type {
+        let role = TraceRole::of_field(field, attrs, timestamp_type);
+        if role.traces {
             // One packed field supplies both traces; mark all three so neither
             // separate field is also injected.
             existence.has_traces = true;
             existence.has_backtrace = true;
             existence.has_spantrace = true;
         }
-
-        let has_backtrace_type = is_backtrace_type(&field.ty);
-        if has_backtrace_type {
+        if role.backtrace {
             existence.has_backtrace = true;
         }
-        let has_spantrace_type = is_spantrace_type(&field.ty);
-        if has_spantrace_type {
+        if role.spantrace {
             existence.has_spantrace = true;
         }
-        let is_timestamp_typed = is_timestamp_type(&field.ty) || field.ty == *timestamp_type;
-        if is_injected_timestamp || is_timestamp_typed {
+        if is_injected_timestamp || role.timestamp {
             existence.has_timestamp = true;
         }
-        if is_timestamp_typed && !is_injected_timestamp {
+        if role.timestamp && !is_injected_timestamp {
             existence
                 .timestamp_conflict
                 .get_or_insert_with(|| field.span());
         }
-        let has_location_type = is_location_type(&field.ty);
-        if has_location_type {
+        if role.location {
             existence.has_location = true;
         }
 
@@ -71,10 +61,10 @@ pub(super) fn check_existing_fields(
         // unnoticed and collide with the field `inject_fields` pushes later —
         // rustc then reports the resulting duplicate-field shape, not this
         // cause. Reject the collision here, at the actual field.
-        reject_mangled_collision(field, "__oopsie_traces", has_traces_type)?;
-        reject_mangled_collision(field, "__oopsie_backtrace", has_backtrace_type)?;
-        reject_mangled_collision(field, "__oopsie_spantrace", has_spantrace_type)?;
-        reject_mangled_collision(field, "__oopsie_location", has_location_type)?;
+        reject_mangled_collision(field, "__oopsie_traces", role.traces)?;
+        reject_mangled_collision(field, "__oopsie_backtrace", role.backtrace)?;
+        reject_mangled_collision(field, "__oopsie_spantrace", role.spantrace)?;
+        reject_mangled_collision(field, "__oopsie_location", role.location)?;
     }
     Ok(existence)
 }
@@ -84,6 +74,17 @@ pub(super) struct ItemFacts {
     pub traced: bool,
     pub has_user_code: bool,
     pub transparent: bool,
+}
+
+/// The injection outcome for one cfg assignment that doesn't reject the item.
+enum Decision {
+    Inject {
+        fields: FieldsToInject,
+        auto_code: bool,
+    },
+    /// The attributes rustc would leave don't parse: nothing is injected, and
+    /// the derive reports the error if this assignment is the real one.
+    Deferred(syn::Error),
 }
 
 /// Decide what to inject into one struct or variant, and under which cfg
@@ -98,46 +99,79 @@ pub(super) fn plan_injection(
     span: proc_macro2::Span,
     facts: impl Fn(&[syn::Attribute]) -> syn::Result<ItemFacts>,
 ) -> syn::Result<(InjectPlan, Gate)> {
-    let atoms = CfgAtoms::collect([attrs], fields, span)?;
-    let mut decisions = Vec::new();
-    for assignment in atoms.assignments() {
-        let attrs = assignment.resolve_attrs(attrs);
-        let fields = assignment.resolve_fields(fields);
-        decisions.push(decide(resolved, config, &attrs, &fields, &facts)?);
-    }
-    // An assignment whose attributes don't parse injects nothing; the derive
-    // reports the error if that assignment is the real one. Only when every
-    // assignment fails is the error certain.
-    if let Some(Err(first)) = decisions.first()
-        && decisions.iter().all(Result::is_err)
+    let atoms = CfgAtoms::collect([attrs], fields, &config.timestamp_type, span)?;
+    let decisions: Vec<syn::Result<Decision>> = atoms
+        .assignments()
+        .map(|assignment| {
+            let attrs = assignment.resolve_attrs(attrs);
+            let fields = assignment.resolve_fields(fields);
+            decide(resolved, config, &attrs, &fields, &facts)
+        })
+        .collect();
+    reject_if_any(&atoms, &decisions)?;
+    if let Some(Ok(Decision::Deferred(first))) = decisions.first()
+        && decisions
+            .iter()
+            .all(|d| matches!(d, Ok(Decision::Deferred(_))))
     {
         return Err(first.clone());
     }
-    let decisions: Vec<Option<&(FieldsToInject, bool)>> =
-        decisions.iter().map(|d| d.as_ref().ok()).collect();
-    let injected: Vec<Option<&FieldsToInject>> =
-        decisions.iter().map(|d| d.map(|(f, _)| f)).collect();
+    let injected: Vec<Option<&FieldsToInject>> = decisions
+        .iter()
+        .map(|d| match d {
+            Ok(Decision::Inject { fields, .. }) => Some(fields),
+            Ok(Decision::Deferred(_)) | Err(_) => None,
+        })
+        .collect();
     let auto_code: Vec<bool> = decisions
         .iter()
-        .map(|d| d.is_some_and(|(_, code)| *code))
+        .map(|d| match d {
+            Ok(Decision::Inject { auto_code, .. }) => *auto_code,
+            Ok(Decision::Deferred(_)) | Err(_) => false,
+        })
         .collect();
     Ok((InjectPlan::merge(&atoms, &injected), atoms.gate(&auto_code)))
 }
 
-/// The injection decision for one cfg assignment. The outer error is fatal;
-/// the inner one is an attribute-parse error the derive re-reports.
+/// Every base-predicate assignment is a configuration that can be built, so an
+/// assignment that rejects the item is reported even when it isn't the current
+/// one, naming the configurations that hit it.
+fn reject_if_any(atoms: &CfgAtoms, decisions: &[syn::Result<Decision>]) -> syn::Result<()> {
+    let Some(first) = decisions.iter().find_map(|d| d.as_ref().err()) else {
+        return Ok(());
+    };
+    let rejected: Vec<bool> = decisions.iter().map(Result::is_err).collect();
+    match atoms.gate(&rejected) {
+        Gate::Off | Gate::On => Err(first.clone()),
+        Gate::Cfg(pred) => Err(syn::Error::new(
+            first.span(),
+            format!("{first} (in configurations where `cfg({pred})` holds)"),
+        )),
+    }
+}
+
+/// The injection decision for one cfg assignment; an error rejects the item
+/// under that assignment.
 fn decide(
     resolved: &ResolvedTraceArgs<'_>,
     config: &FieldInjectorConfig,
     attrs: &[syn::Attribute],
     fields: &Fields,
     facts: impl Fn(&[syn::Attribute]) -> syn::Result<ItemFacts>,
-) -> syn::Result<syn::Result<(FieldsToInject, bool)>> {
+) -> syn::Result<Decision> {
     let facts = match facts(attrs) {
         Ok(facts) => facts,
-        Err(err) => return Ok(Err(err)),
+        Err(err) => return Ok(Decision::Deferred(err)),
     };
-    let existence = check_existing_fields(fields, &config.timestamp_type)?;
+    let field_attrs = match fields
+        .iter()
+        .map(FieldAttrs::from_field)
+        .collect::<syn::Result<Vec<_>>>()
+    {
+        Ok(field_attrs) => field_attrs,
+        Err(err) => return Ok(Decision::Deferred(err)),
+    };
+    let existence = check_existing_fields(fields, &field_attrs, &config.timestamp_type)?;
     if facts.traced
         && resolved.timestamp_explicit
         && let Some(span) = existence.timestamp_conflict
@@ -152,7 +186,7 @@ fn decide(
             .collect::<syn::Result<Vec<_>>>()
         {
             Ok(forwards) => forwards.into_iter().find(|f| f.any()).unwrap_or_default(),
-            Err(err) => return Ok(Err(err)),
+            Err(err) => return Ok(Decision::Deferred(err)),
         }
     } else {
         ResolvedForward::default()
@@ -184,7 +218,10 @@ fn decide(
         facts.has_user_code,
         facts.transparent,
     );
-    Ok(Ok((to_inject, auto_code)))
+    Ok(Decision::Inject {
+        fields: to_inject,
+        auto_code,
+    })
 }
 
 /// Error for `traced(timestamp)` requested on a struct/variant whose
@@ -284,7 +321,7 @@ fn inject_into_named(
         if gate.is_off() {
             return;
         }
-        let cfg = gate.cfg_attr();
+        let cfg = gate.cfg_attribute();
         fields.named.push(parse_quote! { #cfg #field });
     };
     push(
@@ -361,6 +398,14 @@ mod tests {
         item.fields
     }
 
+    fn existence_of(fields: &Fields, ts: &syn::Type) -> syn::Result<FieldExistence> {
+        let attrs = fields
+            .iter()
+            .map(FieldAttrs::from_field)
+            .collect::<syn::Result<Vec<_>>>()?;
+        check_existing_fields(fields, &attrs, ts)
+    }
+
     fn test_config() -> FieldInjectorConfig {
         FieldInjectorConfig {
             backtrace_ident: format_ident!("__oopsie_backtrace"),
@@ -388,7 +433,7 @@ mod tests {
     fn check_existing_fields_detects_backtrace() {
         let fields = parse_fields(quote! { struct S { backtrace: Backtrace, message: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts).unwrap();
+        let existence = existence_of(&fields, &ts).unwrap();
         assert!(existence.has_backtrace);
         assert!(!existence.has_spantrace);
         assert!(!existence.has_timestamp);
@@ -398,7 +443,7 @@ mod tests {
     fn check_existing_fields_detects_spantrace() {
         let fields = parse_fields(quote! { struct S { trace: SpanTrace, message: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts).unwrap();
+        let existence = existence_of(&fields, &ts).unwrap();
         assert!(!existence.has_backtrace);
         assert!(existence.has_spantrace);
         assert!(!existence.has_timestamp);
@@ -408,14 +453,14 @@ mod tests {
     fn wrongly_typed_timestamp_name_does_not_suppress_injection() {
         let fields = parse_fields(quote! { struct S { timestamp: u64, msg: String } });
         let ts: syn::Type = parse_quote!(::std::time::SystemTime);
-        assert!(!check_existing_fields(&fields, &ts).unwrap().has_timestamp);
+        assert!(!existence_of(&fields, &ts).unwrap().has_timestamp);
     }
 
     #[test]
     fn timestamp_typed_field_suppresses_regardless_of_name() {
         let fields = parse_fields(quote! { struct S { when: SystemTime } });
         let ts: syn::Type = parse_quote!(::std::time::SystemTime);
-        assert!(check_existing_fields(&fields, &ts).unwrap().has_timestamp);
+        assert!(existence_of(&fields, &ts).unwrap().has_timestamp);
     }
 
     #[test]
@@ -423,7 +468,7 @@ mod tests {
         let fields = parse_fields(quote! { struct S { when: SystemTime } });
         let ts: syn::Type = parse_quote!(::std::time::SystemTime);
         assert!(
-            check_existing_fields(&fields, &ts)
+            existence_of(&fields, &ts)
                 .unwrap()
                 .timestamp_conflict
                 .is_some()
@@ -434,7 +479,7 @@ mod tests {
     fn reexpanded_injected_timestamp_field_does_not_record_conflict() {
         let fields = parse_fields(quote! { struct S { __oopsie_timestamp: SystemTime } });
         let ts: syn::Type = parse_quote!(::std::time::SystemTime);
-        let existence = check_existing_fields(&fields, &ts).unwrap();
+        let existence = existence_of(&fields, &ts).unwrap();
         assert!(existence.has_timestamp);
         assert!(existence.timestamp_conflict.is_none());
     }
@@ -443,7 +488,7 @@ mod tests {
     fn check_existing_fields_detects_none() {
         let fields = parse_fields(quote! { struct S { message: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts).unwrap();
+        let existence = existence_of(&fields, &ts).unwrap();
         assert!(!existence.has_backtrace);
         assert!(!existence.has_spantrace);
         assert!(!existence.has_timestamp);
@@ -453,7 +498,7 @@ mod tests {
     fn check_existing_fields_unit_returns_default() {
         let fields: syn::Fields = syn::Fields::Unit;
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts).unwrap();
+        let existence = existence_of(&fields, &ts).unwrap();
         assert!(!existence.has_backtrace);
     }
 
@@ -599,7 +644,7 @@ mod tests {
         let fields =
             parse_fields(quote! { struct S { t: Box<(Backtrace, SpanTrace)>, msg: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts).unwrap();
+        let existence = existence_of(&fields, &ts).unwrap();
         assert!(existence.has_traces);
         // A packed field stands in for both, suppressing separate injection.
         assert!(existence.has_backtrace && existence.has_spantrace);
@@ -609,7 +654,7 @@ mod tests {
     fn check_existing_fields_rejects_mangled_name_collision() {
         let fields = parse_fields(quote! { struct S { __oopsie_traces: u8, msg: String } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let err = check_existing_fields(&fields, &ts).err().unwrap();
+        let err = existence_of(&fields, &ts).err().unwrap();
         assert_eq!(
             err.to_string(),
             "`__oopsie_traces` conflicts with a field injected by `traced`; rename it"
@@ -620,7 +665,7 @@ mod tests {
     fn check_existing_fields_allows_correctly_typed_mangled_field() {
         let fields = parse_fields(quote! { struct S { __oopsie_backtrace: Box<Backtrace> } });
         let ts: syn::Type = parse_quote!(std::time::Instant);
-        let existence = check_existing_fields(&fields, &ts).unwrap();
+        let existence = existence_of(&fields, &ts).unwrap();
         assert!(existence.has_backtrace);
     }
 }

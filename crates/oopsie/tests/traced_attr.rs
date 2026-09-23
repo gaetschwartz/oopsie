@@ -627,14 +627,11 @@ fn timestamp_provide_surfaces_via_provider_api() {
 // Custom backtrace/spantrace type override
 //
 // Findings:
-// * `backtrace(r#type = Path)` injects `Path` as the field type. Constraints
-//   discovered: (a) the override's last path segment must be literally
-//   `Backtrace` (the injector tags the field `#[oopsie(backtrace)]`, whose
-//   field-type validation requires that segment name); (b) the type must
+// * `backtrace(r#type = Path)` injects `Path` as the field type. The type must
 //   implement `Capturable` AND `Borrow<oopsie::Backtrace>` (the generated
-//   Diagnostic accessor borrows it as `&oopsie::Backtrace`); (c) it must be
-//   inline (`boxed = false` on the trace) — `Box<Custom>` only borrows to
-//   `Custom`, not to `oopsie::Backtrace`, so a boxed custom type won't compile.
+//   Diagnostic accessor borrows it as `&oopsie::Backtrace`); boxed (the
+//   default), `Box<Path>` must implement that `Borrow` too, since `Box<Custom>`
+//   only borrows to `Custom` on its own.
 // ════════════════════════════════════════════════════════════════════════
 
 #[cfg(feature = "tracing")]
@@ -1041,7 +1038,7 @@ fn cfg_gated_in_trace_field_is_the_backtrace() {
     let err = CfgGatedInBacktraceOopsie { info: "x" }.build();
     assert!(std::ptr::eq(
         err.oopsie_backtrace().unwrap(),
-        &err.backtrace
+        &raw const err.backtrace
     ));
     assert!(err.oopsie_spantrace().is_some());
     let err = cfg_gated_trace_enum_oopsies::In.build();
@@ -1049,4 +1046,173 @@ fn cfg_gated_in_trace_field_is_the_backtrace() {
         unreachable!()
     };
     assert!(std::ptr::eq(err.oopsie_backtrace().unwrap(), backtrace));
+}
+
+// ---- explicit trace roles accept aliased and custom types ----
+
+type AliasedBt = oopsie::Backtrace;
+
+type AliasedTraces = Box<(oopsie::Backtrace, oopsie::SpanTrace)>;
+
+#[oopsie(traced)]
+pub struct AliasedTracesError {
+    info: String,
+    #[oopsie(traces)]
+    traces: AliasedTraces,
+}
+
+#[oopsie(traced)]
+pub struct AliasedBacktraceError {
+    info: String,
+    #[oopsie(backtrace)]
+    bt: AliasedBt,
+}
+
+pub mod renamed_trace {
+    #[derive(Debug)]
+    pub struct MyBt(pub oopsie::Backtrace);
+
+    impl oopsie::Capturable for MyBt {
+        #[track_caller]
+        fn capture() -> Self {
+            Self(oopsie::Capturable::capture())
+        }
+    }
+
+    impl core::borrow::Borrow<oopsie::Backtrace> for MyBt {
+        fn borrow(&self) -> &oopsie::Backtrace {
+            &self.0
+        }
+    }
+
+    #[derive(Debug)]
+    pub struct MySt(pub oopsie::SpanTrace);
+
+    impl oopsie::Capturable for MySt {
+        #[track_caller]
+        fn capture() -> Self {
+            Self(oopsie::Capturable::capture())
+        }
+    }
+
+    impl core::borrow::Borrow<oopsie::SpanTrace> for MySt {
+        fn borrow(&self) -> &oopsie::SpanTrace {
+            &self.0
+        }
+    }
+}
+
+#[oopsie(traced(packed = false, backtrace(r#type = renamed_trace::MyBt)))]
+pub enum RenamedBacktraceError {
+    #[oopsie("custom")]
+    Custom { info: String },
+}
+
+#[oopsie(traced(packed = false, spantrace(r#type = renamed_trace::MySt, boxed = false)))]
+pub struct RenamedSpantraceError {
+    info: String,
+}
+
+#[oopsie(traced(packed = false, backtrace(r#type = renamed_trace::MyBt)))]
+pub struct RenamedBoxedBacktraceError {
+    info: String,
+}
+
+#[test]
+fn explicit_trace_roles_accept_aliased_and_custom_types() {
+    use oopsie::Diagnostic as _;
+    let err = AliasedBacktraceOopsie { info: "x" }.build();
+    assert!(std::ptr::eq(
+        err.oopsie_backtrace().unwrap(),
+        &raw const err.bt
+    ));
+
+    let err = renamed_backtrace_oopsies::Custom { info: "x" }.build();
+    assert!(err.oopsie_backtrace().is_some());
+
+    let err = RenamedSpantraceOopsie { info: "x" }.build();
+    assert!(err.oopsie_spantrace().is_some());
+
+    let err = RenamedBoxedBacktraceOopsie { info: "x" }.build();
+    assert!(err.oopsie_backtrace().is_some());
+
+    let err = AliasedTracesOopsie { info: "x" }.build();
+    assert!(std::ptr::eq(
+        err.oopsie_backtrace().unwrap(),
+        &raw const err.traces.0
+    ));
+}
+
+// ---- correlated cfg predicates never combine into impossible configurations ----
+
+#[oopsie(traced)]
+pub enum CorrelatedCfgError {
+    #[cfg_attr(debug_assertions, oopsie(traced = false))]
+    #[oopsie("gated")]
+    Gated {
+        info: String,
+        #[cfg(not(debug_assertions))]
+        backtrace: oopsie::Backtrace,
+    },
+}
+
+#[oopsie(traced(timestamp))]
+pub enum CorrelatedTimestampError {
+    #[cfg_attr(not(debug_assertions), oopsie(traced = false))]
+    #[oopsie("gated")]
+    Gated {
+        #[cfg(not(any(debug_assertions)))]
+        at: std::time::SystemTime,
+    },
+}
+
+#[test]
+fn correlated_cfg_attr_and_cfg_field_agree() {
+    use oopsie::Diagnostic as _;
+    let err = correlated_cfg_oopsies::Gated { info: "x" }.build();
+    assert_eq!(err.oopsie_backtrace().is_some(), !cfg!(debug_assertions));
+}
+
+#[test]
+fn correlated_timestamp_field_never_conflicts() {
+    #[cfg(debug_assertions)]
+    {
+        let before = std::time::SystemTime::now();
+        let CorrelatedTimestampError::Gated {
+            __oopsie_timestamp, ..
+        } = correlated_timestamp_oopsies::Gated.build();
+        assert!(__oopsie_timestamp >= before);
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let at = std::time::SystemTime::now();
+        let CorrelatedTimestampError::Gated { at: stored } =
+            correlated_timestamp_oopsies::Gated { at }.build();
+        assert_eq!(stored, at);
+    }
+}
+
+// ---- `traced(timestamp)` only conflicts with a timestamp field that can exist ----
+
+#[oopsie(traced(timestamp))]
+pub struct AbsentTimestampFieldError {
+    info: String,
+    #[cfg(any())]
+    at: std::time::SystemTime,
+}
+
+#[oopsie(traced(timestamp))]
+pub struct ContradictoryTimestampFieldError {
+    info: String,
+    #[cfg(all(debug_assertions, not(debug_assertions)))]
+    at: std::time::SystemTime,
+}
+
+#[test]
+fn impossible_timestamp_field_keeps_the_injected_timestamp() {
+    let before = std::time::SystemTime::now();
+    let err = AbsentTimestampFieldOopsie { info: "x" }.build();
+    assert!(err.__oopsie_timestamp >= before);
+    let err = ContradictoryTimestampFieldOopsie { info: "x" }.build();
+    assert!(err.__oopsie_timestamp >= before);
 }

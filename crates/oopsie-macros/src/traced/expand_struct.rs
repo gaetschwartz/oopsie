@@ -55,10 +55,11 @@ mod tests {
 
     use super::*;
 
-    fn expand(args: &TracedArgs, defaults: &TracedDefaults) -> syn::Result<String> {
-        let mut item: syn::ItemStruct = parse_quote! {
-            struct Seen { last_seen: ::std::time::SystemTime }
-        };
+    fn expand_item(
+        args: &TracedArgs,
+        defaults: &TracedDefaults,
+        mut item: syn::ItemStruct,
+    ) -> syn::Result<String> {
         expand_struct(
             args,
             defaults,
@@ -67,6 +68,88 @@ mod tests {
             &mut item,
         )?;
         Ok(item.into_token_stream().to_string())
+    }
+
+    fn expand(args: &TracedArgs, defaults: &TracedDefaults) -> syn::Result<String> {
+        expand_item(
+            args,
+            defaults,
+            parse_quote! { struct Seen { last_seen: ::std::time::SystemTime } },
+        )
+    }
+
+    fn explicit_timestamp() -> TracedArgs {
+        TracedArgs::from_meta(&parse_quote!(traced(
+            timestamp,
+            code = false,
+            location = false
+        )))
+        .unwrap()
+    }
+
+    #[test]
+    fn timestamp_conflict_names_the_configurations_it_occurs_in() {
+        let err = expand_item(
+            &explicit_timestamp(),
+            &TracedDefaults::default(),
+            parse_quote! {
+                struct Seen { #[cfg(feature = "a")] at: ::std::time::SystemTime }
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            format!(
+                "{} (in configurations where `cfg(feature = \"a\")` holds)",
+                crate::traced::inject::timestamp_conflict_error(Span::call_site())
+            )
+        );
+    }
+
+    #[test]
+    fn impossible_timestamp_conflict_is_not_reported() {
+        let out = expand_item(
+            &explicit_timestamp(),
+            &TracedDefaults::default(),
+            parse_quote! {
+                struct Seen {
+                    #[cfg(all(feature = "a", not(feature = "a")))]
+                    at: ::std::time::SystemTime,
+                }
+            },
+        )
+        .unwrap();
+        insta::assert_snapshot!(out);
+    }
+
+    #[test]
+    fn statically_absent_timestamp_field_is_no_conflict() {
+        let out = expand_item(
+            &explicit_timestamp(),
+            &TracedDefaults::default(),
+            parse_quote! {
+                struct Seen { #[cfg(any())] at: ::std::time::SystemTime }
+            },
+        )
+        .unwrap();
+        insta::assert_snapshot!(out);
+    }
+
+    #[test]
+    fn injection_gate_is_minimised() {
+        let out = expand_item(
+            &TracedArgs::from_meta(&parse_quote!(traced(packed = false, code = false))).unwrap(),
+            &TracedDefaults::default(),
+            parse_quote! {
+                struct S {
+                    #[cfg(all(feature = "a", feature = "b"))] bt: Backtrace,
+                    #[cfg(all(feature = "a", not(feature = "b")))] bt2: Backtrace,
+                    #[cfg(feature = "c")] st: SpanTrace,
+                }
+            },
+        )
+        .unwrap();
+        insta::assert_snapshot!(out);
     }
 
     #[test]
