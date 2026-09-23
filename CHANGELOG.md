@@ -4,6 +4,23 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-rc.24] - 2026-09-23
+
+### Changed
+
+- An error with its own message no longer shows its source's error code or
+  help text; an exit code is still inherited from the nearest source that
+  has one.
+- Keywords written as `key = value` in the short display form, and field
+  types shadowed by a generated selector, are now compile errors.
+
+### Fixed
+
+- Backtraces hide runtime and capture frames under `line-tables-only` and in
+  release builds, and no longer drop user frames under `with_override`.
+- `#[cfg_attr(…, oopsie(…))]` is now honored by `#[oopsie::oopsie]`.
+- Explicit trace fields accept custom and aliased types.
+
 ## [0.1.0-rc.23] - 2026-09-11
 
 ### Changed
@@ -292,6 +309,8 @@ Initial release candidate.
 - Feature flags: `fancy`, `serde`, `tracing`, `chrono`, `jiff`, `extras`, and
   the nightly `unstable-*` set.
 
+[0.1.0-rc.24]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.24
+[0.1.0-rc.23]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.23
 [0.1.0-rc.22]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.22
 [0.1.0-rc.21]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.21
 [0.1.0-rc.20]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.20
