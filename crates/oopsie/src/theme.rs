@@ -243,5 +243,3 @@ pub fn set_theme(theme: Theme) {
 pub fn get_theme() -> Theme {
     *THEME.read().unwrap_or_else(PoisonError::into_inner)
 }
-
-// The global `THEME` roundtrip test lives in `tests/report.rs` (re-exec'd; it'd race other tests' colored-render reads in-process).

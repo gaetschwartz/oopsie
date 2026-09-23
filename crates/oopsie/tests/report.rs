@@ -94,15 +94,8 @@ fn test_report_colored() {
     });
 }
 
-/// The colored render path must actually emit ANSI escapes. Snapshotting the
-/// raw ANSI form is impractical (the escape codes break the `rs:N:C` line/col
-/// filter, pinning exact source lines), so this asserts the emission directly
-/// instead: `test_report_colored`'s snapshot only covers the ANSI-stripped
-/// text, so a regression that silently dropped all styling would slip past
-/// it. This is the positive counterpart to `test_no_colors_never_no_ansi`: it
-/// pins that `force_colors()` both colorizes (escapes present, incl. the
-/// specific red header SGR) and leaves the rendered text intact when the
-/// escapes are stripped.
+/// `force_colors()` emits ANSI (incl. the red header SGR) and strips back to
+/// the plain text; the snapshot covers only the stripped form.
 #[test]
 fn test_report_colored_emits_ansi() {
     common::force_backtrace();
@@ -140,25 +133,12 @@ fn report_theme_override_changes_output() {
     );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Global-state tests
-//
-// `set_theme` and `std::panic::set_hook` mutate process-wide state, so running
-// them in-process under `cargo test`'s default thread parallelism races every
-// other test that reads the same global (a colored-render reader for the
-// theme, any panicking test for the hook). Each such test re-execs this
-// binary as a child running only itself, isolating the mutation to a
-// throwaway process — the pattern established in `tests/panic_hook.rs`.
-// ─────────────────────────────────────────────────────────────────────────────
+// Tests mutating process-global state (theme, color mode, panic hook) re-exec
+// this binary so they can't race other tests.
 
 const GLOBAL_STATE_TEST_TRIGGER: &str = "OOPSIE_REPORT_GLOBAL_STATE_TEST_TRIGGER";
 
-/// Re-exec this test binary running only `child_test`, and assert it exited
-/// successfully — an assertion failure inside the child surfaces as a nonzero
-/// exit, which this turns into an ordinary test failure with the child's
-/// output attached. Also asserts libtest actually ran `child_test`: a rename
-/// or a move into a module makes `--exact` match zero tests, which exits 0
-/// and would otherwise pass silently.
+/// Re-exec this binary running only `child_test`; fail if it fails or never ran.
 fn run_isolated_child(child_test: &str) {
     let exe = std::env::current_exe().expect("locate test binary");
     let output = std::process::Command::new(exe)
@@ -208,10 +188,7 @@ fn report_follows_global_theme() {
     run_isolated_child("report_follows_global_theme_child");
 }
 
-/// `set_theme`/`get_theme` roundtrip through the process-global slot. Runs
-/// isolated via `run_isolated_child` because it mutates process-wide state
-/// and would race every other test reading it under `cargo test`'s default
-/// parallelism.
+/// `set_theme`/`get_theme` roundtrip through the process-global slot.
 #[test]
 fn theme_set_get_roundtrips_child() {
     if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {

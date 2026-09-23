@@ -33,16 +33,8 @@ pub fn extract_boxed_inner(ty: &syn::Type) -> Option<&syn::Type> {
     })
 }
 
-// A field is a trace field iff it carries an explicit
-// `#[oopsie(backtrace|spantrace|traces)]` attribute or its type matches one of
-// these predicates; both classification (in `parse.rs`) and already-present
-// detection (in `check_existing_fields`) apply that rule. Matching is on the
-// type's last path segment only — a proc-macro has no type information, so
-// re-exports (`oopsie::Backtrace`, `oopsie_core::Backtrace`) all match, an
-// opaque alias (`type Bt = Backtrace; field: Bt`) does not, and an unrelated
-// user type whose final segment is `Backtrace` is a false positive. The
-// explicit backtrace/spantrace attribute accepts any type, which covers
-// aliases and custom trace types.
+/// Last-path-segment match (a proc macro can't resolve types): aliases miss,
+/// unrelated `…::Backtrace` types hit.
 pub fn is_backtrace_type(ty: &syn::Type) -> bool {
     is_ident_type(ty, "Backtrace") || is_boxed_ident_type(ty, "Backtrace")
 }

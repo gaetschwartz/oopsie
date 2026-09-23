@@ -626,12 +626,8 @@ fn timestamp_provide_surfaces_via_provider_api() {
 // ════════════════════════════════════════════════════════════════════════
 // Custom backtrace/spantrace type override
 //
-// Findings:
-// * `backtrace(r#type = Path)` injects `Path` as the field type. The type must
-//   implement `Capturable` AND `Borrow<oopsie::Backtrace>` (the generated
-//   Diagnostic accessor borrows it as `&oopsie::Backtrace`); boxed (the
-//   default), `Box<Path>` must implement that `Borrow` too, since `Box<Custom>`
-//   only borrows to `Custom` on its own.
+// `backtrace(r#type = Path)` injects `Path` (boxed by default); it must implement
+// `Capturable` and `Borrow<oopsie::Backtrace>`.
 // ════════════════════════════════════════════════════════════════════════
 
 #[cfg(feature = "tracing")]
@@ -1254,8 +1250,6 @@ fn auto_code_ignores_shadowed_core_macros() {
         code.as_str()
     );
 }
-
-// ---- injected trace fields must not trip `#[deny(missing_docs)]` on a `pub` traced type ----
 
 /// A traced enum denying `missing_docs`, whose variant fields are public, so
 /// an undocumented injected field would trip it.

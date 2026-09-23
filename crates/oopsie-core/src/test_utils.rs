@@ -150,9 +150,6 @@ pub mod settings {
         settings.add_filter(&regex_escape(&WORKSPACE_ROOT), "[WORKSPACE]");
         settings.add_filter(&regex_escape(&RUSTC_SYSROOT), "[SYS_ROOT]");
         if let Some(cargo_home) = CARGO_HOME.as_deref() {
-            // No trailing slash: the matched path never carries one either, so
-            // the separator before the next path segment is whatever the
-            // original text already had (`/` on Unix, `\` on Windows).
             settings.add_filter(&regex_escape(cargo_home), "[CARGO_HOME]");
         }
         // Stdlib path normalization: local `[SYS_ROOT]/lib/rustlib/src/rust/library/`
@@ -176,12 +173,7 @@ pub mod settings {
         // varies between runs; the render path peels this OS tail, but the
         // erased path serializes raw frames, so normalize it here.
         settings.add_filter(r"__pthread\w*", "[OS_TAIL]");
-        // The erased JSON path serializes every captured frame, including the
-        // libtest/std harness tail below the test function that the render
-        // path's trimming already hides; collapse the (already-normalized)
-        // `[STDLIB]/library/…` and `[OS_TAIL]` run at the end of a `frames`
-        // array into one placeholder frame so upgrading the toolchain (which
-        // reshapes that tail) doesn't churn the snapshot.
+        // Collapse the JSON path's normalized libtest/std tail into one placeholder so a toolchain upgrade reshaping it doesn't churn the snapshot.
         settings.add_filter(
             concat!(
                 r#"(?s)(,\s*\{\s*"name":\s*"(?:\[OS_TAIL\]|[^"]*)",\s*"filename":\s*(?:null|"\[STDLIB\]/library/[^"]*"),\s*"line":\s*(?:null|42),\s*"column":\s*(?:null|69)\s*\})+"#,

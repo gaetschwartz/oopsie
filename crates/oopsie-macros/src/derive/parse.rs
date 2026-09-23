@@ -2061,18 +2061,7 @@ impl CategorizedFields {
                 provides.push((ident.clone(), p.clone()));
             }
 
-            // Detect backtrace/spantrace/traces/help fields. A trace field is
-            // one carrying an explicit `#[oopsie(...)]` attribute or whose type
-            // matches (by last path segment). An explicit backtrace/spantrace/
-            // traces attribute accepts any type; the generated accessors then
-            // impose the real requirements (`Capturable`, plus `Borrow` of the
-            // trace or a `(Backtrace, SpanTrace)` pair shape). A field merely
-            // *named* `backtrace` of the wrong type is an ordinary field — the
-            // real trace is injected separately under a mangled name. The
-            // type-based match is skipped for the source field: a real
-            // `oopsie::Backtrace`/`SpanTrace` can never implement `Error`, so a
-            // source field whose own error type merely happens to share that
-            // last segment is never a real trace.
+            // Type-based detection skips the source field: a source's type is never a real trace.
             if attrs.location && !is_location_type(&field.ty) {
                 return Err(syn::Error::new_spanned(
                     field,

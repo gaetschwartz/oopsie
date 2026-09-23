@@ -238,8 +238,7 @@ impl Marker {
     }
 }
 
-/// Generate the impls for an item rewritten by [`expand`]. Runs as a derive, so
-/// it sees the item after `#[cfg]`/`#[cfg_attr]` evaluation.
+/// Generate the impls for an item rewritten by [`expand`].
 pub fn expand_impls(input: TokenStream2) -> syn::Result<TokenStream2> {
     let mut input: syn::DeriveInput = syn::parse2(input)?;
     let marker_idx = input

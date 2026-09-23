@@ -8,11 +8,8 @@
 use oopsie::{ResultExt as _, oopsie};
 pub use oopsie_core::test_utils::force_backtrace;
 
-/// Runtime gate for the backtrace-snapshot test suite. A gated test calls
-/// this before asserting anything, so a run that never exercises the
-/// snapshot path can't be mistaken for one that did: under `CI`, the gate
-/// var must be set explicitly to `1` (run) or `0` (intentionally skipped on
-/// this leg) — leaving it unset panics instead of silently skipping.
+/// Whether backtrace-snapshot tests run. Under `CI` the var must be `1` (run)
+/// or `0` (skip); unset panics.
 #[expect(
     clippy::print_stderr,
     reason = "the skip notice is only visible in a test's captured output (e.g. --nocapture or a failing run), never during a normal green pass"

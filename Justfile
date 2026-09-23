@@ -31,9 +31,7 @@ clippy: (_cargo "0" "clippy" "--workspace" "--all-targets" "--" "-D" "warnings")
 
 # Run doctests across the whole feature powerset on stable + nightly.
 doctest-full: (_cargo "1" "test" "--doc" "--workspace")
-# Run doctests for default features on stable + nightly, plus the
-# fancy,serde,tracing combo (doctests gated behind those features are
-# otherwise never exercised).
+# Run doctests for default features on stable + nightly, plus fancy,serde,tracing.
 doctest: (_cargo "0" "test" "--doc" "--workspace")
     cargo +stable test --doc --workspace --no-default-features --features fancy,serde,tracing
     cargo test --doc --workspace --no-default-features --features fancy,serde,tracing
@@ -51,8 +49,6 @@ _nextest-snapshots *ARGS:
 nextest *ARGS: (_nextest-snapshots ARGS)
 
 # Run the feature powerset (snapshots skip), then the snapshot-bearing combos.
-# The powerset isn't a blessed-snapshot combo set, so its legs opt out of the
-# backtrace-snapshot gate explicitly rather than leaving it unset.
 nextest-full *ARGS: (_nextest-snapshots ARGS)
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=0 cargo +stable hack {{ stable_powerset }} nextest run --workspace {{ ARGS }}
     OOPSIE_BACKTRACE_SNAPSHOT_TESTS=0 cargo hack {{ nightly_powerset }} nextest run --workspace {{ ARGS }}
@@ -73,8 +69,7 @@ test-bless *ARGS:
     cargo +stable nextest run --workspace --no-default-features --features fancy,tracing,chrono --no-fail-fast {{ ARGS }} || true
     cargo nextest run --workspace --no-default-features --features unstable,fancy,tracing,chrono --no-fail-fast {{ ARGS }} || true
 
-# Build the runtime crates for no_std (host + bare-metal), plus the
-# nostd-smoke crate's host-run unit tests.
+# Build the runtime crates for no_std (host + bare-metal) and run nostd-smoke's host tests.
 nostd:
     cargo build -p oopsie-core --no-default-features
     cargo build -p oopsie-core --no-default-features --features serde

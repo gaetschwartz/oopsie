@@ -292,8 +292,6 @@ pub fn gen_enum_error(
         if let Some(code) = &variant_attrs.code {
             provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
         }
-        // Provide the declared exit code (variant override, else container
-        // default) so it reaches a wrapper's accessor through the Provider API.
         if let Some(exit) = variant_attrs.exit_code.or(container_exit) {
             provide_stmts.push(gen_exit_code_provide(exit, oopsie_path, &req));
         }
@@ -482,8 +480,6 @@ pub fn gen_enum_error(
             code_arms.push(arm);
         }
 
-        // Help text: dynamic field, then static attribute, then a `HelpText`
-        // provide, then (for `transparent`) forwarded from the source.
         if let Some(help_field) = &categorized.help_field {
             let help_value = help_text_from_field(help_field, oopsie_path);
             help_arms.push(quote! {
@@ -519,8 +515,6 @@ pub fn gen_enum_error(
             help_arms.push(arm);
         }
 
-        // Exit code: variant override, then container default, then the
-        // nearest one declared down the source chain.
         if let Some(exit) = variant_attrs.exit_code.or(container_exit) {
             let some = exit_code_some(exit, oopsie_path);
             exit_arms.push(quote! {
@@ -746,7 +740,6 @@ pub fn gen_struct_error(
     // Own values, then the source's, then own traces (see the enum arm).
     let mut provide_stmts = Vec::new();
 
-    // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
     if let Some(help_field) = &categorized.help_field {
         let help_value = help_text_from_field(help_field, oopsie_path);
         provide_stmts.push(quote! {
@@ -791,9 +784,6 @@ pub fn gen_struct_error(
         ));
     }
 
-    // Provide backtrace/spantrace refs from detected fields. An empty trace
-    // is never provided, so it cannot shadow a captured one further out
-    // (`Request` is first-wins).
     if let Some(tf) = &categorized.traces_field {
         provide_stmts.push(quote! {
             if #tf.0.is_captured() {
@@ -1144,11 +1134,7 @@ fn gen_code_provide(
     }
 }
 
-/// Forward a `provide` request to the source (through `as_error_source()`, so
-/// a boxed-dyn field compiles as in `source()`). A layer that renders its own
-/// message keeps the source's code and help out of the request: they would
-/// label a message this layer replaced. Everything else, including traces and
-/// user `provide(...)` values, still passes through.
+/// Forward `provide` to the source; a non-`transparent` layer withholds the source's code and help.
 fn gen_source_provide_forward(
     source_ident: &syn::Ident,
     transparent: bool,
@@ -1495,7 +1481,6 @@ fn collect_provide_field_binds(categorized: &CategorizedFields) -> Vec<TokenStre
     binds
 }
 
-/// A `Self::Variant { binds.., .. } => body` accessor match arm.
 fn enum_accessor_arm(
     variant_ident: &syn::Ident,
     binds: &[syn::Ident],

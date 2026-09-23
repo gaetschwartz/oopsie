@@ -265,8 +265,6 @@ fn nested_help_text_stops_at_message_layer() {
     .build_error(inner);
     let outer: OuterError = Top { label: "api" }.build_error(middle);
 
-    // A layer with its own message owns its identity: the inner help labels
-    // a message the outer layers replaced, so it stays with the inner error.
     assert_eq!(core::error::request_value::<oopsie::HelpText>(&outer), None);
     let inner_ref = outer.source().unwrap().source().unwrap();
     assert_eq!(

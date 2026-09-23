@@ -13,13 +13,10 @@
 //!
 //! A workspace group can further carry `<group>/cargo-config.toml` (written as
 //! `.cargo/config.toml` at the generated workspace root) and `<group>/extdep.rs`
-//! (the `src/lib.rs` of a sibling `extdep` crate built *outside* the generated
-//! root, wired in as a path dependency of the member crate). Together these
-//! exercise a `[env] CARGO_WORKSPACE_DIR` override leaking into a non-member
-//! path dependency compiled in the same `cargo build` invocation — the
-//! `extdep` crate must never see the workspace's `[workspace.metadata.oopsie]`.
-//! Its outcome is tracked under the synthetic case name `extdep`, checked
-//! against an optional `<group>/extdep.stderr` exactly like a normal case.
+//! (the `src/lib.rs` of a sibling `extdep` crate built outside the generated
+//! root, wired in as a path dependency of the member crate). Its outcome is
+//! tracked under the synthetic case name `extdep`, checked against an optional
+//! `<group>/extdep.stderr` exactly like a normal case.
 //!
 //! trybuild itself can't drive this: it regenerates each fixture's `Cargo.toml`
 //! and drops `[package.metadata]`, so a fixture would never see custom settings.

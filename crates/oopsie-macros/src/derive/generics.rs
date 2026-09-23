@@ -171,18 +171,16 @@ pub fn projected_bound_predicates(
     predicates
 }
 
-/// Whether `bound` relaxes a default bound (`?Sized`).
 const fn is_maybe_bound(bound: &TypeParamBound) -> bool {
     matches!(bound, TypeParamBound::Trait(tb) if tb.maybe.is_some())
 }
 
-/// Whether `ty` is the bare parameter path `ident`.
 fn is_bare_param(ty: &Type, ident: &Ident) -> bool {
     matches!(ty, Type::Path(tp) if tp.qself.is_none() && tp.path.is_ident(ident))
 }
 
 /// The `?Sized` relaxation declared for type parameter `ident`, inline or in
-/// the `where` clause, at most once (rustc rejects a duplicate, E0203).
+/// the `where` clause, at most once (rustc rejects a duplicate).
 fn maybe_bounds_of(generics: &Generics, ident: &Ident) -> Punctuated<TypeParamBound, Token![+]> {
     let inline = generics
         .params
@@ -210,7 +208,7 @@ fn maybe_bounds_of(generics: &Generics, ident: &Ident) -> Punctuated<TypeParamBo
 }
 
 /// `pred` without the `?Sized` relaxations of the parameters in `projected`,
-/// which [`project`] already declares inline and rustc rejects twice (E0203);
+/// which [`project`] already declares inline and rustc rejects twice;
 /// `None` when nothing is left.
 pub fn strip_projected_maybe_bounds(
     pred: &WherePredicate,

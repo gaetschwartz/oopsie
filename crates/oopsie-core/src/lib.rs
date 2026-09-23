@@ -233,9 +233,7 @@ pub mod __private {
     pub use crate::nostd_stubs::{TraceMarker, restore_marker, set_marker};
 
     /// Whether `request` still wants an [`ErrorCode`](crate::ErrorCode) or
-    /// [`HelpText`](crate::HelpText), by value or by reference. A layer that
-    /// renders its own message skips forwarding such a request to its source:
-    /// the source's code or help would label a message this layer replaced.
+    /// [`HelpText`](crate::HelpText), by value or by reference.
     #[cfg(feature = "unstable-error-generic-member-access")]
     #[inline]
     #[must_use]

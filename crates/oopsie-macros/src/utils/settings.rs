@@ -221,15 +221,11 @@ fn find_workspace_root() -> Result<Option<PathBuf>, String> {
 /// driven over a temp tree: a packaged/vendored member (see [`is_packaged`])
 /// finds no workspace at all; otherwise honor an explicit
 /// `CARGO_WORKSPACE_DIR` (still subject to the member/exclude check and the
-/// `$CARGO_HOME`/`target/package` bounds below — the override names a
-/// *candidate* root, it doesn't bypass membership), then the member's own
+/// `$CARGO_HOME`/`target/package` bounds below), then the member's own
 /// `[workspace]`, then a `package.workspace` pointer, then the first ancestor
 /// `Cargo.toml` with a `[workspace]`. The walk stops at `$CARGO_HOME` and at a
 /// `target/package` staging dir, matching Cargo so a packaged or
-/// registry-sourced crate finds no workspace. `workspace_override` and
-/// `cargo_home` are canonicalized (falling back to the raw path on failure)
-/// before any comparison against `member_dir`'s canonical form, so a
-/// symlinked or relative value still matches.
+/// registry-sourced crate finds no workspace.
 fn find_root_from(
     member_dir: &Path,
     workspace_override: Option<&Path>,

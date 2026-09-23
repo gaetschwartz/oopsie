@@ -135,7 +135,6 @@ macro_rules! style {
 }
 pub(crate) use style;
 
-// Global `COLOR_MODE` mutation tests live in `tests/report.rs` (re-exec'd; they'd race other tests' `should_colorize()` reads in-process).
 #[cfg(test)]
 mod tests {
     use super::*;

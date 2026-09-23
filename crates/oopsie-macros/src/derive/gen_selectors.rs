@@ -420,13 +420,8 @@ struct EmittedSelector<'a> {
     renamable: &'static str,
 }
 
-/// Reject every type path in the item's fields, generics, and `where` clause
-/// whose leading segment (or, for `self::…`, second segment — `self::` and a
-/// bare path resolve in the same scope) names one of its selectors. The
-/// selectors are declared in the scope those types resolve in — the item's own
-/// module, or a child that glob-imports it — so the selector silently shadows
-/// a glob-imported or prelude type of the same name and rustc reports an
-/// unrelated type error.
+/// Reject any type path whose leading segment (after an optional `self::`)
+/// names a generated selector, which would silently shadow it.
 fn reject_selector_shadowing(
     input: &syn::DeriveInput,
     selectors: &[EmittedSelector],
@@ -470,9 +465,6 @@ struct ShadowVisitor<'a> {
 
 impl<'ast> Visit<'ast> for ShadowVisitor<'_> {
     fn visit_path(&mut self, i: &'ast syn::Path) {
-        // `self::Selector` resolves in the module the selectors are declared
-        // in (the item's own module, or a child that glob-imports it) exactly
-        // like a bare `Selector`, so it shadows the same way.
         let leading = i.segments.first().filter(|_| i.leading_colon.is_none());
         let named_segment = match leading {
             Some(first) if first.ident == "self" => i.segments.get(1),
@@ -580,8 +572,6 @@ pub fn gen_enum_selectors(
                     #[doc = #doc]
                     #[track_caller]
                     fn from(#source_arg: #param_ty) -> Self {
-                        // Capture probes borrow `&source` before
-                        // `body_assign` moves it into the renamed field.
                         #(#auto_inits)*
                         #body_assign
                         #enum_ident::#variant_ident {
@@ -743,8 +733,6 @@ pub fn gen_struct_selector(
                 #[doc = #doc]
                 #[track_caller]
                 fn from(#source_arg: #param_ty) -> Self {
-                    // Capture probes borrow `&source` before `body_assign`
-                    // moves it into the renamed field.
                     #(#auto_inits)*
                     #body_assign
                     Self { #source_ident, #(#auto_names)* }
@@ -1030,10 +1018,7 @@ fn gen_build_error(
 
             #[track_caller]
             fn build_error(self, #source_arg: #source_type) -> #dest_ty {
-                // Capture probes borrow `&source`, so they must run before
-                // `source_assign` moves `source` into the (possibly renamed)
-                // field. They also see the pre-transform value, preserving the
-                // source's own trace.
+                // Capture probes borrow the source argument, so run them before it moves.
                 #(#auto_inits)*
                 #source_assign
                 #construct {

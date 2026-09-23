@@ -3,17 +3,8 @@
     feature(error_generic_member_access)
 )]
 //! Comparing oopsie against other error libraries: wrapping, plain rendering,
-//! and colored rendering — none of these groups carry a backtrace. See
-//! `vs_ecosystem_traced` for the backtrace-carrying comparison
-//! (`render_traced*`), split into its own binary because the ecosystem
-//! crates read `RUST_BACKTRACE`/`RUST_LIB_BACKTRACE` once and cache the
-//! decision process-wide, so the two can't coexist fairly in one binary.
-//!
-//! [`disable_env_backtraces`] forces `RUST_LIB_BACKTRACE=0` at startup so
-//! anyhow/eyre never capture a backtrace here regardless of the ambient
-//! environment, matching oopsie (explicitly disabled via `set_override`) and
-//! snafu (whose error type here has no `backtrace` field) — every crate does
-//! the same work in these groups.
+//! and colored rendering — none of these groups carry a backtrace.
+//! See `vs_ecosystem_traced` for backtrace-carrying renders.
 
 use std::hint::black_box;
 use std::io;

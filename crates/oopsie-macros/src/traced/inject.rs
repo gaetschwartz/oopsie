@@ -322,9 +322,7 @@ fn inject_into_named(
             return;
         }
         let cfg = gate.cfg_attribute();
-        // `#[doc(hidden)]`: every injected field is a mangled implementation
-        // detail, never part of the type's documented surface, so it must not
-        // trip `missing_docs` on a `pub` traced type.
+        // Injected fields are mangled internals: keep them out of docs and `missing_docs`.
         fields
             .named
             .push(parse_quote! { #cfg #[doc(hidden)] #field });
@@ -351,10 +349,8 @@ fn inject_into_named(
     );
 }
 
-/// Whether an item gets the auto-generated error code. It is the fallback:
-/// skipped when the feature is off, when the user wrote their own
-/// `code = "..."`, or when the item is `transparent` (its code is forwarded
-/// from the source, and an injected auto-code would shadow that forward).
+/// Whether an item gets the auto-generated error code; `transparent` items
+/// forward their source's instead.
 pub(super) const fn wants_auto_code(
     code_enabled: bool,
     has_user_code: bool,

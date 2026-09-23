@@ -357,10 +357,7 @@ fn cfg_kept_location_field_accessor_returns_some() {
     assert!(err.oopsie_location().is_some());
 }
 
-// Struct path: the accessor names `self.<field>` directly (no match arm), so
-// a stripped trace field must drop the whole method rather than just an arm.
-// Selector name is the struct name with a trailing `Error` stripped (default
-// suffix off).
+// Struct form of the above.
 #[oopsie]
 #[oopsie(module(false))]
 pub struct StructBtStrippedError {
@@ -474,9 +471,7 @@ fn struct_cfg_kept_help_field_returns_some() {
     assert_eq!(&*err.oopsie_help_text().unwrap(), "do this");
 }
 
-// Enum sibling: the `provide()` closure (built under
-// `error_generic_member_access`) also references the help field and must
-// drop together with the accessor arm.
+// Enum form of the above.
 #[oopsie]
 #[oopsie(module(false), suffix = "He")]
 pub enum EnumHelpCfgError {
@@ -517,9 +512,7 @@ fn enum_cfg_kept_help_field_returns_some() {
 
 // ---- field-level `provide(ErrorCode)` under field-level cfg ----
 //
-// The `provide` expression references the field by name, so a stripped field
-// must drop the whole arm/method with it — the enum falls through to
-// `_ => None`, the struct drops the accessor entirely.
+// A field-level provide on a stripped field goes with the field.
 
 #[oopsie]
 #[oopsie(module(false), suffix = "Ec")]
@@ -600,11 +593,8 @@ fn struct_cfg_kept_error_code_field_returns_some() {
 
 // ---- `cfg_attr`-wrapped helper attrs under the attribute-macro path ----
 //
-// An `#[oopsie(...)]` helper attribute nested inside `#[cfg_attr(pred, ...)]`
-// must never survive into the final item as a bare, unrecognized `oopsie`
-// attribute, regardless of whether `pred` holds — siblings and the
-// `cfg_attr` itself stay. Such a wrapped helper is invisible to the macro, so
-// `hint` below is treated as a plain user field either way.
+// A cfg_attr-wrapped oopsie(...) helper never survives as a bare attribute;
+// sibling attrs stay.
 
 #[oopsie]
 #[oopsie(module(false), suffix = "Ca")]
@@ -625,7 +615,7 @@ pub enum CfgAttrHelperError {
 }
 
 #[test]
-fn cfg_attr_wrapped_helper_attr_is_stripped_with_predicate_on() {
+fn cfg_attr_wrapped_helper_attr_applies_with_predicate_on() {
     let err = KeptCa {
         hint: "plain field".to_owned(),
         keep: 1u32,
@@ -636,7 +626,7 @@ fn cfg_attr_wrapped_helper_attr_is_stripped_with_predicate_on() {
 }
 
 #[test]
-fn cfg_attr_wrapped_helper_attr_is_stripped_with_predicate_off() {
+fn cfg_attr_wrapped_helper_attr_is_absent_with_predicate_off() {
     let err = GoneCa {
         hint: "plain field".to_owned(),
         keep: 2u32,
@@ -715,10 +705,7 @@ fn all_variants_stripped_via_cfg_attr_still_compiles() {
 
 // ---- trace FIELDS gated by a `cfg_attr`-injected `cfg` ----
 //
-// Same guarantee as a literal `#[cfg]` on a trace field, but the field is
-// gated through `#[cfg_attr(pred, cfg(...))]` instead. The struct accessor
-// must exist for exactly one of the stripped/kept twins — never both, never
-// neither. `all()`/`any()` pin the two feature states deterministically.
+// Same, gated through #[cfg_attr(pred, cfg(...))].
 
 #[oopsie]
 #[oopsie(module(false))]
@@ -836,9 +823,7 @@ fn struct_non_cfg_cfg_attr_backtrace_field_returns_some() {
     assert!(err.oopsie_backtrace().is_some());
 }
 
-// With a source present, the stripped field's own-trace forwards to the
-// source's instead — the stripped and kept twins must partition exactly, so
-// there is no gap (lost forwarding) and no overlap (a duplicate accessor).
+// With a source, a stripped own trace falls back to the source's.
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false), suffix = "CaLeaf")]
 pub enum CfgAttrLeafError {
@@ -931,8 +916,7 @@ fn enum_cfg_attr_kept_backtrace_field_accessor_returns_some() {
     assert!(err.oopsie_backtrace().is_some());
 }
 
-// Enum twin of the struct complement: a stripped own trace/location field must
-// leave the variant forwarding its source's, not fall through to `None`.
+// Enum form: a stripped own trace/location falls back to the source's.
 #[oopsie]
 #[oopsie(module(false), suffix = "Fl")]
 pub enum FwdTraceLeafError {
