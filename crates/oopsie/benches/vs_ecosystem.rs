@@ -3,14 +3,17 @@
     feature(error_generic_member_access)
 )]
 //! Comparing oopsie against other error libraries: wrapping, plain rendering,
-//! colored rendering, and rendering with backtraces (the `render_traced*` groups).
+//! and colored rendering — none of these groups carry a backtrace. See
+//! `vs_ecosystem_traced` for the backtrace-carrying comparison
+//! (`render_traced*`), split into its own binary because the ecosystem
+//! crates read `RUST_BACKTRACE`/`RUST_LIB_BACKTRACE` once and cache the
+//! decision process-wide, so the two can't coexist fairly in one binary.
 //!
-//! `RUST_BACKTRACE` is forced to `1` at startup (see [`enable_env_backtraces`])
-//! so the ecosystem crates — which read it once and cache the decision — capture
-//! frames in the traced groups. The reach is process-wide: anyhow and eyre
-//! consequently also carry a backtrace in the non-traced groups. oopsie and
-//! snafu only carry one when their error type opts in, so for them the
-//! non-traced groups stay backtrace-free.
+//! [`disable_env_backtraces`] forces `RUST_LIB_BACKTRACE=0` at startup so
+//! anyhow/eyre never capture a backtrace here regardless of the ambient
+//! environment, matching oopsie (explicitly disabled via `set_override`) and
+//! snafu (whose error type here has no `backtrace` field) — every crate does
+//! the same work in these groups.
 
 use std::hint::black_box;
 use std::io;
@@ -42,36 +45,16 @@ struct MietteErr {
     source: io::Error,
 }
 
-// Backtrace-carrying error types for the `render_traced*` groups. oopsie uses
-// the `traced` machinery without the spantrace; anyhow and eyre capture from
-// the forced env. snafu's `backtrace` feature captures a backtrace, but its
-// `Report` only renders one under the nightly provider API (not enabled here),
-// so the snafu arm measures a backtrace-free render.
-#[oopsie(traced(spantrace(false)))]
-#[oopsie("wrap failed: {ctx}")]
-struct TracedError {
-    ctx: &'static str,
-    source: io::Error,
-}
-
-#[cfg(feature = "unstable-error-generic-member-access")]
-#[derive(Debug, snafu::Snafu)]
-#[snafu(display("wrap failed: {}", ctx))]
-struct SnafuTraced {
-    ctx: &'static str,
-    source: io::Error,
-    backtrace: Option<snafu::Backtrace>,
-}
-
 #[inline(always)]
 fn io_err() -> Result<(), io::Error> {
     Err(io::Error::other("boom"))
 }
 
-/// Force `RUST_BACKTRACE=1` so anyhow/eyre/snafu capture frames in the traced
-/// groups. They read the variable once and std locks the decision on the first
-/// capture, so this must run before any error is built.
-fn enable_env_backtraces() {
+/// Force `RUST_LIB_BACKTRACE=0` so anyhow/eyre never capture a backtrace in
+/// these groups, regardless of the ambient environment. They (like std) read
+/// the variable once and lock the decision on the first capture, so this must
+/// run before any error is built.
+fn disable_env_backtraces() {
     static ONCE: Once = Once::new();
     ONCE.call_once(|| {
         // SAFETY: runs once before the benchmark body executes and before any
@@ -82,13 +65,13 @@ fn enable_env_backtraces() {
             reason = "edition 2024 makes env::set_var unsafe; the Once guard upholds the no-concurrent-access requirement"
         )]
         unsafe {
-            std::env::set_var("RUST_BACKTRACE", "1");
+            std::env::set_var("RUST_LIB_BACKTRACE", "0");
         };
     });
 }
 
 fn bench_wrap(c: &mut Criterion) {
-    enable_env_backtraces();
+    disable_env_backtraces();
     set_override(RustBacktrace::Disabled);
     let mut group = c.benchmark_group("wrap_io_error");
 
@@ -134,7 +117,7 @@ fn bench_wrap(c: &mut Criterion) {
 /// idiomatic full-chain renderer: `Report` for oopsie, `snafu::Report` for
 /// snafu, alternate `Debug` for anyhow and eyre.
 fn bench_render(c: &mut Criterion) {
-    enable_env_backtraces();
+    disable_env_backtraces();
     set_override(RustBacktrace::Disabled);
     let mut group = c.benchmark_group("render_error");
 
@@ -183,7 +166,7 @@ fn bench_render(c: &mut Criterion) {
 /// Renders a pre-built error with colors forced on, comparing oopsie's printer
 /// against the two ecosystem renderers that specialize in colored diagnostics.
 fn bench_colored(c: &mut Criterion) {
-    enable_env_backtraces();
+    disable_env_backtraces();
     set_override(RustBacktrace::Disabled);
     // `color_eyre::install` sets a process-global eyre hook, so this group must
     // run last — otherwise the plain `eyre` benches above would pick up the
@@ -223,74 +206,5 @@ fn bench_colored(c: &mut Criterion) {
     group.finish();
 }
 
-/// Plain full-chain rendering of errors that carry a backtrace, across crates.
-/// oopsie's backtrace comes from `#[oopsie(traced(spantrace(false)))]` + the override; the
-/// others rely on the forced `RUST_BACKTRACE` env (see module docs).
-fn bench_traced(c: &mut Criterion) {
-    enable_env_backtraces();
-    set_override(RustBacktrace::Enabled);
-    let mut group = c.benchmark_group("render_traced");
-
-    let oopsie_report = Report::new(
-        oopsie::ResultExt::context(io_err(), TracedOopsie { ctx: "render" }).unwrap_err(),
-    )
-    .no_colors();
-    group.bench_function("oopsie", |b| {
-        b.iter(|| black_box(format!("{oopsie_report}")));
-    });
-
-    #[cfg(feature = "unstable-error-generic-member-access")]
-    {
-        let snafu_report = snafu::Report::from_error(
-            snafu::ResultExt::context(io_err(), SnafuTracedSnafu { ctx: "render" }).unwrap_err(),
-        );
-        group.bench_function("snafu", |b| {
-            b.iter(|| black_box(format!("{snafu_report}")));
-        });
-    }
-
-    let anyhow_err = anyhow::Context::context(io_err(), "render").unwrap_err();
-    group.bench_function("anyhow", |b| {
-        b.iter(|| black_box(format!("{anyhow_err:?}")));
-    });
-
-    // eyre is intentionally absent: its default handler renders no backtrace
-    // (only color-eyre does), so it would be timing a message-only render here.
-    // It appears in `render_traced_colored` via color-eyre instead.
-
-    group.finish();
-}
-
-/// Colored rendering of backtrace-carrying errors: oopsie's printer versus
-/// color-eyre, the ecosystem's colored-backtrace renderer.
-fn bench_traced_colored(c: &mut Criterion) {
-    enable_env_backtraces();
-    set_override(RustBacktrace::Enabled);
-    let _ = color_eyre::install();
-    let mut group = c.benchmark_group("render_traced_colored");
-
-    let oopsie_report = Report::new(
-        oopsie::ResultExt::context(io_err(), TracedOopsie { ctx: "render" }).unwrap_err(),
-    )
-    .force_colors();
-    group.bench_function("oopsie", |b| {
-        b.iter(|| black_box(format!("{oopsie_report}")));
-    });
-
-    let color_eyre_report = eyre::WrapErr::wrap_err(io_err(), "render").unwrap_err();
-    group.bench_function("color_eyre", |b| {
-        b.iter(|| black_box(format!("{color_eyre_report:?}")));
-    });
-
-    group.finish();
-}
-
-criterion_group!(
-    benches,
-    bench_wrap,
-    bench_render,
-    bench_traced,
-    bench_colored,
-    bench_traced_colored
-);
+criterion_group!(benches, bench_wrap, bench_render, bench_colored);
 criterion_main!(benches);

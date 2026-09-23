@@ -91,6 +91,11 @@ harness = false
 required-features = ["fancy", "tracing"]
 
 [[bench]]
+name = "vs_ecosystem_traced"
+harness = false
+required-features = ["fancy", "tracing"]
+
+[[bench]]
 name = "erased"
 harness = false
 required-features = ["serde"]
