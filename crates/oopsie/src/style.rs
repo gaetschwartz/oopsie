@@ -6,9 +6,7 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Style(owo_colors::Style);
 
-// `owo_colors::Style` doesn't implement `Eq` (so `#[derive(Eq)]` can't see through
-// it), but its `PartialEq` only ever compares discrete color/attribute fields — no
-// floats — so it is already a total equivalence relation and `Eq` holds.
+// `owo_colors::Style`'s `PartialEq` only compares discrete fields, so `Eq` holds even though it isn't derived.
 impl Eq for Style {}
 
 impl Style {

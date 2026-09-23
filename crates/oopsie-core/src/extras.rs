@@ -155,17 +155,17 @@ impl Capturable for EnvArgs {
 )]
 pub struct EnvVarOpt<E: EnvVarName>(Option<Box<str>>, std::marker::PhantomData<E>);
 
-/// Gates [`EnvVarName`] implementations to those [`make_env_var!`](env_vars::make_env_var)
-/// generates. `#[doc(hidden)]` rather than a private-module seal: the macro is
-/// `#[macro_export]`ed, so its generated `impl EnvVarName` lands in the calling crate and needs
-/// a supertrait it can name from there.
+/// Implemented by [`make_env_var!`](env_vars::make_env_var) for the types it generates. Not
+/// meant to be implemented directly. `#[doc(hidden)]` rather than a private-module seal: the
+/// macro is `#[macro_export]`ed, so its generated `impl EnvVarName` lands in the calling crate
+/// and needs a supertrait it can name from there.
 #[doc(hidden)]
 pub trait EnvVarNameImpl {}
 
 /// Names the environment variable that an [`EnvVarOpt`] reads.
 ///
-/// Declare implementors with [`make_env_var!`](env_vars::make_env_var) rather than by hand — the
-/// hidden [`EnvVarNameImpl`] supertrait it also implements is not meant to be named directly.
+/// Declare implementors with [`make_env_var!`](env_vars::make_env_var) rather than by hand —
+/// its hidden supertrait is not meant to be named directly.
 pub trait EnvVarName: EnvVarNameImpl {
     /// The environment variable name.
     const NAME: &'static str;

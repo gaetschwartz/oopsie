@@ -1540,7 +1540,11 @@ mod tests {
     fn location_anchor_hides_frames_above_the_call_site() {
         // Capture + a macro-generated frame (which the symbol filter might not
         // recognize) sit above the user's `.fail()` site.
-        let capture = frame_with_loc("oopsie_core::backtrace::capture", "src/backtrace.rs", 196);
+        let capture = frame_with_loc(
+            "oopsie_core::backtrace::capture",
+            "src/backtrace/capture.rs",
+            196,
+        );
         let generated = frame_with_loc("my_crate::query_oopsies::fail", "src/lib.rs", 99);
         let user = frame_with_loc("my_crate::fetch_user", "src/lib.rs", 21);
         let caller = frame_with_loc("my_crate::main", "src/lib.rs", 27);
@@ -1956,7 +1960,7 @@ mod tests {
 
     #[test]
     fn bottom_peel_recognizes_line_tables_only_sysroot_frames() {
-        let core_capture = core_file("backtrace.rs");
+        let core_capture = core_file("backtrace/capture.rs");
         let fn_rs = format!("{RUSTUP_LIBRARY}/core/src/ops/function.rs");
         let short_bt = format!("{RUSTUP_LIBRARY}/std/src/sys/backtrace.rs");
         let rt = format!("{RUSTUP_LIBRARY}/std/src/rt.rs");
@@ -2015,7 +2019,7 @@ mod tests {
 
     #[test]
     fn capture_trim_stops_at_first_user_frame() {
-        let core_capture = core_file("backtrace.rs");
+        let core_capture = core_file("backtrace/capture.rs");
         let core_traits = core_file("traits.rs");
         let frames = [
             frame_in(
@@ -2078,7 +2082,7 @@ mod tests {
 
     #[test]
     fn capture_trim_spans_the_context_adapter() {
-        let core_capture = core_file("backtrace.rs");
+        let core_capture = core_file("backtrace/capture.rs");
         let core_lib = core_file("lib.rs");
         let core_traits = core_file("traits.rs");
         let frames = [
@@ -2122,7 +2126,7 @@ mod tests {
 
     #[test]
     fn panic_trim_spares_user_frames_above_with_override() {
-        let core_capture = core_file("backtrace.rs");
+        let core_capture = core_file("backtrace/capture.rs");
         let frames = [
             frame_in("oopsie::panic_hook::install_panic_hook::{{closure}}", None),
             frame_in("std::panicking::rust_panic_with_hook", None),
@@ -2148,7 +2152,7 @@ mod tests {
     fn capture_trim_recognizes_bare_named_backtrace_crate_frames() {
         let bt_file = "/home/u/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs";
         let bt_capture = "/home/u/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs";
-        let core_capture = core_file("backtrace.rs");
+        let core_capture = core_file("backtrace/capture.rs");
         let frames = [
             frame_in("trace", Some(bt_file)),
             frame_in("create", Some(bt_capture)),
@@ -2314,7 +2318,7 @@ mod tests {
 
     #[test]
     fn capture_trim_keeps_user_frames_in_a_backtrace_named_checkout() {
-        let core_capture = core_file("backtrace.rs");
+        let core_capture = core_file("backtrace/capture.rs");
         let user = "/home/u/src/backtrace-2/src/main.rs";
         let frames = [
             frame_in("capture", Some(&core_capture)),
@@ -2404,7 +2408,7 @@ mod tests {
                 "{name}"
             );
         }
-        let core_capture = core_file("backtrace.rs");
+        let core_capture = core_file("backtrace/capture.rs");
         let user = "/home/u/bt-named/src/main.rs";
         let frames = [
             frame_in(

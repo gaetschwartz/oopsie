@@ -457,12 +457,7 @@ impl Diagnostic for Welp {
     }
 }
 
-// `WelpRepr::Sourced` holds a `Box<dyn Error + Send + Sync>`; auto-derivation can't
-// see through the trait object, so the compiler treats `Welp` as `!UnwindSafe`. The
-// erased source is never mutated through a `&Welp`/`Welp` across an unwind boundary
-// in a way that would violate exception safety, so assert both by hand — matching
-// `anyhow::Error`/`eyre::Report`, and `Report<E>` (which has no such opaque field and
-// gets these for free).
+// The erased `dyn Error` source defeats auto-derivation; unwind safety matches anyhow's.
 impl core::panic::UnwindSafe for Welp {}
 impl core::panic::RefUnwindSafe for Welp {}
 

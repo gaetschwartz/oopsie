@@ -262,11 +262,7 @@ impl<E: Diagnostic> Report<E> {
         Ok(())
     }
 
-    /// Format the span trace if available and captured.
-    ///
-    /// Both the empty and colored paths go through [`TracePrinter`], which
-    /// writes nothing for an empty or unsupported span trace — mirrors
-    /// [`write_backtrace`](Self::write_backtrace).
+    /// Writes the span trace via [`TracePrinter`], or nothing if the error has none captured.
     #[cfg(feature = "tracing")]
     fn write_spantrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Some(span_trace) = self.error().and_then(|e| e.oopsie_spantrace()) else {
