@@ -14,6 +14,7 @@ use core::error::Error as StdError;
 /// `Error` contract — makes the iterator loop forever, the same as
 /// `anyhow::Chain`.
 #[derive(Clone, Debug)]
+#[must_use = "iterators are lazy and do nothing unless consumed"]
 pub struct Chain<'a> {
     next: Option<&'a (dyn StdError + 'static)>,
 }

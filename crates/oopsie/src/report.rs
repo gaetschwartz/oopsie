@@ -38,6 +38,7 @@ use crate::trace_printer::{
 /// present, as the more specific runtime signal; otherwise the declarative
 /// [`Diagnostic::oopsie_exit_code`] (from `#[oopsie(exit_code = N)]`) is used;
 /// failing both, the code is [`ExitCode::FAILURE`].
+#[must_use = "this `Report` should be returned or propagated, not discarded"]
 pub struct Report<E> {
     res: Result<(), E>,
     color_config: ColorMode,
@@ -66,7 +67,6 @@ impl<E: Diagnostic> Report<E> {
     ///
     /// Uses automatic color detection based on environment variables and
     /// terminal detection.
-    #[must_use]
     #[inline]
     pub fn new(error: E) -> Self {
         let res = Err(error);
@@ -80,7 +80,6 @@ impl<E: Diagnostic> Report<E> {
     }
 
     /// Create a new `Report` with a successful result.
-    #[must_use]
     #[inline]
     pub const fn ok() -> Self {
         Self {
@@ -107,7 +106,6 @@ impl<E: Diagnostic> Report<E> {
     /// this call, so rendered traces end at the `run` closure boundary; the
     /// previous marker is restored afterwards. A `start_marker!` set inside
     /// `func` does not outlive it.
-    #[must_use]
     pub fn run<F>(func: F) -> Self
     where
         F: FnOnce() -> Result<(), E>,
@@ -140,7 +138,6 @@ impl<E: Diagnostic> Report<E> {
     }
 
     /// Disable colors in output.
-    #[must_use]
     #[inline]
     pub const fn no_colors(mut self) -> Self {
         self.color_config = ColorMode::Never;
@@ -148,7 +145,6 @@ impl<E: Diagnostic> Report<E> {
     }
 
     /// Force colors in output.
-    #[must_use]
     #[inline]
     pub const fn force_colors(mut self) -> Self {
         self.color_config = ColorMode::Always;
@@ -157,7 +153,6 @@ impl<E: Diagnostic> Report<E> {
 
     /// Render this report with an explicit [`Theme`], overriding the
     /// process-global default set by [`set_theme`](crate::set_theme).
-    #[must_use]
     #[inline]
     pub const fn with_theme(mut self, theme: Theme) -> Self {
         self.theme_override = Some(theme);
