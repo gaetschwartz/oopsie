@@ -20,6 +20,9 @@ First stable release.
   `TracingLevel` and `ColorMode` are `#[non_exhaustive]`.
 - Internals are no longer public: `AsErrorSource`, `oopsie_core::alloc`, and
   `Backtrace::frames`/`as_backtrace` (use `BacktraceProvider::frames`).
+- `ErasedBacktrace::from_backtrace`/`ErasedSpanTrace::from_spantrace_ref` →
+  `From`; `EnvVarName` now comes only from `make_env_var!`; `Report` is
+  `#[must_use]`.
 - Empty span traces no longer print a `SPANTRACE` section.
 - The `tracing` feature no longer enables `tracing-subscriber`'s `env-filter`
   or default features.
