@@ -10,6 +10,7 @@ repository.workspace = true
 readme = "README.md"
 keywords.workspace = true
 categories.workspace = true
+include = ["src/**", "README.md", "LICENSE-*"]
 
 [package.metadata.docs.rs]
 features = ["serde", "tracing", "chrono", "jiff", "extras", "unstable"]

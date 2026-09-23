@@ -10,6 +10,7 @@ repository.workspace = true
 readme.workspace = true
 keywords.workspace = true
 categories.workspace = true
+include = ["src/**", "LICENSE-*"]
 
 [package.metadata.docs.rs]
 all-features = true
