@@ -15,7 +15,6 @@ use syn::punctuated::Punctuated;
 use syn::{Attribute, Fields, Meta, Token};
 
 use super::field_detect::TraceRole;
-use crate::derive::parse::existence_pred;
 
 /// Above this many base predicates the assignment space gets too large to
 /// enumerate at expansion time.
@@ -381,6 +380,43 @@ impl Assignment<'_> {
             field.attrs = self.resolve_attrs(&field.attrs);
         }
         fields
+    }
+}
+
+/// The predicate under which an item carrying `attrs` survives cfg-stripping,
+/// or `None` when nothing gates its existence. `#[cfg(P)]` contributes `P`;
+/// `#[cfg_attr(Q, cfg(P))]` contributes `any(not(Q), P)`, since the nested `cfg`
+/// only reaches the item when `Q` holds. A `cfg_attr` gating no `cfg` (however
+/// deeply nested) conditions other attributes without removing the item, so it
+/// contributes nothing.
+fn existence_pred(attrs: &[Attribute]) -> Option<TokenStream2> {
+    conjunction(attrs.iter().filter_map(|a| meta_existence_pred(&a.meta)))
+}
+
+fn meta_existence_pred(meta: &Meta) -> Option<TokenStream2> {
+    let list = meta.require_list().ok()?;
+    if list.path.is_ident("cfg") {
+        let pred = &list.tokens;
+        return Some(quote! { #pred });
+    }
+    if !list.path.is_ident("cfg_attr") {
+        return None;
+    }
+    let metas = list
+        .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+        .ok()?;
+    let mut metas = metas.iter();
+    let pred = metas.next()?;
+    let inner = conjunction(metas.filter_map(meta_existence_pred))?;
+    Some(quote! { any(not(#pred), #inner) })
+}
+
+fn conjunction(preds: impl IntoIterator<Item = TokenStream2>) -> Option<TokenStream2> {
+    let preds: Vec<TokenStream2> = preds.into_iter().collect();
+    match preds.as_slice() {
+        [] => None,
+        [pred] => Some(quote! { #pred }),
+        preds => Some(quote! { all(#(#preds),*) }),
     }
 }
 

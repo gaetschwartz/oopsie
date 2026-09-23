@@ -15,7 +15,6 @@
     reason = "derive macros (darling's FromAttributes, derive_syn_parse's #[call] closures) emit code tripping these lints, unreachable from our own logic"
 )]
 
-use proc_macro2::TokenStream;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{Expr, Ident, LitStr, Path, Token, Type, Visibility};
@@ -1992,94 +1991,18 @@ pub struct SourceField {
     pub ty: Type,
     pub kind: SourceKind,
     pub forward: ResolvedForward,
-    /// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs on the field, forwarded onto every
-    /// generated mention so stripped fields take their references with them.
-    pub cfg_attrs: Vec<syn::Attribute>,
 }
 
 #[derive(Debug)]
 pub struct AutoField {
     pub ident: Ident,
     pub ty: Type,
-    /// See [`SourceField::cfg_attrs`].
-    pub cfg_attrs: Vec<syn::Attribute>,
 }
 
 #[derive(Debug)]
 pub struct UserField {
     pub ident: Ident,
     pub ty: Type,
-    /// See [`SourceField::cfg_attrs`].
-    pub cfg_attrs: Vec<syn::Attribute>,
-}
-
-/// Whether any variant carries a `#[cfg(...)]` gate or a `#[cfg_attr(...)]`
-/// conditional that could inject one, meaning the set of variants rustc keeps
-/// is not knowable at macro-expansion time. Generated matches over `self` then
-/// need a wildcard fallback: the attribute-macro path expands before
-/// cfg-stripping, so an all-stripped enum would otherwise leave an empty `match`
-/// on a still-inhabited reference.
-pub fn any_variant_has_cfg(data: &syn::DataEnum) -> bool {
-    data.variants.iter().any(|v| {
-        v.attrs
-            .iter()
-            .any(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"))
-    })
-}
-
-/// Attributes a cfg-stripped field/variant would take with it: `#[cfg(...)]`
-/// gates and `#[cfg_attr(...)]` conditionals. Forwarded verbatim onto every
-/// generated reference (selector field, struct-expression field, match-arm
-/// binding, variant match arm) so the reference vanishes together with what
-/// rustc strips.
-pub fn forwarded_cfg_attrs(attrs: &[syn::Attribute]) -> Vec<syn::Attribute> {
-    attrs
-        .iter()
-        .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"))
-        .cloned()
-        .collect()
-}
-
-/// The predicate under which an item carrying `attrs` survives cfg-stripping,
-/// or `None` when nothing gates its existence. `#[cfg(P)]` contributes `P`;
-/// `#[cfg_attr(Q, cfg(P))]` contributes `any(not(Q), P)`, since the nested `cfg`
-/// only reaches the item when `Q` holds. A `cfg_attr` gating no `cfg` (however
-/// deeply nested) conditions other attributes without removing the item, so it
-/// contributes nothing.
-pub fn existence_pred(attrs: &[syn::Attribute]) -> Option<TokenStream> {
-    conjunction(attrs.iter().filter_map(|a| meta_existence_pred(&a.meta)))
-}
-
-fn meta_existence_pred(meta: &syn::Meta) -> Option<TokenStream> {
-    let list = meta.require_list().ok()?;
-    if list.path.is_ident("cfg") {
-        let pred = &list.tokens;
-        return Some(quote::quote! { #pred });
-    }
-    if !list.path.is_ident("cfg_attr") {
-        return None;
-    }
-    let metas = list
-        .parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)
-        .ok()?;
-    let mut metas = metas.iter();
-    let pred = metas.next()?;
-    let inner = conjunction(metas.filter_map(meta_existence_pred))?;
-    Some(quote::quote! { any(not(#pred), #inner) })
-}
-
-fn conjunction(preds: impl IntoIterator<Item = TokenStream>) -> Option<TokenStream> {
-    let preds: Vec<TokenStream> = preds.into_iter().collect();
-    match preds.as_slice() {
-        [] => None,
-        [pred] => Some(quote::quote! { #pred }),
-        preds => Some(quote::quote! { all(#(#preds),*) }),
-    }
-}
-
-/// See [`forwarded_cfg_attrs`].
-fn field_cfg_attrs(field: &syn::Field) -> Vec<syn::Attribute> {
-    forwarded_cfg_attrs(&field.attrs)
 }
 
 impl CategorizedFields {
@@ -2132,7 +2055,6 @@ impl CategorizedFields {
                 continue;
             };
             let attrs = FieldAttrs::from_field(field)?;
-            let cfg_attrs = field_cfg_attrs(field);
 
             // Collect provides
             for p in &attrs.provide {
@@ -2226,19 +2148,16 @@ impl CategorizedFields {
                     ty: field.ty.clone(),
                     kind: attrs.from,
                     forward,
-                    cfg_attrs,
                 });
             } else if attrs.capture.is_enabled() {
                 auto_fields.push(AutoField {
                     ident,
                     ty: field.ty.clone(),
-                    cfg_attrs,
                 });
             } else {
                 user_fields.push(UserField {
                     ident,
                     ty: field.ty.clone(),
-                    cfg_attrs,
                 });
             }
         }

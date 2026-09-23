@@ -2,9 +2,8 @@
 //!
 //! A [`ResolvedEnum`]/[`ResolvedStruct`] holds everything the generators need
 //! about one error type: the container attributes, the per-variant (or struct)
-//! parsed `#[oopsie(...)]` metas, the categorized fields, the `#[cfg(...)]`
-//! gating, and the facts derived from them (selector name, whether any variant
-//! is cfg-gated). It is built once from the `DeriveInput` and shared by
+//! parsed `#[oopsie(...)]` metas, the categorized fields, and the facts derived
+//! from them (such as the selector name). It is built once from the `DeriveInput` and shared by
 //! reference with every generator, so each attribute is parsed and each
 //! cross-cutting rule is checked exactly once.
 
@@ -27,10 +26,6 @@ pub struct ResolvedVariant<'a> {
     pub attrs: VariantAttrs,
     /// The variant's fields split into source/auto/user plus trace detection.
     pub fields: CategorizedFields,
-    /// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs gating the whole variant,
-    /// forwarded onto every generated mention so a stripped variant takes its
-    /// impls with it.
-    pub cfg_attrs: Vec<syn::Attribute>,
     /// The context selector struct name (variant name with `Error` stripped and
     /// the suffix applied); `None` for a `transparent` variant, which generates
     /// a `From` impl rather than a named selector.
@@ -48,11 +43,6 @@ pub struct ResolvedEnum<'a> {
     pub input: &'a DeriveInput,
     pub container: &'a EnumContainerAttrs,
     pub variants: Vec<ResolvedVariant<'a>>,
-    /// Whether any variant carries a `#[cfg(...)]` gate or a `#[cfg_attr(...)]`
-    /// conditional that could inject one, so generated matches over `self` need
-    /// a wildcard fallback (the attribute-macro path expands before
-    /// cfg-stripping).
-    pub any_variant_cfg: bool,
 }
 
 /// A fully resolved struct: container + variant-role attributes plus fields.
@@ -81,8 +71,8 @@ impl<'a> ResolvedEnum<'a> {
         for variant in &data.variants {
             categorized.push(CategorizedFields::from_fields(&variant.fields)?);
         }
-        for fields in &categorized {
-            reject_cfg_on_source(fields)?;
+        for (variant, fields) in data.variants.iter().zip(&categorized) {
+            reject_cfg_on_source(&variant.fields, fields)?;
         }
 
         // Phase 2 — parse attributes, resolve selector names, validate
@@ -95,16 +85,10 @@ impl<'a> ResolvedEnum<'a> {
         let mut variants = Vec::with_capacity(data.variants.len());
         for (variant, fields) in data.variants.iter().zip(categorized) {
             let attrs = VariantAttrs::from_attrs(&variant.attrs)?;
-            let cfg_attrs = super::parse::forwarded_cfg_attrs(&variant.attrs);
 
             let selector_ident = if attrs.transparent {
                 validate_transparent(&variant.ident, &input.ident, &fields, &attrs)?;
-                // cfg-gated variants may legitimately share a source type under
-                // mutually exclusive cfgs, so only unconditional variants
-                // participate in the collision check.
-                if cfg_attrs.is_empty()
-                    && let Some(source) = &fields.source
-                {
+                if let Some(source) = &fields.source {
                     let ty = transparent_source_ty(source);
                     let key = ty.pretty().to_string();
                     if let Some(first) = seen_transparent_sources.insert(key, variant.ident.clone())
@@ -119,18 +103,12 @@ impl<'a> ResolvedEnum<'a> {
                 None
             } else {
                 let ident = super::gen_selectors::selector_name(&variant.ident, &suffix)?;
-                // cfg-gated variants may legitimately share a selector name
-                // under mutually exclusive cfgs, so only unconditional variants
-                // participate in the collision check.
-                if cfg_attrs.is_empty() {
-                    if ident == input.ident {
-                        return Err(selector_matches_enum_error(&variant.ident, &input.ident));
-                    }
-                    if let Some(first) =
-                        seen_selectors.insert(ident.to_string(), variant.ident.clone())
-                    {
-                        return Err(selector_collision_error(&first, &variant.ident, &ident));
-                    }
+                if ident == input.ident {
+                    return Err(selector_matches_enum_error(&variant.ident, &input.ident));
+                }
+                if let Some(first) = seen_selectors.insert(ident.to_string(), variant.ident.clone())
+                {
+                    return Err(selector_collision_error(&first, &variant.ident, &ident));
                 }
                 Some(ident)
             };
@@ -139,7 +117,6 @@ impl<'a> ResolvedEnum<'a> {
                 variant,
                 attrs,
                 fields,
-                cfg_attrs,
                 selector_ident,
             });
         }
@@ -158,7 +135,6 @@ impl<'a> ResolvedEnum<'a> {
             input,
             container,
             variants,
-            any_variant_cfg: super::parse::any_variant_has_cfg(data),
         })
     }
 
@@ -205,7 +181,7 @@ impl<'a> ResolvedStruct<'a> {
             unreachable!("ResolvedStruct::resolve called on a non-struct")
         };
         let fields = CategorizedFields::from_fields(&data.fields)?;
-        reject_cfg_on_source(&fields)?;
+        reject_cfg_on_source(&data.fields, &fields)?;
 
         if attrs.transparent {
             validate_transparent(&input.ident, &input.ident, &fields, attrs)?;
@@ -239,11 +215,16 @@ impl<'a> ResolvedStruct<'a> {
     }
 }
 
-/// `#[cfg(...)]` on a source field is unsupported: gating the source would strip
-/// the `From`/`Contextual` impls that depend on it, with no sourceless fallback.
-fn reject_cfg_on_source(fields: &CategorizedFields) -> syn::Result<()> {
-    if let Some(source) = &fields.source
-        && let Some(cfg) = source.cfg_attrs.first()
+/// `#[cfg(...)]` on a source field is unsupported.
+fn reject_cfg_on_source(fields: &syn::Fields, categorized: &CategorizedFields) -> syn::Result<()> {
+    let Some(source) = &categorized.source else {
+        return Ok(());
+    };
+    if let Some(cfg) = fields
+        .iter()
+        .filter(|f| f.ident.as_ref() == Some(&source.ident))
+        .flat_map(|f| &f.attrs)
+        .find(|a| a.path().is_ident("cfg"))
     {
         return Err(syn::Error::new_spanned(
             cfg,
@@ -511,10 +492,7 @@ impl HasHelp for StructAttrs {
     }
 }
 
-/// Field-binding patterns (`name,`) for a destructure, each carrying its
-/// `#[cfg(...)]`/`#[cfg_attr(...)]` attrs so a binding for a stripped field is
-/// stripped too — a trailing `..` in the pattern absorbs the gap. Pattern fields
-/// accept attributes; the destructures relying on this do so.
+/// Field-binding patterns (`name,`) for a destructure.
 pub fn field_binding_pats(fields: &syn::Fields) -> Vec<TokenStream2> {
     let syn::Fields::Named(named) = fields else {
         return Vec::new();
@@ -524,8 +502,7 @@ pub fn field_binding_pats(fields: &syn::Fields) -> Vec<TokenStream2> {
         .iter()
         .filter_map(|f| {
             let ident = f.ident.as_ref()?;
-            let cfg = super::parse::forwarded_cfg_attrs(&f.attrs);
-            Some(quote! { #(#cfg)* #ident, })
+            Some(quote! { #ident, })
         })
         .collect()
 }

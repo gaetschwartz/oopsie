@@ -8,18 +8,13 @@
     reason = "derive-macro test fixtures intentionally trip style lints"
 )]
 
-//! `#[cfg(...)]` propagation onto generated selectors and the generated
-//! `From`/`Contextual`/`Display`/source match arms.
+//! Tests that `#[cfg(...)]`-gated variants and fields behave correctly in
+//! generated code: gated-out items leave no dangling references to
+//! compiled-out variants, fields, or types, and gated-in items work normally.
 //!
-//! The derive extracts each variant's `#[cfg(...)]` attributes and re-applies
-//! them to the code it generates for that variant. If that forwarding breaks, a
-//! gated-*out* variant's selector and impl arms would still be emitted and would
-//! reference a variant (and field types) that no longer exist — a compile error.
-//!
-//! These tests pin the behavior deterministically without depending on which
-//! cargo features happen to be enabled: `cfg(all())` is always satisfied and
-//! `cfg(any())` never is. The extraction logic treats them exactly like a
-//! `cfg(feature = "...")` gate, so this exercises the same propagation path.
+//! `cfg(all())` and `cfg(any())` stand in for an active/inactive feature gate,
+//! so these tests are deterministic regardless of which cargo features happen
+//! to be enabled.
 
 use oopsie::{Oopsie, oopsie};
 
@@ -51,21 +46,17 @@ fn cfg_satisfied_variant_builds() {
 #[test]
 fn cfg_gated_out_variant_emits_no_dangling_refs() {
     // This test's existence is incidental — the real assertion is that this
-    // file compiles at all. If the `#[cfg(any())]` on `Gone` were not forwarded
-    // to its generated selector / From / Display arms, that code would reference
-    // `CfgError::Gone` and `GhostType` (both compiled out) and fail to build.
+    // file compiles: the gated-out `Gone` variant must leave no generated code
+    // referencing `CfgError::Gone` or `GhostType`, both compiled out.
     let err = PresentOopsie { n: 1u32 }.build();
     assert!(matches!(err, CfgError::Present { .. }));
 }
 
-// ---- cfg propagation under the `#[oopsie(...)]` attribute-macro form ----
+// ---- same guarantee under the `#[oopsie(...)]` attribute-macro form ----
 //
-// The attribute macro (oopsie_attr/mod.rs) delegates to `derive::expand_enum`,
-// so the same cfg-forwarding path must apply. Here one variant is gated behind
-// an ACTIVE cfg (`cfg(test)` — these are compiled as a test binary) and another
-// behind an INACTIVE cfg (`cfg(any())`). The inactive variant references a type
-// that only exists under the inactive cfg, so if forwarding broke, the generated
-// selector/From/Display arms would name a compiled-out type and fail to build.
+// One variant is gated behind an ACTIVE cfg (`cfg(test)`, since this compiles
+// as a test binary) and another behind an INACTIVE cfg (`cfg(any())`), whose
+// field type only exists under that same inactive cfg.
 
 /// Only exists under the never-satisfied cfg; the gated-out variant references it.
 #[cfg(any())]
@@ -93,8 +84,8 @@ fn attr_cfg_active_variant_builds() {
 }
 
 // Two variants whose stripped selector names collide (`Read` / `ReadError`)
-// are allowed when each carries a mutually exclusive `#[cfg(...)]`: only one
-// selector is ever emitted, so the collision check must exempt them.
+// are fine when each carries a mutually exclusive `#[cfg(...)]`: only one
+// ever survives stripping, so there is no real collision.
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
 pub enum CfgCollisionError {
@@ -114,11 +105,9 @@ fn cfg_gated_variants_may_share_selector_name() {
 
 // ---- field-level cfg under the `#[oopsie(...)]` attribute-macro form ----
 //
-// Attribute macros run before rustc strips `#[cfg]`, so a field gated out by an
-// inactive cfg is still visible to the macro. Its cfg attrs must ride onto every
-// generated mention (selector struct field, `build()` initializer, Display
-// destructure binding); if they don't, the generated code references a field
-// rustc removed and fails with E0559/E0026/E0063.
+// A field gated out by `#[cfg(any())]` must be absent from every place
+// generated code could mention it — the selector struct, `build()`, and the
+// `Display` destructuring — or it references a field rustc stripped.
 
 #[cfg(any())]
 pub struct FieldGhost;
@@ -143,8 +132,7 @@ fn field_cfg_stripped_field_drops_its_generated_mentions() {
     assert_eq!(err.to_string(), "v: 9");
 }
 
-// Enabled-cfg twin: the field is present and usable. A cfg-gated field takes its
-// concrete type (not the `Into` selector param), so `keep` is passed concretely.
+// Enabled-cfg twin: the field is present and works normally.
 #[oopsie]
 #[oopsie(module(false), suffix = "Ctx")]
 pub enum FieldCfgPresentError {
@@ -169,9 +157,9 @@ fn field_cfg_active_field_is_present_and_usable() {
 
 // ---- field-level cfg referencing a generic parameter ----
 //
-// `x`'s cfg-gated type is the only reference to `T` in variant `GenV`; the
-// impls are generated from the cfg-stripped item, so `GenV`'s selector never
-// declares `T`. `GenW`'s `y` field references `T` unconditionally.
+// `x` is `GenV`'s only reference to `T`, and it's gated out — so `GenV`'s
+// selector must not declare `T` at all. `GenW`'s `y` field references `T`
+// unconditionally and needs no special handling.
 
 #[oopsie]
 #[oopsie(module(false), suffix)]
@@ -200,8 +188,9 @@ fn unconditional_generic_field_needs_no_marker() {
 
 // ---- fully cfg-stripped enums under the attribute-macro path ----
 //
-// An enum whose variants are *all* gated out has no match arms left, but
-// `&Enum` is still inhabited, so a bare `match self {}` would be E0004.
+// An enum whose variants are *all* gated out still exists as a type — `&Enum`
+// stays inhabited — so any generated code matching over `self` must still
+// compile with zero arms.
 
 #[cfg(any())]
 pub struct AllGoneGhost;
@@ -225,9 +214,8 @@ fn all_variants_stripped_still_compiles() {
     fn _accepts(_: &AllStrippedError) {}
 }
 
-// Mixed enum: one variant stripped, one kept. The wildcard fallback is emitted
-// because a variant is cfg-gated, yet the kept variant's Display and source
-// arms must still resolve normally.
+// Mixed enum: one variant stripped, one kept. The kept variant's Display and
+// source arms must resolve normally with the other variant gone.
 
 #[cfg(any())]
 pub struct MixedGhost;
@@ -256,14 +244,12 @@ fn mixed_cfg_kept_variant_display_and_source_work() {
 
 // ---- cfg-gated EXPLICIT trace FIELDS under the attribute-macro path ----
 //
-// The cfg sits on the trace FIELD (`#[oopsie(backtrace)]` / `spantrace` /
-// `traces` / `location`), inside a kept variant — distinct from a cfg on the
-// whole variant. The attribute macro runs before rustc strips `#[cfg]`, so the
-// field's own cfg must ride onto its generated `Diagnostic` accessor arm (and
-// `provide()` stmt); otherwise the arm names a field rustc later removed and
-// fails with E0026 (enum) / E0609 (struct). The stripped variant has no other
-// own trace, so its arm must drop and fall through to the accessor's
-// `_ => None`. The enabled twin (`cfg(all())` on the field) keeps it.
+// The cfg sits on a trace FIELD (`#[oopsie(backtrace)]` / `spantrace` /
+// `traces` / `location`) inside an otherwise-kept variant — distinct from
+// gating the whole variant. A stripped trace field must not appear in its
+// `Diagnostic` accessor, which falls through to `None` for that variant; the
+// enabled twin (`cfg(all())` on the field) keeps the field and the accessor
+// returns `Some`.
 
 #[oopsie]
 #[oopsie(module(false), suffix = "Bt")]
@@ -299,7 +285,7 @@ fn cfg_kept_backtrace_field_accessor_returns_some() {
     assert!(err.oopsie_backtrace().is_some());
 }
 
-// Packed `traces` field under field-level cfg: same arm/stmt-naming gap.
+// Packed `traces` field under field-level cfg: same guarantee as above.
 #[oopsie]
 #[oopsie(module(false), suffix = "Tr")]
 pub enum TracesFieldCfgError {
@@ -371,10 +357,10 @@ fn cfg_kept_location_field_accessor_returns_some() {
     assert!(err.oopsie_location().is_some());
 }
 
-// Struct path: the accessor methods name `self.<field>` directly (no match
-// arm), so a stripped own trace field there would be E0609 unless the whole
-// method drops with the field. Selector name is the struct name with a trailing
-// `Error` stripped (default suffix off).
+// Struct path: the accessor names `self.<field>` directly (no match arm), so
+// a stripped trace field must drop the whole method rather than just an arm.
+// Selector name is the struct name with a trailing `Error` stripped (default
+// suffix off).
 #[oopsie]
 #[oopsie(module(false))]
 pub struct StructBtStrippedError {
@@ -488,8 +474,9 @@ fn struct_cfg_kept_help_field_returns_some() {
     assert_eq!(&*err.oopsie_help_text().unwrap(), "do this");
 }
 
-// Enum sibling: the help accessor arm is already cfg-gated, but the `provide()`
-// closure references the help field too and must drop with it under `unstable`.
+// Enum sibling: the `provide()` closure (built under
+// `error_generic_member_access`) also references the help field and must
+// drop together with the accessor arm.
 #[oopsie]
 #[oopsie(module(false), suffix = "He")]
 pub enum EnumHelpCfgError {
@@ -530,11 +517,9 @@ fn enum_cfg_kept_help_field_returns_some() {
 
 // ---- field-level `provide(ErrorCode)` under field-level cfg ----
 //
-// The provide expr references the field itself, so a cfg-stripped field's
-// binding drops from the destructure while the expr still names it — unless
-// the whole arm/method drops with the field (the enum drops to `_ => None`;
-// the struct method drops entirely with the field's cfg). Before the fix this
-// failed with E0425 ("cannot find value `code`") on the stable accessor.
+// The `provide` expression references the field by name, so a stripped field
+// must drop the whole arm/method with it — the enum falls through to
+// `_ => None`, the struct drops the accessor entirely.
 
 #[oopsie]
 #[oopsie(module(false), suffix = "Ec")]
@@ -615,13 +600,11 @@ fn struct_cfg_kept_error_code_field_returns_some() {
 
 // ---- `cfg_attr`-wrapped helper attrs under the attribute-macro path ----
 //
-// The attribute macro strips `#[oopsie(...)]` helper attrs before re-emitting
-// the item (the derive that registered them is gone), but a helper attr nested
-// inside `#[cfg_attr(pred, oopsie(...))]` survives a plain path match. With the
-// predicate true rustc then applies it and errors "cannot find attribute
-// `oopsie`". The nested helper must be carved out of the `cfg_attr` while its
-// siblings (and the `cfg_attr` itself) are kept. A cfg_attr-wrapped helper is
-// invisible to the derive layer, so `hint` below is a plain user field.
+// An `#[oopsie(...)]` helper attribute nested inside `#[cfg_attr(pred, ...)]`
+// must never survive into the final item as a bare, unrecognized `oopsie`
+// attribute, regardless of whether `pred` holds — siblings and the
+// `cfg_attr` itself stay. Such a wrapped helper is invisible to the macro, so
+// `hint` below is treated as a plain user field either way.
 
 #[oopsie]
 #[oopsie(module(false), suffix = "Ca")]
@@ -665,12 +648,10 @@ fn cfg_attr_wrapped_helper_attr_is_stripped_with_predicate_off() {
 // ---- variant-level `cfg_attr`-wrapped `cfg` (the "requires-both" idiom) ----
 //
 // `#[cfg_attr(not(feature = "x"), cfg(feature = "x"))]` gates a variant on a
-// feature without a literal `#[cfg]`: with the feature off the cfg_attr injects
-// an unsatisfied `cfg`, with it on nothing is applied. Variant-level cfg
-// collection must look through `cfg_attr` the same way the field side does, or
-// the gated-out variant still gets unconditional selectors / From impls / match
-// arms naming a variant (and field types) rustc stripped. `all()`/`any()` pin
-// the two feature states deterministically.
+// feature without a literal `#[cfg]`: with the feature off the injected `cfg`
+// strips the variant, with it on nothing is applied. A variant gated out this
+// way must leave no dangling references, exactly like a literal `#[cfg]`.
+// `all()`/`any()` pin the two feature states deterministically.
 
 #[cfg(any())]
 pub struct BothGhost;
@@ -690,9 +671,9 @@ pub enum RequiresBothOffError {
 
 #[test]
 fn cfg_attr_gated_out_variant_emits_no_dangling_refs() {
-    // The real assertion is that this file compiles: without cfg_attr
-    // forwarding, `Gated`'s selector and Display/source arms would reference
-    // the stripped `RequiresBothOffError::Gated` and `BothGhost`.
+    // The real assertion is that this file compiles: the gated-out `Gated`
+    // variant must leave no generated code referencing
+    // `RequiresBothOffError::Gated` or `BothGhost`, both stripped.
     let err = PlainOff { n: 1u32 }.build();
     assert!(matches!(err, RequiresBothOffError::Plain { n: 1 }));
 }
@@ -717,8 +698,8 @@ fn cfg_attr_kept_variant_builds() {
     assert_eq!(err.to_string(), "gated: 7");
 }
 
-// Every variant stripped through cfg_attr: the generated matches over `self`
-// still need their wildcard fallback.
+// Every variant stripped through cfg_attr: the type stays inhabited with
+// zero variants, so generated code matching over `self` must still compile.
 #[oopsie]
 #[oopsie(module(false), suffix = "Ag")]
 pub enum AllCfgAttrStrippedError {
@@ -734,14 +715,10 @@ fn all_variants_stripped_via_cfg_attr_still_compiles() {
 
 // ---- trace FIELDS gated by a `cfg_attr`-injected `cfg` ----
 //
-// `#[cfg_attr(not(feature = "x"), cfg(feature = "x"))]` gates a field on a
-// feature without a literal `#[cfg]`. The struct path picks between the full
-// accessor (which names `self.<field>`) and a source-only complement from the
-// field's existence predicate, so that predicate must look through `cfg_attr`
-// to the `cfg` it injects — otherwise the stripped field keeps its accessor and
-// fails with E0609. The complement must also stay exactly complementary, or the
-// kept field gets the method defined twice. `all()`/`any()` pin the two feature
-// states deterministically.
+// Same guarantee as a literal `#[cfg]` on a trace field, but the field is
+// gated through `#[cfg_attr(pred, cfg(...))]` instead. The struct accessor
+// must exist for exactly one of the stripped/kept twins — never both, never
+// neither. `all()`/`any()` pin the two feature states deterministically.
 
 #[oopsie]
 #[oopsie(module(false))]
@@ -859,9 +836,9 @@ fn struct_non_cfg_cfg_attr_backtrace_field_returns_some() {
     assert!(err.oopsie_backtrace().is_some());
 }
 
-// With a source present the stripped branch emits the source-only complement,
-// so the two branches must partition exactly: a gap loses source forwarding, an
-// overlap defines the accessor twice.
+// With a source present, the stripped field's own-trace forwards to the
+// source's instead — the stripped and kept twins must partition exactly, so
+// there is no gap (lost forwarding) and no overlap (a duplicate accessor).
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false), suffix = "CaLeaf")]
 pub enum CfgAttrLeafError {
@@ -918,8 +895,8 @@ fn struct_cfg_attr_kept_backtrace_field_with_source_returns_some() {
     assert!(err.oopsie_backtrace().is_some());
 }
 
-// Enum sibling: the accessor arm carries the field's `cfg_attr` and drops to
-// the trailing `_ => None` when the injected `cfg` strips the field.
+// Enum sibling: the stripped field's variant arm falls through to the
+// accessor's `_ => None`.
 #[oopsie]
 #[oopsie(module(false), suffix = "Cb")]
 pub enum EnumBtCfgAttrError {

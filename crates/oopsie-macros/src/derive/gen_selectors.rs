@@ -48,7 +48,7 @@ struct SelectorShape<'a> {
     /// The names of the error parameters the selector's fields reference, to
     /// split the error parameters into selector-bound and free.
     referenced_names: std::collections::HashSet<String>,
-    /// The braced field block (`{ ... }`), each field carrying its cfg attrs.
+    /// The braced field block (`{ ... }`).
     struct_fields: TokenStream2,
     /// The `#[derive(...)]` line for the selector struct.
     derives: TokenStream2,
@@ -57,21 +57,6 @@ struct SelectorShape<'a> {
 /// Build a selector's generics, field block, and derive set from its user
 /// fields, projecting `generics` down to the parameters those fields reference.
 /// `doc` renders each field's doc-comment.
-///
-/// A cfg-gated field cannot ride an `Into` type parameter: cfg attrs are
-/// rejected on generic *arguments* (the `Selector<__T>` use position) and
-/// unstable in `where` clauses, so a gated `__T` would dangle once the field is
-/// stripped. Such fields instead take their own concrete type (no conversion),
-/// gated alongside the field; only unconditional fields contribute a parameter.
-/// A concrete-typed field also can't ride a blanket `Copy`/`Clone` derive (its
-/// type may be neither), so any cfg-gated field drops both from the selector.
-///
-/// A cfg-gated field's type still projects its error parameter onto the
-/// selector (the struct must declare it to name the field at all before
-/// stripping), but stripping the field would then leave that parameter
-/// declared and unused (E0392) whenever no unconditional field also names it.
-/// A hidden `PhantomData` field carries every such parameter unconditionally
-/// so the struct keeps compiling regardless of which cfg-gated fields survive.
 fn selector_shape<'a>(
     user_fields: &[UserField],
     generics: &'a Generics,
@@ -79,49 +64,34 @@ fn selector_shape<'a>(
 ) -> SelectorShape<'a> {
     let declared = DeclaredParams::from_generics(generics);
     let mut referenced = ReferencedParams::default();
-    let mut unconditionally_referenced = ReferencedParams::default();
     let mut into_param_idents = Vec::new();
     let mut into_bounds = Vec::new();
     let mut fields = Vec::new();
     // A selector blanket-derives `Copy`/`Clone` only when every field rides an
-    // `Into` parameter; a cfg-gated field (concrete type) or a parameter-typed
-    // field (also concrete) may be neither, so either drops both derives.
+    // `Into` parameter; a parameter-typed field (concrete) may be neither, so it
+    // drops both derives.
     let mut all_into_params = true;
     for (i, uf) in user_fields.iter().enumerate() {
         let field_ident = &uf.ident;
         let field_ty = &uf.ty;
-        let cfg = &uf.cfg_attrs;
         let field_doc = doc(uf);
         referenced.add_type(field_ty, &declared);
-        if cfg.is_empty() {
-            unconditionally_referenced.add_type(field_ty, &declared);
-        }
         // A field whose type names a generic parameter takes that parameter's
         // type directly: an `Into`-converted `__T{i}: Into<FieldTy>` would leave
         // the parameter used only in a `where` bound, never in a struct field —
         // which rustc rejects (E0392) and no phantom field can fix without
         // breaking the selector's struct-literal construction. Only a field with
         // no parameter rides the `Into` ergonomics.
-        let references_param = declared.type_references_param(field_ty);
-        if cfg.is_empty() && !references_param {
+        if declared.type_references_param(field_ty) {
+            all_into_params = false;
+            fields.push(quote! { #[doc = #field_doc] pub #field_ident: #field_ty });
+        } else {
             let ty_param = fresh_into_param(i, &declared, &into_param_idents);
             into_param_idents.push(ty_param.clone());
             let bound = quote! { #ty_param: ::core::convert::Into<#field_ty> };
             into_bounds.push((bound, declared.params_for_into_bound(field_ty)));
             fields.push(quote! { #[doc = #field_doc] pub #field_ident: #ty_param });
-        } else {
-            all_into_params = false;
-            fields.push(quote! { #(#cfg)* #[doc = #field_doc] pub #field_ident: #field_ty });
         }
-    }
-
-    let cfg_only_names: std::collections::HashSet<String> = referenced
-        .names()
-        .difference(&unconditionally_referenced.names())
-        .cloned()
-        .collect();
-    if let Some(phantom_ty) = cfg_only_phantom_field(generics, &cfg_only_names) {
-        fields.push(quote! { #[doc(hidden)] pub __oopsie_phantom: #phantom_ty });
     }
 
     let projected = super::generics::project(generics, &referenced);
@@ -171,41 +141,6 @@ fn fresh_into_param(i: usize, declared: &DeclaredParams, assigned: &[Ident]) -> 
             return candidate;
         }
         n += 1;
-    }
-}
-
-/// The `PhantomData` marker field for the parameters in `cfg_only_names` — each
-/// projected only by a cfg-gated field, so it would dangle once that field is
-/// stripped. Every such parameter rides as one element of a tuple (a lifetime
-/// as `&'a ()`, a const as `[(); N]`), so a single field covers them all;
-/// `None` when no parameter needs one.
-fn cfg_only_phantom_field(
-    generics: &Generics,
-    cfg_only_names: &std::collections::HashSet<String>,
-) -> Option<TokenStream2> {
-    let elems: Vec<TokenStream2> = generics
-        .params
-        .iter()
-        .filter(|param| cfg_only_names.contains(&super::generics::param_name(param)))
-        .map(|param| match param {
-            GenericParam::Lifetime(lt) => {
-                let lifetime = &lt.lifetime;
-                quote! { &#lifetime () }
-            }
-            GenericParam::Type(tp) => {
-                let ident = &tp.ident;
-                quote! { #ident }
-            }
-            GenericParam::Const(cp) => {
-                let ident = &cp.ident;
-                quote! { [(); #ident] }
-            }
-        })
-        .collect();
-    if elems.is_empty() {
-        None
-    } else {
-        Some(quote! { ::core::marker::PhantomData<(#(#elems,)*)> })
     }
 }
 
@@ -420,21 +355,18 @@ fn render_where(predicates: &[TokenStream2]) -> TokenStream2 {
 }
 
 /// Per-field initializers for the destination's struct expression, e.g.
-/// `name: self.name.into()`. A field that keeps its concrete type on the
-/// selector — cfg-gated, or a generic parameter named directly — already holds
-/// the destination type, so it moves without `.into()`; cfg attrs ride along so
-/// the initializer is stripped together with the field.
+/// `name: self.name.into()`. A field whose type names a generic parameter keeps
+/// that concrete type on the selector, so it moves without `.into()`.
 fn user_init_exprs(user_fields: &[UserField], generics: &syn::Generics) -> Vec<TokenStream2> {
     let declared = DeclaredParams::from_generics(generics);
     user_fields
         .iter()
         .map(|uf| {
             let ident = &uf.ident;
-            let cfg = &uf.cfg_attrs;
-            if cfg.is_empty() && !declared.type_references_param(&uf.ty) {
-                quote! { #ident: self.#ident.into() }
+            if declared.type_references_param(&uf.ty) {
+                quote! { #ident: self.#ident }
             } else {
-                quote! { #(#cfg)* #ident: self.#ident }
+                quote! { #ident: self.#ident.into() }
             }
         })
         .collect()
@@ -607,7 +539,6 @@ pub fn gen_enum_selectors(
         let variant_attrs = &v.attrs;
         let categorized = &v.fields;
         let variant_ident = v.ident();
-        let cfg_attrs = &v.cfg_attrs;
 
         let Some(selector_ident) = &v.selector_ident else {
             // `transparent` variant: the resolved model validated the source
@@ -645,7 +576,6 @@ pub fn gen_enum_selectors(
             let auto_names = gen_auto_field_inits(categorized);
             let doc = format!("Converts `{param_ty}` into `{enum_ident}::{variant_ident}`.");
             selectors.push(quote! {
-                #(#cfg_attrs)*
                 impl #impl_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics #where_clause {
                     #[doc = #doc]
                     #[track_caller]
@@ -694,14 +624,12 @@ pub fn gen_enum_selectors(
         let selector_doc = format!("Context selector for `{enum_ident}::{variant_ident}`.");
         let selector_struct = if user_fields.is_empty() {
             quote! {
-                #(#cfg_attrs)*
                 #[doc = #selector_doc]
                 #[derive(Debug, Copy, Clone)]
                 #selector_vis struct #selector_ident;
             }
         } else {
             quote! {
-                #(#cfg_attrs)*
                 #[doc = #selector_doc]
                 #derives
                 #selector_vis struct #selector_ident #struct_decl #struct_fields
@@ -723,25 +651,12 @@ pub fn gen_enum_selectors(
         };
 
         // Generate Contextual or build/fail depending on whether there's a source
-        let methods_inner = if has_source {
+        let methods = if has_source {
             reject_unconstrained_sourced(categorized, &shape)?;
             gen_build_error(selector_ident, &dest, categorized, &shape, oopsie_path)
         } else {
             gen_build_fail(selector_ident, &dest, categorized, &shape, oopsie_path)
         };
-        // Wrap methods in `const _: () = { ... };` so cfg-attrs apply to all
-        // impl blocks emitted by gen_build_error / gen_build_fail.
-        let methods = if cfg_attrs.is_empty() {
-            methods_inner
-        } else {
-            quote! {
-                #(#cfg_attrs)*
-                const _: () = {
-                    #methods_inner
-                };
-            }
-        };
-
         selectors.push(quote! {
             #selector_struct
             #methods
@@ -973,33 +888,28 @@ fn gen_auto_inits(
         .map(|af| {
             let ident = &af.ident;
             let ty = &af.ty;
-            let cfg = &af.cfg_attrs;
             if let Some(source_arg) = source_arg {
                 quote! {
-                    #(#cfg)*
                     let #ident = {
                         use #oopsie_path::__private::{CaptureFromExt as _, CaptureFromFallback as _};
                         (&#oopsie_path::__private::CaptureProbe(&#source_arg)).resolve::<#ty>()
                     };
                 }
             } else {
-                quote! { #(#cfg)* let #ident = <#ty as #oopsie_path::Capturable>::capture(); }
+                quote! { let #ident = <#ty as #oopsie_path::Capturable>::capture(); }
             }
         })
         .collect()
 }
 
-/// Shorthand struct-expression initializers (`name,`) for auto-captured fields,
-/// each carrying its cfg attrs so a stripped field's binding and reference
-/// vanish together.
+/// Shorthand struct-expression initializers (`name,`) for auto-captured fields.
 fn gen_auto_field_inits(categorized: &CategorizedFields) -> Vec<TokenStream2> {
     categorized
         .auto_fields
         .iter()
         .map(|af| {
             let ident = &af.ident;
-            let cfg = &af.cfg_attrs;
-            quote! { #(#cfg)* #ident, }
+            quote! { #ident, }
         })
         .collect()
 }

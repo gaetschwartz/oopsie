@@ -132,16 +132,13 @@ fn const_panic_msg(
     quote_spanned! {span=> ::core::panic!("{}", #chain.as_str()) }
 }
 
-/// A variant's payload size, as the sum of its field sizes. Each term carries
-/// the field's `#[cfg]` so a cfg-stripped field drops out instead of leaving its
-/// (now-removed) type referenced — the attribute-macro form expands before rustc
-/// strips `#[cfg]`. The sum ignores layout padding, but this value only ranks
-/// variants to attribute the blame; the size check itself uses `size_of::<E>()`.
+/// A variant's payload size, as the sum of its field sizes. The sum ignores
+/// layout padding, but this value only ranks variants to attribute the blame;
+/// the size check itself uses `size_of::<E>()`.
 fn payload_size(variant: &ResolvedVariant<'_>) -> TokenStream2 {
     let terms = variant.variant.fields.iter().map(|f| {
-        let cfg = super::parse::forwarded_cfg_attrs(&f.attrs);
         let ty = &f.ty;
-        quote! { #( #cfg )* { __payload += ::core::mem::size_of::<#ty>(); } }
+        quote! { { __payload += ::core::mem::size_of::<#ty>(); } }
     });
     quote! {{
         let mut __payload = 0usize;
@@ -240,13 +237,11 @@ fn gen_enum_upper(p: &EnumUpperParams<'_>) -> TokenStream2 {
 
     // Track the largest payload imperatively — const-eval has no `usize::max`.
     let updates = fielded.iter().map(|v| {
-        let cfg = &v.cfg_attrs;
         let size = payload_size(v);
-        quote! { #( #cfg )* if #size > largest { largest = #size; } }
+        quote! { if #size > largest { largest = #size; } }
     });
 
     let checks = fielded.iter().map(|v| {
-        let cfg = &v.cfg_attrs;
         let size = payload_size(v);
         let vname = v.variant.ident.to_string();
         let parts = [
@@ -260,12 +255,8 @@ fn gen_enum_upper(p: &EnumUpperParams<'_>) -> TokenStream2 {
             &parts,
             &[quote! { ::core::mem::size_of::<#ident>() }, size.clone()],
         );
-        quote! { #( #cfg )* if #size == max_payload { #p } }
+        quote! { if #size == max_payload { #p } }
     });
-
-    // Reached only when every field-bearing variant is cfg-stripped on this
-    // target: report the whole-type violation rather than blaming a variant.
-    let fallback = whole_panic(attr_span);
 
     quote! {
         if ::core::mem::size_of::<#ident>() #cmp #limit {
@@ -275,7 +266,6 @@ fn gen_enum_upper(p: &EnumUpperParams<'_>) -> TokenStream2 {
                 largest
             };
             #( #checks )*
-            #fallback
         }
     }
 }

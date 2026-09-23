@@ -262,18 +262,15 @@ pub fn gen_enum_error(
         let variant_ident = v.ident();
         let categorized = &v.fields;
         let variant_attrs = &v.attrs;
-        let cfg_attrs = &v.cfg_attrs;
 
         // source() arm
         if let Some(source_field) = &categorized.source {
             let source_ident = &source_field.ident;
             source_arms.push(quote! {
-                #(#cfg_attrs)*
                 Self::#variant_ident { #source_ident, .. } => ::core::option::Option::Some(#source_ident.as_error_source()),
             });
         } else {
             source_arms.push(quote! {
-                #(#cfg_attrs)*
                 Self::#variant_ident { .. } => ::core::option::Option::None,
             });
         }
@@ -285,10 +282,8 @@ pub fn gen_enum_error(
 
         // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
         if let Some(help_field) = &categorized.help_field {
-            let help_cfg = field_cfg_for(categorized, help_field);
             let help_value = help_text_from_field(help_field, oopsie_path);
             provide_stmts.push(quote! {
-                #(#help_cfg)*
                 #req.provide_value_with::<#oopsie_path::HelpText>(|| #help_value);
             });
         } else if let Some(help) = &variant_attrs.help {
@@ -307,19 +302,12 @@ pub fn gen_enum_error(
             code: variant_attrs.code.is_some(),
             help: categorized.help_field.is_some() || variant_attrs.help.is_some(),
         };
-        // Provide from field-level provide attrs. A cfg-stripped field's stmt
-        // must drop with it (its destructure binding already does).
-        for (field_ident, provide_attr) in &categorized.provides {
-            let field_cfg = field_cfg_for(categorized, field_ident);
-            let call = gen_provide_call(provide_attr, &req, oopsie_path, own, &mut provide_probes);
-            provide_stmts.push(quote! {
-                #(#field_cfg)*
-                #call
-            });
-        }
-
-        // Provide from variant-level provide attrs (including auto error code from trace injection)
-        for provide_attr in &variant_attrs.provides {
+        for provide_attr in categorized
+            .provides
+            .iter()
+            .map(|(_, p)| p)
+            .chain(&variant_attrs.provides)
+        {
             provide_stmts.push(gen_provide_call(
                 provide_attr,
                 &req,
@@ -340,29 +328,22 @@ pub fn gen_enum_error(
 
         // Provide backtrace/spantrace refs from detected fields. An empty
         // trace is never provided, so it cannot shadow a captured one further
-        // out (`Request` is first-wins). The statement references the field by
-        // name, so a cfg-stripped trace field's stmt must drop with it (the
-        // destructure binding already does).
+        // out (`Request` is first-wins).
         if let Some(tf) = &categorized.traces_field {
-            let field_cfg = trace_field_cfg(categorized, Some(tf));
             provide_stmts.push(quote! {
-                #(#field_cfg)*
                 if #tf.0.is_captured() {
                     #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
                 }
             });
             provide_stmts.push(quote! {
-                #(#field_cfg)*
                 if #tf.1.is_captured() {
                     #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
                 }
             });
         } else {
             if let Some(bt_field) = &categorized.backtrace_field {
-                let field_cfg = trace_field_cfg(categorized, Some(bt_field));
                 let bt_field = binding_through_box(bt_field, categorized.backtrace_boxed);
                 provide_stmts.push(quote! {
-                    #(#field_cfg)*
                     {
                         let __bt = ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field);
                         if __bt.is_captured() {
@@ -372,10 +353,8 @@ pub fn gen_enum_error(
                 });
             }
             if let Some(st_field) = &categorized.spantrace_field {
-                let field_cfg = trace_field_cfg(categorized, Some(st_field));
                 let st_field = binding_through_box(st_field, categorized.spantrace_boxed);
                 provide_stmts.push(quote! {
-                    #(#field_cfg)*
                     {
                         let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
                         if __st.is_captured() {
@@ -388,7 +367,6 @@ pub fn gen_enum_error(
 
         let field_binds = collect_provide_field_binds(categorized);
         provide_arms.push(quote! {
-            #(#cfg_attrs)*
             Self::#variant_ident { #(#field_binds)* .. } => {
                 #(#provide_stmts)*
             }
@@ -429,27 +407,11 @@ pub fn gen_enum_error(
         } else {
             (None, None)
         };
-        let bt_stripped = trace_accessor_body(
-            None,
-            src_access.clone(),
-            bt_probe.clone(),
-            &bt_fn,
-            oopsie_path,
-        );
         if let Some(body) =
             trace_accessor_body(bt_own, src_access.clone(), bt_probe, &bt_fn, oopsie_path)
         {
             let binds = accessor_pattern_binds(bt_bind, source_ident);
-            // Auto-injected (mangled) trace fields carry no user cfg, so this is
-            // empty there.
-            let field_cfg = trace_field_cfg(categorized, bt_bind);
-            bt_arms.push(enum_accessor_arms(
-                cfg_attrs,
-                variant_ident,
-                field_cfg,
-                (&binds, body),
-                source_ident.zip(bt_stripped),
-            ));
+            bt_arms.push(enum_accessor_arm(variant_ident, &binds, &body));
             accessor_uses_source |= source_ident.is_some();
         }
 
@@ -467,25 +429,11 @@ pub fn gen_enum_error(
         } else {
             (None, None)
         };
-        let st_stripped = trace_accessor_body(
-            None,
-            src_access.clone(),
-            st_probe.clone(),
-            &st_fn,
-            oopsie_path,
-        );
         if let Some(body) =
             trace_accessor_body(st_own, src_access.clone(), st_probe, &st_fn, oopsie_path)
         {
             let binds = accessor_pattern_binds(st_bind, source_ident);
-            let field_cfg = trace_field_cfg(categorized, st_bind);
-            st_arms.push(enum_accessor_arms(
-                cfg_attrs,
-                variant_ident,
-                field_cfg,
-                (&binds, body),
-                source_ident.zip(st_stripped),
-            ));
+            st_arms.push(enum_accessor_arm(variant_ident, &binds, &body));
             accessor_uses_source |= source_ident.is_some();
         }
 
@@ -500,17 +448,9 @@ pub fn gen_enum_error(
             .map(|lf| quote! { *#lf });
         let loc_source = source_ident.filter(|_| variant_attrs.transparent || forward.location);
         let loc_probe = loc_source.map(|s| gen_diag_forward(s, "fwd_location", oopsie_path));
-        let loc_stripped = location_accessor_body(None, loc_probe.clone());
         if let Some(body) = location_accessor_body(loc_own, loc_probe) {
             let binds = accessor_pattern_binds(categorized.location_field.as_ref(), loc_source);
-            let field_cfg = trace_field_cfg(categorized, categorized.location_field.as_ref());
-            loc_arms.push(enum_accessor_arms(
-                cfg_attrs,
-                variant_ident,
-                field_cfg,
-                (&binds, body),
-                loc_source.zip(loc_stripped),
-            ));
+            loc_arms.push(enum_accessor_arm(variant_ident, &binds, &body));
         }
 
         // Error code: user-specified, then auto-generated from provide attrs,
@@ -519,7 +459,6 @@ pub fn gen_enum_error(
             if code.is_static() {
                 let lit = code.static_lit()?;
                 code_arms.push(quote! {
-                    #(#cfg_attrs)*
                     Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#lit)),
                 });
             } else {
@@ -527,7 +466,6 @@ pub fn gen_enum_error(
                 let args = code.args.iter();
                 let code_field_binds = field_binding_pats(&variant.fields);
                 code_arms.push(quote! {
-                    #(#cfg_attrs)*
                     #[allow(unused_variables)]
                     Self::#variant_ident { #(#code_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*))),
                 });
@@ -541,30 +479,20 @@ pub fn gen_enum_error(
             &mut accessor_probes,
             oopsie_path,
         ) {
-            code_arms.push(quote! {
-                #(#cfg_attrs)*
-                #arm
-            });
+            code_arms.push(arm);
         }
 
         // Help text: dynamic field, then static attribute, then a `HelpText`
         // provide, then (for `transparent`) forwarded from the source.
         if let Some(help_field) = &categorized.help_field {
-            // The body interpolates the help field, so a cfg-stripped help field
-            // takes the whole arm with it; the trailing `_ => None` arm covers
-            // the variant then.
-            let field_cfg = field_cfg_for(categorized, help_field);
             let help_value = help_text_from_field(help_field, oopsie_path);
             help_arms.push(quote! {
-                #(#cfg_attrs)*
-                #(#field_cfg)*
                 Self::#variant_ident { #help_field, .. } => ::core::option::Option::Some(#help_value),
             });
         } else if let Some(help) = &variant_attrs.help {
             if help.is_static() {
                 let lit = help.static_lit()?;
                 help_arms.push(quote! {
-                    #(#cfg_attrs)*
                     Self::#variant_ident { .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from_static(#lit)),
                 });
             } else {
@@ -575,7 +503,6 @@ pub fn gen_enum_error(
                 // pattern (mirroring the `display` arm).
                 let help_field_binds = field_binding_pats(&variant.fields);
                 help_arms.push(quote! {
-                    #(#cfg_attrs)*
                     #[allow(unused_variables)]
                     Self::#variant_ident { #(#help_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*))),
                 });
@@ -589,10 +516,7 @@ pub fn gen_enum_error(
             &mut accessor_probes,
             oopsie_path,
         ) {
-            help_arms.push(quote! {
-                #(#cfg_attrs)*
-                #arm
-            });
+            help_arms.push(arm);
         }
 
         // Exit code: variant override, then container default, then the
@@ -600,7 +524,6 @@ pub fn gen_enum_error(
         if let Some(exit) = variant_attrs.exit_code.or(container_exit) {
             let some = exit_code_some(exit, oopsie_path);
             exit_arms.push(quote! {
-                #(#cfg_attrs)*
                 Self::#variant_ident { .. } => #some,
             });
         } else if let Some(source_field) = &categorized.source {
@@ -613,20 +536,10 @@ pub fn gen_enum_error(
                 oopsie_path,
             );
             exit_arms.push(quote! {
-                #(#cfg_attrs)*
                 Self::#variant_ident { #source_ident, .. } => #fwd,
             });
         }
     }
-
-    // An all-stripped enum reaches the generators with every arm gated out (the
-    // attribute-macro path runs before cfg-stripping), so matches that bind one
-    // arm per variant need a wildcard fallback to stay exhaustive.
-    let cfg_fallback_arm = if resolved.any_variant_cfg {
-        quote! { _ => ::core::unreachable!() }
-    } else {
-        quote! {}
-    };
 
     // `Error::provide` only compiles when the consumer enables the
     // `error_generic_member_access` language feature, so it can't be emitted
@@ -644,7 +557,6 @@ pub fn gen_enum_error(
                     #probe_items
                     match self {
                         #(#provide_arms)*
-                        #cfg_fallback_arm
                     }
                 }
             }
@@ -760,7 +672,6 @@ pub fn gen_enum_error(
             use #oopsie_path::AsErrorSource as _;
             match self {
                 #(#source_arms)*
-                #cfg_fallback_arm
             }
         }
     };
@@ -837,10 +748,8 @@ pub fn gen_struct_error(
 
     // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
     if let Some(help_field) = &categorized.help_field {
-        let help_cfg = field_cfg_for(categorized, help_field);
         let help_value = help_text_from_field(help_field, oopsie_path);
         provide_stmts.push(quote! {
-            #(#help_cfg)*
             #req.provide_value_with::<#oopsie_path::HelpText>(|| #help_value);
         });
     } else if let Some(help) = &variant_attrs.help {
@@ -858,19 +767,12 @@ pub fn gen_struct_error(
         help: categorized.help_field.is_some() || variant_attrs.help.is_some(),
     };
     let mut provide_probes = MetaSet::default();
-    // Field-level provides. A cfg-stripped field's stmt must drop with it (its
-    // destructure binding already does).
-    for (field_ident, provide_attr) in &categorized.provides {
-        let field_cfg = field_cfg_for(categorized, field_ident);
-        let call = gen_provide_call(provide_attr, &req, oopsie_path, own, &mut provide_probes);
-        provide_stmts.push(quote! {
-            #(#field_cfg)*
-            #call
-        });
-    }
-
-    // Struct-level provides (from #[oopsie(provide(...))] on the struct)
-    for provide_attr in &attrs.provides {
+    for provide_attr in categorized
+        .provides
+        .iter()
+        .map(|(_, p)| p)
+        .chain(&attrs.provides)
+    {
         provide_stmts.push(gen_provide_call(
             provide_attr,
             &req,
@@ -891,29 +793,22 @@ pub fn gen_struct_error(
 
     // Provide backtrace/spantrace refs from detected fields. An empty trace
     // is never provided, so it cannot shadow a captured one further out
-    // (`Request` is first-wins). The statement references the field by name, so
-    // a cfg-stripped trace field's stmt must drop with it (the destructure
-    // binding already does).
+    // (`Request` is first-wins).
     if let Some(tf) = &categorized.traces_field {
-        let field_cfg = trace_field_cfg(categorized, Some(tf));
         provide_stmts.push(quote! {
-            #(#field_cfg)*
             if #tf.0.is_captured() {
                 #req.provide_ref::<#oopsie_path::Backtrace>(&#tf.0);
             }
         });
         provide_stmts.push(quote! {
-            #(#field_cfg)*
             if #tf.1.is_captured() {
                 #req.provide_ref::<#oopsie_path::SpanTrace>(&#tf.1);
             }
         });
     } else {
         if let Some(bt_field) = &categorized.backtrace_field {
-            let field_cfg = trace_field_cfg(categorized, Some(bt_field));
             let bt_field = binding_through_box(bt_field, categorized.backtrace_boxed);
             provide_stmts.push(quote! {
-                #(#field_cfg)*
                 {
                     let __bt = ::core::borrow::Borrow::<#oopsie_path::Backtrace>::borrow(#bt_field);
                     if __bt.is_captured() {
@@ -923,10 +818,8 @@ pub fn gen_struct_error(
             });
         }
         if let Some(st_field) = &categorized.spantrace_field {
-            let field_cfg = trace_field_cfg(categorized, Some(st_field));
             let st_field = binding_through_box(st_field, categorized.spantrace_boxed);
             provide_stmts.push(quote! {
-                #(#field_cfg)*
                 {
                     let __st = ::core::borrow::Borrow::<#oopsie_path::SpanTrace>::borrow(#st_field);
                     if __st.is_captured() {
@@ -990,17 +883,6 @@ pub fn gen_struct_error(
     let bt_fn = format_ident!("source_backtrace");
     let st_fn = format_ident!("source_spantrace");
 
-    // The own-trace field whose cfg gates the accessor: the packed `traces`
-    // field if present, else the standalone backtrace/spantrace field.
-    let bt_field_ident = categorized
-        .traces_field
-        .as_ref()
-        .or(categorized.backtrace_field.as_ref());
-    let st_field_ident = categorized
-        .traces_field
-        .as_ref()
-        .or(categorized.spantrace_field.as_ref());
-
     let bt_own = if let Some(tf) = &categorized.traces_field {
         Some(quote! { &self.#tf.0 })
     } else {
@@ -1016,7 +898,6 @@ pub fn gen_struct_error(
     let bt_method = gen_struct_trace_method(
         &bt_sig,
         &struct_use_aes,
-        trace_field_cfg(categorized, bt_field_ident),
         bt_own,
         struct_src_access.clone(),
         bt_probe,
@@ -1039,7 +920,6 @@ pub fn gen_struct_error(
     let st_method = gen_struct_trace_method(
         &st_sig,
         &struct_use_aes,
-        trace_field_cfg(categorized, st_field_ident),
         st_own,
         struct_src_access,
         st_probe,
@@ -1057,21 +937,9 @@ pub fn gen_struct_error(
     let loc_sig = quote! {
         fn oopsie_location(&self) -> ::core::option::Option<&'static ::core::panic::Location<'static>>
     };
-    let loc_field_cfg = trace_field_cfg(categorized, categorized.location_field.as_ref());
-    let loc_method = match location_accessor_body(loc_own, loc_probe.clone()) {
-        Some(body) => {
-            let full = quote! { #loc_sig { #body } };
-            match negated_existence_cfg(loc_field_cfg) {
-                Some(not_cfg) => {
-                    let stripped = location_accessor_body(None, loc_probe)
-                        .map(|b| quote! { #not_cfg #loc_sig { #b } });
-                    quote! { #(#loc_field_cfg)* #full #stripped }
-                }
-                None => full,
-            }
-        }
-        None => quote! {},
-    };
+    let loc_method = location_accessor_body(loc_own, loc_probe)
+        .map(|body| quote! { #loc_sig { #body } })
+        .unwrap_or_default();
 
     let code_method = if let Some(code) = &variant_attrs.code {
         if code.is_static() {
@@ -1106,9 +974,7 @@ pub fn gen_struct_error(
             oopsie_path,
         )
         .map(|body| {
-            let field_cfg = meta_field_cfg(categorized, MetaType::ErrorCode);
             quote! {
-                #(#field_cfg)*
                 fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
                     #body
                 }
@@ -1119,13 +985,8 @@ pub fn gen_struct_error(
 
     // Dynamic help field takes precedence over static attribute
     let help_method = if let Some(help_field) = &categorized.help_field {
-        // The body names `self.<field>`, so a cfg-stripped help field takes the
-        // whole accessor with it, degrading to the trait default (`None`) — the
-        // struct analogue of the enum arm dropping to `_ => None`.
-        let help_cfg = field_cfg_for(categorized, help_field);
         let help_value = help_text_from_field(quote! { self.#help_field }, oopsie_path);
         quote! {
-            #(#help_cfg)*
             fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
                 ::core::option::Option::Some(#help_value)
             }
@@ -1164,9 +1025,7 @@ pub fn gen_struct_error(
         MetaType::HelpText,
         oopsie_path,
     ) {
-        let field_cfg = meta_field_cfg(categorized, MetaType::HelpText);
         quote! {
-            #(#field_cfg)*
             fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
                 #body
             }
@@ -1566,23 +1425,10 @@ fn enum_provided_meta_arm(
     // The provide exprs may reference fields, bound as in `provide()`.
     let binds = collect_provide_field_binds(categorized);
     let value = provided_meta_body(&candidates, meta, fwd)?;
-    let field_cfg = meta_field_cfg(categorized, meta);
     Some(quote! {
-        #(#field_cfg)*
         #[allow(unused_variables)]
         Self::#variant_ident { #(#binds)* .. } => #value,
     })
-}
-
-/// The cfg attrs of the first field-level `provide(...)` named like `meta`: a
-/// cfg-stripped field takes the accessor arm or method naming it along.
-fn meta_field_cfg(categorized: &CategorizedFields, meta: MetaType) -> &[syn::Attribute] {
-    let ident = categorized
-        .provides
-        .iter()
-        .find(|(_, p)| MetaType::named_by(p) == Some(meta))
-        .map(|(f, _)| f);
-    trace_field_cfg(categorized, ident)
 }
 
 /// A struct accessor body for `meta`, like [`enum_provided_meta_arm`].
@@ -1626,153 +1472,54 @@ fn struct_provided_meta_body(
 }
 
 /// Field-binding patterns (`name,`) for the fields a `provide(...)` expr can
-/// reference (source, provide-attr fields, auto, then user fields). Each binding
-/// carries its `#[cfg(...)]` attrs, so a stripped field's binding is stripped
-/// with it (the destructure's trailing `..` absorbs the gap). The generated
-/// `provide` method carries `#[allow(unused_variables)]` for fields no expr uses.
+/// reference (source, provide-attr fields, auto, then user fields). The
+/// generated `provide` method carries `#[allow(unused_variables)]` for fields no
+/// expr uses.
 fn collect_provide_field_binds(categorized: &CategorizedFields) -> Vec<TokenStream2> {
+    let idents = categorized
+        .source
+        .iter()
+        .map(|s| &s.ident)
+        .chain(categorized.provides.iter().map(|(ident, _)| ident))
+        .chain(categorized.auto_fields.iter().map(|af| &af.ident))
+        .chain(categorized.user_fields.iter().map(|uf| &uf.ident));
     let mut seen: Vec<&syn::Ident> = Vec::new();
     let mut binds = Vec::new();
-    if let Some(source) = &categorized.source {
-        seen.push(&source.ident);
-        let cfg = &source.cfg_attrs;
-        let ident = &source.ident;
-        binds.push(quote! { #(#cfg)* #ident, });
-    }
-    for (ident, _) in &categorized.provides {
+    for ident in idents {
         if seen.contains(&ident) {
             continue;
         }
         seen.push(ident);
-        let cfg = field_cfg_for(categorized, ident);
-        binds.push(quote! { #(#cfg)* #ident, });
-    }
-    for af in &categorized.auto_fields {
-        if seen.contains(&&af.ident) {
-            continue;
-        }
-        seen.push(&af.ident);
-        let cfg = &af.cfg_attrs;
-        let ident = &af.ident;
-        binds.push(quote! { #(#cfg)* #ident, });
-    }
-    for uf in &categorized.user_fields {
-        if seen.contains(&&uf.ident) {
-            continue;
-        }
-        seen.push(&uf.ident);
-        let cfg = &uf.cfg_attrs;
-        let ident = &uf.ident;
-        binds.push(quote! { #(#cfg)* #ident, });
+        binds.push(quote! { #ident, });
     }
     binds
 }
 
-/// The cfg attrs of an optional trace-field ident, or `&[]` when absent. A
-/// stripped trace field's accessor arm / provide stmt must drop with it, so its
-/// cfg rides onto every generated mention exactly as the help field's does.
-fn trace_field_cfg<'a>(
-    categorized: &'a CategorizedFields,
-    ident: Option<&syn::Ident>,
-) -> &'a [syn::Attribute] {
-    ident.map_or(&[], |ident| field_cfg_for(categorized, ident))
-}
-
-/// The `not(...)` complement of a field's existence predicate, for emitting a
-/// struct accessor that runs only when the own trace field is stripped. `None`
-/// when nothing gates the field's existence, so the accessor is unconditional.
-fn negated_existence_cfg(field_cfg: &[syn::Attribute]) -> Option<TokenStream2> {
-    let pred = super::parse::existence_pred(field_cfg)?;
-    Some(quote! { #[cfg(not(#pred))] })
-}
-
-/// An enum accessor arm gated on its own field's cfg, plus the complementary
-/// source-only arm (`stripped`: the source binding and its body) when that cfg
-/// can strip the field, so the variant keeps forwarding its source's value
-/// instead of falling through to `_ => None`. The enum twin of
-/// [`gen_struct_trace_method`].
-fn enum_accessor_arms(
-    cfg_attrs: &[syn::Attribute],
+/// A `Self::Variant { binds.., .. } => body` accessor match arm.
+fn enum_accessor_arm(
     variant_ident: &syn::Ident,
-    field_cfg: &[syn::Attribute],
-    (binds, body): (&[syn::Ident], TokenStream2),
-    stripped: Option<(&syn::Ident, TokenStream2)>,
+    binds: &[syn::Ident],
+    body: &TokenStream2,
 ) -> TokenStream2 {
-    let full = quote! {
-        #(#cfg_attrs)*
-        #(#field_cfg)*
+    quote! {
         Self::#variant_ident { #(#binds,)* .. } => #body,
-    };
-    let complement =
-        negated_existence_cfg(field_cfg)
-            .zip(stripped)
-            .map(|(not_cfg, (source, stripped_body))| {
-                quote! {
-                    #(#cfg_attrs)*
-                    #not_cfg
-                    Self::#variant_ident { #source, .. } => #stripped_body,
-                }
-            });
-    quote! { #full #complement }
+    }
 }
 
-/// A struct trace accessor that forwards a cfg-stripped own field's arm to a
-/// source-only body, mirroring the enum's drop-the-arm-fall-through behavior.
-/// With no existence cfg (the common/auto case) it emits exactly the full body,
-/// byte-identical to the pre-cfg path. With one, it gates the full body on the
-/// field's cfg and, when a source/probe path exists, emits the complementary
-/// source-only body so source forwarding survives the field being stripped.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "wraps one accessor's full inputs"
-)]
+/// A struct trace accessor method, or nothing when the struct has neither an
+/// own trace nor a source to forward from.
 fn gen_struct_trace_method(
     sig: &TokenStream2,
     use_aes: &TokenStream2,
-    field_cfg: &[syn::Attribute],
     own: Option<TokenStream2>,
     source_access: Option<TokenStream2>,
     probe: Option<TokenStream2>,
     source_fn: &syn::Ident,
     oopsie_path: &syn::Path,
 ) -> TokenStream2 {
-    let with_body = |body: TokenStream2| quote! { #sig { #use_aes #body } };
-    let full = trace_accessor_body(
-        own,
-        source_access.clone(),
-        probe.clone(),
-        source_fn,
-        oopsie_path,
-    )
-    .map(with_body);
-    let Some(not_cfg) = negated_existence_cfg(field_cfg) else {
-        return full.unwrap_or_default();
-    };
-    let gated = full.map(|m| quote! { #(#field_cfg)* #m });
-    let stripped =
-        trace_accessor_body(None, source_access, probe, source_fn, oopsie_path).map(with_body);
-    let stripped = stripped.map(|m| quote! { #not_cfg #m });
-    quote! { #gated #stripped }
-}
-
-/// The cfg attrs of the categorized field named `ident`, or `&[]` if it is not a
-/// user/auto/source field (e.g. a provide attr referencing a synthetic name).
-fn field_cfg_for<'a>(
-    categorized: &'a CategorizedFields,
-    ident: &syn::Ident,
-) -> &'a [syn::Attribute] {
-    if let Some(source) = &categorized.source
-        && &source.ident == ident
-    {
-        return &source.cfg_attrs;
-    }
-    if let Some(af) = categorized.auto_fields.iter().find(|f| &f.ident == ident) {
-        return &af.cfg_attrs;
-    }
-    if let Some(uf) = categorized.user_fields.iter().find(|f| &f.ident == ident) {
-        return &uf.cfg_attrs;
-    }
-    &[]
+    trace_accessor_body(own, source_access, probe, source_fn, oopsie_path)
+        .map(|body| quote! { #sig { #use_aes #body } })
+        .unwrap_or_default()
 }
 
 /// A reference to a trace field's value from its by-ref pattern binding,

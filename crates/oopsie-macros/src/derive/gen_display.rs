@@ -21,7 +21,6 @@ pub fn gen_enum_display(resolved: &ResolvedEnum) -> TokenStream2 {
     let mut arms = Vec::new();
     for v in &resolved.variants {
         let variant_ident = v.ident();
-        let cfg_attrs = &v.cfg_attrs;
         let field_binds = field_binding_pats(&v.variant.fields);
 
         let write_call = if let Some(display) = &v.attrs.display {
@@ -37,7 +36,6 @@ pub fn gen_enum_display(resolved: &ResolvedEnum) -> TokenStream2 {
         };
 
         arms.push(quote! {
-            #(#cfg_attrs)*
             #[allow(unused_variables)]
             Self::#variant_ident { #(#field_binds)* .. } => #write_call,
         });
@@ -45,8 +43,6 @@ pub fn gen_enum_display(resolved: &ResolvedEnum) -> TokenStream2 {
 
     let body = if arms.is_empty() {
         quote! { match *self {} }
-    } else if resolved.any_variant_cfg {
-        quote! { match self { #(#arms)* _ => ::core::unreachable!() } }
     } else {
         quote! { match self { #(#arms)* } }
     };
