@@ -314,3 +314,20 @@ fn raw_ident_struct_default_display_drops_prefix() {
     let err = structOopsie { value: 7i32 }.build();
     assert_eq!(format!("{err}"), "struct");
 }
+
+// A named format argument whose name is not an `#[oopsie(...)]` keyword stays a
+// plain format argument, in both the short and the `display(...)` form.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum NamedFormatArgError {
+    #[oopsie("doubled {twice}", twice = amount * 2)]
+    Doubled { amount: u32 },
+    #[oopsie(display("{label}: {n}", label = "tripled", n = amount * 3))]
+    Tripled { amount: u32 },
+}
+
+#[test]
+fn non_keyword_named_format_arg_is_kept() {
+    assert_eq!(Doubled { amount: 4u32 }.build().to_string(), "doubled 8");
+    assert_eq!(Tripled { amount: 2u32 }.build().to_string(), "tripled: 6");
+}

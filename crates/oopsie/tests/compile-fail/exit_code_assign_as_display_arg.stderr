@@ -1,0 +1,11 @@
+error: `exit_code` is an `#[oopsie(...)]` keyword, not a display format argument; give it its own attribute: `#[oopsie("exited")] #[oopsie(exit_code = 3)]`
+ --> tests/compile-fail/exit_code_assign_as_display_arg.rs:8:24
+  |
+8 |     #[oopsie("exited", exit_code = 3)]
+  |                        ^^^^^^^^^
+
+error: `suffix` is an `#[oopsie(...)]` keyword, not a display format argument; give it its own attribute: `#[oopsie("config broke")] #[oopsie(suffix = "Ctx")]`
+  --> tests/compile-fail/exit_code_assign_as_display_arg.rs:13:26
+   |
+13 | #[oopsie("config broke", suffix = "Ctx")]
+   |                          ^^^^^^

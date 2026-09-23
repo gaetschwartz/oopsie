@@ -468,9 +468,11 @@ impl DisplayAttr {
     /// which otherwise surfaces as an unused-argument warning plus a resolution
     /// error on a value that was never meant to be one.
     ///
-    /// An arg is flagged only when it is a bare single ident matching a keyword
-    /// for `scope` **and** is not a field of the item — a field of that name is a
-    /// legitimate `{field}` interpolation argument, so it passes through.
+    /// A bare single ident is flagged when it matches a keyword for `scope`
+    /// **and** is not a field of the item — a field of that name is a legitimate
+    /// `{field}` interpolation argument, so it passes through. A `key = value`
+    /// arg is flagged whenever `key` is a keyword, field or not: it would
+    /// otherwise become a named format argument and silently drop the setting.
     pub fn reject_keyword_args(
         &self,
         fields: &syn::Fields,
@@ -478,11 +480,20 @@ impl DisplayAttr {
     ) -> syn::Result<()> {
         let field_named = |ident: &Ident| matches!(fields, syn::Fields::Named(f) if f.named.iter().any(|f| f.ident.as_ref() == Some(ident)));
         for arg in &self.args {
-            let Some(ident) = bare_path_ident(arg) else {
+            let (ident, meta, assign_value) = if let Expr::Assign(assign) = arg
+                && let Some(ident) = bare_path_ident(&assign.left)
+            {
+                let value = expr_text(&assign.right);
+                (ident, format!("{ident} = {value}"), Some(value))
+            } else if let Some(ident) = bare_path_ident(arg)
+                && !field_named(ident)
+            {
+                (ident, ident.to_string(), None)
+            } else {
                 continue;
             };
             let ident_str = ident.to_string();
-            if field_named(ident) || !scope.is_keyword(&ident_str) {
+            if !scope.is_keyword(&ident_str) {
                 continue;
             }
             let fmt = self.format_str.value();
@@ -490,13 +501,23 @@ impl DisplayAttr {
                 format!(
                     "`{ident}` is an `#[oopsie(...)]` container keyword, not a display \
                      format argument; it belongs on the enum, not this variant: move it \
-                     to the enum's own `#[oopsie({ident})]` attribute"
+                     to the enum's own `#[oopsie({meta})]` attribute"
+                )
+            } else if let Some(value) = assign_value
+                && let renamed_arg = format!("{ident}_")
+                && let Some(renamed_fmt) = rename_placeholder(&fmt, &ident_str, &renamed_arg)
+            {
+                format!(
+                    "`{ident}` is an `#[oopsie(...)]` keyword, not a display format \
+                     argument; give it its own attribute (`#[oopsie(\"{fmt}\")] \
+                     #[oopsie({meta})]`), or rename the format argument: \
+                     `\"{renamed_fmt}\", {renamed_arg} = {value}`"
                 )
             } else {
                 format!(
                     "`{ident}` is an `#[oopsie(...)]` keyword, not a display format \
                      argument; give it its own attribute: \
-                     `#[oopsie(\"{fmt}\")] #[oopsie({ident})]`"
+                     `#[oopsie(\"{fmt}\")] #[oopsie({meta})]`"
                 )
             };
             return Err(syn::Error::new_spanned(ident, message));
@@ -558,6 +579,139 @@ fn format_str_has_placeholder(s: &str) -> bool {
         }
     }
     false
+}
+
+/// `fmt` with every reference to the named argument `from` (as a placeholder
+/// or a `from$` width/precision) renamed to `to`, or `None` if it has none.
+fn rename_placeholder(fmt: &str, from: &str, to: &str) -> Option<String> {
+    let mut out = String::with_capacity(fmt.len());
+    let mut renamed = false;
+    let mut rest = fmt;
+    while let Some(open) = rest.find(['{', '}']) {
+        out.push_str(&rest[..open]);
+        rest = &rest[open..];
+        if rest.starts_with("{{") || rest.starts_with("}}") || rest.starts_with('}') {
+            let escape = if rest.starts_with("{{") || rest.starts_with("}}") {
+                2
+            } else {
+                1
+            };
+            out.push_str(&rest[..escape]);
+            rest = &rest[escape..];
+            continue;
+        }
+        let Some(close) = rest.find('}') else {
+            break;
+        };
+        let inner = &rest[1..close];
+        let (arg, spec) = inner.split_at(inner.find(':').unwrap_or(inner.len()));
+        out.push('{');
+        if arg.trim() == from {
+            out.push_str(to);
+            renamed = true;
+        } else {
+            out.push_str(arg);
+        }
+        let mut spec_rest = spec;
+        while let Some(dollar) = spec_rest.find('$') {
+            let head = &spec_rest[..dollar];
+            let name_start = head
+                .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
+                .map_or(0, |i| i + 1);
+            if &head[name_start..] == from {
+                out.push_str(&head[..name_start]);
+                out.push_str(to);
+                renamed = true;
+            } else {
+                out.push_str(head);
+            }
+            out.push('$');
+            spec_rest = &spec_rest[dollar + 1..];
+        }
+        out.push_str(spec_rest);
+        out.push('}');
+        rest = &rest[close + 1..];
+    }
+    out.push_str(rest);
+    renamed.then_some(out)
+}
+
+/// `expr` as the user wrote it when its span covers the whole expression
+/// (joining spans is nightly-only), else as [`tidy_tokens`].
+fn expr_text(expr: &Expr) -> String {
+    use quote::ToTokens as _;
+    use syn::spanned::Spanned as _;
+
+    let tokens = expr.to_token_stream();
+    expr.span()
+        .source_text()
+        .filter(|text| {
+            text.parse::<proc_macro2::TokenStream>()
+                .is_ok_and(|parsed| parsed.to_string() == tokens.to_string())
+        })
+        .unwrap_or_else(|| tidy_tokens(tokens))
+}
+
+/// `tokens` spaced like source, where their `Display` spaces every token
+/// (`a :: b`, `f (x)`).
+fn tidy_tokens(tokens: proc_macro2::TokenStream) -> String {
+    use proc_macro2::{Delimiter, Spacing, TokenTree};
+
+    let punct = |tt: Option<&TokenTree>| match tt {
+        Some(TokenTree::Punct(p)) => Some((p.as_char(), p.spacing())),
+        _ => None,
+    };
+    let tts: Vec<TokenTree> = tokens.into_iter().collect();
+    let mut out = String::new();
+    for (i, tt) in tts.iter().enumerate() {
+        let prev = i.checked_sub(1).and_then(|j| tts.get(j));
+        let before_prev = i.checked_sub(2).and_then(|j| tts.get(j));
+        let glued_to_prev = match (punct(prev), tt) {
+            (None, _) if prev.is_none() => true,
+            (Some((_, Spacing::Joint) | ('.', _)), _) => true,
+            (Some((':', _)), _) if punct(before_prev) == Some((':', Spacing::Joint)) => true,
+            (Some(('-' | '!' | '&' | '*', _)), _)
+                if before_prev.is_none()
+                    || punct(before_prev).is_some_and(|(_, s)| s == Spacing::Alone) =>
+            {
+                true
+            }
+            (_, TokenTree::Punct(p)) => {
+                matches!(p.as_char(), ',' | ';' | '.' | '?' | ':')
+                    || (p.as_char() == '!'
+                        && p.spacing() == Spacing::Alone
+                        && matches!(prev, Some(TokenTree::Ident(_))))
+            }
+            (Some(('!', Spacing::Alone)), TokenTree::Group(_)) => true,
+            (None, TokenTree::Group(g)) => {
+                matches!(g.delimiter(), Delimiter::Parenthesis | Delimiter::Bracket)
+                    && matches!(prev, Some(TokenTree::Ident(_) | TokenTree::Group(_)))
+            }
+            _ => false,
+        };
+        if !glued_to_prev {
+            out.push(' ');
+        }
+        match tt {
+            TokenTree::Group(g) => {
+                let inner = tidy_tokens(g.stream());
+                let (open, close) = match g.delimiter() {
+                    Delimiter::Parenthesis => ("(", ")"),
+                    Delimiter::Bracket => ("[", "]"),
+                    Delimiter::Brace if inner.is_empty() => ("{", "}"),
+                    Delimiter::Brace => ("{ ", " }"),
+                    Delimiter::None => ("", ""),
+                };
+                out.push_str(open);
+                out.push_str(&inner);
+                out.push_str(close);
+            }
+            TokenTree::Ident(_) | TokenTree::Punct(_) | TokenTree::Literal(_) => {
+                out.push_str(&tt.to_string());
+            }
+        }
+    }
+    out
 }
 
 /// Byte position of the first unmatched `}` (a `}` not part of a `}}` escape),
@@ -1577,6 +1731,89 @@ mod tests {
         let fields = fields_of(parse_quote! { struct S { module: String } });
         d.reject_keyword_args(&fields, DisplayScope::Variant)
             .unwrap();
+    }
+
+    #[test]
+    fn reject_keyword_args_flags_keyword_assign_even_when_field_named() {
+        let d: DisplayAttr =
+            DisplayAttr::from_meta(&parse_quote!(display("[{code}]", code = "E001"))).unwrap();
+        let fields = fields_of(parse_quote! { struct S { code: u16 } });
+        d.reject_keyword_args(&fields, DisplayScope::Variant)
+            .unwrap_err();
+
+        let d: DisplayAttr =
+            DisplayAttr::from_meta(&parse_quote!(display("{n}", n = code))).unwrap();
+        d.reject_keyword_args(&fields, DisplayScope::Variant)
+            .unwrap();
+    }
+
+    fn keyword_arg_message(display: &DisplayAttr) -> String {
+        let fields = fields_of(parse_quote! { struct S { msg: String } });
+        display
+            .reject_keyword_args(&fields, DisplayScope::Variant)
+            .unwrap_err()
+            .to_string()
+    }
+
+    #[test]
+    fn reject_keyword_args_suggests_renaming_a_used_placeholder() {
+        let d = DisplayAttr::from_meta(&parse_quote!(display(
+            "failed [{code}] {code:?}",
+            code = codes::E001
+        )))
+        .unwrap();
+        assert_eq!(
+            keyword_arg_message(&d),
+            "`code` is an `#[oopsie(...)]` keyword, not a display format argument; give it \
+             its own attribute (`#[oopsie(\"failed [{code}] {code:?}\")] \
+             #[oopsie(code = codes::E001)]`), or rename the format argument: \
+             `\"failed [{code_}] {code_:?}\", code_ = codes::E001`"
+        );
+    }
+
+    #[test]
+    fn reject_keyword_args_only_moves_an_unused_arg() {
+        let d =
+            DisplayAttr::from_meta(&parse_quote!(display("exited {{code}}", code = 3))).unwrap();
+        assert_eq!(
+            keyword_arg_message(&d),
+            "`code` is an `#[oopsie(...)]` keyword, not a display format argument; give it \
+             its own attribute: `#[oopsie(\"exited {{code}}\")] #[oopsie(code = 3)]`"
+        );
+    }
+
+    #[test]
+    fn rename_placeholder_renames_only_the_named_argument() {
+        assert_eq!(
+            rename_placeholder(
+                "{code} {code:>8} {:>code$} {{code}} {codes} {0}",
+                "code",
+                "c"
+            )
+            .as_deref(),
+            Some("{c} {c:>8} {:>c$} {{code}} {codes} {0}")
+        );
+        assert_eq!(rename_placeholder("{codes} {{code}}", "code", "c"), None);
+    }
+
+    #[test]
+    fn tidy_tokens_reads_like_source() {
+        for (expr, text) in [
+            (parse_quote!(codes::E001), "codes::E001"),
+            (parse_quote!(::oopsie::codes::E001), "::oopsie::codes::E001"),
+            (parse_quote!(make(1, -2)), "make(1, -2)"),
+            (
+                parse_quote!(self.codes[0].as_str()),
+                "self.codes[0].as_str()",
+            ),
+            (parse_quote!(format!("{}", x)), "format!(\"{}\", x)"),
+            (parse_quote!(a != b && !c), "a != b && !c"),
+            (parse_quote!(&CODES), "&CODES"),
+            (parse_quote!(Code { n: 1 }), "Code { n: 1 }"),
+        ] {
+            let expr: Expr = expr;
+            assert_eq!(expr_text(&expr), text);
+        }
     }
 
     #[test]
