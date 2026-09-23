@@ -69,12 +69,32 @@ const MANIFEST_ENV_VAR: &str = "CARGO_MANIFEST_DIR";
 const WORKSPACE_ENV_VAR: &str = "CARGO_WORKSPACE_DIR";
 const CARGO_HOME_ENV_VAR: &str = "CARGO_HOME";
 
+/// Files a packaged `.crate` archive (registry cache, `cargo vendor` output)
+/// carries at its root that an authored-in-place crate never does.
+const PACKAGED_MARKERS: [&str; 2] = [".cargo-checksum.json", ".cargo_vcs_info.json"];
+
+/// A packaged/vendored crate must never inherit an ambient workspace's
+/// settings, however it happens to be nested (e.g. dropped under `vendor/`
+/// inside the consumer's own workspace tree).
+fn is_packaged(dir: &Path) -> bool {
+    PACKAGED_MARKERS
+        .iter()
+        .any(|marker| dir.join(marker).is_file())
+}
+
 fn compile_error(msg: &str) -> proc_macro2::TokenStream {
     quote! { ::core::compile_error!(#msg); }
 }
 
 fn env_path(var: &str) -> Option<PathBuf> {
     std::env::var_os(var).map(PathBuf::from)
+}
+
+/// Canonicalize `dir` for comparison against [`member_dir`]'s canonical form,
+/// falling back to the raw path when canonicalization fails (e.g. the path
+/// doesn't exist).
+fn canonicalize_or_raw(dir: &Path) -> PathBuf {
+    std::fs::canonicalize(dir).unwrap_or_else(|_| dir.to_path_buf())
 }
 
 /// The member crate's manifest directory, canonicalized for symlink-safe
@@ -189,7 +209,7 @@ fn is_workspace_at(dir: &Path) -> bool {
 fn find_workspace_root() -> Result<Option<PathBuf>, String> {
     let member_dir = member_dir()?;
     let workspace_override = env_path(WORKSPACE_ENV_VAR);
-    let cargo_home = env_path(CARGO_HOME_ENV_VAR).and_then(|home| std::fs::canonicalize(home).ok());
+    let cargo_home = env_path(CARGO_HOME_ENV_VAR);
     find_root_from(
         &member_dir,
         workspace_override.as_deref(),
@@ -198,18 +218,37 @@ fn find_workspace_root() -> Result<Option<PathBuf>, String> {
 }
 
 /// Workspace-root discovery, with the environment hoisted out so it can be
-/// driven over a temp tree: honor an explicit `CARGO_WORKSPACE_DIR`, then the
-/// member's own `[workspace]`, then a `package.workspace` pointer, then the
-/// first ancestor `Cargo.toml` with a `[workspace]`. The walk stops at
-/// `$CARGO_HOME` (both canonicalized) and at a `target/package` staging dir,
-/// matching Cargo so a packaged or registry-sourced crate finds no workspace.
+/// driven over a temp tree: a packaged/vendored member (see [`is_packaged`])
+/// finds no workspace at all; otherwise honor an explicit
+/// `CARGO_WORKSPACE_DIR` (still subject to the member/exclude check and the
+/// `$CARGO_HOME`/`target/package` bounds below — the override names a
+/// *candidate* root, it doesn't bypass membership), then the member's own
+/// `[workspace]`, then a `package.workspace` pointer, then the first ancestor
+/// `Cargo.toml` with a `[workspace]`. The walk stops at `$CARGO_HOME` and at a
+/// `target/package` staging dir, matching Cargo so a packaged or
+/// registry-sourced crate finds no workspace. `workspace_override` and
+/// `cargo_home` are canonicalized (falling back to the raw path on failure)
+/// before any comparison against `member_dir`'s canonical form, so a
+/// symlinked or relative value still matches.
 fn find_root_from(
     member_dir: &Path,
     workspace_override: Option<&Path>,
     cargo_home: Option<&Path>,
 ) -> Result<Option<PathBuf>, String> {
-    if let Some(dir) = workspace_override
-        && is_workspace_at(dir)
+    if is_packaged(member_dir) {
+        return Ok(None);
+    }
+
+    let workspace_override = workspace_override.map(canonicalize_or_raw);
+    let cargo_home = cargo_home.map(canonicalize_or_raw);
+
+    if let Some(dir) = workspace_override.as_deref()
+        && let Some(doc) = read_doc(dir)
+        && has_workspace(&doc)
+        && cargo_home.as_deref() != Some(dir)
+        && !dir.ends_with("target/package")
+        && member_dir.starts_with(dir)
+        && !member_excluded(dir, &doc, member_dir)
     {
         return Ok(Some(dir.join("Cargo.toml")));
     }
@@ -239,7 +278,7 @@ fn find_root_from(
 
     let mut current = member_dir.parent();
     while let Some(dir) = current {
-        if cargo_home == Some(dir) || dir.ends_with("target/package") {
+        if cargo_home.as_deref() == Some(dir) || dir.ends_with("target/package") {
             break;
         }
         if let Some(doc) = read_doc(dir)
@@ -496,9 +535,8 @@ fn resolve_traced(settings: &Settings) -> super::TracedDefaults {
 /// applicable root exists and is a distinct file from the member manifest,
 /// even with no oopsie section yet, so adding one later triggers a rebuild.
 pub fn manifest_dep_token() -> proc_macro2::TokenStream {
-    let member = quote! {
-        const _: &[u8] = include_bytes!(concat!(env!(#MANIFEST_ENV_VAR), "/Cargo.toml"));
-    };
+    let member = member_dep_token();
+    let workspace_override_tracking = workspace_override_tracking_token();
     let workspace = match cached_workspace_root() {
         Ok(Some(root)) => {
             let differs = member_dir().map_or(true, |dir| dir.join("Cargo.toml") != *root);
@@ -510,7 +548,23 @@ pub fn manifest_dep_token() -> proc_macro2::TokenStream {
         }
         Ok(None) | Err(_) => quote! {},
     };
-    quote! { #member #workspace }
+    quote! { #member #workspace_override_tracking #workspace }
+}
+
+fn member_dep_token() -> proc_macro2::TokenStream {
+    quote! {
+        const _: &[u8] = ::core::include_bytes!(::core::concat!(::core::env!(#MANIFEST_ENV_VAR), "/Cargo.toml"));
+    }
+}
+
+/// `CARGO_WORKSPACE_DIR` changes discovery (`find_root_from`) but, being a
+/// plain env override rather than a file, has no path for the `include_bytes!`
+/// tokens above to track; `option_env!` registers it directly so flipping it
+/// re-runs the macro.
+fn workspace_override_tracking_token() -> proc_macro2::TokenStream {
+    quote! {
+        const _: ::core::option::Option<&'static str> = ::core::option_env!(#WORKSPACE_ENV_VAR);
+    }
 }
 
 /// `include_bytes!` takes a string literal, so a workspace root whose path is
@@ -525,7 +579,7 @@ fn workspace_dep_token(root: &Path) -> Result<proc_macro2::TokenStream, String> 
         )
     })?;
     Ok(quote! {
-        const _: &[u8] = include_bytes!(#root_path);
+        const _: &[u8] = ::core::include_bytes!(#root_path);
     })
 }
 
@@ -899,6 +953,16 @@ mod tests {
         assert!(workspace_dep_token(Path::new("/ws/Cargo.toml")).is_ok());
     }
 
+    #[test]
+    fn workspace_dep_token_uses_qualified_include_bytes() {
+        let tokens = workspace_dep_token(Path::new("/ws/Cargo.toml")).unwrap();
+        assert_eq!(
+            tokens.to_string(),
+            quote::quote! { const _: &[u8] = ::core::include_bytes!("/ws/Cargo.toml"); }
+                .to_string()
+        );
+    }
+
     #[cfg(unix)]
     #[test]
     fn workspace_dep_token_reports_non_utf8_root() {
@@ -906,6 +970,31 @@ mod tests {
 
         let root = PathBuf::from(std::ffi::OsStr::from_bytes(b"/ws/\xffbad/Cargo.toml"));
         assert!(workspace_dep_token(&root).is_err());
+    }
+
+    #[test]
+    fn member_dep_token_uses_qualified_macros() {
+        assert_eq!(
+            member_dep_token().to_string(),
+            quote::quote! {
+                const _: &[u8] = ::core::include_bytes!(::core::concat!(
+                    ::core::env!("CARGO_MANIFEST_DIR"),
+                    "/Cargo.toml"
+                ));
+            }
+            .to_string()
+        );
+    }
+
+    #[test]
+    fn workspace_override_tracking_token_tracks_env_var() {
+        assert_eq!(
+            workspace_override_tracking_token().to_string(),
+            quote::quote! {
+                const _: ::core::option::Option<&'static str> = ::core::option_env!("CARGO_WORKSPACE_DIR");
+            }
+            .to_string()
+        );
     }
 
     // ── workspace-root discovery over a temp FS tree ──────────────────
@@ -1037,17 +1126,157 @@ mod tests {
         assert_eq!(find_root_from(&member, None, Some(&home)).unwrap(), None);
     }
 
+    // ── symlinked env overrides (e.g. macOS `/tmp` → `/private/tmp`) ───
+
+    #[cfg(unix)]
+    #[test]
+    fn discovery_workspace_override_resolves_through_symlink() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = canonical_root(&tmp);
+        let real_override = root.join("real-forced");
+        write_manifest(&real_override, VIRTUAL_ROOT);
+        let symlinked_override = root.join("forced-link");
+        std::os::unix::fs::symlink(&real_override, &symlinked_override).unwrap();
+        let member = real_override.join("member");
+        write_manifest(&member, PACKAGE);
+        assert_eq!(
+            find_root_from(&member, Some(&symlinked_override), None).unwrap(),
+            Some(real_override.join("Cargo.toml"))
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn discovery_cargo_home_stops_walk_through_symlink() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = canonical_root(&tmp);
+        let real_home = root.join("real-home");
+        write_manifest(&real_home, VIRTUAL_ROOT);
+        let symlinked_home = root.join("home-link");
+        std::os::unix::fs::symlink(&real_home, &symlinked_home).unwrap();
+        let member = real_home
+            .join("registry")
+            .join("src")
+            .join("x")
+            .join("crate");
+        write_manifest(&member, PACKAGE);
+        assert_eq!(
+            find_root_from(&member, None, Some(&symlinked_home)).unwrap(),
+            None
+        );
+    }
+
     #[test]
     fn discovery_workspace_override_wins() {
         let tmp = tempfile::tempdir().unwrap();
         let root = canonical_root(&tmp);
         let override_dir = root.join("forced");
         write_manifest(&override_dir, VIRTUAL_ROOT);
-        let member = root.join("member");
+        // A real member of the override root: it wins over the ancestor walk
+        // (there is no real ancestor `[workspace]` in this fixture either way).
+        let member = override_dir.join("member");
         write_manifest(&member, PACKAGE);
         assert_eq!(
             find_root_from(&member, Some(&override_dir), Some(&root)).unwrap(),
             Some(override_dir.join("Cargo.toml"))
+        );
+    }
+
+    // ── override membership / CARGO_HOME bound ──────────────────────────
+
+    #[test]
+    fn discovery_workspace_override_rejects_non_member() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = canonical_root(&tmp);
+        let override_dir = root.join("forced");
+        write_manifest(&override_dir, VIRTUAL_ROOT);
+        // Entirely outside `override_dir`'s tree, e.g. a third-party path
+        // dependency compiled alongside a workspace member: must not pick up
+        // the override root's settings.
+        let member = root.join("elsewhere").join("crate");
+        write_manifest(&member, PACKAGE);
+        assert_eq!(
+            find_root_from(&member, Some(&override_dir), Some(&root)).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn discovery_workspace_override_falls_through_to_real_ancestor() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = canonical_root(&tmp);
+        let override_dir = root.join("forced");
+        write_manifest(&override_dir, VIRTUAL_ROOT);
+        // A real ancestor workspace, distinct from the override root, for the
+        // (non-member) crate the override doesn't apply to.
+        write_manifest(&root, "[workspace]\nmembers = [\"real\"]\n");
+        let member = root.join("real");
+        write_manifest(&member, PACKAGE);
+        assert_eq!(
+            find_root_from(&member, Some(&override_dir), None).unwrap(),
+            Some(root.join("Cargo.toml"))
+        );
+    }
+
+    #[test]
+    fn discovery_workspace_override_respects_exclude() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = canonical_root(&tmp);
+        write_manifest(&root, "[workspace]\nexclude = [\"vendor\"]\n");
+        let member = root.join("vendor");
+        write_manifest(&member, PACKAGE);
+        assert_eq!(find_root_from(&member, Some(&root), None).unwrap(), None);
+    }
+
+    #[test]
+    fn discovery_workspace_override_equal_to_cargo_home_is_rejected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = canonical_root(&tmp);
+        write_manifest(&home, VIRTUAL_ROOT);
+        let member = home.join("registry").join("src").join("x").join("crate");
+        write_manifest(&member, PACKAGE);
+        assert_eq!(
+            find_root_from(&member, Some(&home), Some(&home)).unwrap(),
+            None
+        );
+    }
+
+    // ── packaged/vendored crates ─────────────────────────────────────────
+
+    #[test]
+    fn discovery_packaged_checksum_marker_stops_discovery() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = canonical_root(&tmp);
+        write_manifest(&root, "[workspace]\nmembers = [\"vendor/dep\"]\n");
+        let member = root.join("vendor").join("dep");
+        write_manifest(&member, PACKAGE);
+        std::fs::write(member.join(".cargo-checksum.json"), "{}").unwrap();
+        assert_eq!(find_root_from(&member, None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn discovery_packaged_vcs_info_marker_stops_discovery() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = canonical_root(&tmp);
+        write_manifest(&root, "[workspace]\nmembers = [\"vendor/dep\"]\n");
+        let member = root.join("vendor").join("dep");
+        write_manifest(&member, PACKAGE);
+        std::fs::write(member.join(".cargo_vcs_info.json"), "{}").unwrap();
+        assert_eq!(find_root_from(&member, None, None).unwrap(), None);
+    }
+
+    #[test]
+    fn discovery_packaged_marker_overrides_explicit_workspace_override() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = canonical_root(&tmp);
+        let override_dir = root.join("forced");
+        write_manifest(&override_dir, VIRTUAL_ROOT);
+        let member = override_dir.join("member");
+        write_manifest(&member, PACKAGE);
+        std::fs::write(member.join(".cargo-checksum.json"), "{}").unwrap();
+        assert_eq!(
+            find_root_from(&member, Some(&override_dir), None).unwrap(),
+            None
         );
     }
 }

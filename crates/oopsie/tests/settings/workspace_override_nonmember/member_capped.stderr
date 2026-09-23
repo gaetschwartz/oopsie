@@ -1,0 +1,6 @@
+error[E0080]: evaluation panicked: `Big` is 8 bytes, must be ≤ 4
+              set by `[workspace.metadata.oopsie] max-size` in Cargo.toml
+ --> member/member_capped.rs:7:12
+  |
+7 | pub struct Big {
+  |            ^^^ evaluation of `_::size_check` failed here

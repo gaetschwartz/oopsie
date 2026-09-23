@@ -11,6 +11,16 @@
 //! crate holding the cases), so the macro's workspace-root discovery and
 //! `[workspace.metadata.oopsie]` merge are exercised end-to-end.
 //!
+//! A workspace group can further carry `<group>/cargo-config.toml` (written as
+//! `.cargo/config.toml` at the generated workspace root) and `<group>/extdep.rs`
+//! (the `src/lib.rs` of a sibling `extdep` crate built *outside* the generated
+//! root, wired in as a path dependency of the member crate). Together these
+//! exercise a `[env] CARGO_WORKSPACE_DIR` override leaking into a non-member
+//! path dependency compiled in the same `cargo build` invocation — the
+//! `extdep` crate must never see the workspace's `[workspace.metadata.oopsie]`.
+//! Its outcome is tracked under the synthetic case name `extdep`, checked
+//! against an optional `<group>/extdep.stderr` exactly like a normal case.
+//!
 //! trybuild itself can't drive this: it regenerates each fixture's `Cargo.toml`
 //! and drops `[package.metadata]`, so a fixture would never see custom settings.
 //! We instead build each group with one `cargo build --bins --keep-going
@@ -58,6 +68,14 @@ fn wsroot_base() -> PathBuf {
     std::env::temp_dir().join("oopsie-settings-wsroot")
 }
 
+/// A non-member `extdep` crate for a group carrying `extdep.rs`: a sibling of
+/// the generated workspace root (`wsroot_base()/<group>-extdep`), so it sits
+/// entirely outside the root's tree — the scenario a `CARGO_WORKSPACE_DIR`
+/// override must not reach.
+fn extdep_dir(group: &str) -> PathBuf {
+    wsroot_base().join(format!("{group}-extdep"))
+}
+
 /// Deep-merge `overlay` into `base`: tables recurse, everything else is replaced.
 fn merge_into(base: &mut toml_edit::Table, mut overlay: toml_edit::Table) {
     for (key, value) in overlay.iter_mut() {
@@ -73,16 +91,19 @@ fn merge_into(base: &mut toml_edit::Table, mut overlay: toml_edit::Table) {
 }
 
 /// The package manifest for a group's crate: `[package]` + a `[[bin]]` per case +
-/// the `oopsie` path dep, then the group's `oopsie.toml` merged in for its
-/// `[package.metadata.oopsie]`. `workspace_table` is the standalone empty
-/// `[workspace]` that detaches the crate from the parent workspace; a member of a
-/// generated workspace passes `false` so it resolves against the generated root.
+/// the `oopsie` path dep (plus `extra_deps`, raw TOML lines appended to the same
+/// `[dependencies]` table — e.g. an `extdep` path dependency), then the group's
+/// `oopsie.toml` merged in for its `[package.metadata.oopsie]`. `workspace_table`
+/// is the standalone empty `[workspace]` that detaches the crate from the parent
+/// workspace; a member of a generated workspace passes `false` so it resolves
+/// against the generated root.
 fn package_manifest(
     group: &str,
     oopsie_path: &str,
     cases: &[String],
     sidecar: Option<&str>,
     workspace_table: bool,
+    extra_deps: &str,
 ) -> String {
     let workspace_table = if workspace_table {
         "[workspace]\n\n"
@@ -98,7 +119,8 @@ fn package_manifest(
          \n\
          {workspace_table}\
          [dependencies]\n\
-         oopsie = {{ path = {oopsie_path:?}, default-features = false, features = [\"experimental-settings\"] }}\n",
+         oopsie = {{ path = {oopsie_path:?}, default-features = false, features = [\"experimental-settings\"] }}\n\
+         {extra_deps}",
     );
     for case in cases {
         // infallible into a String
@@ -153,6 +175,12 @@ struct Sidecars {
     oopsie: Option<String>,
     /// Present iff this is a workspace group (`None` keeps the standalone layout).
     workspace: Option<String>,
+    /// `.cargo/config.toml` content written at the generated workspace root.
+    /// Only meaningful alongside `workspace`.
+    cargo_config: Option<String>,
+    /// `src/lib.rs` of a non-member `extdep` crate wired as a path dependency
+    /// of the member crate. Only meaningful alongside `workspace`.
+    extdep: Option<String>,
 }
 
 /// Build one group as a multi-bin crate; returns each case's rendered errors.
@@ -178,6 +206,37 @@ fn build_group(
             &root_dir.join("Cargo.toml"),
             &workspace_root_manifest(group, workspace_sidecar),
         );
+
+        if let Some(cargo_config) = &sidecars.cargo_config {
+            let dotcargo = root_dir.join(".cargo");
+            std::fs::create_dir_all(&dotcargo).expect("create .cargo dir");
+            write_if_changed(&dotcargo.join("config.toml"), cargo_config);
+        }
+
+        let mut extra_deps = String::new();
+        if let Some(extdep_lib) = &sidecars.extdep {
+            let dep_dir = extdep_dir(group);
+            std::fs::create_dir_all(dep_dir.join("src")).expect("create extdep src dir");
+            write_if_changed(
+                &dep_dir.join("Cargo.toml"),
+                &format!(
+                    "[package]\n\
+                     name = \"extdep\"\n\
+                     version = \"0.0.0\"\n\
+                     edition = \"2024\"\n\
+                     \n\
+                     [dependencies]\n\
+                     oopsie = {{ path = {oopsie_path:?} }}\n",
+                ),
+            );
+            write_if_changed(&dep_dir.join("src").join("lib.rs"), extdep_lib);
+            let _ = writeln!(
+                extra_deps,
+                "extdep = {{ path = {:?} }}",
+                dep_dir.to_string_lossy()
+            );
+        }
+
         write_if_changed(
             &member_dir.join("Cargo.toml"),
             &package_manifest(
@@ -186,6 +245,7 @@ fn build_group(
                 &stems,
                 sidecars.oopsie.as_deref(),
                 false,
+                &extra_deps,
             ),
         );
         member_dir
@@ -194,7 +254,14 @@ fn build_group(
         std::fs::create_dir_all(&crate_dir).expect("create group crate dir");
         write_if_changed(
             &crate_dir.join("Cargo.toml"),
-            &package_manifest(group, oopsie_path, &stems, sidecars.oopsie.as_deref(), true),
+            &package_manifest(
+                group,
+                oopsie_path,
+                &stems,
+                sidecars.oopsie.as_deref(),
+                true,
+                "",
+            ),
         );
         crate_dir
     };
@@ -217,6 +284,9 @@ fn build_group(
         .iter()
         .map(|(stem, _)| (stem.clone(), Outcome::default()))
         .collect();
+    if sidecars.extdep.is_some() {
+        outcomes.insert("extdep".to_owned(), Outcome::default());
+    }
 
     // cargo emits `build-finished` only once it actually compiled the crate. If it
     // errors earlier (e.g. manifest resolution), there are no `compiler-message`s
@@ -242,12 +312,16 @@ fn build_group(
             continue;
         }
         // Map the message to a case by the source file name (exact, so one stem
-        // can't match another's suffix).
+        // can't match another's suffix); `extdep`'s `src/lib.rs` maps to the
+        // synthetic "extdep" outcome.
         let file = value
             .pointer("/target/src_path")
             .and_then(serde_json::Value::as_str)
             .map(|p| Path::new(p).file_name().unwrap_or_default().to_owned());
         let Some(stem) = file.and_then(|f| {
+            if sidecars.extdep.is_some() && f == AsRef::<std::ffi::OsStr>::as_ref("lib.rs") {
+                return Some("extdep".to_owned());
+            }
             cases
                 .iter()
                 .map(|(stem, _)| stem)
@@ -289,6 +363,11 @@ fn cases_in(dir: &Path) -> Vec<(String, String)> {
         if path.extension().is_none_or(|x| x != "rs") {
             continue;
         }
+        // `extdep.rs` is a sidecar (the non-member dependency's `src/lib.rs`),
+        // not a case of this group.
+        if path.file_name().is_some_and(|f| f == "extdep.rs") {
+            continue;
+        }
         let stem = path
             .file_stem()
             .expect("fixture has a stem")
@@ -328,10 +407,17 @@ fn settings_fixtures() {
         let sidecars = Sidecars {
             oopsie: std::fs::read_to_string(group_dir.join("oopsie.toml")).ok(),
             workspace: std::fs::read_to_string(group_dir.join("workspace.toml")).ok(),
+            cargo_config: std::fs::read_to_string(group_dir.join("cargo-config.toml")).ok(),
+            extdep: std::fs::read_to_string(group_dir.join("extdep.rs")).ok(),
         };
         let outcomes = build_group(&group, &oopsie_path, &cases, &sidecars);
 
-        for (stem, _) in &cases {
+        let mut stems: Vec<String> = cases.iter().map(|(stem, _)| stem.clone()).collect();
+        if sidecars.extdep.is_some() {
+            stems.push("extdep".to_owned());
+        }
+
+        for stem in &stems {
             let outcome = &outcomes[stem];
             let stderr_path = group_dir.join(format!("{stem}.stderr"));
             let rendered = normalize(&outcome.rendered, &oopsie_path);
