@@ -26,6 +26,7 @@ const _: () = assert!(matches!(CHANNEL.as_bytes(), b"unstable"));
 /// Build a snapshot name from a base label plus the target triple. Use
 /// [`snap_name_by_channel`](crate::snap_name_by_channel) when a fixture erases a source.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! snap_name {
     ($name:literal) => {{
         $crate::test_utils::__private::konst::string::str_join!(
@@ -38,6 +39,7 @@ macro_rules! snap_name {
 /// [`snap_name`](crate::snap_name) plus the toolchain [`CHANNEL`], for fixtures
 /// whose trace reach goes through a type-erased source and so differs by channel.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! snap_name_by_channel {
     ($name:literal) => {{
         $crate::test_utils::__private::konst::string::str_join!(
@@ -268,6 +270,7 @@ pub mod settings {
 /// Run a block with a named [`settings`] redaction profile bound, so the
 /// snapshots asserted inside it use the shared normalization filters.
 #[macro_export]
+#[doc(hidden)]
 macro_rules! redact {
     ($name:ident, $bl:block) => {
         $crate::test_utils::settings::$name().bind(|| $bl)

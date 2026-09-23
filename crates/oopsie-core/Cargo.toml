@@ -12,7 +12,7 @@ keywords.workspace = true
 categories.workspace = true
 
 [package.metadata.docs.rs]
-all-features = true
+features = ["serde", "tracing", "chrono", "jiff", "extras", "unstable"]
 
 [features]
 default = ["std"]

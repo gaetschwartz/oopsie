@@ -37,6 +37,7 @@ mod marker;
 mod nostd_stubs;
 mod spantrace;
 #[cfg(feature = "test-utils")]
+#[doc(hidden)]
 pub mod test_utils;
 mod traits;
 mod welp;
