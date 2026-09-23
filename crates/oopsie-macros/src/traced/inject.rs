@@ -139,7 +139,7 @@ fn decide(
     };
     let existence = check_existing_fields(fields, &config.timestamp_type)?;
     if facts.traced
-        && resolved.timestamp
+        && resolved.timestamp_explicit
         && let Some(span) = existence.timestamp_conflict
     {
         return Err(timestamp_conflict_error(span));

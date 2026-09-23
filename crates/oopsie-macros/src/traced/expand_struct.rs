@@ -46,3 +46,43 @@ pub fn expand_struct(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use darling::FromMeta as _;
+    use quote::ToTokens as _;
+    use syn::parse_quote;
+
+    use super::*;
+
+    fn expand(args: &TracedArgs, defaults: &TracedDefaults) -> syn::Result<String> {
+        let mut item: syn::ItemStruct = parse_quote! {
+            struct Seen { last_seen: ::std::time::SystemTime }
+        };
+        expand_struct(
+            args,
+            defaults,
+            &parse_quote!(::oopsie),
+            Span::call_site(),
+            &mut item,
+        )?;
+        Ok(item.into_token_stream().to_string())
+    }
+
+    #[test]
+    fn manifest_timestamp_skips_a_timestamp_typed_field_silently() {
+        let defaults = TracedDefaults {
+            traced: Some(true),
+            timestamp: Some(true),
+            ..TracedDefaults::default()
+        };
+        let out = expand(&TracedArgs::default(), &defaults).unwrap();
+        assert!(!out.contains("__oopsie_timestamp"), "{out}");
+    }
+
+    #[test]
+    fn explicit_timestamp_still_rejects_a_timestamp_typed_field() {
+        let args = TracedArgs::from_meta(&parse_quote!(traced(timestamp))).unwrap();
+        expand(&args, &TracedDefaults::default()).unwrap_err();
+    }
+}

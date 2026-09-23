@@ -101,6 +101,7 @@ impl TracedArgs {
             backtrace: self.backtrace.is_enabled(),
             spantrace: self.spantrace.is_enabled(),
             timestamp: fold(self.timestamp.explicit(), defaults.timestamp, false),
+            timestamp_explicit: self.timestamp.explicit() == Some(true),
             location: fold(self.location.to_option(), defaults.location, true),
             packed: fold(self.packed.to_option(), defaults.packed, true),
             code: fold(self.code.explicit(), defaults.code, true),
@@ -138,6 +139,9 @@ pub struct ResolvedTraceArgs<'a> {
     pub backtrace: bool,
     pub spantrace: bool,
     pub timestamp: bool,
+    /// `timestamp` was turned on at the call site rather than by a manifest
+    /// default.
+    pub timestamp_explicit: bool,
     pub location: bool,
     pub packed: bool,
     pub code: bool,
