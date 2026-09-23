@@ -6,6 +6,11 @@
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Style(owo_colors::Style);
 
+// `owo_colors::Style` doesn't implement `Eq` (so `#[derive(Eq)]` can't see through
+// it), but its `PartialEq` only ever compares discrete color/attribute fields — no
+// floats — so it is already a total equivalence relation and `Eq` holds.
+impl Eq for Style {}
+
 impl Style {
     /// An empty style that emits no ANSI codes.
     #[must_use]
@@ -14,10 +19,10 @@ impl Style {
         Self(owo_colors::Style::new())
     }
 
-    /// Construct a style from a 24-bit RGB color tuple.
+    /// Construct a style from a 24-bit RGB color.
     #[must_use]
     #[inline]
-    pub const fn from_rgb((r, g, b): (u8, u8, u8)) -> Self {
+    pub const fn from_rgb(r: u8, g: u8, b: u8) -> Self {
         Self(owo_colors::Style::new().truecolor(r, g, b))
     }
 
@@ -29,6 +34,10 @@ impl Style {
     }
 
     /// Set the foreground to a 24-bit truecolor from a hex literal, e.g. `#ff00aa`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `literal` isn't a well-formed `#rrggbb` hex color.
     #[must_use]
     #[inline]
     pub const fn hex(self, literal: &str) -> Self {

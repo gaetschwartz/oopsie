@@ -19,6 +19,7 @@ use crate::style::{Colorize as _, Style};
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// A single frame from a backtrace.
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct BacktraceFrame {
     /// Instruction pointer of the physical frame this symbol belongs to.
@@ -56,6 +57,7 @@ impl BacktraceFrame {
 }
 
 /// Metadata for a single span in a span trace.
+#[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct SpanMetadata<'a> {
     /// The span's name.
@@ -91,14 +93,28 @@ impl<'a> SpanMetadata<'a> {
 // Provider traits
 // ─────────────────────────────────────────────────────────────────────────────
 
+mod sealed {
+    #[expect(
+        unnameable_types,
+        reason = "the sealed-trait pattern: nameable only from inside this crate"
+    )]
+    pub trait Sealed {}
+}
+
 /// Trait for types that can provide backtrace frames.
+///
+/// Open on purpose: [`TracePrinter::write_backtrace`] takes `&impl BacktraceProvider`, and a
+/// caller building a synthetic or foreign backtrace representation implements this directly
+/// rather than converting into [`oopsie_core::Backtrace`].
 pub trait BacktraceProvider {
     /// Resolve the backtrace into rendered frames, top of stack first.
     fn frames(&self) -> Vec<BacktraceFrame>;
 }
 
 /// Trait for types that can provide span trace information.
-pub trait SpanTraceProvider {
+///
+/// This trait is sealed and cannot be implemented outside this crate.
+pub trait SpanTraceProvider: sealed::Sealed {
     /// Invoke `f` once per span, from innermost to outermost, passing the
     /// span's metadata and its formatted fields. Iteration stops early when
     /// `f` returns `false`.
@@ -130,6 +146,9 @@ impl BacktraceProvider for Backtrace {
 }
 
 #[cfg(feature = "tracing")]
+impl sealed::Sealed for crate::SpanTrace {}
+
+#[cfg(feature = "tracing")]
 impl SpanTraceProvider for crate::SpanTrace {
     #[inline]
     fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata<'_>, &str) -> bool) {
@@ -155,7 +174,7 @@ impl SpanTraceProvider for crate::SpanTrace {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Color theme for trace rendering.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct TraceTheme {
     /// Style for the per-frame index.
@@ -727,7 +746,7 @@ impl FrameFilter for FrameFilterBox {
 /// Renders backtraces and span traces with colors.
 pub struct TracePrinter {
     /// An explicit theme, or `None` to follow the current global theme
-    /// ([`get_theme`](crate::get_theme)) resolved at render time.
+    /// ([`theme`](crate::theme)) resolved at render time.
     theme: Option<TraceTheme>,
     frame_filter: FrameFilterBox,
     strip_cwd: bool,
@@ -739,7 +758,7 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn new() -> Self {
-        Self::with_const_filter(&error_backtrace_frame_filter)
+        Self::const_filtered(&error_backtrace_frame_filter)
     }
 
     /// Create a new `TracePrinter` with no frame filtering, following the
@@ -749,14 +768,14 @@ impl TracePrinter {
     #[must_use]
     #[inline]
     pub const fn unfiltered() -> Self {
-        Self::with_const_filter(&noop_frame_filter).absolute_paths()
+        Self::const_filtered(&noop_frame_filter).absolute_paths()
     }
 
     /// Create a new `TracePrinter` with a custom frame filter, following the
     /// current global theme.
     #[must_use]
     #[inline]
-    pub fn with_filter(filter: impl FrameFilter + Send + Sync + 'static) -> Self {
+    pub fn filtered(filter: impl FrameFilter + Send + Sync + 'static) -> Self {
         Self {
             frame_filter: BoxOrBorrow::Box(Box::new(filter)),
             theme: None,
@@ -767,7 +786,7 @@ impl TracePrinter {
     /// Create a new `TracePrinter` with a `const` frame filter.
     #[must_use]
     #[inline]
-    pub const fn with_const_filter(
+    pub const fn const_filtered(
         filter: &'static (impl FrameFilter + Send + Sync + 'static),
     ) -> Self {
         Self {
@@ -817,8 +836,7 @@ impl TracePrinter {
     /// The theme to render with: the pinned one, else the current global
     /// theme's trace styles.
     fn resolved_theme(&self) -> TraceTheme {
-        self.theme
-            .unwrap_or_else(|| crate::theme::get_theme().trace())
+        self.theme.unwrap_or_else(|| crate::theme::theme().trace())
     }
 
     /// Render a colored backtrace, including the ` BACKTRACE ` header.
@@ -958,52 +976,38 @@ impl TracePrinter {
 
     /// Render a colored span trace, including the ` SPANTRACE ` header.
     ///
-    /// Always writes the header, so callers must pre-check that the provider
-    /// yields at least one span — an empty provider leaves a lone banner.
+    /// Writes nothing at all for an empty or unsupported span trace, matching
+    /// [`write_backtrace`](Self::write_backtrace) — a degenerate trace never
+    /// leaves a lone banner behind.
     pub fn write_spantrace(
         &self,
         f: &mut fmt::Formatter<'_>,
         st: &impl SpanTraceProvider,
     ) -> fmt::Result {
+        if st.status() != SpanTraceStatus::Captured {
+            return Ok(());
+        }
+
         let theme = self.resolved_theme();
-        // Header
         writeln!(
             f,
             "{}",
             format_args!("{:━^80}", " SPANTRACE ").style(theme.header)
         )?;
 
-        match st.status() {
-            SpanTraceStatus::Captured => {
-                let mut index = 1usize;
-                let mut err = Ok(());
+        let mut index = 1usize;
+        let mut err = Ok(());
 
-                st.with_spans(&mut |meta, fields| {
-                    if let Err(e) = Self::write_span_frame(f, index, meta, fields, &theme) {
-                        err = Err(e);
-                        return false;
-                    }
-                    index += 1;
-                    true
-                });
+        st.with_spans(&mut |meta, fields| {
+            if let Err(e) = Self::write_span_frame(f, index, meta, fields, &theme) {
+                err = Err(e);
+                return false;
+            }
+            index += 1;
+            true
+        });
 
-                err
-            }
-            SpanTraceStatus::Empty => {
-                writeln!(
-                    f,
-                    "{}",
-                    "   ... no spans captured ...".style(theme.frames_hidden)
-                )
-            }
-            SpanTraceStatus::Unsupported | _ => {
-                writeln!(
-                    f,
-                    "{}",
-                    "   ... span traces unsupported ...".style(theme.frames_hidden)
-                )
-            }
-        }
+        err
     }
 
     /// Render a single span trace frame.
@@ -1049,6 +1053,15 @@ impl TracePrinter {
         }
 
         Ok(())
+    }
+}
+
+impl fmt::Debug for TracePrinter {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TracePrinter")
+            .field("theme", &self.theme)
+            .field("strip_cwd", &self.strip_cwd)
+            .finish_non_exhaustive()
     }
 }
 

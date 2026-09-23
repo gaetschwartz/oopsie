@@ -6,9 +6,6 @@ Error: outer
   at crates/oopsie/tests/provider_reach.rs:[LOC]
   ╰─▶ inner failed: disk offline
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ... no spans captured ...
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 9 frames hidden ...
   1: provider_reach[[HASH]]::origin_frame

@@ -15,8 +15,8 @@ use std::process::Termination as _;
 
 use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter};
 use oopsie::{
-    ColorMode, Contextual as _, Report, RustBacktrace, Theme, get_color_mode, get_theme, oopsie,
-    set_color_mode, set_theme,
+    ColorMode, Contextual as _, Report, RustBacktrace, Theme, color_mode, oopsie, set_color_mode,
+    set_theme, theme,
 };
 use oopsie_core::{redact, snap_name};
 
@@ -170,7 +170,7 @@ fn report_follows_global_theme_child() {
     }
     let report = Report::new(TestOopsie { message: "themed" }.build()).force_colors();
 
-    let original = get_theme();
+    let original = theme();
     set_theme(Theme::NORD);
     let nord_render = report.to_string();
     set_theme(Theme::CATPPUCCIN_MOCHA);
@@ -188,17 +188,17 @@ fn report_follows_global_theme() {
     run_isolated_child("report_follows_global_theme_child");
 }
 
-/// `set_theme`/`get_theme` roundtrip through the process-global slot.
+/// `set_theme`/`theme` roundtrip through the process-global slot.
 #[test]
 fn theme_set_get_roundtrips_child() {
     if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
         return;
     }
-    let original = get_theme();
+    let original = theme();
     set_theme(Theme::DRACULA);
-    assert_eq!(get_theme(), Theme::DRACULA);
+    assert_eq!(theme(), Theme::DRACULA);
     set_theme(Theme::NORD);
-    assert_eq!(get_theme(), Theme::NORD);
+    assert_eq!(theme(), Theme::NORD);
     set_theme(original);
 }
 
@@ -207,19 +207,19 @@ fn theme_set_get_roundtrips() {
     run_isolated_child("theme_set_get_roundtrips_child");
 }
 
-/// `set_color_mode`/`get_color_mode` roundtrip through the process-global slot.
+/// `set_color_mode`/`color_mode` roundtrip through the process-global slot.
 #[test]
 fn global_color_mode_roundtrip_child() {
     if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
         return;
     }
-    let original = get_color_mode();
+    let original = color_mode();
 
     set_color_mode(ColorMode::Never);
-    assert_eq!(get_color_mode(), ColorMode::Never);
+    assert_eq!(color_mode(), ColorMode::Never);
 
     set_color_mode(ColorMode::Always);
-    assert_eq!(get_color_mode(), ColorMode::Always);
+    assert_eq!(color_mode(), ColorMode::Always);
 
     set_color_mode(original);
 }
@@ -234,10 +234,10 @@ fn auto_color_mode_roundtrip_through_global_child() {
     if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
         return;
     }
-    let original = get_color_mode();
+    let original = color_mode();
 
     set_color_mode(ColorMode::Auto);
-    assert_eq!(get_color_mode(), ColorMode::Auto);
+    assert_eq!(color_mode(), ColorMode::Auto);
 
     set_color_mode(original);
 }
@@ -254,7 +254,7 @@ fn global_never_disables_auto_colorize_child() {
     if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
         return;
     }
-    let original = get_color_mode();
+    let original = color_mode();
     set_color_mode(ColorMode::Never);
     assert!(!ColorMode::Auto.should_colorize());
     set_color_mode(ColorMode::Always);
@@ -379,12 +379,12 @@ fn test_report_colored_spantrace_renders_frames() {
 }
 
 /// A span trace captured under a subscriber with no `ErrorLayer` reports
-/// `Unsupported`; the report renders a placeholder in the `SPANTRACE` section
-/// instead of suppressing it. Backtraces are disabled so the render is
+/// `Unsupported`; the report suppresses the `SPANTRACE` section entirely,
+/// same as an empty one. Backtraces are disabled so the render is
 /// deterministic without depending on captured frames.
 #[cfg(feature = "tracing")]
 #[test]
-fn test_report_renders_unsupported_spantrace() {
+fn test_report_suppresses_unsupported_spantrace() {
     oopsie::backtrace::set_override(RustBacktrace::Disabled);
 
     // `Unsupported` requires a current span at capture (so `self.span` is set)
@@ -404,9 +404,6 @@ fn test_report_renders_unsupported_spantrace() {
         insta::assert_snapshot!(report, @"
         Error[report::TestError]: Test error: unsupported render
           at crates/oopsie/tests/report.rs:[LOC]
-
-        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-           ... span traces unsupported ...
         ");
     });
 }
@@ -778,9 +775,9 @@ fn test_backtrace_frame_no_colno_renders_only_lineno() {
     );
 }
 
-/// `with_filter` installs a fully custom filter, replacing the default.
+/// `filtered` installs a fully custom filter, replacing the default.
 #[test]
-fn test_trace_printer_with_filter_custom_filter() {
+fn test_trace_printer_filtered_custom_filter() {
     let provider = FixedFrames(vec![
         frame("keep::alpha", Some(1), None),
         frame("drop::beta", Some(2), None),
@@ -788,7 +785,7 @@ fn test_trace_printer_with_filter_custom_filter() {
     ]);
 
     // Custom filter: drop any frame whose name starts with "drop::".
-    let printer = TracePrinter::with_filter(|frames: &mut [Option<&BacktraceFrame>]| {
+    let printer = TracePrinter::filtered(|frames: &mut [Option<&BacktraceFrame>]| {
         for slot in frames.iter_mut() {
             if slot.is_some_and(|frame| {
                 frame

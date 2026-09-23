@@ -5,9 +5,6 @@ expression: strip_ansi(&rendered)
 Error[report::TestError]: Test error: colored test
   at crates/oopsie/tests/report.rs:[LOC]
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ SPANTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-   ... no spans captured ...
-
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
    ... 9 frames hidden ...
   1: report[[HASH]]::test_report_colored

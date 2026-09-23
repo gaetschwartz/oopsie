@@ -15,7 +15,7 @@ use oopsie_core::SpanTrace;
 
 use crate::ColorMode;
 use crate::color::style;
-use crate::theme::get_theme;
+use crate::theme::theme;
 use crate::trace_printer::{TracePrinter, marker_strip_filter, panic_frame_filter};
 
 /// Install a process-global panic hook that renders panics with a colored
@@ -110,7 +110,7 @@ impl<'a> PanicReport<'a> {
 
     fn write_header(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let c = self.color_config.should_colorize();
-        let theme = get_theme();
+        let theme = theme();
         // `PanicHookInfo::payload_as_str` would be cleaner but postdates the
         // crate's MSRV; downcast manually instead.
         let payload = self.info.payload();
@@ -176,7 +176,7 @@ impl<'a> PanicReport<'a> {
                 "{}",
                 style!(
                     "note: run with `RUST_BACKTRACE=1` to display a backtrace",
-                    get_theme().hint(),
+                    theme().hint(),
                     c
                 )
             )?;
@@ -192,9 +192,9 @@ impl<'a> PanicReport<'a> {
         } else if let Some(cut) = self.backtrace.marker_hidden_frames() {
             // Marker cut first (exact bottom); panic_frame_filter then trims
             // the panic plumbing on top and the residue left above the cut.
-            TracePrinter::with_filter(marker_strip_filter(cut)).add_frame_filter(panic_frame_filter)
+            TracePrinter::filtered(marker_strip_filter(cut)).add_frame_filter(panic_frame_filter)
         } else {
-            TracePrinter::with_filter(panic_frame_filter)
+            TracePrinter::filtered(panic_frame_filter)
         };
         // The default printer follows the global theme; only the uncolored
         // case needs an explicit override.

@@ -6,7 +6,7 @@
 //! report onto a palette color. The shipped themes are curated presets, exposed
 //! as associated constants ([`Theme::CATPPUCCIN_MOCHA`], [`Theme::DRACULA`],
 //! [`Theme::NORD`], …); pick one. The active default is read from a
-//! process-global slot via [`get_theme`] and replaced with [`set_theme`].
+//! process-global slot via [`theme`] and replaced with [`set_theme`].
 
 use std::sync::{PoisonError, RwLock};
 
@@ -33,8 +33,13 @@ pub struct Theme {
 
 const _: () = assert!(
     std::mem::size_of::<Theme>() <= 32,
-    "Theme is copied on every get_theme(); keep it a small palette",
+    "Theme is copied on every theme(); keep it a small palette",
 );
+
+/// Build a [`Style`] from one of this module's `(u8, u8, u8)` palette entries.
+const fn rgb((r, g, b): (u8, u8, u8)) -> Style {
+    Style::from_rgb(r, g, b)
+}
 
 impl Theme {
     /// Catppuccin Mocha — the dark default. <https://catppuccin.com/palette>
@@ -123,47 +128,47 @@ impl Theme {
     /// Backtrace/span-trace frame index.
     #[must_use]
     pub const fn frame_number(&self) -> Style {
-        Style::from_rgb(self.overlay1)
+        rgb(self.overlay1)
     }
     /// Function / span name.
     #[must_use]
     pub const fn function_name(&self) -> Style {
-        Style::from_rgb(self.red)
+        rgb(self.red)
     }
     /// The `::h…` hash suffix on a function name.
     #[must_use]
     pub const fn function_hash(&self) -> Style {
-        Style::from_rgb(self.overlay0)
+        rgb(self.overlay0)
     }
     /// Source file path.
     #[must_use]
     pub const fn file_path(&self) -> Style {
-        Style::from_rgb(self.mauve)
+        rgb(self.mauve)
     }
     /// `:line:col` location.
     #[must_use]
     pub const fn line_number(&self) -> Style {
-        Style::from_rgb(self.peach)
+        rgb(self.peach)
     }
     /// Inline separators (`at`, `:`, `with`).
     #[must_use]
     pub const fn separator(&self) -> Style {
-        Style::from_rgb(self.overlay0)
+        rgb(self.overlay0)
     }
     /// Span field list.
     #[must_use]
     pub const fn fields(&self) -> Style {
-        Style::from_rgb(self.sky)
+        rgb(self.sky)
     }
     /// The `━ BACKTRACE ━` / `━ SPANTRACE ━` banner.
     #[must_use]
     pub const fn header(&self) -> Style {
-        Style::from_rgb(self.mauve)
+        rgb(self.mauve)
     }
     /// The `… N frames hidden …` notice.
     #[must_use]
     pub const fn frames_hidden(&self) -> Style {
-        Style::from_rgb(self.teal)
+        rgb(self.teal)
     }
 
     // ── Error-chain / panic roles ───────────────────────────────────────────
@@ -171,42 +176,42 @@ impl Theme {
     /// The `Error` headline, and the panic header line.
     #[must_use]
     pub const fn error_title(&self) -> Style {
-        Style::from_rgb(self.red).bold()
+        rgb(self.red).bold()
     }
     /// The `[error_code]` token next to the headline.
     #[must_use]
     pub const fn error_code(&self) -> Style {
-        Style::from_rgb(self.blue)
+        rgb(self.blue)
     }
     /// The brackets around the error code.
     #[must_use]
     pub const fn delimiter(&self) -> Style {
-        Style::from_rgb(self.overlay0)
+        rgb(self.overlay0)
     }
     /// The `├─▶` / `╰─▶` arrows joining the error chain.
     #[must_use]
     pub const fn cause(&self) -> Style {
-        Style::from_rgb(self.yellow)
+        rgb(self.yellow)
     }
     /// The `help` label.
     #[must_use]
     pub const fn help(&self) -> Style {
-        Style::from_rgb(self.teal)
+        rgb(self.teal)
     }
     /// The panic message body.
     #[must_use]
     pub const fn panic_message(&self) -> Style {
-        Style::from_rgb(self.sky)
+        rgb(self.sky)
     }
     /// The panic location (`file:line:col`).
     #[must_use]
     pub const fn panic_location(&self) -> Style {
-        Style::from_rgb(self.mauve)
+        rgb(self.mauve)
     }
     /// Dimmed hints, e.g. the `RUST_BACKTRACE` note.
     #[must_use]
     pub const fn hint(&self) -> Style {
-        Style::from_rgb(self.overlay0)
+        rgb(self.overlay0)
     }
 
     /// Bundle the trace roles into a [`TraceTheme`] for [`TracePrinter`].
@@ -240,6 +245,6 @@ pub fn set_theme(theme: Theme) {
 /// The current process-global theme.
 #[must_use]
 #[inline]
-pub fn get_theme() -> Theme {
+pub fn theme() -> Theme {
     *THEME.read().unwrap_or_else(PoisonError::into_inner)
 }

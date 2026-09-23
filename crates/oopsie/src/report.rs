@@ -12,7 +12,7 @@ use crate::ColorMode;
 use crate::Diagnostic;
 
 use crate::color::style;
-use crate::theme::{Theme, get_theme};
+use crate::theme::{Theme, theme};
 use crate::trace_printer::{
     TracePrinter, TraceTheme, error_backtrace_frame_filter, location_anchor_filter,
     marker_strip_filter,
@@ -42,7 +42,7 @@ use crate::trace_printer::{
 pub struct Report<E> {
     res: Result<(), E>,
     color_config: ColorMode,
-    /// Per-report theme; `None` falls back to the process-global [`get_theme`]
+    /// Per-report theme; `None` falls back to the process-global [`theme`]
     /// at render time.
     theme_override: Option<Theme>,
     /// Cloned from the error at construction; clones share the same
@@ -164,7 +164,7 @@ impl<E: Diagnostic> Report<E> {
     fn resolved_theme(&self) -> Cow<'_, Theme> {
         match self.theme_override.as_ref() {
             Some(theme) => Cow::Borrowed(theme),
-            None => Cow::Owned(get_theme()),
+            None => Cow::Owned(theme()),
         }
     }
 
@@ -262,12 +262,19 @@ impl<E: Diagnostic> Report<E> {
         Ok(())
     }
 
-    /// Format the span trace if available.
+    /// Format the span trace if available and captured.
+    ///
+    /// Both the empty and colored paths go through [`TracePrinter`], which
+    /// writes nothing for an empty or unsupported span trace — mirrors
+    /// [`write_backtrace`](Self::write_backtrace).
     #[cfg(feature = "tracing")]
     fn write_spantrace(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let Some(span_trace) = self.error().and_then(|e| e.oopsie_spantrace()) else {
             return Ok(());
         };
+        if !span_trace.is_captured() {
+            return Ok(());
+        }
 
         writeln!(f)?;
         let printer = TracePrinter::new();
@@ -307,10 +314,7 @@ impl<E: Diagnostic> Report<E> {
             // Marker cut first (exact bottom); the name filter then trims the
             // runtime frames left above the cut.
             let backtrace_filter = backtrace.marker_hidden_frames().map(marker_strip_filter);
-            TracePrinter::with_filter((
-                loc_filter,
-                (backtrace_filter, error_backtrace_frame_filter),
-            ))
+            TracePrinter::filtered((loc_filter, (backtrace_filter, error_backtrace_frame_filter)))
         };
         printer = printer.with_theme(if self.color_config.should_colorize() {
             self.resolved_theme().trace()

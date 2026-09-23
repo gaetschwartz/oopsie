@@ -82,7 +82,7 @@ impl ColorMode {
     #[inline]
     pub fn should_colorize(self) -> bool {
         match self {
-            Self::Auto => match get_color_mode() {
+            Self::Auto => match color_mode() {
                 Self::Always => true,
                 Self::Never => false,
                 Self::Auto => cached_env_supports_color(),
@@ -114,7 +114,7 @@ pub fn set_color_mode(mode: ColorMode) {
 /// Get the current global color mode.
 #[must_use]
 #[inline]
-pub fn get_color_mode() -> ColorMode {
+pub fn color_mode() -> ColorMode {
     match ColorMode::from_u8(COLOR_MODE.load(SeqCst)) {
         Some(mode) => mode,
         None => ColorMode::Auto,

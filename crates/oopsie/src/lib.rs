@@ -532,7 +532,7 @@ pub mod prelude {
 #[cfg(feature = "fancy")]
 mod color;
 #[cfg(feature = "fancy")]
-pub use color::{ColorMode, get_color_mode, set_color_mode};
+pub use color::{ColorMode, color_mode, set_color_mode};
 
 #[cfg(feature = "fancy")]
 mod report;
@@ -555,4 +555,4 @@ pub use style::Style;
 #[cfg(feature = "fancy")]
 mod theme;
 #[cfg(feature = "fancy")]
-pub use theme::{Theme, get_theme, set_theme};
+pub use theme::{Theme, set_theme, theme};
