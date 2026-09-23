@@ -2016,44 +2016,13 @@ pub fn any_variant_has_cfg(data: &syn::DataEnum) -> bool {
 /// gates and `#[cfg_attr(...)]` conditionals. Forwarded verbatim onto every
 /// generated reference (selector field, struct-expression field, match-arm
 /// binding, variant match arm) so the reference vanishes together with what
-/// rustc strips. `oopsie` helper attrs gated inside a `cfg_attr` are consumed
-/// by the macro and unregistered outside the item, so they are pruned rather
-/// than forwarded.
+/// rustc strips.
 pub fn forwarded_cfg_attrs(attrs: &[syn::Attribute]) -> Vec<syn::Attribute> {
     attrs
         .iter()
         .filter(|a| a.path().is_ident("cfg") || a.path().is_ident("cfg_attr"))
-        .filter_map(|a| {
-            if a.path().is_ident("cfg_attr") {
-                prune_cfg_attr_oopsie(a)
-            } else {
-                Some(a.clone())
-            }
-        })
+        .cloned()
         .collect()
-}
-
-/// `cfg_attr` with the `oopsie` helper attrs it gates removed; `None` when
-/// nothing gated remains, in which case the attribute gates nothing and must
-/// be dropped.
-pub fn prune_cfg_attr_oopsie(attr: &syn::Attribute) -> Option<syn::Attribute> {
-    let Ok(metas) = attr.parse_args_with(
-        syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
-    ) else {
-        return Some(attr.clone());
-    };
-    let metas: Vec<syn::Meta> = metas.into_iter().collect();
-    let [pred, gated @ ..] = &*metas else {
-        return Some(attr.clone());
-    };
-    let kept: Vec<&syn::Meta> = gated
-        .iter()
-        .filter(|m| !m.path().is_ident("oopsie"))
-        .collect();
-    if kept.is_empty() {
-        return None;
-    }
-    Some(syn::parse_quote! { #[cfg_attr(#pred, #(#kept),*)] })
 }
 
 /// The predicate under which an item carrying `attrs` survives cfg-stripping,

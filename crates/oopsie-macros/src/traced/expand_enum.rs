@@ -4,11 +4,9 @@ use proc_macro2::Span;
 use syn::ext::IdentExt as _;
 
 use super::args::TracedArgs;
-use super::config::{FieldInjectorConfig, FieldsToInject};
-use super::inject::{
-    add_provide_attrs, check_existing_fields, inject_fields, timestamp_conflict_error,
-};
-use crate::derive::parse::{ResolvedForward, VariantAttrs, field_forward};
+use super::config::FieldInjectorConfig;
+use super::inject::{ItemFacts, add_provide_attrs, inject_fields, plan_injection};
+use crate::derive::parse::VariantAttrs;
 use crate::utils::TracedDefaults;
 
 pub fn expand_enum(
@@ -24,52 +22,22 @@ pub fn expand_enum(
     resolved.validate(args_span)?;
     let config = FieldInjectorConfig::new(&resolved, args.code.inner(), oopsie_path);
 
-    // Process variants
     for variant in &mut input.variants {
-        // Parse once so injection and auto-code decisions share the same
-        // variant-level attribute view.
-        let variant_attrs = VariantAttrs::from_attrs(&variant.attrs)?;
-        let variant_traced_enabled = variant_attrs.traced.is_enabled();
-
-        let existence = check_existing_fields(&variant.fields, &config.timestamp_type)?;
-        if variant_traced_enabled
-            && resolved.timestamp
-            && let Some(span) = existence.timestamp_conflict
-        {
-            return Err(timestamp_conflict_error(span));
-        }
-
-        let forward = if variant_traced_enabled {
-            variant
-                .fields
-                .iter()
-                .map(field_forward)
-                .collect::<syn::Result<Vec<_>>>()?
-                .into_iter()
-                .find(|f| f.any())
-                .unwrap_or_default()
-        } else {
-            ResolvedForward::default()
-        };
-
-        let inject_backtrace = variant_traced_enabled && resolved.backtrace && !forward.backtrace;
-        let inject_spantrace = variant_traced_enabled && resolved.spantrace && !forward.spantrace;
-        let inject_location = variant_traced_enabled && resolved.location && !forward.location;
-
-        let packed = resolved.packed
-            && inject_backtrace
-            && inject_spantrace
-            && !existence.has_backtrace
-            && !existence.has_spantrace
-            && !existence.has_traces;
-
-        let to_inject = FieldsToInject {
-            backtrace: !packed && inject_backtrace && !existence.has_backtrace,
-            spantrace: !packed && inject_spantrace && !existence.has_spantrace,
-            timestamp: variant_traced_enabled && resolved.timestamp && !existence.has_timestamp,
-            traces: packed,
-            location: inject_location && !existence.has_location,
-        };
+        let (to_inject, auto_code) = plan_injection(
+            &resolved,
+            &config,
+            &variant.attrs,
+            &variant.fields,
+            variant.ident.span(),
+            |attrs| {
+                let attrs = VariantAttrs::from_attrs(attrs)?;
+                Ok(ItemFacts {
+                    traced: attrs.traced.is_enabled(),
+                    has_user_code: attrs.code.is_some(),
+                    transparent: attrs.transparent,
+                })
+            },
+        )?;
 
         // An explicit discriminant requires a fieldless variant; injecting trace
         // fields would change its shape, which rustc rejects. Refuse here so the
@@ -87,18 +55,13 @@ pub fn expand_enum(
 
         inject_fields(&mut variant.fields, &config, &to_inject)?;
 
-        let has_user_code = variant_attrs.code.is_some();
-        let is_transparent = variant_attrs.transparent;
-
         let variant_name = variant.ident.unraw().to_string();
         add_provide_attrs(
             &mut variant.attrs,
             &config,
             &enum_name,
             Some(&variant_name),
-            variant_traced_enabled && resolved.code,
-            has_user_code,
-            is_transparent,
+            &auto_code,
         );
     }
 

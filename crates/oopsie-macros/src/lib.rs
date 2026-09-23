@@ -72,6 +72,17 @@ pub fn oopsie_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream 
     }
 }
 
+/// Impl half of [`#[oopsie]`](macro@oopsie). The attribute emits this derive on
+/// the item it rewrites, so impls are generated from the item after `#[cfg]`
+/// and `#[cfg_attr]` are evaluated. Not for direct use.
+#[doc(hidden)]
+#[proc_macro_derive(OopsieAttrImpl, attributes(oopsie, __oopsie_attr))]
+pub fn oopsie_attr_impl(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    oopsie_attr::expand_impls(input.into())
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
 /// Attribute macro — the primary way to define an `oopsie` error type.
 ///
 /// Generates context selectors, `Display`, `Error`, and `Debug` impls in one

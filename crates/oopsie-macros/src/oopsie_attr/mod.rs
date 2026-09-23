@@ -16,7 +16,7 @@ use syn::spanned::Spanned as _;
 
 use crate::derive;
 use crate::traced::args::TracedArgs;
-use crate::utils::{FieldSetting, TracedDefaults};
+use crate::utils::FieldSetting;
 
 #[derive(Debug, darling::FromMeta)]
 pub struct OopsieAttrArgs {
@@ -91,154 +91,207 @@ pub fn expand(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStre
         }
         None => None,
     };
-    let keywords = crate::keyword_docs::collect_attr_keywords(&meta);
-
-    match syn::parse2::<syn::Item>(input)? {
-        syn::Item::Enum(item_enum) => expand_enum(
-            &args,
-            effective_traced.as_deref(),
-            traced_span,
-            &traced_defaults,
-            &manifest_err,
-            &keywords,
-            item_enum,
-        ),
-        syn::Item::Struct(item_struct) => expand_struct(
-            &args,
-            effective_traced.as_deref(),
-            traced_span,
-            &traced_defaults,
-            &manifest_err,
-            &keywords,
-            item_struct,
-        ),
-        other => Err(syn::Error::new_spanned(
-            other,
-            "`#[oopsie]` can only be applied to enums or structs",
-        )),
-    }
-}
-
-fn expand_enum(
-    args: &OopsieAttrArgs,
-    traced: Option<&TracedArgs>,
-    traced_span: Option<proc_macro2::Span>,
-    defaults: &TracedDefaults,
-    manifest_err: &TokenStream2,
-    keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
-    mut item: syn::ItemEnum,
-) -> syn::Result<TokenStream2> {
-    let span = item.span();
+    let (attr_keywords, traced_keywords) = crate::keyword_docs::collect_attr_keywords(&meta);
+    let traced = effective_traced.as_deref();
     let oopsie_path: syn::Path = args
         .path
         .clone()
         .unwrap_or_else(|| parse_quote! { ::oopsie });
 
-    // Step 1: inject diagnostic fields in place if requested.
-    if let Some(traced) = traced {
-        crate::traced::expand_enum::expand_enum(
-            traced,
-            defaults,
-            &oopsie_path,
-            traced_span.unwrap_or(span),
-            &mut item,
-        )?;
-    }
-
-    // Step 2: generate Oopsie impls from the injected item. The derive layer
-    // needs the helper attrs still present, so it reads a copy taken before the
-    // strip below.
-    let derive_input = syn::DeriveInput::from(item.clone());
-    let mut container_attrs = derive::parse::EnumContainerAttrs::from_attrs(&derive_input.attrs)?;
-    // The macro-level `path` governs every generated impl; an explicit
-    // container-attr `path` still wins.
-    if container_attrs.inner.path.is_none() {
-        container_attrs.inner.path.clone_from(&args.path);
-    }
-    let impls = derive::expand_enum(&derive_input, &container_attrs, traced.is_some())?;
-
-    let (attr_kws, traced_kws) = keywords;
-    let keyword_docs = crate::keyword_docs::gen_use_block(
-        &container_attrs.oopsie_path(),
-        &[("attr", attr_kws), ("traced", traced_kws)],
-    );
-
-    // Step 3: emit the item with Debug added, Oopsie removed from derives,
-    // and all #[oopsie(...)] helper attrs stripped (they've been consumed).
-    fix_derives(&mut item.attrs, args.debug.is_enabled());
-    strip_oopsie_attrs(&mut item.attrs);
-    for variant in &mut item.variants {
-        strip_oopsie_attrs(&mut variant.attrs);
-        for field in &mut variant.fields {
-            strip_oopsie_attrs(&mut field.attrs);
+    let mut item = syn::parse2::<syn::Item>(input)?;
+    // The derive resolves through the same crate path as the impls it
+    // generates; an unparsable container attr falls back and is reported by the
+    // derive.
+    let container_path = match &item {
+        syn::Item::Enum(e) => derive::parse::EnumContainerAttrs::from_attrs(&e.attrs)
+            .ok()
+            .and_then(|c| c.inner.path),
+        syn::Item::Struct(s) => derive::parse::StructAttrs::from_attrs(&s.attrs)
+            .ok()
+            .and_then(|c| c.container.path),
+        _ => None,
+    };
+    let derive_path = container_path.as_ref().unwrap_or(&oopsie_path);
+    let item_attrs = match &mut item {
+        syn::Item::Enum(item_enum) => {
+            if let Some(traced) = traced {
+                let span = traced_span.unwrap_or_else(|| item_enum.span());
+                crate::traced::expand_enum::expand_enum(
+                    traced,
+                    &traced_defaults,
+                    &oopsie_path,
+                    span,
+                    item_enum,
+                )?;
+            }
+            &mut item_enum.attrs
         }
-    }
+        syn::Item::Struct(item_struct) => {
+            if let Some(traced) = traced {
+                let span = traced_span.unwrap_or_else(|| item_struct.span());
+                crate::traced::expand_struct::expand_struct(
+                    traced,
+                    &traced_defaults,
+                    &oopsie_path,
+                    span,
+                    item_struct,
+                )?;
+            }
+            &mut item_struct.attrs
+        }
+        other => {
+            return Err(syn::Error::new_spanned(
+                other,
+                "`#[oopsie]` can only be applied to enums or structs",
+            ));
+        }
+    };
+
+    fix_derives(item_attrs, args.debug.is_enabled());
+    let marker = Marker {
+        tracing_active: traced.is_some(),
+        path: args.path.clone(),
+        attr_keywords,
+        traced_keywords,
+    };
+    // The derive must come first: a helper attribute ahead of the derive that
+    // registers it trips `legacy_derive_helpers`.
+    item_attrs.splice(
+        0..0,
+        [
+            parse_quote! { #[derive(#derive_path::__private::OopsieAttrImpl)] },
+            marker.to_attr(),
+        ],
+    );
 
     Ok(quote! {
         #item
-        #impls
-        #keyword_docs
         #manifest_err
     })
 }
 
-fn expand_struct(
-    args: &OopsieAttrArgs,
-    traced: Option<&TracedArgs>,
-    traced_span: Option<proc_macro2::Span>,
-    defaults: &TracedDefaults,
-    manifest_err: &TokenStream2,
-    keywords: &(Vec<syn::Ident>, Vec<syn::Ident>),
-    mut item: syn::ItemStruct,
-) -> syn::Result<TokenStream2> {
-    let span = item.span();
-    let oopsie_path: syn::Path = args
-        .path
-        .clone()
-        .unwrap_or_else(|| parse_quote! { ::oopsie });
+const MARKER: &str = "__oopsie_attr";
 
-    // Step 1: inject diagnostic fields in place if requested.
-    if let Some(traced) = traced {
-        crate::traced::expand_struct::expand_struct(
-            traced,
-            defaults,
-            &oopsie_path,
-            traced_span.unwrap_or(span),
-            &mut item,
+/// What the attribute knows that the item alone doesn't, handed to
+/// [`expand_impls`] through a `#[__oopsie_attr(...)]` helper attribute.
+struct Marker {
+    tracing_active: bool,
+    path: Option<syn::Path>,
+    attr_keywords: Vec<syn::Ident>,
+    traced_keywords: Vec<syn::Ident>,
+}
+
+impl Marker {
+    fn to_attr(&self) -> syn::Attribute {
+        let tracing_active = self.tracing_active.then(|| quote! { tracing_active, });
+        let path = self.path.as_ref().map(|p| quote! { path(#p), });
+        let attr_keywords = &self.attr_keywords;
+        let traced_keywords = &self.traced_keywords;
+        parse_quote! {
+            #[__oopsie_attr(
+                #tracing_active
+                #path
+                attr_keywords(#(#attr_keywords),*),
+                traced_keywords(#(#traced_keywords),*)
+            )]
+        }
+    }
+
+    fn from_attr(attr: &syn::Attribute) -> syn::Result<Self> {
+        use syn::ext::IdentExt as _;
+        let idents = |list: &syn::MetaList| -> syn::Result<Vec<syn::Ident>> {
+            list.parse_args_with(|input: syn::parse::ParseStream<'_>| {
+                syn::punctuated::Punctuated::<syn::Ident, syn::Token![,]>::parse_terminated_with(
+                    input,
+                    syn::Ident::parse_any,
+                )
+            })
+            .map(|p| p.into_iter().collect())
+        };
+        let mut marker = Self {
+            tracing_active: false,
+            path: None,
+            attr_keywords: Vec::new(),
+            traced_keywords: Vec::new(),
+        };
+        let metas = attr.parse_args_with(
+            syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
         )?;
+        for meta in &metas {
+            match meta {
+                syn::Meta::Path(p) if p.is_ident("tracing_active") => marker.tracing_active = true,
+                syn::Meta::List(l) if l.path.is_ident("path") => {
+                    marker.path = Some(l.parse_args()?);
+                }
+                syn::Meta::List(l) if l.path.is_ident("attr_keywords") => {
+                    marker.attr_keywords = idents(l)?;
+                }
+                syn::Meta::List(l) if l.path.is_ident("traced_keywords") => {
+                    marker.traced_keywords = idents(l)?;
+                }
+                syn::Meta::Path(_) | syn::Meta::List(_) | syn::Meta::NameValue(_) => {
+                    return Err(syn::Error::new_spanned(meta, "unknown `__oopsie_attr` key"));
+                }
+            }
+        }
+        Ok(marker)
     }
+}
 
-    // Step 2: generate Oopsie impls from the injected item. The derive layer
-    // needs the helper attrs still present, so it reads a copy taken before the
-    // strip below.
-    let derive_input = syn::DeriveInput::from(item.clone());
-    let mut container_attrs = derive::parse::StructAttrs::from_attrs(&derive_input.attrs)?;
-    // The macro-level `path` governs every generated impl; an explicit
-    // container-attr `path` still wins.
-    if container_attrs.container.path.is_none() {
-        container_attrs.container.path.clone_from(&args.path);
-    }
-    let impls = derive::expand_struct(&derive_input, &container_attrs)?;
+/// Generate the impls for an item rewritten by [`expand`]. Runs as a derive, so
+/// it sees the item after `#[cfg]`/`#[cfg_attr]` evaluation.
+pub fn expand_impls(input: TokenStream2) -> syn::Result<TokenStream2> {
+    let mut input: syn::DeriveInput = syn::parse2(input)?;
+    let marker_idx = input
+        .attrs
+        .iter()
+        .position(|a| a.path().is_ident(MARKER))
+        .ok_or_else(|| {
+            syn::Error::new(
+                proc_macro2::Span::call_site(),
+                "`OopsieAttrImpl` is an implementation detail of `#[oopsie::oopsie]`; \
+                 use `#[oopsie::oopsie]` or `#[derive(Oopsie)]` instead",
+            )
+        })?;
+    let marker = Marker::from_attr(&input.attrs.remove(marker_idx))?;
 
-    let (attr_kws, traced_kws) = keywords;
+    let (impls, path) = match &input.data {
+        syn::Data::Enum(_) => {
+            let mut container = derive::parse::EnumContainerAttrs::from_attrs(&input.attrs)?;
+            // An explicit container-attr `path` wins over the macro-level one.
+            if container.inner.path.is_none() {
+                container.inner.path.clone_from(&marker.path);
+            }
+            let impls = derive::expand_enum(&input, &container, marker.tracing_active)?;
+            (impls, container.oopsie_path())
+        }
+        syn::Data::Struct(_) => {
+            let mut container = derive::parse::StructAttrs::from_attrs(&input.attrs)?;
+            if container.container.path.is_none() {
+                container.container.path.clone_from(&marker.path);
+            }
+            let impls = derive::expand_struct(&input, &container)?;
+            (impls, container.container.oopsie_path())
+        }
+        syn::Data::Union(_) => {
+            return Err(syn::Error::new_spanned(
+                &input.ident,
+                "`#[oopsie]` can only be applied to enums or structs",
+            ));
+        }
+    };
+
     let keyword_docs = crate::keyword_docs::gen_use_block(
-        &container_attrs.container.oopsie_path(),
-        &[("attr", attr_kws), ("traced", traced_kws)],
+        &path,
+        &[
+            ("attr", &marker.attr_keywords),
+            ("traced", &marker.traced_keywords),
+        ],
     );
 
-    // Step 3: emit the item with Debug added, Oopsie removed from derives,
-    // and all #[oopsie(...)] helper attrs stripped (they've been consumed).
-    fix_derives(&mut item.attrs, args.debug.is_enabled());
-    strip_oopsie_attrs(&mut item.attrs);
-    for field in &mut item.fields {
-        strip_oopsie_attrs(&mut field.attrs);
-    }
-
     Ok(quote! {
-        #item
         #impls
         #keyword_docs
-        #manifest_err
     })
 }
 
@@ -317,38 +370,27 @@ fn fix_derives(attrs: &mut Vec<syn::Attribute>, inject_debug: bool) {
     *attrs = new_attrs;
 }
 
-/// Strip all `#[oopsie(...)]` attributes, including ones gated inside
-/// `#[cfg_attr(pred, oopsie(...), ...)]`. Used to remove processed helper
-/// attributes from the output item so Rust doesn't complain about unknown
-/// attributes once the derive that registered them is gone.
-fn strip_oopsie_attrs(attrs: &mut Vec<syn::Attribute>) {
-    let mut new_attrs = Vec::with_capacity(attrs.len());
-    for attr in attrs.drain(..) {
-        if attr.path().is_ident("oopsie") {
-            continue;
-        }
-        if attr.path().is_ident("cfg_attr") {
-            if let Some(pruned) = derive::parse::prune_cfg_attr_oopsie(&attr) {
-                new_attrs.push(pruned);
-            }
-            continue;
-        }
-        new_attrs.push(attr);
-    }
-    *attrs = new_attrs;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use quote::quote;
+
+    /// Both halves of the attribute: the rewritten item, then the impls the
+    /// hidden derive generates from it (no `cfg` to evaluate in these inputs).
+    fn expand_full(attrs: TokenStream2, input: TokenStream2) -> syn::Result<TokenStream2> {
+        let mut file: syn::File = syn::parse2(expand(attrs, input)?)?;
+        let item = file.items.remove(0);
+        let impls = expand_impls(quote! { #item })?;
+        let rest = file.items;
+        Ok(quote! { #item #impls #(#rest)* })
+    }
 
     // Output includes the `provide` impl when the unstable feature is on,
     // so the snapshot only matches in the default-features build.
     #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn bare_enum() {
-        let result = expand(
+        let result = expand_full(
             quote! {},
             quote! {
                 pub enum AppError {
@@ -363,7 +405,7 @@ mod tests {
 
     #[test]
     fn bare_struct() {
-        let result = expand(
+        let result = expand_full(
             quote! {},
             quote! {
                 pub struct ConnectionFailed {
@@ -378,7 +420,7 @@ mod tests {
     #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn traced_enum() {
-        let result = expand(
+        let result = expand_full(
             quote! { traced },
             quote! {
                 pub enum AppError {
@@ -394,7 +436,7 @@ mod tests {
     #[cfg(not(feature = "unstable-error-generic-member-access"))]
     #[test]
     fn backtrace_only_struct() {
-        let result = expand(
+        let result = expand_full(
             quote! { traced(spantrace(false)) },
             quote! {
                 pub struct ConnectionFailed {
@@ -448,7 +490,7 @@ mod tests {
 
     #[test]
     fn path_reaches_derive_impls() {
-        let out = expand(
+        let out = expand_full(
             quote! { traced, path = "my_oopsie" },
             quote! { pub enum E { #[oopsie("boom")] Boom { info: String } } },
         )
@@ -460,7 +502,7 @@ mod tests {
 
     #[test]
     fn container_path_attr_wins_over_macro_path() {
-        let out = expand(
+        let out = expand_full(
             quote! { path = "macro_oopsie" },
             quote! {
                 #[oopsie(path = "attr_oopsie")]
@@ -652,5 +694,39 @@ mod tests {
         // packed default => single combined field, no separate ones.
         assert!(output.contains("__oopsie_traces"), "{output}");
         assert!(!output.contains("__oopsie_backtrace"), "{output}");
+    }
+
+    #[test]
+    fn cfg_attr_traced_false_gates_injection_on_the_predicate() {
+        let output = expand(
+            quote! { traced },
+            quote! {
+                pub enum AppError {
+                    #[cfg_attr(feature = "quiet", oopsie(traced = false))]
+                    #[oopsie("boom")]
+                    Boom { info: String },
+                }
+            },
+        )
+        .unwrap()
+        .to_string();
+        insta::assert_snapshot!(output);
+    }
+
+    #[test]
+    fn cfg_gated_trace_field_gets_a_mirror() {
+        let output = expand(
+            quote! { traced },
+            quote! {
+                pub struct S {
+                    info: String,
+                    #[cfg(feature = "bt")]
+                    backtrace: Backtrace,
+                }
+            },
+        )
+        .unwrap()
+        .to_string();
+        insta::assert_snapshot!(output);
     }
 }

@@ -842,3 +842,211 @@ fn renamed_crate_path_preserves_auto_code() {
         code.as_str()
     );
 }
+
+// ---- `cfg_attr`-gated helper attrs behave like the derive's ----
+
+#[oopsie(traced)]
+pub enum CfgAttrVariantError {
+    #[cfg_attr(all(), oopsie(traced = false))]
+    #[oopsie("untraced")]
+    Untraced { info: String },
+    #[cfg_attr(any(), oopsie(traced = false))]
+    #[oopsie("traced")]
+    Traced { info: String },
+    #[cfg_attr(all(), oopsie("shown {info}"))]
+    Shown { info: String },
+    #[cfg_attr(any(), oopsie("never {info}"))]
+    Hidden { info: String },
+    #[cfg_attr(all(), oopsie(code = "custom::gated"))]
+    #[oopsie("coded")]
+    Coded { info: String },
+}
+
+#[test]
+fn cfg_attr_traced_false_follows_predicate() {
+    use oopsie::Diagnostic as _;
+    let off = cfg_attr_variant_oopsies::Untraced { info: "x" }.build();
+    assert!(off.oopsie_backtrace().is_none());
+    assert!(off.oopsie_location().is_none());
+    let on = cfg_attr_variant_oopsies::Traced { info: "x" }.build();
+    assert!(on.oopsie_backtrace().is_some());
+    assert!(on.oopsie_location().is_some());
+}
+
+#[test]
+fn cfg_attr_display_follows_predicate() {
+    let shown = cfg_attr_variant_oopsies::Shown { info: "x" }.build();
+    assert_eq!(shown.to_string(), "shown x");
+    let hidden = cfg_attr_variant_oopsies::Hidden { info: "x" }.build();
+    assert_eq!(hidden.to_string(), "Hidden");
+}
+
+#[test]
+fn cfg_attr_code_replaces_auto_code() {
+    use oopsie::Diagnostic as _;
+    let err = cfg_attr_variant_oopsies::Coded { info: "x" }.build();
+    assert_eq!(
+        err.oopsie_error_code().map(|c| c.as_str().to_owned()),
+        Some("custom::gated".to_owned())
+    );
+}
+
+#[oopsie(traced)]
+#[cfg_attr(all(), oopsie("struct shown {info}"))]
+pub struct CfgAttrStructError {
+    info: String,
+}
+
+#[oopsie(traced)]
+#[cfg_attr(all(), oopsie(transparent))]
+pub struct CfgAttrStructTransparent {
+    source: CfgAttrLeafError,
+}
+
+#[test]
+fn cfg_attr_on_struct_container_is_honored() {
+    use oopsie::Diagnostic as _;
+    let err = CfgAttrStructOopsie { info: "x" }.build();
+    assert_eq!(err.to_string(), "struct shown x");
+
+    let leaf = cfg_attr_leaf_oopsies::Leaf { msg: "x" }.build();
+    let leaf_code = leaf.oopsie_error_code().map(|c| c.as_str().to_owned());
+    let err = CfgAttrStructTransparent::from(leaf);
+    assert_eq!(err.to_string(), "leaf");
+    assert_eq!(
+        err.oopsie_error_code().map(|c| c.as_str().to_owned()),
+        leaf_code
+    );
+}
+
+#[oopsie(traced)]
+pub enum CfgAttrLeafError {
+    #[oopsie("leaf")]
+    Leaf { msg: String },
+}
+
+#[oopsie(traced)]
+pub struct CfgAttrForwardOn {
+    #[cfg_attr(all(), oopsie(forward))]
+    source: CfgAttrLeafError,
+}
+
+#[oopsie(traced)]
+pub struct CfgAttrForwardOff {
+    #[cfg_attr(any(), oopsie(forward))]
+    source: CfgAttrLeafError,
+}
+
+#[oopsie(traced)]
+pub struct CfgAttrForwardPlain {
+    #[oopsie(forward)]
+    source: CfgAttrLeafError,
+}
+
+#[oopsie(traced)]
+pub struct CfgAttrCapturePlain {
+    source: CfgAttrLeafError,
+}
+
+#[oopsie(traced)]
+pub enum CfgAttrForwardEnum {
+    #[oopsie("on")]
+    On {
+        #[cfg_attr(all(), oopsie(forward))]
+        source: CfgAttrLeafError,
+    },
+    #[oopsie("off")]
+    Off {
+        #[cfg_attr(any(), oopsie(forward))]
+        source: CfgAttrLeafError,
+    },
+}
+
+#[test]
+fn cfg_attr_forward_follows_predicate() {
+    use oopsie::Contextual as _;
+    use oopsie::Diagnostic as _;
+    use std::mem::size_of;
+
+    assert_eq!(
+        size_of::<CfgAttrForwardOn>(),
+        size_of::<CfgAttrForwardPlain>()
+    );
+    assert_eq!(
+        size_of::<CfgAttrForwardOff>(),
+        size_of::<CfgAttrCapturePlain>()
+    );
+
+    let leaf = || cfg_attr_leaf_oopsies::Leaf { msg: "x" }.build();
+
+    let src = leaf();
+    let src_bt: *const oopsie::Backtrace = src.oopsie_backtrace().unwrap();
+    let on: CfgAttrForwardOn = CfgAttrForwardOnOopsie.build_error(src);
+    assert!(std::ptr::eq(on.oopsie_backtrace().unwrap(), src_bt));
+
+    let src = leaf();
+    let src_bt: *const oopsie::Backtrace = src.oopsie_backtrace().unwrap();
+    let on: CfgAttrForwardEnum = cfg_attr_forward_enum_oopsies::On.build_error(src);
+    assert!(std::ptr::eq(on.oopsie_backtrace().unwrap(), src_bt));
+
+    let src = leaf();
+    let src_bt: *const oopsie::Backtrace = src.oopsie_backtrace().unwrap();
+    let off: CfgAttrForwardEnum = cfg_attr_forward_enum_oopsies::Off.build_error(src);
+    assert!(!std::ptr::eq(off.oopsie_backtrace().unwrap(), src_bt));
+}
+
+// ---- a `#[cfg]`-gated own trace field is mirrored when gated out ----
+
+#[oopsie(traced)]
+pub struct CfgGatedOutBacktrace {
+    info: String,
+    #[cfg(any())]
+    backtrace: oopsie::Backtrace,
+}
+
+#[oopsie(traced)]
+pub struct CfgGatedInBacktrace {
+    info: String,
+    #[cfg(all())]
+    backtrace: oopsie::Backtrace,
+}
+
+#[oopsie(traced)]
+pub enum CfgGatedTraceEnum {
+    #[oopsie("out")]
+    Out {
+        #[cfg(any())]
+        backtrace: oopsie::Backtrace,
+    },
+    #[oopsie("in")]
+    In {
+        #[cfg(all())]
+        backtrace: oopsie::Backtrace,
+    },
+}
+
+#[test]
+fn cfg_gated_out_trace_field_still_gets_a_backtrace() {
+    use oopsie::Diagnostic as _;
+    let err = CfgGatedOutBacktraceOopsie { info: "x" }.build();
+    assert!(err.oopsie_backtrace().is_some());
+    assert!(err.oopsie_spantrace().is_some());
+    let err = cfg_gated_trace_enum_oopsies::Out.build();
+    assert!(err.oopsie_backtrace().is_some());
+}
+
+#[test]
+fn cfg_gated_in_trace_field_is_the_backtrace() {
+    use oopsie::Diagnostic as _;
+    let err = CfgGatedInBacktraceOopsie { info: "x" }.build();
+    assert!(std::ptr::eq(
+        err.oopsie_backtrace().unwrap(),
+        &err.backtrace
+    ));
+    assert!(err.oopsie_spantrace().is_some());
+    let err = cfg_gated_trace_enum_oopsies::In.build();
+    let CfgGatedTraceEnum::In { backtrace, .. } = &err else {
+        unreachable!()
+    };
+    assert!(std::ptr::eq(err.oopsie_backtrace().unwrap(), backtrace));
+}

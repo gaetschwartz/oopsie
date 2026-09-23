@@ -489,6 +489,7 @@ pub mod __private {
     #[cfg(feature = "fancy")]
     pub use linkme;
     pub use oopsie_core::__private::*;
+    pub use oopsie_macros::OopsieAttrImpl;
 
     pub mod documented;
 }

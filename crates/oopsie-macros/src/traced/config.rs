@@ -5,6 +5,7 @@ use quote::{format_ident, quote};
 use syn::parse_quote;
 
 use super::args::{CodeSettings, ResolvedTraceArgs};
+use super::cfg_view::{CfgAtoms, Gate};
 use crate::utils::FieldSetting;
 
 /// Configuration for injecting backtrace, spantrace, and timestamp fields.
@@ -151,9 +152,52 @@ pub(super) struct FieldsToInject {
     pub location: bool,
 }
 
-impl FieldsToInject {
+/// Per-field [`Gate`]s merged from the [`FieldsToInject`] decided under each
+/// cfg assignment.
+pub(super) struct InjectPlan {
+    pub backtrace: Gate,
+    pub spantrace: Gate,
+    pub timestamp: Gate,
+    pub traces: Gate,
+    pub location: Gate,
+}
+
+impl InjectPlan {
+    /// `decisions` is indexed like [`CfgAtoms::assignments`]; `None` marks an
+    /// assignment whose attributes don't parse, where nothing is injected and
+    /// the derive reports the error.
+    pub(super) fn merge(atoms: &CfgAtoms, decisions: &[Option<&FieldsToInject>]) -> Self {
+        let gate = |pick: fn(&FieldsToInject) -> bool| {
+            let outcomes: Vec<bool> = decisions.iter().map(|d| d.is_some_and(pick)).collect();
+            atoms.gate(&outcomes)
+        };
+        Self {
+            backtrace: gate(|d| d.backtrace),
+            spantrace: gate(|d| d.spantrace),
+            timestamp: gate(|d| d.timestamp),
+            traces: gate(|d| d.traces),
+            location: gate(|d| d.location),
+        }
+    }
+
     pub(super) const fn any(&self) -> bool {
-        self.backtrace || self.spantrace || self.timestamp || self.traces || self.location
+        !(self.backtrace.is_off()
+            && self.spantrace.is_off()
+            && self.timestamp.is_off()
+            && self.traces.is_off()
+            && self.location.is_off())
+    }
+}
+
+impl From<FieldsToInject> for InjectPlan {
+    fn from(to_inject: FieldsToInject) -> Self {
+        Self {
+            backtrace: to_inject.backtrace.into(),
+            spantrace: to_inject.spantrace.into(),
+            timestamp: to_inject.timestamp.into(),
+            traces: to_inject.traces.into(),
+            location: to_inject.location.into(),
+        }
     }
 }
 

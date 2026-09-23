@@ -1,0 +1,5 @@
+---
+source: crates/oopsie-macros/src/oopsie_attr/mod.rs
+expression: output
+---
+# [derive (:: oopsie :: __private :: OopsieAttrImpl)] # [__oopsie_attr (tracing_active , attr_keywords (traced) , traced_keywords ())] # [derive (:: core :: fmt :: Debug)] pub enum AppError { # [cfg_attr (feature = "quiet" , oopsie (traced = false))] # [oopsie ("boom")] # [cfg_attr (not (feature = "quiet") , oopsie (provide (:: oopsie :: ErrorCode => :: oopsie :: ErrorCode :: from (concat ! (module_path ! () , "::" , "AppError::Boom")))))] Boom { info : String , # [cfg (not (feature = "quiet"))] # [oopsie (traces)] __oopsie_traces : :: oopsie :: __private :: alloc :: boxed :: Box < (:: oopsie :: Backtrace , :: oopsie :: SpanTrace) > , # [cfg (not (feature = "quiet"))] # [oopsie (location)] __oopsie_location : & 'static :: core :: panic :: Location < 'static > } , }

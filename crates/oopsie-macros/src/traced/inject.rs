@@ -4,10 +4,13 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned as _;
 use syn::{Fields, FieldsNamed, parse_quote, token};
 
-use super::config::{FieldExistence, FieldInjectorConfig, FieldsToInject};
+use super::args::ResolvedTraceArgs;
+use super::cfg_view::{CfgAtoms, Gate};
+use super::config::{FieldExistence, FieldInjectorConfig, FieldsToInject, InjectPlan};
 use super::field_detect::{
     is_backtrace_type, is_location_type, is_spantrace_type, is_timestamp_type, is_traces_type,
 };
+use crate::derive::parse::{ResolvedForward, field_forward};
 
 /// Check which fields already exist in a `Fields` collection.
 pub(super) fn check_existing_fields(
@@ -76,6 +79,114 @@ pub(super) fn check_existing_fields(
     Ok(existence)
 }
 
+/// What an item's own `#[oopsie(...)]` attributes say about injection.
+pub(super) struct ItemFacts {
+    pub traced: bool,
+    pub has_user_code: bool,
+    pub transparent: bool,
+}
+
+/// Decide what to inject into one struct or variant, and under which cfg
+/// predicates. `facts` parses the item-level attributes; it and the field
+/// attribute parsing run once per cfg assignment on the attributes rustc would
+/// leave under it.
+pub(super) fn plan_injection(
+    resolved: &ResolvedTraceArgs<'_>,
+    config: &FieldInjectorConfig,
+    attrs: &[syn::Attribute],
+    fields: &Fields,
+    span: proc_macro2::Span,
+    facts: impl Fn(&[syn::Attribute]) -> syn::Result<ItemFacts>,
+) -> syn::Result<(InjectPlan, Gate)> {
+    let atoms = CfgAtoms::collect([attrs], fields, span)?;
+    let mut decisions = Vec::new();
+    for assignment in atoms.assignments() {
+        let attrs = assignment.resolve_attrs(attrs);
+        let fields = assignment.resolve_fields(fields);
+        decisions.push(decide(resolved, config, &attrs, &fields, &facts)?);
+    }
+    // An assignment whose attributes don't parse injects nothing; the derive
+    // reports the error if that assignment is the real one. Only when every
+    // assignment fails is the error certain.
+    if let Some(Err(first)) = decisions.first()
+        && decisions.iter().all(Result::is_err)
+    {
+        return Err(first.clone());
+    }
+    let decisions: Vec<Option<&(FieldsToInject, bool)>> =
+        decisions.iter().map(|d| d.as_ref().ok()).collect();
+    let injected: Vec<Option<&FieldsToInject>> =
+        decisions.iter().map(|d| d.map(|(f, _)| f)).collect();
+    let auto_code: Vec<bool> = decisions
+        .iter()
+        .map(|d| d.is_some_and(|(_, code)| *code))
+        .collect();
+    Ok((InjectPlan::merge(&atoms, &injected), atoms.gate(&auto_code)))
+}
+
+/// The injection decision for one cfg assignment. The outer error is fatal;
+/// the inner one is an attribute-parse error the derive re-reports.
+fn decide(
+    resolved: &ResolvedTraceArgs<'_>,
+    config: &FieldInjectorConfig,
+    attrs: &[syn::Attribute],
+    fields: &Fields,
+    facts: impl Fn(&[syn::Attribute]) -> syn::Result<ItemFacts>,
+) -> syn::Result<syn::Result<(FieldsToInject, bool)>> {
+    let facts = match facts(attrs) {
+        Ok(facts) => facts,
+        Err(err) => return Ok(Err(err)),
+    };
+    let existence = check_existing_fields(fields, &config.timestamp_type)?;
+    if facts.traced
+        && resolved.timestamp
+        && let Some(span) = existence.timestamp_conflict
+    {
+        return Err(timestamp_conflict_error(span));
+    }
+
+    let forward = if facts.traced {
+        match fields
+            .iter()
+            .map(field_forward)
+            .collect::<syn::Result<Vec<_>>>()
+        {
+            Ok(forwards) => forwards.into_iter().find(|f| f.any()).unwrap_or_default(),
+            Err(err) => return Ok(Err(err)),
+        }
+    } else {
+        ResolvedForward::default()
+    };
+
+    let inject_backtrace = facts.traced && resolved.backtrace && !forward.backtrace;
+    let inject_spantrace = facts.traced && resolved.spantrace && !forward.spantrace;
+    let inject_location = facts.traced && resolved.location && !forward.location;
+
+    // Packed only applies when both traces are enabled and no trace field
+    // already exists; otherwise fall back to per-field (unpacked) injection,
+    // which also covers the single-trace case.
+    let packed = resolved.packed
+        && inject_backtrace
+        && inject_spantrace
+        && !existence.has_backtrace
+        && !existence.has_spantrace
+        && !existence.has_traces;
+
+    let to_inject = FieldsToInject {
+        backtrace: !packed && inject_backtrace && !existence.has_backtrace,
+        spantrace: !packed && inject_spantrace && !existence.has_spantrace,
+        timestamp: facts.traced && resolved.timestamp && !existence.has_timestamp,
+        traces: packed,
+        location: inject_location && !existence.has_location,
+    };
+    let auto_code = wants_auto_code(
+        facts.traced && resolved.code,
+        facts.has_user_code,
+        facts.transparent,
+    );
+    Ok(Ok((to_inject, auto_code)))
+}
+
 /// Error for `traced(timestamp)` requested on a struct/variant whose
 /// pre-existing SystemTime/DateTime-typed field suppresses injection: unlike
 /// backtrace/spantrace fields, such a field is an ordinary selector, not
@@ -115,7 +226,7 @@ fn reject_mangled_collision(
 pub(super) fn inject_fields(
     fields: &mut Fields,
     config: &FieldInjectorConfig,
-    to_inject: &FieldsToInject,
+    to_inject: &InjectPlan,
 ) -> syn::Result<()> {
     match fields {
         Fields::Named(named) => {
@@ -148,7 +259,7 @@ pub(super) fn inject_fields(
 fn inject_into_named(
     fields: &mut FieldsNamed,
     config: &FieldInjectorConfig,
-    to_inject: &FieldsToInject,
+    to_inject: &InjectPlan,
 ) {
     let FieldInjectorConfig {
         backtrace_ident,
@@ -169,62 +280,72 @@ fn inject_into_named(
         ..
     } = config;
 
-    if to_inject.traces {
-        fields
-            .named
-            .push(parse_quote! { #traces_attrs #traces_ident: #traces_type });
-    }
-    if to_inject.backtrace {
-        fields
-            .named
-            .push(parse_quote! { #backtrace_attrs #backtrace_ident: #backtrace_type });
-    }
-    if to_inject.spantrace {
-        fields
-            .named
-            .push(parse_quote! { #spantrace_attrs #spantrace_ident: #spantrace_type });
-    }
-    if to_inject.timestamp {
-        fields
-            .named
-            .push(parse_quote! { #timestamp_attrs #timestamp_ident: #timestamp_type });
-    }
-    if to_inject.location {
-        fields
-            .named
-            .push(parse_quote! { #location_attrs #location_ident: #location_type });
-    }
+    let mut push = |gate: &Gate, field: syn::Field| {
+        if gate.is_off() {
+            return;
+        }
+        let cfg = gate.cfg_attr();
+        fields.named.push(parse_quote! { #cfg #field });
+    };
+    push(
+        &to_inject.traces,
+        parse_quote! { #traces_attrs #traces_ident: #traces_type },
+    );
+    push(
+        &to_inject.backtrace,
+        parse_quote! { #backtrace_attrs #backtrace_ident: #backtrace_type },
+    );
+    push(
+        &to_inject.spantrace,
+        parse_quote! { #spantrace_attrs #spantrace_ident: #spantrace_type },
+    );
+    push(
+        &to_inject.timestamp,
+        parse_quote! { #timestamp_attrs #timestamp_ident: #timestamp_type },
+    );
+    push(
+        &to_inject.location,
+        parse_quote! { #location_attrs #location_ident: #location_type },
+    );
 }
 
-/// Add Oopsie provide attributes for auto-generated error code.
+/// Whether an item gets the auto-generated error code. It is the fallback:
+/// skipped when the feature is off, when the user wrote their own
+/// `code = "..."`, or when the item is `transparent` (its code is forwarded
+/// from the source, and an injected auto-code would shadow that forward).
+pub(super) const fn wants_auto_code(
+    code_enabled: bool,
+    has_user_code: bool,
+    is_transparent: bool,
+) -> bool {
+    code_enabled && !has_user_code && !is_transparent
+}
+
+/// Add the provide attribute carrying the auto-generated error code, under
+/// `gate`.
 ///
 /// Backtrace and spantrace are handled by Diagnostic via field detection, so
 /// only ErrorCode needs a provide attr for nightly Error::provide support.
-///
-/// A `transparent` item is skipped: its code is forwarded from the source, and
-/// an injected auto-code would shadow that forward in code-resolution.
 pub(super) fn add_provide_attrs(
     attrs: &mut Vec<syn::Attribute>,
     config: &FieldInjectorConfig,
     type_name: &str,
     variant_name: Option<&str>,
-    code_enabled: bool,
-    has_user_code: bool,
-    is_transparent: bool,
+    gate: &Gate,
 ) {
     let FieldInjectorConfig { code_type, .. } = config;
-
-    // Auto-code is the fallback: skip it when the feature is off, when the user
-    // wrote their own `code = "..."`, or when the item is `transparent` (its code
-    // comes from the source).
-    if code_enabled && !has_user_code && !is_transparent {
-        let mut name = type_name.to_owned();
-        if let Some(v) = variant_name {
-            name.push_str("::");
-            name.push_str(v);
-        }
-        let attr = parse_quote! { #[oopsie(provide(#code_type => #code_type::from(concat!(module_path!(), "::", #name))))] };
-        attrs.push(attr);
+    let mut name = type_name.to_owned();
+    if let Some(v) = variant_name {
+        name.push_str("::");
+        name.push_str(v);
+    }
+    let provide = quote::quote! {
+        oopsie(provide(#code_type => #code_type::from(concat!(module_path!(), "::", #name))))
+    };
+    match gate {
+        Gate::Off => {}
+        Gate::On => attrs.push(parse_quote! { #[#provide] }),
+        Gate::Cfg(pred) => attrs.push(parse_quote! { #[cfg_attr(#pred, #provide)] }),
     }
 }
 
@@ -347,7 +468,7 @@ mod tests {
             traces: false,
             location: false,
         };
-        inject_fields(&mut fields, &config, &to_inject).unwrap();
+        inject_fields(&mut fields, &config, &to_inject.into()).unwrap();
         assert!(matches!(fields, syn::Fields::Named(_)));
     }
 
@@ -362,7 +483,7 @@ mod tests {
             traces: false,
             location: false,
         };
-        inject_fields(&mut fields, &config, &to_inject).unwrap();
+        inject_fields(&mut fields, &config, &to_inject.into()).unwrap();
         assert!(
             matches!(fields, syn::Fields::Unit),
             "a unit variant must stay unit when no fields are injected"
@@ -380,7 +501,7 @@ mod tests {
             traces: false,
             location: false,
         };
-        assert!(inject_fields(&mut fields, &config, &to_inject).is_err());
+        assert!(inject_fields(&mut fields, &config, &to_inject.into()).is_err());
     }
 
     // ── add_provide_attrs ────────────────────────────────────────────
@@ -389,7 +510,13 @@ mod tests {
     fn add_provide_attrs_no_code_when_disabled() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(&mut attrs, &config, "MyError", None, false, false, false);
+        add_provide_attrs(
+            &mut attrs,
+            &config,
+            "MyError",
+            None,
+            &wants_auto_code(false, false, false).into(),
+        );
         assert_eq!(attrs.len(), 0);
     }
 
@@ -397,7 +524,13 @@ mod tests {
     fn add_provide_attrs_adds_code_when_enabled() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(&mut attrs, &config, "MyError", None, true, false, false);
+        add_provide_attrs(
+            &mut attrs,
+            &config,
+            "MyError",
+            None,
+            &wants_auto_code(true, false, false).into(),
+        );
         assert_eq!(attrs.len(), 1);
     }
 
@@ -405,7 +538,13 @@ mod tests {
     fn add_provide_attrs_skips_code_when_user_code_present() {
         let mut attrs: Vec<syn::Attribute> = vec![];
         let config = test_config();
-        add_provide_attrs(&mut attrs, &config, "MyError", None, true, true, false);
+        add_provide_attrs(
+            &mut attrs,
+            &config,
+            "MyError",
+            None,
+            &wants_auto_code(true, true, false).into(),
+        );
         assert_eq!(attrs.len(), 0);
     }
 
@@ -418,9 +557,7 @@ mod tests {
             &config,
             "MyError",
             Some("Variant"),
-            true,
-            false,
-            true,
+            &wants_auto_code(true, false, true).into(),
         );
         assert_eq!(attrs.len(), 0);
     }
@@ -434,9 +571,7 @@ mod tests {
             &config,
             "MyError",
             Some("Variant"),
-            true,
-            false,
-            false,
+            &wants_auto_code(true, false, false).into(),
         );
         assert_eq!(attrs.len(), 1);
         let attr_str = quote! { #(#attrs)* }.to_string();
@@ -454,7 +589,7 @@ mod tests {
             traces: true,
             location: false,
         };
-        inject_fields(&mut fields, &config, &to_inject).unwrap();
+        inject_fields(&mut fields, &config, &to_inject.into()).unwrap();
         let rendered = quote! { #fields }.to_string();
         assert!(rendered.contains("__oopsie_traces"), "{rendered}");
     }

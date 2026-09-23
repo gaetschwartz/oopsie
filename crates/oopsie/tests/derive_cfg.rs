@@ -169,11 +169,9 @@ fn field_cfg_active_field_is_present_and_usable() {
 
 // ---- field-level cfg referencing a generic parameter ----
 //
-// `x`'s cfg-gated type is the only reference to `T` in variant `GenV`;
-// stripping it would leave `T` declared on the selector but never named by a
-// surviving field (E0392) unless a `PhantomData` marker keeps it used.
-// `GenW`'s `y` field references `T` unconditionally, so its selector needs no
-// marker.
+// `x`'s cfg-gated type is the only reference to `T` in variant `GenV`; the
+// impls are generated from the cfg-stripped item, so `GenV`'s selector never
+// declares `T`. `GenW`'s `y` field references `T` unconditionally.
 
 #[oopsie]
 #[oopsie(module(false), suffix)]
@@ -189,12 +187,8 @@ pub enum CfgGenericFieldError<T: std::fmt::Debug> {
 }
 
 #[test]
-fn cfg_only_generic_param_gets_phantom_marker() {
-    let err: CfgGenericFieldError<u32> = GenVOopsie {
-        keep: 5u32,
-        __oopsie_phantom: std::marker::PhantomData,
-    }
-    .build();
+fn cfg_only_generic_param_is_not_on_the_selector() {
+    let err: CfgGenericFieldError<u32> = GenVOopsie { keep: 5u32 }.build();
     assert!(matches!(err, CfgGenericFieldError::GenV { keep: 5 }));
 }
 
@@ -206,11 +200,8 @@ fn unconditional_generic_field_needs_no_marker() {
 
 // ---- fully cfg-stripped enums under the attribute-macro path ----
 //
-// The attribute macro expands before rustc strips `#[cfg]`, so an enum whose
-// variants are *all* gated out reaches the generators with every match arm
-// present. After stripping the arms vanish but `&Enum` is still inhabited, so a
-// bare `match self {}` would be E0004. The generated matches over `self` carry a
-// wildcard fallback whenever any variant is cfg-gated.
+// An enum whose variants are *all* gated out has no match arms left, but
+// `&Enum` is still inhabited, so a bare `match self {}` would be E0004.
 
 #[cfg(any())]
 pub struct AllGoneGhost;

@@ -4,11 +4,9 @@ use proc_macro2::Span;
 use syn::ext::IdentExt as _;
 
 use super::args::TracedArgs;
-use super::config::{FieldInjectorConfig, FieldsToInject};
-use super::inject::{
-    add_provide_attrs, check_existing_fields, inject_fields, timestamp_conflict_error,
-};
-use crate::derive::parse::{StructAttrs, field_forward};
+use super::config::FieldInjectorConfig;
+use super::inject::{ItemFacts, add_provide_attrs, inject_fields, plan_injection};
+use crate::derive::parse::StructAttrs;
 use crate::utils::TracedDefaults;
 
 pub fn expand_struct(
@@ -24,63 +22,27 @@ pub fn expand_struct(
     resolved.validate(args_span)?;
     let config = FieldInjectorConfig::new(&resolved, args.code.inner(), oopsie_path);
 
-    let existence = check_existing_fields(&input.fields, &config.timestamp_type)?;
-    if resolved.timestamp
-        && let Some(span) = existence.timestamp_conflict
-    {
-        return Err(timestamp_conflict_error(span));
-    }
-
-    let forward = input
-        .fields
-        .iter()
-        .map(field_forward)
-        .collect::<syn::Result<Vec<_>>>()?
-        .into_iter()
-        .find(|f| f.any())
-        .unwrap_or_default();
-
-    let inject_backtrace = resolved.backtrace && !forward.backtrace;
-    let inject_spantrace = resolved.spantrace && !forward.spantrace;
-    let inject_location = resolved.location && !forward.location;
-
-    // Packed only applies when both traces are enabled and no trace field
-    // already exists; otherwise fall back to per-field (unpacked) injection,
-    // which also covers the single-trace case.
-    let packed = resolved.packed
-        && inject_backtrace
-        && inject_spantrace
-        && !existence.has_backtrace
-        && !existence.has_spantrace
-        && !existence.has_traces;
-
-    let to_inject = FieldsToInject {
-        backtrace: !packed && inject_backtrace && !existence.has_backtrace,
-        spantrace: !packed && inject_spantrace && !existence.has_spantrace,
-        timestamp: resolved.timestamp && !existence.has_timestamp,
-        traces: packed,
-        location: inject_location && !existence.has_location,
-    };
+    // Auto-code suppression facts come from the same parser the derive layer
+    // uses, so injection and codegen can't disagree on what counts as a user
+    // `code` or a `transparent` struct.
+    let (to_inject, auto_code) = plan_injection(
+        &resolved,
+        &config,
+        &input.attrs,
+        &input.fields,
+        input.ident.span(),
+        |attrs| {
+            let attrs = StructAttrs::from_attrs(attrs)?;
+            Ok(ItemFacts {
+                traced: true,
+                has_user_code: attrs.code.is_some(),
+                transparent: attrs.transparent,
+            })
+        },
+    )?;
 
     inject_fields(&mut input.fields, &config, &to_inject)?;
-
-    // Read the auto-code suppression facts through the same parser the derive
-    // layer uses, so injection and codegen can't disagree on what counts as a
-    // user `code` or a `transparent` struct.
-    let struct_attrs = StructAttrs::from_attrs(&input.attrs)?;
-    let has_user_code = struct_attrs.code.is_some();
-    let is_transparent = struct_attrs.transparent;
-
-    // Add struct-level provide attrs
-    add_provide_attrs(
-        &mut input.attrs,
-        &config,
-        &struct_name,
-        None,
-        resolved.code,
-        has_user_code,
-        is_transparent,
-    );
+    add_provide_attrs(&mut input.attrs, &config, &struct_name, None, &auto_code);
 
     Ok(())
 }
