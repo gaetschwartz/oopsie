@@ -221,7 +221,9 @@ pub struct NoSource;
 /// assert_eq!(err.to_string(), "IO failed: disk full");
 /// # }
 /// ```
-pub trait ResultExt<T, E> {
+///
+/// This trait is sealed and cannot be implemented outside this crate.
+pub trait ResultExt<T, E>: crate::sealed::Ctx {
     /// Wrap the error with an eagerly-evaluated context selector.
     fn context<C>(self, context: C) -> Result<T, C::Destination>
     where
@@ -249,6 +251,8 @@ pub trait ResultExt<T, E> {
     where
         E: error::Error + 'static;
 }
+
+impl<T, E> crate::sealed::Ctx for Result<T, E> {}
 
 impl<T, E> ResultExt<T, E> for Result<T, E> {
     #[inline]
@@ -321,7 +325,9 @@ impl<T, E> ResultExt<T, E> for Result<T, E> {
 /// assert_eq!(err.to_string(), "Key not found: host");
 /// # }
 /// ```
-pub trait OptionExt<T> {
+///
+/// This trait is sealed and cannot be implemented outside this crate.
+pub trait OptionExt<T>: crate::sealed::Ctx {
     /// Convert `None` into an error with an eagerly-evaluated context selector.
     fn context<C>(self, context: C) -> Result<T, C::Destination>
     where
@@ -333,6 +339,8 @@ pub trait OptionExt<T> {
         F: FnOnce() -> C,
         C: Contextual<NoSource>;
 }
+
+impl<T> crate::sealed::Ctx for Option<T> {}
 
 impl<T> OptionExt<T> for Option<T> {
     #[inline]

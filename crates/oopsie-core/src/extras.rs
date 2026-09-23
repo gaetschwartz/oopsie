@@ -155,10 +155,18 @@ impl Capturable for EnvArgs {
 )]
 pub struct EnvVarOpt<E: EnvVarName>(Option<Box<str>>, std::marker::PhantomData<E>);
 
+/// Gates [`EnvVarName`] implementations to those [`make_env_var!`](env_vars::make_env_var)
+/// generates. `#[doc(hidden)]` rather than a private-module seal: the macro is
+/// `#[macro_export]`ed, so its generated `impl EnvVarName` lands in the calling crate and needs
+/// a supertrait it can name from there.
+#[doc(hidden)]
+pub trait EnvVarNameImpl {}
+
 /// Names the environment variable that an [`EnvVarOpt`] reads.
 ///
-/// Declare implementors with [`make_env_var!`](env_vars::make_env_var) rather than by hand.
-pub trait EnvVarName {
+/// Declare implementors with [`make_env_var!`](env_vars::make_env_var) rather than by hand — the
+/// hidden [`EnvVarNameImpl`] supertrait it also implements is not meant to be named directly.
+pub trait EnvVarName: EnvVarNameImpl {
     /// The environment variable name.
     const NAME: &'static str;
 }
@@ -216,6 +224,8 @@ pub mod env_vars {
             #[doc = "Marker type for the `" $name "` environment variable."]
             #[derive(Debug, Clone, Copy, PartialEq, Eq)]
             pub struct [< $name:camel VarName>];
+
+            impl $crate::extras::EnvVarNameImpl for [< $name:camel VarName>] {}
 
             impl $crate::extras::EnvVarName for [< $name:camel VarName>] {
                 const NAME: &'static str = stringify!($name);

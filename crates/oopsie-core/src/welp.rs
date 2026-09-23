@@ -457,6 +457,15 @@ impl Diagnostic for Welp {
     }
 }
 
+// `WelpRepr::Sourced` holds a `Box<dyn Error + Send + Sync>`; auto-derivation can't
+// see through the trait object, so the compiler treats `Welp` as `!UnwindSafe`. The
+// erased source is never mutated through a `&Welp`/`Welp` across an unwind boundary
+// in a way that would violate exception safety, so assert both by hand — matching
+// `anyhow::Error`/`eyre::Report`, and `Report<E>` (which has no such opaque field and
+// gets these for free).
+impl core::panic::UnwindSafe for Welp {}
+impl core::panic::RefUnwindSafe for Welp {}
+
 /// Extension trait on [`Result`] for attaching a string message that produces
 /// a [`Welp`].
 ///
@@ -470,7 +479,9 @@ impl Diagnostic for Welp {
 ///     std::fs::read_to_string(path).welp_context("could not read")
 /// }
 /// ```
-pub trait WelpResultExt<T, E>: Sized {
+///
+/// This trait is sealed and cannot be implemented outside this crate.
+pub trait WelpResultExt<T, E>: Sized + crate::sealed::Ctx {
     /// Convert the error into a [`Welp`] with no user message — the kind of
     /// message-free `?`-style conversion `anyhow`/`eyre` give you for free. The
     /// resulting `Welp`'s [`Display`](core::fmt::Display) delegates to the
@@ -557,7 +568,9 @@ where
 ///     s.split_whitespace().next().welp_context("string is empty")
 /// }
 /// ```
-pub trait WelpOptionExt<T>: Sized {
+///
+/// This trait is sealed and cannot be implemented outside this crate.
+pub trait WelpOptionExt<T>: Sized + crate::sealed::Ctx {
     /// Convert `None` into a [`Welp`] with the given message.
     ///
     /// Note: the `message` argument is evaluated at the call site per Rust's
@@ -614,6 +627,11 @@ mod tests {
         let subscriber = tracing_subscriber::registry().with(tracing_error::ErrorLayer::default());
         tracing::subscriber::with_default(subscriber, f)
     }
+
+    const _: () = {
+        const fn assert_unwind_safe<T: core::panic::UnwindSafe + core::panic::RefUnwindSafe>() {}
+        assert_unwind_safe::<Welp>();
+    };
 
     #[test]
     fn new_captures_message() {

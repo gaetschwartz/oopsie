@@ -69,7 +69,9 @@ impl core::iter::FusedIterator for Chain<'_> {}
 /// assert_eq!(err.root_cause().to_string(), "disk full");
 /// # }
 /// ```
-pub trait ErrorChainExt {
+///
+/// This trait is sealed and cannot be implemented outside this crate.
+pub trait ErrorChainExt: crate::sealed::Chain {
     /// Iterate this error followed by its transitive
     /// [`source`](StdError::source) causes.
     ///
@@ -107,6 +109,9 @@ fn root_cause_of<'a>(head: &'a (dyn StdError + 'static)) -> &'a (dyn StdError + 
     }
     cause
 }
+
+impl<E: StdError + 'static> crate::sealed::Chain for E {}
+impl crate::sealed::Chain for dyn StdError + 'static {}
 
 impl<E: StdError + 'static> ErrorChainExt for E {
     #[inline]
