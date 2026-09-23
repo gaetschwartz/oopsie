@@ -11,6 +11,13 @@ enum SizedError {
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
+enum SuffixError {
+    #[oopsie("x", suffix = "Y")]
+    Renamed,
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
 enum UnknownKeyError {
     #[oopsie("{} x", n, bogus = 1)]
     Counted { n: u32 },

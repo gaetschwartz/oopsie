@@ -1,0 +1,19 @@
+error: `size` is an `#[oopsie(...)]` container keyword, not a variant one; it belongs on the enum, not this variant: move it to the enum's own `#[oopsie(size = 16)]` attribute
+ --> tests/compile-fail/short_display_leftover_key_value.rs:8:25
+  |
+8 |     #[oopsie("too big", size = 16)]
+  |                         ^^^^
+
+error: `suffix` is an `#[oopsie(...)]` container keyword, not a variant one; it belongs on the enum, not this variant: move it to the enum's own `#[oopsie(suffix = "Y")]` attribute
+  --> tests/compile-fail/short_display_leftover_key_value.rs:15:19
+   |
+15 |     #[oopsie("x", suffix = "Y")]
+   |                   ^^^^^^
+
+error: named argument never used
+  --> tests/compile-fail/short_display_leftover_key_value.rs:22:33
+   |
+22 |     #[oopsie("{} x", n, bogus = 1)]
+   |              ------             ^ named argument never used
+   |              |
+   |              formatting specifier missing

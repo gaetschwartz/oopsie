@@ -249,7 +249,7 @@ e.g. API error responses."
 //! | `vis` | Selector visibility |
 //!
 //! The short form `#[oopsie("msg {field}", ...)]` is shorthand for `display(...)`
-//! plus any keywords trailing the arguments its string consumes.
+//! plus any `#[oopsie(...)]` keywords among its trailing arguments.
 //! With the `unstable` feature, `help` and `code` are additionally surfaced
 //! through the nightly `Provider` API.
 //!

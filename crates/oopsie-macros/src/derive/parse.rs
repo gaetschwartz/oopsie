@@ -407,10 +407,11 @@ const VARIANT_KEYWORDS: &[&str] = &[
     "code",
     "exit_code",
     "provide",
+    "vis",
 ];
 
-/// Container-only keywords; valid on a struct's `#[oopsie(...)]` alongside the
-/// variant set but never on an enum variant.
+/// Keywords valid on an enum's or struct's own `#[oopsie(...)]`; those absent
+/// from `VARIANT_KEYWORDS` are never valid on an enum variant.
 const CONTAINER_KEYWORDS: &[&str] = &["module", "suffix", "size", "path", "vis", "exit_code"];
 
 impl DisplayAttr {
@@ -524,6 +525,7 @@ impl VariantAttrs {
     pub fn from_attrs(attrs: &[syn::Attribute]) -> syn::Result<Self> {
         use darling::FromAttributes as _;
         reject_bare_vis_pub(attrs)?;
+        reject_short_display_container_keywords(attrs)?;
         let (short_display, attrs) = extract_short_display(attrs)?;
         let mut result = Self::from_attributes(&attrs).map_err(syn::Error::from)?;
         if let Some(short) = short_display {
@@ -954,7 +956,7 @@ pub fn extract_short_display(
 }
 
 /// A short-form `#[oopsie("fmt", args…)]` split into its display and the
-/// trailing args the format string doesn't consume, which are keywords.
+/// trailing `#[oopsie(...)]` keywords.
 pub struct ShortDisplay {
     pub display: DisplayAttr,
     pub keywords: Punctuated<syn::Meta, Token![,]>,
@@ -962,11 +964,13 @@ pub struct ShortDisplay {
 
 /// Split `attr` if it is a short-form display, else `None`.
 ///
-/// A trailing arg is a format argument when the format string consumes it:
-/// the first `N` args not of the form `name = value`, for the `N` positional
-/// arguments the string takes, and every `name = value` whose `name` the string
-/// references. The rest are keywords. When the string is malformed, every arg
-/// goes to the format string, so rustc reports the malformation.
+/// A trailing arg is a format argument when `format!` consumes it: the first
+/// `N` args of any form, for the `N` positional slots the string takes (rustc
+/// lets a `name = value` fill one), and every `name = value` whose `name` the
+/// string references. Of the rest, an `#[oopsie(...)]` keyword is a keyword and
+/// anything else is still a format argument, so rustc reports it. When the
+/// string is malformed, every arg goes to the format string, so rustc reports
+/// the malformation.
 pub fn split_short_display(attr: &syn::Attribute) -> syn::Result<Option<ShortDisplay>> {
     attr.parse_args_with(|input: ParseStream| {
         if input.peek(LitStr) {
@@ -994,28 +998,21 @@ fn parse_short_display(input: ParseStream) -> syn::Result<ShortDisplay> {
     let format_str: LitStr = input.parse()?;
     let value = format_str.value();
     let usage = format_arg_usage(&value).ok();
-    let positional = usage.as_ref().map_or(0, |u| u.positional);
-    let mut positional_left = positional;
     let mut args = Punctuated::new();
     let mut keywords = Punctuated::new();
+    let mut index = 0;
     while !input.is_empty() {
         input.parse::<Token![,]>()?;
         if input.is_empty() {
             break;
         }
-        let is_format_arg = match (&usage, named_arg(input)) {
-            (None, _) => true,
-            (Some(usage), Some(name)) => usage.references(&name),
-            (Some(_), None) => {
-                let take = positional_left > 0;
-                positional_left = positional_left.saturating_sub(1);
-                take
-            }
-        };
-        if is_format_arg {
-            args.push(input.parse::<Expr>()?);
-        } else {
-            keywords.push(parse_leftover(input, positional)?);
+        let consumed = usage.as_ref().is_none_or(|usage| {
+            index < usage.positional || named_arg(input).is_some_and(|name| usage.references(&name))
+        });
+        index += 1;
+        match (!consumed).then(|| keyword_arg(input)).flatten() {
+            Some(meta) => keywords.push(meta),
+            None => args.push(input.parse::<Expr>()?),
         }
     }
     Ok(ShortDisplay {
@@ -1033,26 +1030,49 @@ fn named_arg(input: ParseStream) -> Option<String> {
         .then(|| ident.unraw().to_string())
 }
 
-/// A trailing short-display arg the format string doesn't consume, parsed as
-/// a keyword; anything that can't be one is an error spanned on the arg.
-fn parse_leftover(input: ParseStream, positional: usize) -> syn::Result<syn::Meta> {
+/// Consume the arg at the head of `input` if it is a whole `#[oopsie(...)]`
+/// keyword meta (`kw`, `kw = v`, `kw(...)`) of any scope.
+fn keyword_arg(input: ParseStream) -> Option<syn::Meta> {
     use syn::parse::discouraged::Speculative as _;
     let fork = input.fork();
-    if let Ok(meta) = fork.parse::<syn::Meta>()
-        && (fork.is_empty() || fork.peek(Token![,]))
-    {
+    let meta = fork.parse::<syn::Meta>().ok()?;
+    let is_keyword = meta.path().get_ident().is_some_and(|ident| {
+        [VARIANT_KEYWORDS, CONTAINER_KEYWORDS]
+            .iter()
+            .any(|set| set.iter().any(|k| ident == k))
+    });
+    (is_keyword && (fork.is_empty() || fork.peek(Token![,]))).then(|| {
         input.advance_to(&fork);
-        return Ok(meta);
+        meta
+    })
+}
+
+/// Rejects a container-only keyword trailing a variant's short-form display,
+/// pointing it at the enum's own attribute.
+fn reject_short_display_container_keywords(attrs: &[syn::Attribute]) -> syn::Result<()> {
+    for attr in attrs.iter().filter(|attr| attr.path().is_ident("oopsie")) {
+        let Some(short) = split_short_display(attr)? else {
+            continue;
+        };
+        for meta in &short.keywords {
+            let Some(ident) = meta.path().get_ident() else {
+                continue;
+            };
+            if VARIANT_KEYWORDS.iter().any(|k| ident == k) {
+                continue;
+            }
+            let meta = quote::ToTokens::to_token_stream(meta);
+            return Err(syn::Error::new_spanned(
+                ident,
+                format!(
+                    "`{ident}` is an `#[oopsie(...)]` container keyword, not a variant one; it \
+                     belongs on the enum, not this variant: move it to the enum's own \
+                     `#[oopsie({meta})]` attribute"
+                ),
+            ));
+        }
     }
-    let arg: Expr = input.parse()?;
-    let plural = if positional == 1 { "" } else { "s" };
-    Err(syn::Error::new_spanned(
-        arg,
-        format!(
-            "unused display argument: the format string takes {positional} positional \
-             argument{plural}, and this is not an `#[oopsie(...)]` keyword"
-        ),
-    ))
+    Ok(())
 }
 
 /// Rejects the bare `vis = pub(...)` form. `Meta::NameValue`'s value parses
@@ -1540,6 +1560,36 @@ mod tests {
                 &["code = \"E1\""],
                 &[],
             ),
+            (
+                parse_quote!(#[oopsie("{} {}", a, other = b)]),
+                &["a", "other = b"],
+                &[],
+            ),
+            (
+                parse_quote!(#[oopsie("{0}", code = a, transparent)]),
+                &["code = a"],
+                &["transparent"],
+            ),
+            (
+                parse_quote!(#[oopsie("[{:1$}]", a, w = 6)]),
+                &["a", "w = 6"],
+                &[],
+            ),
+            (
+                parse_quote!(#[oopsie("[{:.*}]", 2, v = 1.5)]),
+                &["2", "v = 1.5"],
+                &[],
+            ),
+            (
+                parse_quote!(#[oopsie("{}", a, b.c, bogus = 1, n + 1, r#code = 2, module)]),
+                &["a", "b . c", "bogus = 1", "n + 1", "r#code = 2"],
+                &["module"],
+            ),
+            (
+                parse_quote!(#[oopsie("x {a}", a, code::E1)]),
+                &["a", "code :: E1"],
+                &[],
+            ),
         ];
         for (attr, args, keywords) in cases {
             assert_eq!(
@@ -1553,16 +1603,17 @@ mod tests {
     }
 
     #[test]
-    fn short_display_rejects_unconsumed_non_keyword_arg() {
-        let attr: syn::Attribute = parse_quote!(#[oopsie("{}", a, b.c)]);
-        let Err(err) = split_short_display(&attr) else {
-            panic!("expected an error");
-        };
+    fn short_display_container_keyword_on_variant_points_at_enum() {
+        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("x", suffix = "Y")] };
+        let err = reject_short_display_container_keywords(&attrs).unwrap_err();
         assert_eq!(
             err.to_string(),
-            "unused display argument: the format string takes 1 positional argument, \
-             and this is not an `#[oopsie(...)]` keyword"
+            "`suffix` is an `#[oopsie(...)]` container keyword, not a variant one; it belongs \
+             on the enum, not this variant: move it to the enum's own \
+             `#[oopsie(suffix = \"Y\")]` attribute"
         );
+        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("x", vis(pub), code = "E1")] };
+        reject_short_display_container_keywords(&attrs).unwrap();
     }
 
     #[test]

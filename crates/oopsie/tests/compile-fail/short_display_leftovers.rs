@@ -15,4 +15,11 @@ enum ExtraArgError {
     Counted { n: u32 },
 }
 
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum RedundantArgError {
+    #[oopsie("x {a}", a)]
+    Captured { a: u32 },
+}
+
 fn main() {}

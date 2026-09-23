@@ -58,9 +58,9 @@ impl<'a> ResolvedEnum<'a> {
     /// Validation runs in phases, each sweeping every variant before the next
     /// begins: field categorization and the source-cfg rule, then attribute
     /// parsing with transparent/selector resolution, then the help-conflict
-    /// rule. The phase order determines which
-    /// error surfaces first when several rules fail; keep it stable, since the
-    /// trybuild stderr fixtures pin the exact first diagnostic.
+    /// rule. The phase order determines which error surfaces first when several
+    /// rules fail; keep it stable, since the trybuild stderr fixtures pin the
+    /// exact first diagnostic.
     pub fn resolve(input: &'a DeriveInput, container: &'a EnumContainerAttrs) -> syn::Result<Self> {
         let syn::Data::Enum(data) = &input.data else {
             unreachable!("ResolvedEnum::resolve called on a non-enum")

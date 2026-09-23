@@ -1,11 +1,25 @@
-error: Unknown field: `module`. Available values: `code`, `display`, `exit_code`, `help`, `provide`, `traced`, `transparent`, `vis`
+error: `module` is an `#[oopsie(...)]` container keyword, not a variant one; it belongs on the enum, not this variant: move it to the enum's own `#[oopsie(module)]` attribute
  --> tests/compile-fail/short_display_leftovers.rs:7:19
   |
 7 |     #[oopsie("x", module)]
   |                   ^^^^^^
 
-error: unused display argument: the format string takes 1 positional argument, and this is not an `#[oopsie(...)]` keyword
+error: argument never used
   --> tests/compile-fail/short_display_leftovers.rs:14:25
    |
 14 |     #[oopsie("{} x", n, n + 1)]
-   |                         ^^^^^
+   |              ------     ^^^^^ argument never used
+   |              |
+   |              formatting specifier missing
+
+error: redundant argument
+  --> tests/compile-fail/short_display_leftovers.rs:21:23
+   |
+21 |     #[oopsie("x {a}", a)]
+   |                       ^ help: this can be removed
+   |
+note: the formatting specifier is referencing the binding already
+  --> tests/compile-fail/short_display_leftovers.rs:21:18
+   |
+21 |     #[oopsie("x {a}", a)]
+   |                  ^
