@@ -21,7 +21,7 @@
 )]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub extern crate alloc;
+extern crate alloc;
 
 #[cfg(feature = "std")]
 mod backtrace;
@@ -428,8 +428,11 @@ pub mod __private {
     /// std-linked consumers of `#[oopsie]`/`#[derive(Oopsie)]` never do.
     /// Routing through here instead names one path that resolves in both std
     /// and no_std consumers, since this crate always declares `extern crate
-    /// alloc;`.
-    pub use alloc;
+    /// alloc;`. Glob-reexporting its contents, rather than the crate item
+    /// itself, keeps `alloc` out of this crate's own public API.
+    pub mod alloc {
+        pub use crate::alloc::*;
+    }
 }
 
 macro_rules! impl_string_newtypes {
