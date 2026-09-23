@@ -851,7 +851,6 @@ dependencies = [
  "serde_json",
  "snafu",
  "strip-ansi-escapes",
- "test-with",
  "thiserror",
  "toml_edit",
  "tracing",
@@ -1393,27 +1392,6 @@ checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix",
  "windows-sys",
-]
-
-[[package]]
-name = "test-with"
-version = "0.16.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "964c2c219d0e7658fc3cd7354826e9e8d997c1e7d592cc32f349fc1125b64a84"
-dependencies = [
- "test-with-derive",
-]
-
-[[package]]
-name = "test-with-derive"
-version = "0.16.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52884ff2163f79cd0a7af841fd2e9aca103f2ff1207092d317bf00565abdc59c"
-dependencies = [
- "proc-macro2",
- "quote",
- "regex",
- "syn 2.0.119",
 ]
 
 [[package]]

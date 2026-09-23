@@ -18,15 +18,15 @@ Error[erased::common::MyError::Inner]:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ BACKTRACE ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   1: backtrace[[HASH]]::backtrace::libunwind::trace
-           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs:[LOC]
+           at [CARGO_HOME]/registry/src/index.crates.io-[HASH]/backtrace-[VER]/src/backtrace/libunwind.rs:[LOC]
   2: backtrace[[HASH]]::backtrace::trace_unsynchronized::<<backtrace[[HASH]]::capture::Backtrace>::create::{closure#0}>
-           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+           at [CARGO_HOME]/registry/src/index.crates.io-[HASH]/backtrace-[VER]/src/backtrace/mod.rs:[LOC]
   3: backtrace[[HASH]]::backtrace::trace::<<backtrace[[HASH]]::capture::Backtrace>::create::{closure#0}>
-           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/mod.rs:[LOC]
+           at [CARGO_HOME]/registry/src/index.crates.io-[HASH]/backtrace-[VER]/src/backtrace/mod.rs:[LOC]
   4: <backtrace[[HASH]]::capture::Backtrace>::create
-           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+           at [CARGO_HOME]/registry/src/index.crates.io-[HASH]/backtrace-[VER]/src/capture.rs:[LOC]
   5: <backtrace[[HASH]]::capture::Backtrace>::new_unresolved
-           at [CARGO_HOME]//registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs:[LOC]
+           at [CARGO_HOME]/registry/src/index.crates.io-[HASH]/backtrace-[VER]/src/capture.rs:[LOC]
   6: <oopsie_core[[HASH]]::backtrace::Backtrace as oopsie_core[[HASH]]::traits::Capturable>::capture
            at [WORKSPACE]/crates/oopsie-core/src/backtrace.rs:[LOC]
   7: <(oopsie_core[[HASH]]::backtrace::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace) as oopsie_core[[HASH]]::traits::Capturable>::capture

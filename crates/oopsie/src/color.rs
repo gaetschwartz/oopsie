@@ -135,24 +135,10 @@ macro_rules! style {
 }
 pub(crate) use style;
 
+// Global `COLOR_MODE` mutation tests live in `tests/report.rs` (re-exec'd; they'd race other tests' `should_colorize()` reads in-process).
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_global_color_mode() {
-        // Save original
-        let original = get_color_mode();
-
-        set_color_mode(ColorMode::Never);
-        assert_eq!(get_color_mode(), ColorMode::Never);
-
-        set_color_mode(ColorMode::Always);
-        assert_eq!(get_color_mode(), ColorMode::Always);
-
-        // Restore
-        set_color_mode(original);
-    }
 
     #[test]
     fn test_always_should_colorize() {
@@ -162,25 +148,5 @@ mod tests {
     #[test]
     fn test_never_should_not_colorize() {
         assert!(!ColorMode::Never.should_colorize());
-    }
-
-    #[test]
-    fn test_auto_roundtrip_through_global() {
-        let original = get_color_mode();
-
-        set_color_mode(ColorMode::Auto);
-        assert_eq!(get_color_mode(), ColorMode::Auto);
-
-        set_color_mode(original);
-    }
-
-    #[test]
-    fn global_never_disables_auto_colorize() {
-        let original = get_color_mode();
-        set_color_mode(ColorMode::Never);
-        assert!(!ColorMode::Auto.should_colorize());
-        set_color_mode(ColorMode::Always);
-        assert!(ColorMode::Auto.should_colorize());
-        set_color_mode(original);
     }
 }

@@ -150,7 +150,10 @@ pub mod settings {
         settings.add_filter(&regex_escape(&WORKSPACE_ROOT), "[WORKSPACE]");
         settings.add_filter(&regex_escape(&RUSTC_SYSROOT), "[SYS_ROOT]");
         if let Some(cargo_home) = CARGO_HOME.as_deref() {
-            settings.add_filter(&regex_escape(cargo_home), "[CARGO_HOME]/");
+            // No trailing slash: the matched path never carries one either, so
+            // the separator before the next path segment is whatever the
+            // original text already had (`/` on Unix, `\` on Windows).
+            settings.add_filter(&regex_escape(cargo_home), "[CARGO_HOME]");
         }
         // Stdlib path normalization: local `[SYS_ROOT]/lib/rustlib/src/rust/library/`
         // and CI `/rustc/[HASH]/library/` both → `[STDLIB]/library/`.
@@ -159,6 +162,13 @@ pub mod settings {
             "[STDLIB]/library/",
         );
         settings.add_filter(r"/rustc/\[HASH\]/library/", "[STDLIB]/library/");
+        // Registry crate paths carry a per-mirror index hash and the exact
+        // dependency version, both build-to-build noise.
+        settings.add_filter(r"index\.crates\.io-[0-9a-f]+", "index.crates.io-[HASH]");
+        settings.add_filter(
+            r"/([A-Za-z][A-Za-z0-9_-]*)-\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.]+)*/src/",
+            "/$1-[VER]/src/",
+        );
         // JSON snapshots carry line/column as numeric fields rather than `rs:N:C`.
         settings.add_filter(r#""line":\s*\d+"#, r#""line": 42"#);
         settings.add_filter(r#""column":\s*\d+"#, r#""column": 69"#);
@@ -166,6 +176,22 @@ pub mod settings {
         // varies between runs; the render path peels this OS tail, but the
         // erased path serializes raw frames, so normalize it here.
         settings.add_filter(r"__pthread\w*", "[OS_TAIL]");
+        // The erased JSON path serializes every captured frame, including the
+        // libtest/std harness tail below the test function that the render
+        // path's trimming already hides; collapse the (already-normalized)
+        // `[STDLIB]/library/…` and `[OS_TAIL]` run at the end of a `frames`
+        // array into one placeholder frame so upgrading the toolchain (which
+        // reshapes that tail) doesn't churn the snapshot.
+        settings.add_filter(
+            concat!(
+                r#"(?s)(,\s*\{\s*"name":\s*"(?:\[OS_TAIL\]|[^"]*)",\s*"filename":\s*(?:null|"\[STDLIB\]/library/[^"]*"),\s*"line":\s*(?:null|42),\s*"column":\s*(?:null|69)\s*\})+"#,
+                r#"(\s*\]\s*\}\s*\}\s*)$"#
+            ),
+            concat!(
+                ",\n      {\n        \"name\": \"[TEST_HARNESS_FRAMES_TRIMMED]\",\n        ",
+                "\"filename\": null,\n        \"line\": null,\n        \"column\": null\n      }${2}"
+            ),
+        );
         settings
     }
 

@@ -14,7 +14,10 @@ use std::fmt;
 use std::process::Termination as _;
 
 use oopsie::trace_printer::{BacktraceFrame, BacktraceProvider, TracePrinter};
-use oopsie::{Contextual as _, Report, RustBacktrace, Theme, get_theme, oopsie, set_theme};
+use oopsie::{
+    ColorMode, Contextual as _, Report, RustBacktrace, Theme, get_color_mode, get_theme, oopsie,
+    set_color_mode, set_theme,
+};
 use oopsie_core::{redact, snap_name};
 
 #[oopsie(traced)]
@@ -35,8 +38,10 @@ fn strip_ansi(s: &str) -> String {
 }
 
 #[test]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_basic() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     common::force_backtrace();
     assert_eq!(
         oopsie::backtrace::current(),
@@ -55,8 +60,10 @@ fn test_report_basic() {
 }
 
 #[test]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_chain() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     common::force_backtrace();
     let inner = TestOopsie {
         message: "root cause",
@@ -71,26 +78,31 @@ fn test_report_chain() {
 }
 
 #[test]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_colored() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     common::force_backtrace();
     let error = TestOopsie {
         message: "colored test",
     }
     .build();
-    let report = Report::new(error).force_colors();
+    let rendered = Report::new(error).force_colors().to_string();
 
     redact!(backtrace, {
-        insta::assert_snapshot!(snap_name!("report_colored_stripped"), report);
+        insta::assert_snapshot!(snap_name!("report_colored_stripped"), strip_ansi(&rendered));
     });
 }
 
-/// The colored render path must actually emit ANSI escapes. `test_report_colored`
-/// strips ANSI *before* snapshotting, so its snapshot is byte-identical to the
-/// plain one — a regression that silently dropped all styling would still pass.
-/// This is the positive counterpart to `test_no_colors_never_no_ansi`: it pins
-/// that `force_colors()` both colorizes (escapes present, incl. the specific red
-/// header SGR) and leaves the rendered text intact when the escapes are stripped.
+/// The colored render path must actually emit ANSI escapes. Snapshotting the
+/// raw ANSI form is impractical (the escape codes break the `rs:N:C` line/col
+/// filter, pinning exact source lines), so this asserts the emission directly
+/// instead: `test_report_colored`'s snapshot only covers the ANSI-stripped
+/// text, so a regression that silently dropped all styling would slip past
+/// it. This is the positive counterpart to `test_no_colors_never_no_ansi`: it
+/// pins that `force_colors()` both colorizes (escapes present, incl. the
+/// specific red header SGR) and leaves the rendered text intact when the
+/// escapes are stripped.
 #[test]
 fn test_report_colored_emits_ansi() {
     common::force_backtrace();
@@ -128,10 +140,54 @@ fn report_theme_override_changes_output() {
     );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Global-state tests
+//
+// `set_theme` and `std::panic::set_hook` mutate process-wide state, so running
+// them in-process under `cargo test`'s default thread parallelism races every
+// other test that reads the same global (a colored-render reader for the
+// theme, any panicking test for the hook). Each such test re-execs this
+// binary as a child running only itself, isolating the mutation to a
+// throwaway process — the pattern established in `tests/panic_hook.rs`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GLOBAL_STATE_TEST_TRIGGER: &str = "OOPSIE_REPORT_GLOBAL_STATE_TEST_TRIGGER";
+
+/// Re-exec this test binary running only `child_test`, and assert it exited
+/// successfully — an assertion failure inside the child surfaces as a nonzero
+/// exit, which this turns into an ordinary test failure with the child's
+/// output attached. Also asserts libtest actually ran `child_test`: a rename
+/// or a move into a module makes `--exact` match zero tests, which exits 0
+/// and would otherwise pass silently.
+fn run_isolated_child(child_test: &str) {
+    let exe = std::env::current_exe().expect("locate test binary");
+    let output = std::process::Command::new(exe)
+        .arg(child_test)
+        .args(["--exact", "--nocapture", "--test-threads=1"])
+        .env(GLOBAL_STATE_TEST_TRIGGER, "1")
+        .output()
+        .expect("spawn child test process");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "child process should have succeeded\n--- stdout ---\n{stdout}\n--- stderr ---\n{}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+    assert!(
+        stdout.contains(&format!("test {child_test} ... ok")),
+        "child process exited successfully but never ran `{child_test}`\n--- stdout ---\n{stdout}",
+    );
+}
+
 /// A report with no override must follow the process-global theme set by
-/// `set_theme`. Re-render the same report under two globals; only color differs.
+/// `set_theme`. Re-render the same report under two globals; only color
+/// differs.
 #[test]
-fn report_follows_global_theme() {
+fn report_follows_global_theme_child() {
+    if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
+        return;
+    }
     let report = Report::new(TestOopsie { message: "themed" }.build()).force_colors();
 
     let original = get_theme();
@@ -145,6 +201,93 @@ fn report_follows_global_theme() {
         nord_render, mocha_render,
         "set_theme must change a report that carries no per-report override"
     );
+}
+
+#[test]
+fn report_follows_global_theme() {
+    run_isolated_child("report_follows_global_theme_child");
+}
+
+/// `set_theme`/`get_theme` roundtrip through the process-global slot. Runs
+/// isolated via `run_isolated_child` because it mutates process-wide state
+/// and would race every other test reading it under `cargo test`'s default
+/// parallelism.
+#[test]
+fn theme_set_get_roundtrips_child() {
+    if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
+        return;
+    }
+    let original = get_theme();
+    set_theme(Theme::DRACULA);
+    assert_eq!(get_theme(), Theme::DRACULA);
+    set_theme(Theme::NORD);
+    assert_eq!(get_theme(), Theme::NORD);
+    set_theme(original);
+}
+
+#[test]
+fn theme_set_get_roundtrips() {
+    run_isolated_child("theme_set_get_roundtrips_child");
+}
+
+/// `set_color_mode`/`get_color_mode` roundtrip through the process-global slot.
+#[test]
+fn global_color_mode_roundtrip_child() {
+    if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
+        return;
+    }
+    let original = get_color_mode();
+
+    set_color_mode(ColorMode::Never);
+    assert_eq!(get_color_mode(), ColorMode::Never);
+
+    set_color_mode(ColorMode::Always);
+    assert_eq!(get_color_mode(), ColorMode::Always);
+
+    set_color_mode(original);
+}
+
+#[test]
+fn global_color_mode_roundtrip() {
+    run_isolated_child("global_color_mode_roundtrip_child");
+}
+
+#[test]
+fn auto_color_mode_roundtrip_through_global_child() {
+    if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
+        return;
+    }
+    let original = get_color_mode();
+
+    set_color_mode(ColorMode::Auto);
+    assert_eq!(get_color_mode(), ColorMode::Auto);
+
+    set_color_mode(original);
+}
+
+#[test]
+fn auto_color_mode_roundtrip_through_global() {
+    run_isolated_child("auto_color_mode_roundtrip_through_global_child");
+}
+
+/// `ColorMode::Auto` reads the global mode first; `Never`/`Always` override
+/// environment/terminal detection either way.
+#[test]
+fn global_never_disables_auto_colorize_child() {
+    if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
+        return;
+    }
+    let original = get_color_mode();
+    set_color_mode(ColorMode::Never);
+    assert!(!ColorMode::Auto.should_colorize());
+    set_color_mode(ColorMode::Always);
+    assert!(ColorMode::Auto.should_colorize());
+    set_color_mode(original);
+}
+
+#[test]
+fn global_never_disables_auto_colorize() {
+    run_isolated_child("global_never_disables_auto_colorize_child");
 }
 
 #[test]
@@ -165,8 +308,10 @@ pub struct ErrorWithHelp {
 }
 
 #[test]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_help() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     common::force_backtrace();
     let error = ErrorWithHelpOopsie {
         message: "connection refused",
@@ -183,8 +328,10 @@ fn test_report_with_help() {
 // `key=value`), so the rendered spantrace — and thus the snapshot — differs.
 #[cfg(all(feature = "tracing", feature = "serde"))]
 #[test]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_spantrace_serde() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     let error = common::make_error();
     let report = Report::new(error).no_colors();
 
@@ -195,8 +342,10 @@ fn test_report_with_spantrace_serde() {
 
 #[cfg(all(feature = "tracing", not(feature = "serde")))]
 #[test]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_spantrace_no_serde() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     let error = common::make_error();
     let report = Report::new(error).no_colors();
 
@@ -207,8 +356,10 @@ fn test_report_with_spantrace_no_serde() {
 
 #[cfg(feature = "tracing")]
 #[test]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_with_spantrace_debug() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     let error = common::make_error();
 
     redact!(backtrace, {
@@ -391,9 +542,13 @@ fn test_report_run_err() {
 }
 
 #[test]
-fn run_restores_prior_hook_even_on_unwind() {
+fn run_restores_prior_hook_even_on_unwind_child() {
     use std::sync::atomic::{AtomicBool, Ordering};
     static PRIOR_HOOK_FIRED: AtomicBool = AtomicBool::new(false);
+
+    if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
+        return;
+    }
 
     std::panic::set_hook(Box::new(|_| {
         PRIOR_HOOK_FIRED.store(true, Ordering::SeqCst);
@@ -409,10 +564,19 @@ fn run_restores_prior_hook_even_on_unwind() {
 }
 
 #[test]
-fn run_concurrent_overlap_restores_prior_hook_after_last_exit() {
+fn run_restores_prior_hook_even_on_unwind() {
+    run_isolated_child("run_restores_prior_hook_even_on_unwind_child");
+}
+
+#[test]
+fn run_concurrent_overlap_restores_prior_hook_after_last_exit_child() {
     use std::sync::Barrier;
     use std::sync::atomic::{AtomicBool, Ordering};
     static PRIOR_HOOK_FIRED: AtomicBool = AtomicBool::new(false);
+
+    if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
+        return;
+    }
 
     std::panic::set_hook(Box::new(|_| {
         PRIOR_HOOK_FIRED.store(true, Ordering::SeqCst);
@@ -447,9 +611,18 @@ fn run_concurrent_overlap_restores_prior_hook_after_last_exit() {
 }
 
 #[test]
-fn run_nested_restores_prior_hook() {
+fn run_concurrent_overlap_restores_prior_hook_after_last_exit() {
+    run_isolated_child("run_concurrent_overlap_restores_prior_hook_after_last_exit_child");
+}
+
+#[test]
+fn run_nested_restores_prior_hook_child() {
     use std::sync::atomic::{AtomicBool, Ordering};
     static PRIOR_HOOK_FIRED: AtomicBool = AtomicBool::new(false);
+
+    if std::env::var_os(GLOBAL_STATE_TEST_TRIGGER).is_none() {
+        return;
+    }
 
     std::panic::set_hook(Box::new(|_| {
         PRIOR_HOOK_FIRED.store(true, Ordering::SeqCst);
@@ -463,6 +636,11 @@ fn run_nested_restores_prior_hook() {
 
     let _ = std::panic::catch_unwind(|| panic!("probe"));
     assert!(PRIOR_HOOK_FIRED.load(Ordering::SeqCst));
+}
+
+#[test]
+fn run_nested_restores_prior_hook() {
+    run_isolated_child("run_nested_restores_prior_hook_child");
 }
 
 // --- Report::no_colors() test ---
@@ -1077,8 +1255,10 @@ pub struct FwdWrapError {
 }
 
 #[test]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 fn test_report_forward_chain() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     common::force_backtrace();
     let leaf = FwdLeafOopsie { msg: "root cause" }.build();
     let wrap: FwdWrapError = FwdWrapOopsie.build_error(leaf);

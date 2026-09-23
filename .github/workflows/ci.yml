@@ -27,6 +27,7 @@ jobs:
           - "extras"
           - "fancy,tracing"
           - "fancy,serde,tracing,chrono"
+          - "fancy,serde,tracing,chrono,experimental-settings"
     env:
       RUSTUP_TOOLCHAIN: ${{ matrix.toolchain == 'stable' && 'stable' || '' }}
     steps:
@@ -39,9 +40,19 @@ jobs:
         with:
           tool: nextest
       # Actions cannot unset a var, and an empty value still counts as present.
+      # The gate panics under CI when unset, so every feature combo that
+      # compiles a snapshot-gated test (report.rs needs fancy, erased.rs
+      # needs serde, provider_reach.rs needs fancy+tracing) must set this
+      # explicitly; every runner in this job is aarch64-apple-darwin, so none
+      # of them are opted out.
       - name: Enable backtrace snapshot tests
-        if: matrix.features == 'fancy,serde,tracing,chrono'
+        if: contains(matrix.features, 'fancy') || contains(matrix.features, 'serde')
         run: echo "OOPSIE_BACKTRACE_SNAPSHOT_TESTS=1" >> "$GITHUB_ENV"
+      - name: Enable settings/no_std E2E tests
+        if: contains(matrix.features, 'experimental-settings')
+        run: |
+          echo "OOPSIE_SETTINGS_E2E=1" >> "$GITHUB_ENV"
+          echo "OOPSIE_NOSTD_E2E=1" >> "$GITHUB_ENV"
       - name: cargo nextest
         run: >
           cargo nextest run --workspace --no-default-features
@@ -52,6 +63,9 @@ jobs:
           cargo test --doc --workspace --no-default-features
           ${{ matrix.features && format('--features {0}', matrix.features) || '' }}
           ${{ matrix.toolchain == 'nightly' && '--features unstable' || '' }}
+      - name: cargo test (nostd-smoke)
+        if: contains(matrix.features, 'experimental-settings')
+        run: cargo test --manifest-path crates/nostd-smoke/Cargo.toml
 
   lints:
     name: Lints (fmt + clippy)

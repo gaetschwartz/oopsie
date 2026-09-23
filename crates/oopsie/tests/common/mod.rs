@@ -7,6 +7,34 @@
 
 use oopsie::{ResultExt as _, oopsie};
 pub use oopsie_core::test_utils::force_backtrace;
+
+/// Runtime gate for the backtrace-snapshot test suite. A gated test calls
+/// this before asserting anything, so a run that never exercises the
+/// snapshot path can't be mistaken for one that did: under `CI`, the gate
+/// var must be set explicitly to `1` (run) or `0` (intentionally skipped on
+/// this leg) — leaving it unset panics instead of silently skipping.
+#[expect(
+    clippy::print_stderr,
+    reason = "the skip notice is only visible in a test's captured output (e.g. --nocapture or a failing run), never during a normal green pass"
+)]
+pub fn backtrace_snapshot_tests_enabled() -> bool {
+    match std::env::var_os("OOPSIE_BACKTRACE_SNAPSHOT_TESTS") {
+        Some(v) if v == "0" => {
+            eprintln!("skipping: OOPSIE_BACKTRACE_SNAPSHOT_TESTS=0 (intentionally disabled)");
+            false
+        }
+        Some(_) => true,
+        None => {
+            assert!(
+                std::env::var_os("CI").is_none(),
+                "OOPSIE_BACKTRACE_SNAPSHOT_TESTS is unset under CI: set it to 1 to run the \
+                 snapshot-gated tests or to 0 to skip them intentionally on this leg"
+            );
+            eprintln!("skipping: OOPSIE_BACKTRACE_SNAPSHOT_TESTS not set");
+            false
+        }
+    }
+}
 #[cfg(feature = "tracing")]
 pub use oopsie_core::test_utils::{init_test_subscriber, init_test_subscriber_without_error_layer};
 #[cfg(feature = "tracing")]

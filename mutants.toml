@@ -1,3 +1,4 @@
 # When mutating oopsie-macros, also run tests from the oopsie crate
 # (which contains integration tests exercising the macros)
 additional_cargo_test_args = ["--workspace"]
+test_tool = "nextest"

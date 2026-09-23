@@ -34,8 +34,11 @@ fn wrap_site(inner: InnerError) -> Welp {
     Welp::wrap(inner, "outer")
 }
 
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
+#[test]
 fn test_welp_wrap_reaches_erased_source_trace() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     common::force_backtrace();
     let report = Report::new(wrap_site(origin_frame())).no_colors();
     redact!(backtrace, {

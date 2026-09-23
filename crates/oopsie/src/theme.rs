@@ -244,17 +244,4 @@ pub fn get_theme() -> Theme {
     *THEME.read().unwrap_or_else(PoisonError::into_inner)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn set_get_theme_roundtrips() {
-        let original = get_theme();
-        set_theme(Theme::DRACULA);
-        assert_eq!(get_theme(), Theme::DRACULA);
-        set_theme(Theme::NORD);
-        assert_eq!(get_theme(), Theme::NORD);
-        set_theme(original);
-    }
-}
+// The global `THEME` roundtrip test lives in `tests/report.rs` (re-exec'd; it'd race other tests' colored-render reads in-process).

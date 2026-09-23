@@ -37,9 +37,11 @@ pub struct ErrorWithExitCode {
 }
 
 #[cfg(feature = "tracing")]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 #[test]
 fn test_erased_error_text() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     let error = ErasedError::from_error(common::make_error());
     redact!(backtrace, {
         insta::assert_snapshot!(snap_name!("erased_error_text"), error.to_text());
@@ -47,9 +49,11 @@ fn test_erased_error_text() {
 }
 
 #[cfg(feature = "tracing")]
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 #[test]
 fn test_erased_error_json() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     let error = ErasedError::from_error(common::make_error());
     redact!(backtrace, {
         insta::assert_json_snapshot!(snap_name!("erased_error_json"), error);
@@ -97,9 +101,11 @@ fn test_exit_code_survives_erasure_and_round_trip() {
     assert_eq!(restored.diagnostics().exit_code(), Some(expected));
 }
 
-#[test_with::env(OOPSIE_BACKTRACE_SNAPSHOT_TESTS)]
 #[test]
 fn test_format_short_includes_help() {
+    if !common::backtrace_snapshot_tests_enabled() {
+        return;
+    }
     let error = ErrorWithHelpOopsie {
         message: "connection refused",
     }
