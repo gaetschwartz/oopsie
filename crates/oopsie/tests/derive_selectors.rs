@@ -447,3 +447,34 @@ fn variant_named_like_prelude_type_with_qualified_field() {
     assert_eq!(err.to_string(), "bad key k");
     assert!(matches!(err, ValueShapeError::Key { key } if key == "k"));
 }
+
+// A non-source auto-captured field named `source` must not capture over the
+// generated conversion's source argument.
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum SourceNamedFieldError {
+    #[oopsie("io")]
+    RenamedIo {
+        #[oopsie(from)]
+        inner: io::Error,
+        #[oopsie(from(false))]
+        source: oopsie::Backtrace,
+    },
+    #[oopsie(transparent)]
+    RenamedFmt {
+        #[oopsie(from)]
+        inner: std::fmt::Error,
+        #[oopsie(from(false))]
+        source: oopsie::Backtrace,
+    },
+}
+
+#[test]
+fn auto_field_named_source_does_not_shadow_source_arg() {
+    let err = RenamedIo.build_error(io::Error::other("disk"));
+    assert!(
+        matches!(&err, SourceNamedFieldError::RenamedIo { inner, .. } if inner.to_string() == "disk")
+    );
+    let err = SourceNamedFieldError::from(std::fmt::Error);
+    assert!(matches!(err, SourceNamedFieldError::RenamedFmt { .. }));
+}

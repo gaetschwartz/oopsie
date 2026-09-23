@@ -620,27 +620,28 @@ pub fn gen_enum_selectors(
                 .as_ref()
                 .expect("transparent variant has a validated source");
             let source_ident = &source.ident;
+            let source_arg = source_arg_ident(categorized);
             let (param_ty, body_assign) = match &source.kind {
                 SourceKind::Transformed {
                     source_type,
                     transform,
                 } => (
                     quote! { #source_type },
-                    quote! { let #source_ident = (#transform)(source); },
+                    quote! { let #source_ident = (#transform)(#source_arg); },
                 ),
                 SourceKind::AutoBoxed { source_type } => (
                     quote! { #source_type },
-                    quote! { let #source_ident = #oopsie_path::__private::alloc::boxed::Box::new(source); },
+                    quote! { let #source_ident = #oopsie_path::__private::alloc::boxed::Box::new(#source_arg); },
                 ),
                 SourceKind::Yes => {
                     let ty = &source.ty;
-                    (quote! { #ty }, quote! { let #source_ident = source; })
+                    (quote! { #ty }, quote! { let #source_ident = #source_arg; })
                 }
                 SourceKind::No | SourceKind::Disabled => {
                     unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
                 }
             };
-            let auto_inits = gen_auto_inits(categorized, oopsie_path, true);
+            let auto_inits = gen_auto_inits(categorized, oopsie_path, Some(&source_arg));
             let auto_names = gen_auto_field_inits(categorized);
             let doc = format!("Converts `{param_ty}` into `{enum_ident}::{variant_ident}`.");
             selectors.push(quote! {
@@ -648,7 +649,7 @@ pub fn gen_enum_selectors(
                 impl #impl_generics ::core::convert::From<#param_ty> for #enum_ident #ty_generics #where_clause {
                     #[doc = #doc]
                     #[track_caller]
-                    fn from(source: #param_ty) -> Self {
+                    fn from(#source_arg: #param_ty) -> Self {
                         // Capture probes borrow `&source` before
                         // `body_assign` moves it into the renamed field.
                         #(#auto_inits)*
@@ -797,27 +798,28 @@ pub fn gen_struct_selector(
             .as_ref()
             .expect("transparent struct has a validated source");
         let source_ident = &source.ident;
+        let source_arg = source_arg_ident(categorized);
         let (param_ty, body_assign) = match &source.kind {
             SourceKind::Transformed {
                 source_type,
                 transform,
             } => (
                 quote! { #source_type },
-                quote! { let #source_ident = (#transform)(source); },
+                quote! { let #source_ident = (#transform)(#source_arg); },
             ),
             SourceKind::AutoBoxed { source_type } => (
                 quote! { #source_type },
-                quote! { let #source_ident = #oopsie_path::__private::alloc::boxed::Box::new(source); },
+                quote! { let #source_ident = #oopsie_path::__private::alloc::boxed::Box::new(#source_arg); },
             ),
             SourceKind::Yes => {
                 let ty = &source.ty;
-                (quote! { #ty }, quote! { let #source_ident = source; })
+                (quote! { #ty }, quote! { let #source_ident = #source_arg; })
             }
             SourceKind::No | SourceKind::Disabled => {
                 unreachable!("categorized.source set but kind is SourceKind::No or Disabled")
             }
         };
-        let auto_inits = gen_auto_inits(categorized, oopsie_path, true);
+        let auto_inits = gen_auto_inits(categorized, oopsie_path, Some(&source_arg));
         let auto_names = gen_auto_field_inits(categorized);
         let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
         let doc = format!("Converts `{param_ty}` into `{struct_ident}`.");
@@ -825,7 +827,7 @@ pub fn gen_struct_selector(
             impl #impl_generics ::core::convert::From<#param_ty> for #struct_ident #ty_generics #where_clause {
                 #[doc = #doc]
                 #[track_caller]
-                fn from(source: #param_ty) -> Self {
+                fn from(#source_arg: #param_ty) -> Self {
                     // Capture probes borrow `&source` before `body_assign`
                     // moves it into the renamed field.
                     #(#auto_inits)*
@@ -941,10 +943,29 @@ fn ident_maybe_raw(name: &str, span: proc_macro2::Span) -> syn::Result<Ident> {
     }
 }
 
+/// The binding a generated conversion gives its source argument: `source`,
+/// unless an auto-captured field of that name would rebind it before the source
+/// field is assigned.
+fn source_arg_ident(categorized: &CategorizedFields) -> Ident {
+    let taken = |candidate: &Ident| {
+        categorized
+            .auto_fields
+            .iter()
+            .any(|af| af.ident == *candidate)
+    };
+    let mut candidate = format_ident!("source");
+    let mut n = 0u32;
+    while taken(&candidate) {
+        candidate = format_ident!("__oopsie_source{}", n);
+        n += 1;
+    }
+    candidate
+}
+
 fn gen_auto_inits(
     categorized: &CategorizedFields,
     oopsie_path: &syn::Path,
-    has_source: bool,
+    source_arg: Option<&Ident>,
 ) -> Vec<TokenStream2> {
     categorized
         .auto_fields
@@ -953,12 +974,12 @@ fn gen_auto_inits(
             let ident = &af.ident;
             let ty = &af.ty;
             let cfg = &af.cfg_attrs;
-            if has_source {
+            if let Some(source_arg) = source_arg {
                 quote! {
                     #(#cfg)*
                     let #ident = {
                         use #oopsie_path::__private::{CaptureFromExt as _, CaptureFromFallback as _};
-                        (&#oopsie_path::__private::CaptureProbe(&source)).resolve::<#ty>()
+                        (&#oopsie_path::__private::CaptureProbe(&#source_arg)).resolve::<#ty>()
                     };
                 }
             } else {
@@ -1059,6 +1080,7 @@ fn gen_build_error(
     let generics = dest.generics;
     let source_field = categorized.source.as_ref().unwrap();
     let source_ident = &source_field.ident;
+    let source_arg = source_arg_ident(categorized);
 
     let (source_type, source_transform) = match &source_field.kind {
         SourceKind::No | SourceKind::Disabled => {
@@ -1078,14 +1100,14 @@ fn gen_build_error(
         ),
     };
 
-    let auto_inits = gen_auto_inits(categorized, oopsie_path, true);
+    let auto_inits = gen_auto_inits(categorized, oopsie_path, Some(&source_arg));
     let auto_names = gen_auto_field_inits(categorized);
     let user_inits = user_init_exprs(&categorized.user_fields, generics);
 
     let source_assign = if let Some(transform) = source_transform {
-        quote! { let #source_ident = #transform(source); }
+        quote! { let #source_ident = #transform(#source_arg); }
     } else {
-        quote! { let #source_ident = source; }
+        quote! { let #source_ident = #source_arg; }
     };
 
     let struct_use = &shape.struct_use;
@@ -1097,7 +1119,7 @@ fn gen_build_error(
             type Destination = #dest_ty;
 
             #[track_caller]
-            fn build_error(self, source: #source_type) -> #dest_ty {
+            fn build_error(self, #source_arg: #source_type) -> #dest_ty {
                 // Capture probes borrow `&source`, so they must run before
                 // `source_assign` moves `source` into the (possibly renamed)
                 // field. They also see the pre-transform value, preserving the
@@ -1127,7 +1149,7 @@ fn gen_build_fail(
     let construct = dest.construct;
     let doc_name = dest.doc_name;
     let generics = dest.generics;
-    let auto_inits = gen_auto_inits(categorized, oopsie_path, false);
+    let auto_inits = gen_auto_inits(categorized, oopsie_path, None);
     let auto_names = gen_auto_field_inits(categorized);
     let user_inits = user_init_exprs(&categorized.user_fields, generics);
 
