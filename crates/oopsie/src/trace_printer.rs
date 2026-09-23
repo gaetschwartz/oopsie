@@ -198,13 +198,18 @@ impl TraceTheme {
 // Frame filtering
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Prefixes for backtrace capture frames that should be skipped.
-const BACKTRACE_CAPTURE_PREFIXES: &[&str] = &[
-    "std::backtrace_rs::backtrace::",
-    "<std::backtrace::Backtrace>::create",
-    "<std::backtrace::Backtrace as oopsie_core::Capturable>::",
-    "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::Capturable>::",
+/// Backtrace capture machinery: std's and the `backtrace` crate's unwinders,
+/// and oopsie's own capture entry points.
+const BACKTRACE_CAPTURE_SCOPED: &[(&str, &str)] = &[
+    ("std", "backtrace_rs::"),
+    ("std", "backtrace::Backtrace>::create"),
+    ("oopsie_core", "backtrace::"),
 ];
+
+/// The `backtrace` crate's capture paths. A user crate may share its name,
+/// so a frame with a source file must also live in the real crate's source.
+const BACKTRACE_CRATE_SCOPED: &[(&str, &str)] =
+    &[("backtrace", "backtrace::"), ("backtrace", "capture::")];
 
 /// A symbol split into its owning crate and path, across spellings:
 /// `std::rt::lang_start`, `std[hash]::rt::lang_start`, and
@@ -334,12 +339,104 @@ const OS_ENTRY_PREFIXES: &[&str] = &[
     "mainCRTStartup",
 ];
 
-/// Check if a frame name matches backtrace capture code.
+/// Whether any `N` consecutive segments of `path` satisfy `pred`. Splits on
+/// both `/` and `\`, so Windows and remapped mixed-separator paths match too.
+fn path_has_segments<const N: usize>(path: &path::Path, pred: impl Fn([&str; N]) -> bool) -> bool {
+    let path = path.to_string_lossy();
+    let mut window = [""; N];
+    path.split(['/', '\\']).enumerate().any(|(idx, segment)| {
+        window.rotate_left(1);
+        window[N - 1] = segment;
+        idx + 1 >= N && pred(window)
+    })
+}
+
+/// Whether `path` is standard-library source: rustc's remapped
+/// `/rustc/<commit>/library/` prefix, or a `rust-src` checkout under
+/// `lib/rustlib/src/rust/library/`.
+fn is_sysroot_source(path: &path::Path) -> bool {
+    path_has_segments(path, |[rustc, commit, library]| {
+        rustc == "rustc"
+            && library == "library"
+            && commit.len() == 40
+            && commit.bytes().all(|b| b.is_ascii_hexdigit())
+    }) || path_has_segments(path, |w| w == ["rustlib", "src", "rust", "library"])
+}
+
+/// Whether `version` is a full semver: `MAJOR.MINOR.PATCH`, optionally
+/// followed by a non-empty `-pre` and/or `+build` suffix.
+fn is_semver(version: &str) -> bool {
+    let (core, suffix) = version.split_at(version.find(['-', '+']).unwrap_or(version.len()));
+    let mut parts = core.split('.');
+    let numeric = |part: Option<&str>| {
+        part.is_some_and(|p| !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()))
+    };
+    numeric(parts.next())
+        && numeric(parts.next())
+        && numeric(parts.next())
+        && parts.next().is_none()
+        && suffix.get(1..).is_none_or(|rest| !rest.is_empty())
+}
+
+/// Whether `path` is a Cargo git-checkout of the `backtrace` crate:
+/// `git/checkouts/backtrace[-rs]-<hash>/<rev>/src/`, where `<rev>` is the
+/// commit id, abbreviated to 7 hex digits unless that is ambiguous.
+fn is_backtrace_git_checkout(path: &path::Path) -> bool {
+    let checkout_dir = |dir: &str| {
+        dir.strip_prefix("backtrace-rs-")
+            .or_else(|| dir.strip_prefix("backtrace-"))
+            .is_some_and(|hash| hash.len() >= 7 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+    };
+    path_has_segments(path, |[git, checkouts, dir, rev, src]| {
+        git == "git"
+            && checkouts == "checkouts"
+            && src == "src"
+            && checkout_dir(dir)
+            && (7..=40).contains(&rev.len())
+            && rev.bytes().all(|b| b.is_ascii_hexdigit())
+    })
+}
+
+/// Whether `path` is source of the `backtrace` crate as Cargo lays it out:
+/// `registry/src/<index>/backtrace-<semver>/src/`, a vendored
+/// `vendor/backtrace/src/` (optionally with a versioned directory), or a
+/// git-checkout (see [`is_backtrace_git_checkout`]).
+fn is_backtrace_crate_source(path: &path::Path) -> bool {
+    let versioned = |dir: &str| dir.strip_prefix("backtrace-").is_some_and(is_semver);
+    path_has_segments(path, |[registry, registry_src, _index, dir, src]| {
+        registry == "registry" && registry_src == "src" && src == "src" && versioned(dir)
+    }) || path_has_segments(path, |[vendor, dir, src]| {
+        vendor == "vendor" && src == "src" && (dir == "backtrace" || versioned(dir))
+    }) || is_backtrace_git_checkout(path)
+}
+
+/// Check if a frame is backtrace capture code, by symbol or source file.
+///
+/// A source-file match counts only for symbols that carry no crate of their
+/// own or belong to the file's crate: a foreign symbol inlined from that file
+/// is not capture machinery.
 fn is_backtrace_capture_code(name: &str, filename: Option<&path::Path>) -> bool {
-    BACKTRACE_CAPTURE_PREFIXES
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
-        || filename.is_some_and(|f| f.starts_with(oopsie_core::__private::CORE_SRC_PATH))
+    let krate = scan_crate(name).map(|(krate, _)| krate);
+    matches_symbol(name, &[], BACKTRACE_CAPTURE_SCOPED)
+        || (matches_symbol(name, &[], BACKTRACE_CRATE_SCOPED)
+            && filename.is_none_or(is_backtrace_crate_source))
+        || impl_trait_side(name).is_some_and(|(krate, path)| {
+            krate == "oopsie_core" && path.starts_with("traits::Capturable>::")
+        })
+        || filename.is_some_and(|f| {
+            f.starts_with(oopsie_core::__private::CORE_SRC_PATH)
+                || (is_backtrace_crate_source(f) && krate.is_none_or(|k| k == "backtrace"))
+        })
+}
+
+/// Frames owned by the standard-library crates: by symbol (including the
+/// trait side of an impl shim), or by sysroot source file when line-tables-only
+/// debuginfo leaves inlined frames with bare, crate-less names.
+fn is_std_owned(name: &str, filename: Option<&path::Path>) -> bool {
+    let std_crate = |krate: &str| matches!(krate, "std" | "core" | "alloc");
+    parse_symbol(name).is_some_and(|symbol| {
+        std_crate(symbol.krate) || symbol.trait_crate().is_some_and(std_crate)
+    }) || filename.is_some_and(is_sysroot_source)
 }
 
 /// Frames emitted by `#[oopsie]` expansions resolve to the macro invocation
@@ -440,17 +537,12 @@ fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
     // crate. `test` is deliberately absent: it is the harness crate, but
     // also a legal user package name, so the harness is recognized by its
     // scoped entry paths in `RUNTIME_INIT_SCOPED` instead of by ownership.
-    let std_owned = |krate: &str| matches!(krate, "std" | "core" | "alloc");
-    if let Some(symbol) = parse_symbol(name)
-        && (std_owned(symbol.krate) || symbol.trait_crate().is_some_and(std_owned))
-    {
+    if is_std_owned(name, filename) || is_runtime_init_code(name, filename) {
         return true;
     }
-    if is_runtime_init_code(name, filename) {
-        return true;
-    }
-    // The C entry shim; the user's own Rust `main` demangles crate-qualified.
-    if name == "main" {
+    // The C entry shim has no source; a user's Rust `main` can resolve to
+    // the same bare name under line-tables-only debuginfo, but keeps its file.
+    if name == "main" && filename.is_none() {
         return true;
     }
     OS_ENTRY_PREFIXES
@@ -466,7 +558,11 @@ fn is_runtime_tail_code(name: &str, filename: Option<&path::Path>) -> bool {
 ///    keeps frames below a user's own mid-stack `catch_unwind` intact —
 ///    the cost is that an unrecognized tail spelling leaks frames instead
 ///    of hiding user code.
-/// 2. Skips frames from the top that are backtrace capture machinery.
+/// 2. Skips frames from the top that are backtrace capture machinery. The
+///    cut is bounded to the leading run of non-user frames (capture,
+///    macro-generated, standard-library, unnamed, or already hidden), so a
+///    capture-classified frame below user code never hides the user frames
+///    above it, and it is skipped when it would leave no frame at all.
 pub fn error_backtrace_frame_filter(frames: &mut [Option<&BacktraceFrame>]) {
     let internal = |frame: &BacktraceFrame| match frame.name.as_ref() {
         Some(name) => is_runtime_tail_code(name, frame.filename.as_deref()),
@@ -489,16 +585,24 @@ pub fn error_backtrace_frame_filter(frames: &mut [Option<&BacktraceFrame>]) {
         }
     }
 
-    let top_cutoff_idx = frames.iter().rposition(|slot| {
-        slot.is_some_and(|frame| {
-            frame
-                .name
-                .as_ref()
-                .is_some_and(|name| is_backtrace_capture_code(name, frame.filename.as_deref()))
-                || is_generated_site_frame(frame)
-        })
-    });
-    if let Some(top) = top_cutoff_idx {
+    let mut top_cutoff_idx = None;
+    for (idx, slot) in frames.iter().enumerate() {
+        let Some(frame) = slot else { continue };
+        let Some(name) = frame.name.as_deref() else {
+            continue;
+        };
+        let filename = frame.filename.as_deref();
+        if is_backtrace_capture_code(name, filename) || is_generated_site_frame(frame) {
+            top_cutoff_idx = Some(idx);
+        } else if !is_std_owned(name, filename) {
+            break;
+        }
+    }
+    // A cut that would leave nothing means the classification misfired on
+    // user code; showing the capture frames beats an empty trace.
+    if let Some(top) = top_cutoff_idx
+        && frames[top + 1..].iter().any(Option::is_some)
+    {
         for slot in &mut frames[..=top] {
             *slot = None;
         }
@@ -1810,6 +1914,300 @@ mod tests {
         }
     }
 
+    fn frame_in(name: &str, file: Option<&str>) -> BacktraceFrame {
+        BacktraceFrame {
+            ip: 0,
+            name: Some(name.to_owned().into_boxed_str()),
+            filename: file.map(|f| path::PathBuf::from(f).into_boxed_path()),
+            lineno: file.map(|_| 1),
+            colno: None,
+        }
+    }
+
+    fn core_file(file: &str) -> String {
+        format!("{}{file}", oopsie_core::__private::CORE_SRC_PATH)
+    }
+
+    const RUSTUP_LIBRARY: &str =
+        "/home/u/.rustup/toolchains/nightly-x86_64-unknown-linux-gnu/lib/rustlib/src/rust/library";
+    const RUSTC_LIBRARY: &str = "/rustc/1303417c416e1595173d9689e7394c31e136ae95/library";
+
+    fn filtered(
+        frames: &[BacktraceFrame],
+        filter: fn(&mut [Option<&BacktraceFrame>]),
+    ) -> Vec<&str> {
+        let mut slots: Vec<Option<&BacktraceFrame>> = frames.iter().map(Some).collect();
+        filter(&mut slots);
+        kept_names(&slots)
+    }
+
+    #[test]
+    fn bottom_peel_recognizes_line_tables_only_sysroot_frames() {
+        let core_capture = core_file("backtrace.rs");
+        let fn_rs = format!("{RUSTUP_LIBRARY}/core/src/ops/function.rs");
+        let short_bt = format!("{RUSTUP_LIBRARY}/std/src/sys/backtrace.rs");
+        let rt = format!("{RUSTUP_LIBRARY}/std/src/rt.rs");
+        let fn_rs_rustc = format!("{RUSTC_LIBRARY}/core/src/ops/function.rs");
+        let panicking = format!("{RUSTC_LIBRARY}/std/src/panicking.rs");
+        let rt_rustc = format!("{RUSTC_LIBRARY}/std/src/rt.rs");
+        let frames = [
+            frame_in("capture", Some(&core_capture)),
+            frame_in("deep_user_fn", Some("/home/u/app/src/main.rs")),
+            frame_in("app", Some("/home/u/app/src/main.rs")),
+            frame_in("main", Some("/home/u/app/src/main.rs")),
+            frame_in("call_once<fn(), ()>", Some(&fn_rs)),
+            frame_in("__rust_begin_short_backtrace<fn(), ()>", Some(&short_bt)),
+            frame_in("{closure#0}<()>", Some(&rt)),
+            frame_in(
+                "<&dyn core[f1ce]::ops::function::Fn<(), Output = i32> as core[f1ce]::ops::function::FnOnce<()>>::call_once",
+                Some(&fn_rs_rustc),
+            ),
+            frame_in(
+                "std[c8fa]::panicking::catch_unwind::do_call::<isize>",
+                Some(&panicking),
+            ),
+            frame_in("std[c8fa]::rt::lang_start_internal", Some(&rt_rustc)),
+            frame_in("lang_start<()>", Some(&rt)),
+            frame_in("_main", None),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            ["deep_user_fn", "app", "main"]
+        );
+    }
+
+    #[test]
+    fn sysroot_source_paths() {
+        for file in [
+            format!("{RUSTC_LIBRARY}/std/src/rt.rs"),
+            format!("{RUSTUP_LIBRARY}/std/src/rt.rs"),
+            r"/rustc/1303417c416e1595173d9689e7394c31e136ae95/library\std\src\rt.rs".to_owned(),
+            r"C:\Users\u\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib\rustlib\src\rust\library\core\src\ops\function.rs".to_owned(),
+        ] {
+            assert!(is_sysroot_source(path::Path::new(&file)), "should match: {file}");
+        }
+        for file in [
+            "/home/u/app/src/main.rs",
+            "/home/u/rustc/library/src/lib.rs",
+            "/rustc/1303417c/library/std/src/rt.rs",
+            "/home/u/rustc/1303417c416e1595173d9689e7394c31e136ae95/libraryx/a.rs",
+            "/home/u/rust/library/src/lib.rs",
+        ] {
+            assert!(
+                !is_sysroot_source(path::Path::new(file)),
+                "must not match: {file}"
+            );
+        }
+    }
+
+    #[test]
+    fn capture_trim_stops_at_first_user_frame() {
+        let core_capture = core_file("backtrace.rs");
+        let core_traits = core_file("traits.rs");
+        let frames = [
+            frame_in(
+                "oopsie_core::backtrace::Backtrace::capture",
+                Some(&core_capture),
+            ),
+            frame_in(
+                "oopsie_core::traits::Capturable::capture",
+                Some(&core_traits),
+            ),
+            frame_in("my_app::user_fn", Some("/home/u/app/src/main.rs")),
+            frame_in("my_app::app", Some("/home/u/app/src/main.rs")),
+            frame_in("my_app::main::{closure#0}", Some("/home/u/app/src/main.rs")),
+            frame_in(
+                "oopsie_core::backtrace::with_rust_backtrace_override",
+                Some(&core_capture),
+            ),
+            frame_in("my_app::main", Some("/home/u/app/src/main.rs")),
+            frame_in("std::rt::lang_start_internal", None),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            [
+                "my_app::user_fn",
+                "my_app::app",
+                "my_app::main::{closure#0}",
+                "oopsie_core::backtrace::with_rust_backtrace_override",
+                "my_app::main",
+            ]
+        );
+    }
+
+    #[test]
+    fn capture_trim_stops_at_first_user_frame_without_debuginfo() {
+        let frames = [
+            frame_in("<backtrace[539f]::capture::Backtrace>::create", None),
+            frame_in("my_app[d2d6]::user_fn", None),
+            frame_in("my_app[d2d6]::app", None),
+            frame_in(
+                "oopsie_core[77aa]::backtrace::with_rust_backtrace_override::<my_app[d2d6]::main::{closure#0}, ()>",
+                None,
+            ),
+            frame_in("my_app[d2d6]::main", None),
+            frame_in("std[c8fa]::rt::lang_start_internal", None),
+            frame_in("_main", None),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            [
+                "my_app[d2d6]::user_fn",
+                "my_app[d2d6]::app",
+                "oopsie_core[77aa]::backtrace::with_rust_backtrace_override::<my_app[d2d6]::main::{closure#0}, ()>",
+                "my_app[d2d6]::main",
+            ]
+        );
+    }
+
+    const GENERATED_SITE_LINE: u32 = line!() + 3;
+    #[expect(unsafe_code, reason = "linkme registration emits `link_section`")]
+    mod generated_site {
+        crate::__register_generated_site!();
+    }
+
+    #[test]
+    fn capture_trim_spans_the_context_adapter() {
+        let core_capture = core_file("backtrace.rs");
+        let core_lib = core_file("lib.rs");
+        let core_traits = core_file("traits.rs");
+        let frames = [
+            frame_in(
+                "oopsie_core::backtrace::Backtrace::capture",
+                Some(&core_capture),
+            ),
+            frame_in(
+                "<&oopsie_core::__private::CaptureProbe<std::io::error::Error> as oopsie_core::__private::CaptureFromFallback>::resolve",
+                Some(&core_lib),
+            ),
+            BacktraceFrame {
+                lineno: Some(GENERATED_SITE_LINE),
+                ..frame_in(
+                    "<oopsie::ReadOopsie as oopsie_core::traits::IntoError<oopsie::ReadError>>::build_error",
+                    Some(concat!("/abs/", file!())),
+                )
+            },
+            frame_in(
+                "<core::result::Result<(), std::io::error::Error> as oopsie_core::traits::ResultExt<(), std::io::error::Error>>::context::{closure#0}",
+                Some(&core_traits),
+            ),
+            frame_in("core::result::Result<T,E>::map_err", None),
+            frame_in(
+                "<core::result::Result<(), std::io::error::Error> as oopsie_core::traits::ResultExt<(), std::io::error::Error>>::context",
+                Some(&core_traits),
+            ),
+            frame_in("my_app::read_config", Some("/home/u/app/src/main.rs")),
+            frame_in(
+                "oopsie_core::backtrace::with_rust_backtrace_override",
+                Some(&core_capture),
+            ),
+            frame_in("my_app::main", Some("/home/u/app/src/main.rs")),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            [
+                "my_app::read_config",
+                "oopsie_core::backtrace::with_rust_backtrace_override",
+                "my_app::main",
+            ]
+        );
+    }
+
+    #[test]
+    fn panic_trim_spares_user_frames_above_with_override() {
+        let core_capture = core_file("backtrace.rs");
+        let frames = [
+            frame_in("oopsie::panic_hook::install_panic_hook::{{closure}}", None),
+            frame_in("std::panicking::rust_panic_with_hook", None),
+            frame_in("core::panicking::panic_fmt", None),
+            frame_in("my_app::user_fn", Some("/home/u/app/src/main.rs")),
+            frame_in("my_app::app", Some("/home/u/app/src/main.rs")),
+            frame_in(
+                "oopsie_core::backtrace::with_rust_backtrace_override",
+                Some(&core_capture),
+            ),
+            frame_in("my_app::main", Some("/home/u/app/src/main.rs")),
+            frame_in("std::rt::lang_start_internal", None),
+        ];
+        assert_eq!(
+            filtered(&frames, panic_frame_filter),
+            [
+                "my_app::user_fn",
+                "my_app::app",
+                "oopsie_core::backtrace::with_rust_backtrace_override",
+                "my_app::main",
+            ]
+        );
+    }
+
+    #[test]
+    fn capture_trim_recognizes_bare_named_backtrace_crate_frames() {
+        let bt_file = "/home/u/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/backtrace/libunwind.rs";
+        let bt_capture = "/home/u/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src/capture.rs";
+        let core_capture = core_file("backtrace.rs");
+        let frames = [
+            frame_in("trace", Some(bt_file)),
+            frame_in("create", Some(bt_capture)),
+            frame_in("capture", Some(&core_capture)),
+            frame_in("deep_user_fn", Some("/home/u/app/src/main.rs")),
+            frame_in("main", Some("/home/u/app/src/main.rs")),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            ["deep_user_fn", "main"]
+        );
+    }
+
+    #[test]
+    fn capture_code_matches_backtrace_crate_spellings() {
+        for name in [
+            "backtrace[539f27f5b3a68716]::backtrace::trace::<backtrace[539f27f5b3a68716]::capture::{impl#4}::create::{closure#0}>",
+            "<backtrace[539f27f5b3a68716]::capture::Backtrace>::create",
+            "backtrace::backtrace::trace_unsynchronized::h0123456789abcdef",
+            "backtrace::capture::Backtrace::create::h0123456789abcdef",
+            "oopsie_core[77aa]::backtrace::Backtrace::capture",
+            "<oopsie_core[77aa]::backtrace::Backtrace as oopsie_core[77aa]::traits::Capturable>::capture",
+            "<alloc[9f]::boxed::Box<oopsie_core[77aa]::backtrace::Backtrace> as oopsie_core[77aa]::traits::Capturable>::capture",
+            "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::traits::Capturable>::capture",
+            "std::backtrace_rs::backtrace::libunwind::trace",
+            "std[c8fa]::backtrace_rs::backtrace::libunwind::trace",
+            "<std::backtrace::Backtrace>::create",
+        ] {
+            assert!(
+                is_backtrace_capture_code(name, None),
+                "should match: {name}"
+            );
+        }
+        for name in [
+            "my_app::backtrace_tool::run",
+            "backtraces::capture::run",
+            "my_app[d2d6]::capture::Backtrace::create",
+            "std::collections::HashMap::insert",
+        ] {
+            assert!(
+                !is_backtrace_capture_code(name, None),
+                "must not match: {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn bottom_peel_keeps_a_bare_user_main() {
+        let frames = [
+            frame_in("work", Some("/home/u/app/src/main.rs")),
+            frame_in("main", Some("/home/u/app/src/main.rs")),
+            frame_in(
+                "lang_start<()>",
+                Some(&format!("{RUSTUP_LIBRARY}/std/src/rt.rs")),
+            ),
+            frame_in("main", None),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            ["work", "main"]
+        );
+    }
+
     #[test]
     fn tail_only_rules_do_not_classify_per_frame_internal() {
         for name in ["std::thread::sleep", "std::sys::pal::unix::futex", "main"] {
@@ -1822,5 +2220,222 @@ mod tests {
                 "missing from tail: {name}"
             );
         }
+    }
+
+    const REGISTRY_BT: &str =
+        "/home/u/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76/src";
+
+    #[test]
+    fn backtrace_crate_source_requires_a_cargo_layout_and_full_version() {
+        for path in [
+            format!("{REGISTRY_BT}/capture.rs"),
+            "/home/u/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76-alpha.1+build.5/src/lib.rs".to_owned(),
+            "C:\\Users\\u\\.cargo\\registry\\src\\index.crates.io-1949cf8c6b5b557f\\backtrace-0.3.76\\src\\capture.rs".to_owned(),
+            "/home/u/app/vendor/backtrace/src/capture.rs".to_owned(),
+            "/home/u/app/vendor/backtrace-0.3.76/src/capture.rs".to_owned(),
+        ] {
+            assert!(
+                is_backtrace_crate_source(path::Path::new(&path)),
+                "should match: {path}"
+            );
+        }
+        for path in [
+            "/home/u/src/backtrace-2/src/main.rs",
+            "/home/u/src/backtrace-0.3.76/src/main.rs",
+            "/home/u/src/backtrace-0.3/src/main.rs",
+            "/home/u/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3/src/lib.rs",
+            "/home/u/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.76-/src/lib.rs",
+            "/home/u/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/backtrace-0.3.x/src/lib.rs",
+            "/home/u/app/vendor/backtrace-2/src/main.rs",
+            "/home/u/app/backtrace/src/capture.rs",
+        ] {
+            assert!(
+                !is_backtrace_crate_source(path::Path::new(path)),
+                "must not match: {path}"
+            );
+        }
+    }
+
+    const GIT_CHECKOUT_HASH: &str = "539f27f5b3a68716";
+    const GIT_CHECKOUT_REV: &str = "11eee54";
+    const GIT_CHECKOUT_FULL_REV: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    #[test]
+    fn backtrace_crate_source_recognizes_git_checkout_layouts() {
+        for path in [
+            format!(
+                "/home/u/.cargo/git/checkouts/backtrace-rs-{GIT_CHECKOUT_HASH}/{GIT_CHECKOUT_REV}/src/capture.rs"
+            ),
+            format!(
+                "/home/u/.cargo/git/checkouts/backtrace-{GIT_CHECKOUT_HASH}/{GIT_CHECKOUT_REV}/src/capture.rs"
+            ),
+            format!(
+                "git/checkouts/backtrace-rs-{GIT_CHECKOUT_HASH}/{GIT_CHECKOUT_REV}/src/capture.rs"
+            ),
+            format!(
+                "C:\\Users\\u\\.cargo\\git\\checkouts\\backtrace-rs-{GIT_CHECKOUT_HASH}\\{GIT_CHECKOUT_REV}\\src\\capture.rs"
+            ),
+            format!(
+                "/home/u/.cargo/git/checkouts/backtrace-rs-{GIT_CHECKOUT_HASH}/{GIT_CHECKOUT_FULL_REV}/src/capture.rs"
+            ),
+        ] {
+            assert!(
+                is_backtrace_crate_source(path::Path::new(&path)),
+                "should match: {path}"
+            );
+        }
+        for path in [
+            // Too-short checkout hash — not a real cargo short-hash.
+            format!("/home/u/.cargo/git/checkouts/backtrace-2/{GIT_CHECKOUT_REV}/src/main.rs"),
+            // Non-hex revision.
+            format!(
+                "/home/u/.cargo/git/checkouts/backtrace-rs-{GIT_CHECKOUT_HASH}/not-a-rev/src/main.rs"
+            ),
+            // Revision shorter than a short id, or longer than a full one.
+            format!(
+                "/home/u/.cargo/git/checkouts/backtrace-rs-{GIT_CHECKOUT_HASH}/11eee5/src/main.rs"
+            ),
+            format!(
+                "/home/u/.cargo/git/checkouts/backtrace-rs-{GIT_CHECKOUT_HASH}/{GIT_CHECKOUT_FULL_REV}8/src/main.rs"
+            ),
+            // A user checkout that merely shares the "backtrace-" naming, outside git/checkouts.
+            "/home/u/src/backtrace-2/src/main.rs".to_owned(),
+        ] {
+            assert!(
+                !is_backtrace_crate_source(path::Path::new(&path)),
+                "must not match: {path}"
+            );
+        }
+    }
+
+    #[test]
+    fn capture_trim_keeps_user_frames_in_a_backtrace_named_checkout() {
+        let core_capture = core_file("backtrace.rs");
+        let user = "/home/u/src/backtrace-2/src/main.rs";
+        let frames = [
+            frame_in("capture", Some(&core_capture)),
+            frame_in("deep_user_fn", Some(user)),
+            frame_in("middle", Some(user)),
+            frame_in("{closure#0}", Some(user)),
+            frame_in("main", Some(user)),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            ["deep_user_fn", "middle", "{closure#0}", "main"]
+        );
+    }
+
+    #[test]
+    fn capture_trim_recognizes_vendored_backtrace_crate_frames() {
+        for dir in [
+            "/home/u/app/vendor/backtrace/src",
+            "/home/u/app/vendor/backtrace-0.3.76/src",
+        ] {
+            let bt_file = format!("{dir}/backtrace/libunwind.rs");
+            let bt_capture = format!("{dir}/capture.rs");
+            let frames = [
+                frame_in("trace", Some(&bt_file)),
+                frame_in("create", Some(&bt_capture)),
+                frame_in("deep_user_fn", Some("/home/u/app/src/main.rs")),
+                frame_in("main", Some("/home/u/app/src/main.rs")),
+            ];
+            assert_eq!(
+                filtered(&frames, error_backtrace_frame_filter),
+                ["deep_user_fn", "main"],
+                "{dir}"
+            );
+        }
+    }
+
+    #[test]
+    fn capture_trim_recognizes_git_checkout_backtrace_crate_frames() {
+        let dir = format!(
+            "/home/u/.cargo/git/checkouts/backtrace-rs-{GIT_CHECKOUT_HASH}/{GIT_CHECKOUT_REV}/src"
+        );
+        let bt_file = format!("{dir}/backtrace/libunwind.rs");
+        let bt_capture = format!("{dir}/capture.rs");
+        let frames = [
+            frame_in("trace", Some(&bt_file)),
+            frame_in("create", Some(&bt_capture)),
+            frame_in("deep_user_fn", Some("/home/u/app/src/main.rs")),
+            frame_in("main", Some("/home/u/app/src/main.rs")),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            ["deep_user_fn", "main"]
+        );
+    }
+
+    #[test]
+    fn capture_trim_ignores_foreign_crate_symbols_in_backtrace_sources() {
+        let bt_file = format!("{REGISTRY_BT}/backtrace/libunwind.rs");
+        let frames = [
+            frame_in("trace", Some(&bt_file)),
+            frame_in("my_app::helper", Some(&bt_file)),
+            frame_in("my_app::main", Some("/home/u/app/src/main.rs")),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            ["my_app::helper", "my_app::main"]
+        );
+        assert!(is_backtrace_capture_code(
+            "backtrace::backtrace::trace_unsynchronized",
+            Some(path::Path::new(&bt_file))
+        ));
+    }
+
+    #[test]
+    fn user_crate_named_backtrace_is_trusted_by_name_only_without_a_file() {
+        let user = path::Path::new("/home/u/bt-named/src/main.rs");
+        let registry = format!("{REGISTRY_BT}/capture.rs");
+        for name in [
+            "backtrace::capture::deep_user_fn",
+            "backtrace[539f]::capture::deep_user_fn",
+            "backtrace::backtrace::helper",
+        ] {
+            assert!(!is_backtrace_capture_code(name, Some(user)), "{name}");
+            assert!(is_backtrace_capture_code(name, None), "{name}");
+            assert!(
+                is_backtrace_capture_code(name, Some(path::Path::new(&registry))),
+                "{name}"
+            );
+        }
+        let core_capture = core_file("backtrace.rs");
+        let user = "/home/u/bt-named/src/main.rs";
+        let frames = [
+            frame_in(
+                "oopsie_core::backtrace::Backtrace::capture",
+                Some(&core_capture),
+            ),
+            frame_in("backtrace::capture::deep_user_fn", Some(user)),
+            frame_in("backtrace::middle", Some(user)),
+            frame_in("backtrace::main", Some(user)),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            [
+                "backtrace::capture::deep_user_fn",
+                "backtrace::middle",
+                "backtrace::main"
+            ]
+        );
+    }
+
+    #[test]
+    fn capture_trim_never_removes_every_kept_frame() {
+        let frames = [
+            frame_in("std::backtrace_rs::backtrace::libunwind::trace", None),
+            frame_in("backtrace::capture::deep_user_fn", None),
+            frame_in("backtrace::capture::main", None),
+            frame_in("std::rt::lang_start_internal", None),
+        ];
+        assert_eq!(
+            filtered(&frames, error_backtrace_frame_filter),
+            [
+                "std::backtrace_rs::backtrace::libunwind::trace",
+                "backtrace::capture::deep_user_fn",
+                "backtrace::capture::main"
+            ]
+        );
     }
 }
