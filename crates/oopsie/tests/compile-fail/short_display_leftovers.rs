@@ -22,4 +22,11 @@ enum RedundantArgError {
     Captured { a: u32 },
 }
 
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum RedundantKeywordArgError {
+    #[oopsie("{code} {}", a, code)]
+    Coded { a: u32, code: u32 },
+}
+
 fn main() {}

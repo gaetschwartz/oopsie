@@ -23,3 +23,15 @@ note: the formatting specifier is referencing the binding already
    |
 21 |     #[oopsie("x {a}", a)]
    |                  ^
+
+error: redundant argument
+  --> tests/compile-fail/short_display_leftovers.rs:28:30
+   |
+28 |     #[oopsie("{code} {}", a, code)]
+   |                              ^^^^ help: this can be removed
+   |
+note: the formatting specifier is referencing the binding already
+  --> tests/compile-fail/short_display_leftovers.rs:28:16
+   |
+28 |     #[oopsie("{code} {}", a, code)]
+   |                ^^^^

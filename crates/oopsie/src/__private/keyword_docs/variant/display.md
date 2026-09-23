@@ -7,9 +7,10 @@ argument after the string goes to `format!`.
 
 The short form `#[oopsie("... {}", expr, key = value)]` gives `format!` every
 argument it would consume. Of the remaining arguments, `#[oopsie(...)]`
-keywords apply to the item, as if written in their own attribute; anything
-else is passed to `format!` too, and the compiler reports it. A name the string
-references stays a format argument even when it is also a keyword.
+keywords apply to the item, as if written in their own attribute, except that
+an enum-level keyword on a variant is an error; anything else is passed to
+`format!` too, and the compiler reports it. A name the string references stays
+a format argument even when it is also a keyword.
 
 ### Example
 ```

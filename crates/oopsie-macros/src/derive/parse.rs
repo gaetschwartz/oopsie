@@ -1007,7 +1007,7 @@ fn parse_short_display(input: ParseStream) -> syn::Result<ShortDisplay> {
             break;
         }
         let consumed = usage.as_ref().is_none_or(|usage| {
-            index < usage.positional || named_arg(input).is_some_and(|name| usage.references(&name))
+            index < usage.positional || arg_name(input).is_some_and(|name| usage.references(&name))
         });
         index += 1;
         match (!consumed).then(|| keyword_arg(input)).flatten() {
@@ -1021,13 +1021,13 @@ fn parse_short_display(input: ParseStream) -> syn::Result<ShortDisplay> {
     })
 }
 
-/// The name of a `name = value` arg at the head of `input`, unraw.
-fn named_arg(input: ParseStream) -> Option<String> {
+/// The name of a `name = value` or bare `name` arg at the head of `input`, unraw.
+fn arg_name(input: ParseStream) -> Option<String> {
     use syn::ext::IdentExt as _;
     let fork = input.fork();
     let ident: Ident = fork.parse().ok()?;
-    (fork.peek(Token![=]) && !fork.peek(Token![==]) && !fork.peek(Token![=>]))
-        .then(|| ident.unraw().to_string())
+    let named = fork.peek(Token![=]) && !fork.peek(Token![==]) && !fork.peek(Token![=>]);
+    (named || fork.is_empty() || fork.peek(Token![,])).then(|| ident.unraw().to_string())
 }
 
 /// Consume the arg at the head of `input` if it is a whole `#[oopsie(...)]`
