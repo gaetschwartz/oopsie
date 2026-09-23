@@ -24,7 +24,7 @@
 /// Each stands for the shape of value the keyword accepts.
 pub mod params {
     /// A bare identifier, e.g. `my_module`.
-    pub struct IdentiferOrFalse;
+    pub struct IdentifierOrFalse;
 
     /// A string literal, e.g. `"..."`.
     pub struct StringOrFalse;
@@ -82,10 +82,10 @@ pub mod helper {
 
 /// Keywords accepted in `#[oopsie(...)]` on the error type itself.
 pub mod container {
-    use super::params::{ExitCode, IdentiferOrFalse, IntOrRange, Path, StringOrFalse, Vis};
+    use super::params::{ExitCode, IdentifierOrFalse, IntOrRange, Path, StringOrFalse, Vis};
 
     #[doc = include_str!("keyword_docs/container/module.md")]
-    pub fn module(name: IdentiferOrFalse) {
+    pub fn module(name: IdentifierOrFalse) {
         _ = name;
     }
 
