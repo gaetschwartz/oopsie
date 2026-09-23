@@ -4,6 +4,26 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0] - 2026-09-23
+
+First stable release.
+
+### Changed
+
+- Renamed: backtrace control is now `backtrace::{current, current_panic,
+  set_override, clear_override, with_override}`; `get_theme`/`get_color_mode`
+  → `theme`/`color_mode`; `TracePrinter::with_filter`/`with_const_filter` →
+  `filtered`/`const_filtered`; `as_span_trace`/`into_span_trace` →
+  `as_spantrace`/`into_spantrace`; `TracingLevel` variants → `Trace`…`Unknown`
+  (serialized form unchanged); `Style::from_rgb` takes `(r, g, b)`.
+- The extension traits and `SpanTraceProvider` are sealed; `SpanTraceStatus`,
+  `TracingLevel` and `ColorMode` are `#[non_exhaustive]`.
+- Internals are no longer public: `AsErrorSource`, `oopsie_core::alloc`, and
+  `Backtrace::frames`/`as_backtrace` (use `BacktraceProvider::frames`).
+- Empty span traces no longer print a `SPANTRACE` section.
+- The `tracing` feature no longer enables `tracing-subscriber`'s `env-filter`
+  or default features.
+
 ## [0.1.0-rc.24] - 2026-09-23
 
 ### Changed
@@ -309,6 +329,7 @@ Initial release candidate.
 - Feature flags: `fancy`, `serde`, `tracing`, `chrono`, `jiff`, `extras`, and
   the nightly `unstable-*` set.
 
+[0.1.0]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0
 [0.1.0-rc.24]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.24
 [0.1.0-rc.23]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.23
 [0.1.0-rc.22]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.22
