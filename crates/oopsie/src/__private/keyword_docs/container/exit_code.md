@@ -4,7 +4,8 @@ the error is returned from `main`. Accepts an integer literal in `1..=255`
 (`0` is rejected: it denotes success, contradictory on an error path).
 
 On an enum it applies to every variant that does not set its own `exit_code`;
-on a struct it is the struct's exit code.
+on a struct it is the struct's exit code. Without one, the error reports the
+nearest exit code declared down its source chain.
 
 Forms: `exit_code = N`.
 

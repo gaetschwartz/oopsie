@@ -250,6 +250,8 @@ pub fn gen_enum_error(
     let mut help_arms = Vec::new();
     let mut exit_arms = Vec::new();
     let mut accessor_uses_source = false;
+    let mut provide_probes = MetaSet::default();
+    let mut accessor_probes = MetaSet::default();
 
     // Container-level `exit_code` is the default for every variant; a variant's
     // own `exit_code` overrides it.
@@ -276,29 +278,64 @@ pub fn gen_enum_error(
             });
         }
 
-        // provide() arm (nightly only)
+        // provide() arm (nightly only). `Request` is first-wins, so this
+        // layer's own values go ahead of the source's and its own traces
+        // after them (the deepest captured trace wins).
         let mut provide_stmts = Vec::new();
 
-        // Forward source's provide. Use `as_error_source()` to obtain a
-        // `&dyn Error` so the call doesn't need `Box<dyn Error + …>: Error`
-        // (which fails for unsized-content boxes — same reason `source()`
-        // needs the same trick).
-        if let Some(source_field) = &categorized.source {
-            let source_ident = &source_field.ident;
+        // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
+        if let Some(help_field) = &categorized.help_field {
+            let help_cfg = field_cfg_for(categorized, help_field);
+            let help_value = help_text_from_field(help_field, oopsie_path);
             provide_stmts.push(quote! {
-                ::core::error::Error::provide(#source_ident.as_error_source(), #req);
+                #(#help_cfg)*
+                #req.provide_value_with::<#oopsie_path::HelpText>(|| #help_value);
             });
+        } else if let Some(help) = &variant_attrs.help {
+            provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
+        }
+        if let Some(code) = &variant_attrs.code {
+            provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
+        }
+        // Provide the declared exit code (variant override, else container
+        // default) so it reaches a wrapper's accessor through the Provider API.
+        if let Some(exit) = variant_attrs.exit_code.or(container_exit) {
+            provide_stmts.push(gen_exit_code_provide(exit, oopsie_path, &req));
         }
 
+        let own = MetaSet {
+            code: variant_attrs.code.is_some(),
+            help: categorized.help_field.is_some() || variant_attrs.help.is_some(),
+        };
         // Provide from field-level provide attrs. A cfg-stripped field's stmt
         // must drop with it (its destructure binding already does).
         for (field_ident, provide_attr) in &categorized.provides {
             let field_cfg = field_cfg_for(categorized, field_ident);
-            let call = gen_provide_call(provide_attr, &req);
+            let call = gen_provide_call(provide_attr, &req, oopsie_path, own, &mut provide_probes);
             provide_stmts.push(quote! {
                 #(#field_cfg)*
                 #call
             });
+        }
+
+        // Provide from variant-level provide attrs (including auto error code from trace injection)
+        for provide_attr in &variant_attrs.provides {
+            provide_stmts.push(gen_provide_call(
+                provide_attr,
+                &req,
+                oopsie_path,
+                own,
+                &mut provide_probes,
+            ));
+        }
+
+        if let Some(source_field) = &categorized.source {
+            provide_stmts.push(gen_source_provide_forward(
+                &source_field.ident,
+                variant_attrs.transparent,
+                &req,
+                oopsie_path,
+            ));
         }
 
         // Provide backtrace/spantrace refs from detected fields. An empty
@@ -347,31 +384,6 @@ pub fn gen_enum_error(
             }
         }
 
-        // Provide from variant-level provide attrs (including auto error code from trace injection)
-        for provide_attr in &variant_attrs.provides {
-            provide_stmts.push(gen_provide_call(provide_attr, &req));
-        }
-
-        // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
-        if let Some(help_field) = &categorized.help_field {
-            let help_cfg = field_cfg_for(categorized, help_field);
-            let help_value = help_text_from_field(help_field, oopsie_path);
-            provide_stmts.push(quote! {
-                #(#help_cfg)*
-                #req.provide_value_with::<#oopsie_path::HelpText>(|| #help_value);
-            });
-        } else if let Some(help) = &variant_attrs.help {
-            provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
-        }
-        if let Some(code) = &variant_attrs.code {
-            provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
-        }
-        // Provide the declared exit code (variant override, else container
-        // default) so it reaches a wrapper's accessor through the Provider API.
-        if let Some(exit) = variant_attrs.exit_code.or(container_exit) {
-            provide_stmts.push(gen_exit_code_provide(exit, oopsie_path, &req));
-        }
-
         let field_binds = collect_provide_field_binds(categorized);
         provide_arms.push(quote! {
             #(#cfg_attrs)*
@@ -414,19 +426,27 @@ pub fn gen_enum_error(
         } else {
             (None, None)
         };
+        let bt_stripped = trace_accessor_body(
+            None,
+            src_access.clone(),
+            bt_probe.clone(),
+            &bt_fn,
+            oopsie_path,
+        );
         if let Some(body) =
             trace_accessor_body(bt_own, src_access.clone(), bt_probe, &bt_fn, oopsie_path)
         {
             let binds = accessor_pattern_binds(bt_bind, source_ident);
-            // A cfg-stripped own-trace field takes its whole arm with it; the
-            // trailing `_ => None` covers the variant then. Auto-injected
-            // (mangled) trace fields carry no user cfg, so this is empty there.
+            // Auto-injected (mangled) trace fields carry no user cfg, so this is
+            // empty there.
             let field_cfg = trace_field_cfg(categorized, bt_bind);
-            bt_arms.push(quote! {
-                #(#cfg_attrs)*
-                #(#field_cfg)*
-                Self::#variant_ident { #(#binds,)* .. } => #body,
-            });
+            bt_arms.push(enum_accessor_arms(
+                cfg_attrs,
+                variant_ident,
+                field_cfg,
+                (&binds, body),
+                source_ident.zip(bt_stripped),
+            ));
             accessor_uses_source |= source_ident.is_some();
         }
 
@@ -443,16 +463,25 @@ pub fn gen_enum_error(
         } else {
             (None, None)
         };
+        let st_stripped = trace_accessor_body(
+            None,
+            src_access.clone(),
+            st_probe.clone(),
+            &st_fn,
+            oopsie_path,
+        );
         if let Some(body) =
             trace_accessor_body(st_own, src_access.clone(), st_probe, &st_fn, oopsie_path)
         {
             let binds = accessor_pattern_binds(st_bind, source_ident);
             let field_cfg = trace_field_cfg(categorized, st_bind);
-            st_arms.push(quote! {
-                #(#cfg_attrs)*
-                #(#field_cfg)*
-                Self::#variant_ident { #(#binds,)* .. } => #body,
-            });
+            st_arms.push(enum_accessor_arms(
+                cfg_attrs,
+                variant_ident,
+                field_cfg,
+                (&binds, body),
+                source_ident.zip(st_stripped),
+            ));
             accessor_uses_source |= source_ident.is_some();
         }
 
@@ -467,14 +496,17 @@ pub fn gen_enum_error(
             .map(|lf| quote! { *#lf });
         let loc_source = source_ident.filter(|_| variant_attrs.transparent || forward.location);
         let loc_probe = loc_source.map(|s| gen_diag_forward(s, "fwd_location", oopsie_path));
+        let loc_stripped = location_accessor_body(None, loc_probe.clone());
         if let Some(body) = location_accessor_body(loc_own, loc_probe) {
             let binds = accessor_pattern_binds(categorized.location_field.as_ref(), loc_source);
             let field_cfg = trace_field_cfg(categorized, categorized.location_field.as_ref());
-            loc_arms.push(quote! {
-                #(#cfg_attrs)*
-                #(#field_cfg)*
-                Self::#variant_ident { #(#binds,)* .. } => #body,
-            });
+            loc_arms.push(enum_accessor_arms(
+                cfg_attrs,
+                variant_ident,
+                field_cfg,
+                (&binds, body),
+                loc_source.zip(loc_stripped),
+            ));
         }
 
         // Error code: user-specified, then auto-generated from provide attrs,
@@ -496,45 +528,23 @@ pub fn gen_enum_error(
                     Self::#variant_ident { #(#code_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::ErrorCode::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*))),
                 });
             }
-        } else if let Some((field_ident, provide_attr)) = categorized
-            .provides
-            .iter()
-            .map(|(f, p)| (Some(f), p))
-            .chain(variant_attrs.provides.iter().map(|p| (None, p)))
-            .find(|(_, p)| is_error_code_provide(p, oopsie_path))
-        {
-            let expr = &provide_attr.expr;
-            // The provide expr may reference fields (it gets the same bindings
-            // inside the generated `provide()`), so bind them here too.
-            let binds = collect_provide_field_binds(categorized);
-            // A ref-form provide evaluates to `&ErrorCode`; the accessor
-            // returns it by value.
-            let value = if provide_attr.is_ref() {
-                quote! { ::core::option::Option::Some(::core::clone::Clone::clone(#expr)) }
-            } else {
-                quote! { ::core::option::Option::Some(#expr) }
-            };
-            // A field-level provide's arm names the field, so a cfg-stripped
-            // field takes the whole arm with it (mirroring the help arm above).
-            let field_cfg = trace_field_cfg(categorized, field_ident);
+        } else if let Some(arm) = enum_provided_meta_arm(
+            variant_ident,
+            categorized,
+            &variant_attrs.provides,
+            variant_attrs.transparent,
+            MetaType::ErrorCode,
+            &mut accessor_probes,
+            oopsie_path,
+        ) {
             code_arms.push(quote! {
                 #(#cfg_attrs)*
-                #(#field_cfg)*
-                #[allow(unused_variables)]
-                Self::#variant_ident { #(#binds)* .. } => #value,
-            });
-        } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
-        {
-            let source_ident = &source_field.ident;
-            let fwd = gen_diag_forward(source_ident, "fwd_code", oopsie_path);
-            code_arms.push(quote! {
-                #(#cfg_attrs)*
-                Self::#variant_ident { #source_ident, .. } => #fwd,
+                #arm
             });
         }
 
-        // Help text: dynamic field, then static attribute, then (for
-        // `transparent`) forwarded from the source.
+        // Help text: dynamic field, then static attribute, then a `HelpText`
+        // provide, then (for `transparent`) forwarded from the source.
         if let Some(help_field) = &categorized.help_field {
             // The body interpolates the help field, so a cfg-stripped help field
             // takes the whole arm with it; the trailing `_ => None` arm covers
@@ -566,28 +576,38 @@ pub fn gen_enum_error(
                     Self::#variant_ident { #(#help_field_binds)* .. } => ::core::option::Option::Some(#oopsie_path::HelpText::from(#oopsie_path::__private::alloc::format!(#fmt #(, #args)*))),
                 });
             }
-        } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
-        {
-            let source_ident = &source_field.ident;
-            let fwd = gen_diag_forward(source_ident, "fwd_help", oopsie_path);
+        } else if let Some(arm) = enum_provided_meta_arm(
+            variant_ident,
+            categorized,
+            &variant_attrs.provides,
+            variant_attrs.transparent,
+            MetaType::HelpText,
+            &mut accessor_probes,
+            oopsie_path,
+        ) {
             help_arms.push(quote! {
                 #(#cfg_attrs)*
-                Self::#variant_ident { #source_ident, .. } => #fwd,
+                #arm
             });
         }
 
-        // Exit code: variant override, then container default, then (for
-        // `transparent`) forwarded from the source.
+        // Exit code: variant override, then container default, then the
+        // nearest one declared down the source chain.
         if let Some(exit) = variant_attrs.exit_code.or(container_exit) {
             let some = exit_code_some(exit, oopsie_path);
             exit_arms.push(quote! {
                 #(#cfg_attrs)*
                 Self::#variant_ident { .. } => #some,
             });
-        } else if let (true, Some(source_field)) = (variant_attrs.transparent, &categorized.source)
-        {
+        } else if let Some(source_field) = &categorized.source {
             let source_ident = &source_field.ident;
-            let fwd = gen_diag_forward(source_ident, "fwd_exit_code", oopsie_path);
+            let fwd = gen_source_meta_forward(
+                source_ident,
+                &quote! { #source_ident.as_error_source() },
+                "source_exit_code",
+                "fwd_exit_code",
+                oopsie_path,
+            );
             exit_arms.push(quote! {
                 #(#cfg_attrs)*
                 Self::#variant_ident { #source_ident, .. } => #fwd,
@@ -612,10 +632,12 @@ pub fn gen_enum_error(
             quote! {}
         } else {
             let lt = provide_lifetime(&input.generics);
+            let probe_items = provide_probes.probe_items(oopsie_path);
             quote! {
                 #[allow(unused_variables)]
                 fn provide<#lt>(&#lt self, #req: &mut ::core::error::Request<#lt>) {
                     use #oopsie_path::AsErrorSource as _;
+                    #probe_items
                     match self {
                         #(#provide_arms)*
                         #cfg_fallback_arm
@@ -673,11 +695,22 @@ pub fn gen_enum_error(
         }
     };
 
+    let code_probe_items = MetaSet {
+        help: false,
+        ..accessor_probes
+    }
+    .probe_items(oopsie_path);
+    let help_probe_items = MetaSet {
+        code: false,
+        ..accessor_probes
+    }
+    .probe_items(oopsie_path);
     let code_method = if code_arms.is_empty() {
         quote! {}
     } else {
         quote! {
             fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
+                #code_probe_items
                 match self {
                     #(#code_arms)*
                     _ => ::core::option::Option::None,
@@ -691,6 +724,7 @@ pub fn gen_enum_error(
     } else {
         quote! {
             fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
+                #help_probe_items
                 match self {
                     #(#help_arms)*
                     _ => ::core::option::Option::None,
@@ -794,26 +828,61 @@ pub fn gen_struct_error(
         quote! { ::core::option::Option::None }
     };
 
+    // Own values, then the source's, then own traces (see the enum arm).
     let mut provide_stmts = Vec::new();
 
-    // Forward source's provide (uses destructured field name). Same
-    // `as_error_source()` trick as `source()` so boxed-dyn fields compile.
-    if let Some(source_field) = &categorized.source {
-        let source_ident = &source_field.ident;
+    // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
+    if let Some(help_field) = &categorized.help_field {
+        let help_cfg = field_cfg_for(categorized, help_field);
+        let help_value = help_text_from_field(help_field, oopsie_path);
         provide_stmts.push(quote! {
-            ::core::error::Error::provide(#source_ident.as_error_source(), #req);
+            #(#help_cfg)*
+            #req.provide_value_with::<#oopsie_path::HelpText>(|| #help_value);
         });
+    } else if let Some(help) = &variant_attrs.help {
+        provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
+    }
+    if let Some(code) = &variant_attrs.code {
+        provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
+    }
+    if let Some(exit) = attrs.container.exit_code {
+        provide_stmts.push(gen_exit_code_provide(exit, oopsie_path, &req));
     }
 
+    let own = MetaSet {
+        code: variant_attrs.code.is_some(),
+        help: categorized.help_field.is_some() || variant_attrs.help.is_some(),
+    };
+    let mut provide_probes = MetaSet::default();
     // Field-level provides. A cfg-stripped field's stmt must drop with it (its
     // destructure binding already does).
     for (field_ident, provide_attr) in &categorized.provides {
         let field_cfg = field_cfg_for(categorized, field_ident);
-        let call = gen_provide_call(provide_attr, &req);
+        let call = gen_provide_call(provide_attr, &req, oopsie_path, own, &mut provide_probes);
         provide_stmts.push(quote! {
             #(#field_cfg)*
             #call
         });
+    }
+
+    // Struct-level provides (from #[oopsie(provide(...))] on the struct)
+    for provide_attr in &attrs.provides {
+        provide_stmts.push(gen_provide_call(
+            provide_attr,
+            &req,
+            oopsie_path,
+            own,
+            &mut provide_probes,
+        ));
+    }
+
+    if let Some(source_field) = &categorized.source {
+        provide_stmts.push(gen_source_provide_forward(
+            &source_field.ident,
+            variant_attrs.transparent,
+            &req,
+            oopsie_path,
+        ));
     }
 
     // Provide backtrace/spantrace refs from detected fields. An empty trace
@@ -862,29 +931,6 @@ pub fn gen_struct_error(
         }
     }
 
-    // Struct-level provides (from #[oopsie(provide(...))] on the struct)
-    for provide_attr in &attrs.provides {
-        provide_stmts.push(gen_provide_call(provide_attr, &req));
-    }
-
-    // Dynamic help field takes precedence; the provide path and the stable accessor must agree.
-    if let Some(help_field) = &categorized.help_field {
-        let help_cfg = field_cfg_for(categorized, help_field);
-        let help_value = help_text_from_field(help_field, oopsie_path);
-        provide_stmts.push(quote! {
-            #(#help_cfg)*
-            #req.provide_value_with::<#oopsie_path::HelpText>(|| #help_value);
-        });
-    } else if let Some(help) = &variant_attrs.help {
-        provide_stmts.push(gen_help_provide(help, oopsie_path, &req)?);
-    }
-    if let Some(code) = &variant_attrs.code {
-        provide_stmts.push(gen_code_provide(code, oopsie_path, &req)?);
-    }
-    if let Some(exit) = attrs.container.exit_code {
-        provide_stmts.push(gen_exit_code_provide(exit, oopsie_path, &req));
-    }
-
     // Destructure self to bring field names into scope (same pattern as enum match arms)
     let provide_field_binds = collect_provide_field_binds(categorized);
     let destructure = if provide_stmts.is_empty() || provide_field_binds.is_empty() {
@@ -901,10 +947,12 @@ pub fn gen_struct_error(
             quote! {}
         } else {
             let lt = provide_lifetime(&input.generics);
+            let probe_items = provide_probes.probe_items(oopsie_path);
             quote! {
                 #[allow(unused_variables)]
                 fn provide<#lt>(&#lt self, #req: &mut ::core::error::Request<#lt>) {
                     use #oopsie_path::AsErrorSource as _;
+                    #probe_items
                     #destructure
                     #(#provide_stmts)*
                 }
@@ -1042,52 +1090,23 @@ pub fn gen_struct_error(
             }
         }
     } else {
-        // An ErrorCode provide may sit on a field or on the container; field-level
-        // is chained first to mirror `provide()`'s first-wins ordering.
-        let code_provide = categorized
-            .provides
-            .iter()
-            .map(|(f, p)| (Some(f), p))
-            .chain(attrs.provides.iter().map(|p| (None, p)))
-            .find(|(_, p)| is_error_code_provide(p, oopsie_path));
-        if let Some((field_ident, provide_attr)) = code_provide {
-            let expr = &provide_attr.expr;
-            // The provide expr may reference fields (it gets the same bindings
-            // inside the generated `provide()`), so destructure them here too.
-            let field_binds = collect_provide_field_binds(categorized);
-            let code_destructure = if field_binds.is_empty() {
-                quote! {}
-            } else {
-                quote! { #[allow(unused_variables)] let Self { #(#field_binds)* .. } = self; }
-            };
-            // A ref-form provide evaluates to `&ErrorCode`; the accessor
-            // returns it by value.
-            let value = if provide_attr.is_ref() {
-                quote! { ::core::option::Option::Some(::core::clone::Clone::clone(#expr)) }
-            } else {
-                quote! { ::core::option::Option::Some(#expr) }
-            };
-            // A field-level provide's body names the field, so a cfg-stripped
-            // field takes the whole accessor with it, degrading to the trait
-            // default (mirroring the help accessor above).
-            let field_cfg = trace_field_cfg(categorized, field_ident);
+        struct_provided_meta_body(
+            categorized,
+            &attrs.provides,
+            variant_attrs.transparent,
+            MetaType::ErrorCode,
+            oopsie_path,
+        )
+        .map(|body| {
+            let field_cfg = meta_field_cfg(categorized, MetaType::ErrorCode);
             quote! {
                 #(#field_cfg)*
                 fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
-                    #code_destructure
-                    #value
+                    #body
                 }
             }
-        } else if let (true, Some(s)) = (variant_attrs.transparent, struct_source) {
-            let fwd = gen_diag_forward(quote! { &self.#s }, "fwd_code", oopsie_path);
-            quote! {
-                fn oopsie_error_code(&self) -> ::core::option::Option<#oopsie_path::ErrorCode> {
-                    #fwd
-                }
-            }
-        } else {
-            quote! {}
-        }
+        })
+        .unwrap_or_default()
     };
 
     // Dynamic help field takes precedence over static attribute
@@ -1130,11 +1149,18 @@ pub fn gen_struct_error(
                 }
             }
         }
-    } else if let (true, Some(s)) = (variant_attrs.transparent, struct_source) {
-        let fwd = gen_diag_forward(quote! { &self.#s }, "fwd_help", oopsie_path);
+    } else if let Some(body) = struct_provided_meta_body(
+        categorized,
+        &attrs.provides,
+        variant_attrs.transparent,
+        MetaType::HelpText,
+        oopsie_path,
+    ) {
+        let field_cfg = meta_field_cfg(categorized, MetaType::HelpText);
         quote! {
+            #(#field_cfg)*
             fn oopsie_help_text(&self) -> ::core::option::Option<#oopsie_path::HelpText> {
-                #fwd
+                #body
             }
         }
     } else {
@@ -1142,8 +1168,8 @@ pub fn gen_struct_error(
     };
 
     // A struct's single `#[oopsie(...)]` list mixes container and variant roles,
-    // so `exit_code` is parsed on the flattened container; a `transparent`
-    // struct with no own code forwards the source's.
+    // so `exit_code` is parsed on the flattened container; a struct with no own
+    // code forwards the nearest one down the source chain.
     let exit_method = if let Some(exit) = attrs.container.exit_code {
         let some = exit_code_some(exit, oopsie_path);
         quote! {
@@ -1151,8 +1177,14 @@ pub fn gen_struct_error(
                 #some
             }
         }
-    } else if let (true, Some(s)) = (variant_attrs.transparent, struct_source) {
-        let fwd = gen_diag_forward(quote! { &self.#s }, "fwd_exit_code", oopsie_path);
+    } else if let Some(s) = struct_source {
+        let fwd = gen_source_meta_forward(
+            quote! { &self.#s },
+            &quote! { self.#s.as_error_source() },
+            "source_exit_code",
+            "fwd_exit_code",
+            oopsie_path,
+        );
         quote! {
             fn oopsie_exit_code(&self) -> ::core::option::Option<::core::num::NonZeroU8> {
                 #fwd
@@ -1245,6 +1277,51 @@ fn gen_code_provide(
     }
 }
 
+/// Forward a `provide` request to the source (through `as_error_source()`, so
+/// a boxed-dyn field compiles as in `source()`). A layer that renders its own
+/// message keeps the source's code and help out of the request: they would
+/// label a message this layer replaced. Everything else, including traces and
+/// user `provide(...)` values, still passes through.
+fn gen_source_provide_forward(
+    source_ident: &syn::Ident,
+    transparent: bool,
+    req: &syn::Ident,
+    oopsie_path: &syn::Path,
+) -> TokenStream2 {
+    let forward = quote! {
+        ::core::error::Error::provide(#source_ident.as_error_source(), #req);
+    };
+    if transparent {
+        forward
+    } else {
+        quote! {
+            if !#oopsie_path::__private::requests_code_or_help(#req) {
+                #forward
+            }
+        }
+    }
+}
+
+/// A code/help/exit accessor body that defers to the source: the Provider-API
+/// lookup (`source_fn`), then the stable `DiagProbe` forwarder (`probe_method`)
+/// on `target`, so the accessor agrees with the generated `provide`.
+fn gen_source_meta_forward(
+    target: impl quote::ToTokens,
+    src_access: &TokenStream2,
+    source_fn: &str,
+    probe_method: &str,
+    oopsie_path: &syn::Path,
+) -> TokenStream2 {
+    let source_fn = format_ident!("{source_fn}");
+    let probe = gen_diag_forward(target, probe_method, oopsie_path);
+    quote! {
+        {
+            use #oopsie_path::AsErrorSource as _;
+            #oopsie_path::__private::#source_fn(#src_access).or_else(|| #probe)
+        }
+    }
+}
+
 /// Provide the declared exit code as a `NonZeroU8`, so a type-erased wrapper
 /// (e.g. `Welp`) can surface the origin-most code through the Provider API.
 fn gen_exit_code_provide(
@@ -1258,46 +1335,286 @@ fn gen_exit_code_provide(
     }
 }
 
-fn gen_provide_call(attr: &ProvideAttr, req: &syn::Ident) -> TokenStream2 {
+/// A `ref` provide of oopsie's `ErrorCode`/`HelpText` is also provided by
+/// value, since the stable accessors and oopsie's own lookups ask for these by
+/// value. On a layer with its `own` code/help, that value wins, so a `ref`
+/// provide of the same type is dropped.
+fn gen_provide_call(
+    attr: &ProvideAttr,
+    req: &syn::Ident,
+    oopsie_path: &syn::Path,
+    own: MetaSet,
+    probes: &mut MetaSet,
+) -> TokenStream2 {
     let ty = &attr.provided_type;
     let expr = &attr.expr;
-    if attr.is_ref() {
-        quote! { #req.provide_ref_with::<#ty>(|| #expr); }
-    } else {
-        quote! { #req.provide_value_with::<#ty>(|| #expr); }
+    if !attr.is_ref() {
+        return quote! { #req.provide_value_with::<#ty>(|| #expr); };
+    }
+    let by_ref = quote! { #req.provide_ref_with::<#ty>(|| #expr); };
+    let Some(meta) = MetaType::named_by(attr) else {
+        return by_ref;
+    };
+    probes.mark(meta);
+    let probe = meta.probe(ty);
+    if own.contains(meta) {
+        return quote! {
+            if #probe.is_none() {
+                #by_ref
+            }
+        };
+    }
+    let meta_ty = meta.path(oopsie_path);
+    quote! {
+        #by_ref
+        if let ::core::option::Option::Some(__oopsie_meta) = #probe {
+            #req.provide_value_with::<#meta_ty>(|| __oopsie_meta(#expr));
+        }
     }
 }
 
-/// Check if a provide attr is for oopsie's `ErrorCode` (used to surface the
-/// auto-generated code from trace injection, and a user's own ErrorCode
-/// provide, through `oopsie_error_code()`).
-///
-/// Matches a bare `ErrorCode` (the form trace injection emits) or one
-/// qualified by exactly `oopsie_path`, the resolved crate path (honoring a
-/// renamed dependency via `path = "..."`). A foreign `my_crate::ErrorCode` is
-/// deliberately not matched, so it is not hijacked into `oopsie_error_code()`.
-fn is_error_code_provide(attr: &ProvideAttr, oopsie_path: &syn::Path) -> bool {
-    let Type::Path(type_path) = &attr.provided_type else {
-        return false;
-    };
-    let segments = &type_path.path.segments;
-    let Some(last) = segments.last() else {
-        return false;
-    };
-    if last.ident != "ErrorCode" {
-        return false;
-    }
-    match segments.len() {
-        1 => true,
-        n => {
-            n - 1 == oopsie_path.segments.len()
-                && segments
-                    .iter()
-                    .take(n - 1)
-                    .zip(oopsie_path.segments.iter())
-                    .all(|(a, b)| a.ident == b.ident)
+/// An oopsie diagnostic type a `provide(...)` can supply, which the stable
+/// accessors surface.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MetaType {
+    ErrorCode,
+    HelpText,
+}
+
+impl MetaType {
+    const ALL: [Self; 2] = [Self::ErrorCode, Self::HelpText];
+
+    const fn ident(self) -> &'static str {
+        match self {
+            Self::ErrorCode => "ErrorCode",
+            Self::HelpText => "HelpText",
         }
     }
+
+    fn path(self, oopsie_path: &syn::Path) -> TokenStream2 {
+        let ident = format_ident!("{}", self.ident());
+        quote! { #oopsie_path::#ident }
+    }
+
+    /// The meta type whose name `attr`'s type is spelled with. A proc macro
+    /// can't resolve types, so this only selects candidates: [`Self::probe`]
+    /// decides whether the type really is oopsie's.
+    fn named_by(attr: &ProvideAttr) -> Option<Self> {
+        let Type::Path(type_path) = &attr.provided_type else {
+            return None;
+        };
+        let last = type_path.path.segments.last()?;
+        Self::ALL.into_iter().find(|m| last.ident == m.ident())
+    }
+
+    /// `Some(clone fn)` when `ty` is oopsie's type, else `None`, resolved at
+    /// the type level; needs [`MetaSet::probe_items`] in scope.
+    fn probe(self, ty: &Type) -> TokenStream2 {
+        let probe = format_ident!("__OopsieProbe{}", self.ident());
+        quote! { #probe::<#ty>(::core::marker::PhantomData).get() }
+    }
+
+    /// Block-scope items behind [`Self::probe`]: the inherent `get` on the
+    /// probe at oopsie's type outranks the blanket trait fallback, so only that
+    /// exact type yields `Some`.
+    fn probe_items(self, oopsie_path: &syn::Path) -> TokenStream2 {
+        let probe = format_ident!("__OopsieProbe{}", self.ident());
+        let fallback = format_ident!("__OopsieProbe{}Fallback", self.ident());
+        let ty = self.path(oopsie_path);
+        quote! {
+            #[allow(dead_code)]
+            struct #probe<T: ?::core::marker::Sized>(::core::marker::PhantomData<T>);
+            #[allow(dead_code)]
+            impl #probe<#ty> {
+                fn get(&self) -> ::core::option::Option<fn(&#ty) -> #ty> {
+                    ::core::option::Option::Some(<#ty as ::core::clone::Clone>::clone)
+                }
+            }
+            #[allow(dead_code)]
+            trait #fallback<T: ?::core::marker::Sized> {
+                fn get(&self) -> ::core::option::Option<fn(&T) -> #ty> {
+                    ::core::option::Option::None
+                }
+            }
+            impl<T: ?::core::marker::Sized> #fallback<T> for #probe<T> {}
+        }
+    }
+}
+
+/// A set of [`MetaType`]s.
+#[derive(Default, Clone, Copy)]
+struct MetaSet {
+    code: bool,
+    help: bool,
+}
+
+impl MetaSet {
+    const fn mark(&mut self, meta: MetaType) {
+        match meta {
+            MetaType::ErrorCode => self.code = true,
+            MetaType::HelpText => self.help = true,
+        }
+    }
+
+    const fn contains(self, meta: MetaType) -> bool {
+        match meta {
+            MetaType::ErrorCode => self.code,
+            MetaType::HelpText => self.help,
+        }
+    }
+
+    /// The probe items of each member (see [`MetaType::probe_items`]).
+    fn probe_items(self, oopsie_path: &syn::Path) -> TokenStream2 {
+        let code = self
+            .code
+            .then(|| MetaType::ErrorCode.probe_items(oopsie_path));
+        let help = self
+            .help
+            .then(|| MetaType::HelpText.probe_items(oopsie_path));
+        quote! { #code #help }
+    }
+}
+
+/// Every `provide(...)` named like `meta`: field-level ahead of `outer`
+/// (variant/container), mirroring `provide()`'s first-wins ordering.
+fn meta_candidates<'a>(
+    categorized: &'a CategorizedFields,
+    outer: &'a [ProvideAttr],
+    meta: MetaType,
+) -> Vec<&'a ProvideAttr> {
+    categorized
+        .provides
+        .iter()
+        .map(|(_, p)| p)
+        .chain(outer)
+        .filter(|p| MetaType::named_by(p) == Some(meta))
+        .collect()
+}
+
+/// An accessor value for `meta`: the first candidate whose type is oopsie's,
+/// else `fallback`. `None` when there is nothing to try.
+fn provided_meta_body(
+    candidates: &[&ProvideAttr],
+    meta: MetaType,
+    fallback: Option<TokenStream2>,
+) -> Option<TokenStream2> {
+    let mut tries = candidates
+        .iter()
+        .map(|p| {
+            let probe = meta.probe(&p.provided_type);
+            let expr = &p.expr;
+            let arg = if p.is_ref() {
+                quote! { #expr }
+            } else {
+                quote! { &(#expr) }
+            };
+            quote! { #probe.map(|__oopsie_meta| __oopsie_meta(#arg)) }
+        })
+        .chain(fallback);
+    let first = tries.next()?;
+    Some(tries.fold(first, |acc, next| quote! { #acc.or_else(|| #next) }))
+}
+
+/// The `transparent` forward of `meta` to `source` (a `&Source` expression).
+fn meta_source_forward(
+    meta: MetaType,
+    target: impl quote::ToTokens,
+    src_access: &TokenStream2,
+    oopsie_path: &syn::Path,
+) -> TokenStream2 {
+    let (source_fn, probe_method) = match meta {
+        MetaType::ErrorCode => ("source_error_code", "fwd_code"),
+        MetaType::HelpText => ("source_help_text", "fwd_help"),
+    };
+    gen_source_meta_forward(target, src_access, source_fn, probe_method, oopsie_path)
+}
+
+/// An enum accessor arm for `meta` from its `provide(...)` candidates, then
+/// (for `transparent`) the source's value. `None` when there is neither.
+fn enum_provided_meta_arm(
+    variant_ident: &syn::Ident,
+    categorized: &CategorizedFields,
+    outer: &[ProvideAttr],
+    transparent: bool,
+    meta: MetaType,
+    probes: &mut MetaSet,
+    oopsie_path: &syn::Path,
+) -> Option<TokenStream2> {
+    let candidates = meta_candidates(categorized, outer, meta);
+    let source_ident = categorized
+        .source
+        .as_ref()
+        .filter(|_| transparent)
+        .map(|s| &s.ident);
+    let fwd = source_ident
+        .map(|s| meta_source_forward(meta, s, &quote! { #s.as_error_source() }, oopsie_path));
+    if candidates.is_empty() {
+        let (s, fwd) = source_ident.zip(fwd)?;
+        return Some(quote! {
+            Self::#variant_ident { #s, .. } => #fwd,
+        });
+    }
+    probes.mark(meta);
+    // The provide exprs may reference fields, bound as in `provide()`.
+    let binds = collect_provide_field_binds(categorized);
+    let value = provided_meta_body(&candidates, meta, fwd)?;
+    let field_cfg = meta_field_cfg(categorized, meta);
+    Some(quote! {
+        #(#field_cfg)*
+        #[allow(unused_variables)]
+        Self::#variant_ident { #(#binds)* .. } => #value,
+    })
+}
+
+/// The cfg attrs of the first field-level `provide(...)` named like `meta`: a
+/// cfg-stripped field takes the accessor arm or method naming it along.
+fn meta_field_cfg(categorized: &CategorizedFields, meta: MetaType) -> &[syn::Attribute] {
+    let ident = categorized
+        .provides
+        .iter()
+        .find(|(_, p)| MetaType::named_by(p) == Some(meta))
+        .map(|(f, _)| f);
+    trace_field_cfg(categorized, ident)
+}
+
+/// A struct accessor body for `meta`, like [`enum_provided_meta_arm`].
+fn struct_provided_meta_body(
+    categorized: &CategorizedFields,
+    outer: &[ProvideAttr],
+    transparent: bool,
+    meta: MetaType,
+    oopsie_path: &syn::Path,
+) -> Option<TokenStream2> {
+    let candidates = meta_candidates(categorized, outer, meta);
+    let fwd = categorized
+        .source
+        .as_ref()
+        .filter(|_| transparent)
+        .map(|s| {
+            let s = &s.ident;
+            meta_source_forward(
+                meta,
+                quote! { &self.#s },
+                &quote! { self.#s.as_error_source() },
+                oopsie_path,
+            )
+        });
+    if candidates.is_empty() {
+        return fwd;
+    }
+    let items = meta.probe_items(oopsie_path);
+    let field_binds = collect_provide_field_binds(categorized);
+    let destructure = if field_binds.is_empty() {
+        quote! {}
+    } else {
+        quote! { #[allow(unused_variables)] let Self { #(#field_binds)* .. } = self; }
+    };
+    let value = provided_meta_body(&candidates, meta, fwd)?;
+    Some(quote! {
+        #items
+        #destructure
+        #value
+    })
 }
 
 /// Field-binding patterns (`name,`) for the fields a `provide(...)` expr can
@@ -1359,6 +1676,36 @@ fn trace_field_cfg<'a>(
 fn negated_existence_cfg(field_cfg: &[syn::Attribute]) -> Option<TokenStream2> {
     let pred = super::parse::existence_pred(field_cfg)?;
     Some(quote! { #[cfg(not(#pred))] })
+}
+
+/// An enum accessor arm gated on its own field's cfg, plus the complementary
+/// source-only arm (`stripped`: the source binding and its body) when that cfg
+/// can strip the field, so the variant keeps forwarding its source's value
+/// instead of falling through to `_ => None`. The enum twin of
+/// [`gen_struct_trace_method`].
+fn enum_accessor_arms(
+    cfg_attrs: &[syn::Attribute],
+    variant_ident: &syn::Ident,
+    field_cfg: &[syn::Attribute],
+    (binds, body): (&[syn::Ident], TokenStream2),
+    stripped: Option<(&syn::Ident, TokenStream2)>,
+) -> TokenStream2 {
+    let full = quote! {
+        #(#cfg_attrs)*
+        #(#field_cfg)*
+        Self::#variant_ident { #(#binds,)* .. } => #body,
+    };
+    let complement =
+        negated_existence_cfg(field_cfg)
+            .zip(stripped)
+            .map(|(not_cfg, (source, stripped_body))| {
+                quote! {
+                    #(#cfg_attrs)*
+                    #not_cfg
+                    Self::#variant_ident { #source, .. } => #stripped_body,
+                }
+            });
+    quote! { #full #complement }
 }
 
 /// A struct trace accessor that forwards a cfg-stripped own field's arm to a

@@ -3,7 +3,8 @@ Sets the process exit code for this variant, surfaced via
 the error is returned from `main`. Accepts an integer literal in `1..=255`
 (`0` is rejected: it denotes success, contradictory on an error path). A
 container-level `exit_code` is the default for every variant; a variant's own
-value overrides it.
+value overrides it. A variant with neither reports the nearest exit code
+declared down its source chain.
 
 Forms: `exit_code = N`.
 

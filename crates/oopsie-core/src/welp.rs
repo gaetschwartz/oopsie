@@ -63,7 +63,10 @@ type BoxError = Box<dyn StdError + Send + Sync + 'static>;
 /// A `Sourced` `Welp`'s [`Diagnostic`] accessors prefer the source's traces
 /// (reached via the Provider API under the
 /// `unstable-error-generic-member-access` feature) and fall back to the
-/// wrap-site ones.
+/// wrap-site ones. A message-bearing `Sourced` never surfaces the source's
+/// error code or help text — its own message replaces them — but does
+/// forward the source's exit code, reached the same Provider-API way
+/// (`None` on stable, where a type-erased source isn't reachable).
 #[must_use = "this `Welp` error should be returned or propagated, not discarded"]
 pub struct Welp(WelpRepr);
 
@@ -111,6 +114,10 @@ impl Welp {
     /// accessors surface those instead, so the origin-most captured trace
     /// wins.
     ///
+    /// The message replaces the source's own error code and help text, so
+    /// neither surfaces here; the source's exit code still forwards, through
+    /// the Provider API (`None` on stable).
+    ///
     /// ```
     /// use oopsie_core::Welp;
     ///
@@ -144,6 +151,10 @@ impl Welp {
     /// can't satisfy [`wrap`](Self::wrap)'s `Sized` bound, but it's exactly
     /// the shape `Welp` stores internally, so no rewrapping is needed.
     ///
+    /// Like [`wrap`](Self::wrap), the message replaces the source's error
+    /// code and help text; the source's exit code still forwards through the
+    /// Provider API (`None` on stable).
+    ///
     /// ```
     /// use oopsie_core::Welp;
     ///
@@ -174,6 +185,9 @@ impl Welp {
     /// surface the source's captured traces (via the Provider API under the
     /// `unstable-error-generic-member-access` feature) when it has them, so the
     /// origin-most trace wins.
+    ///
+    /// The source's error code, help text, and exit code are surfaced the same
+    /// way, so they need that feature too; on stable they are `None`.
     ///
     /// [`Display`]: fmt::Display
     /// [`Error::source`]: StdError::source
@@ -344,13 +358,28 @@ impl StdError for Welp {
 
     #[cfg(feature = "unstable-error-generic-member-access")]
     fn provide<'a>(&'a self, request: &mut core::error::Request<'a>) {
+        // `Request` is first-wins: forwarding the source first keeps its deeper
+        // trace ahead of the wrap-site one. An empty trace is never provided,
+        // so it cannot shadow a captured one in an outer layer.
         let traces = match &self.0 {
-            WelpRepr::Sourced { source, traces, .. } => {
-                // `Request` is first-wins: forwarding the source first keeps
-                // its deeper trace ahead of the wrap-site one. An empty trace
-                // is never provided, so it cannot shadow a captured one in an
-                // outer layer.
+            WelpRepr::Sourced {
+                message: None,
+                source,
+                traces,
+                ..
+            } => {
                 source.provide(request);
+                traces
+            }
+            WelpRepr::Sourced {
+                message: Some(_),
+                source,
+                traces,
+                ..
+            } => {
+                if !crate::__private::requests_code_or_help(request) {
+                    source.provide(request);
+                }
                 traces
             }
             WelpRepr::Traced { traces, .. } => traces,
@@ -456,6 +485,10 @@ pub trait WelpResultExt<T, E>: Sized {
     /// [`Error::source`](core::error::Error::source). Reach for
     /// [`welp_context`](Self::welp_context) instead when a string adds
     /// information the source doesn't already carry.
+    ///
+    /// The source's error code, help text, and exit code surface only through
+    /// the Provider API (the `unstable-error-generic-member-access` feature);
+    /// see [`Welp::from_error`].
     fn welp(self) -> Result<T, Welp>;
 
     /// Wrap the error in a [`Welp`] with the given message.

@@ -151,8 +151,8 @@ fn provide_help_text_from_user_field() {
 
 // ---- Nested error propagation tests ----
 //
-// These test that backtrace, spantrace, help text, and error codes from inner
-// errors are accessible through outer errors via the provide() chain.
+// Traces from inner errors reach outer errors via the provide() chain; help
+// text and error codes stop at the first layer with its own message.
 
 /// Inner error that carries a backtrace and help text.
 #[derive(Debug, Oopsie)]
@@ -257,7 +257,7 @@ fn nested_backtrace_propagated_through_source_chain() {
 
 #[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
-fn nested_help_text_propagated_through_source_chain() {
+fn nested_help_text_stops_at_message_layer() {
     let inner = Root { detail: "issue" }.build();
     let middle: MiddleError = Wrapped {
         context: "handling",
@@ -265,18 +265,19 @@ fn nested_help_text_propagated_through_source_chain() {
     .build_error(inner);
     let outer: OuterError = Top { label: "api" }.build_error(middle);
 
-    // HelpText from inner should be accessible from outer via provide chain
-    let help = core::error::request_value::<oopsie::HelpText>(&outer);
-    assert!(
-        help.is_some(),
-        "HelpText should propagate through source chain"
+    // A layer with its own message owns its identity: the inner help labels
+    // a message the outer layers replaced, so it stays with the inner error.
+    assert_eq!(core::error::request_value::<oopsie::HelpText>(&outer), None);
+    let inner_ref = outer.source().unwrap().source().unwrap();
+    assert_eq!(
+        core::error::request_value::<oopsie::HelpText>(inner_ref),
+        Some(oopsie::HelpText::from_static("fix the inner thing"))
     );
-    assert_eq!(&*help.unwrap(), "fix the inner thing");
 }
 
 #[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
-fn nested_error_code_propagated_through_source_chain() {
+fn nested_error_code_stops_at_message_layer() {
     let inner = Root {
         detail: "parse fail",
     }
@@ -287,13 +288,15 @@ fn nested_error_code_propagated_through_source_chain() {
     .build_error(inner);
     let outer: OuterError = Top { label: "ingest" }.build_error(middle);
 
-    // ErrorCode from inner should be accessible from outer via provide chain
-    let code = core::error::request_value::<oopsie::ErrorCode>(&outer);
-    assert!(
-        code.is_some(),
-        "ErrorCode should propagate through source chain"
+    assert_eq!(
+        core::error::request_value::<oopsie::ErrorCode>(&outer),
+        None
     );
-    assert_eq!(&*code.unwrap(), "inner::code");
+    let inner_ref = outer.source().unwrap().source().unwrap();
+    assert_eq!(
+        core::error::request_value::<oopsie::ErrorCode>(inner_ref),
+        Some(oopsie::ErrorCode::from("inner::code"))
+    );
 }
 
 /// Test that `#[oopsie(traced)]` properly propagates

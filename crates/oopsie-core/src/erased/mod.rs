@@ -78,6 +78,19 @@ impl core::error::Error for ErasedError {
             .as_deref()
             .map(|node| node as &(dyn core::error::Error + 'static))
     }
+
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    fn provide<'a>(&'a self, request: &mut core::error::Request<'a>) {
+        if let Some(code) = &self.diagnostics.code {
+            request.provide_value_with::<ErrorCode>(|| code.clone());
+        }
+        if let Some(help) = &self.diagnostics.help {
+            request.provide_value_with::<HelpText>(|| help.clone());
+        }
+        if let Some(exit_code) = self.diagnostics.exit_code {
+            request.provide_value::<NonZeroU8>(exit_code);
+        }
+    }
 }
 
 /// Deserialization shadow for [`ErasedError`]: carries the wire-format

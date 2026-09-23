@@ -232,6 +232,20 @@ pub mod __private {
     #[cfg(not(feature = "std"))]
     pub use crate::nostd_stubs::{TraceMarker, restore_marker, set_marker};
 
+    /// Whether `request` still wants an [`ErrorCode`](crate::ErrorCode) or
+    /// [`HelpText`](crate::HelpText), by value or by reference. A layer that
+    /// renders its own message skips forwarding such a request to its source:
+    /// the source's code or help would label a message this layer replaced.
+    #[cfg(feature = "unstable-error-generic-member-access")]
+    #[inline]
+    #[must_use]
+    pub fn requests_code_or_help(request: &core::error::Request<'_>) -> bool {
+        request.would_be_satisfied_by_value_of::<crate::ErrorCode>()
+            || request.would_be_satisfied_by_value_of::<crate::HelpText>()
+            || request.would_be_satisfied_by_ref_of::<crate::ErrorCode>()
+            || request.would_be_satisfied_by_ref_of::<crate::HelpText>()
+    }
+
     /// The exit code a type-erased source declares, reached through the Provider
     /// API. Returns `None` on stable (descending into a `dyn Error` is not
     /// portable there).

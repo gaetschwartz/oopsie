@@ -962,3 +962,81 @@ fn enum_cfg_attr_kept_backtrace_field_accessor_returns_some() {
     let err = KeptCb { keep: 2u32 }.build();
     assert!(err.oopsie_backtrace().is_some());
 }
+
+// Enum twin of the struct complement: a stripped own trace/location field must
+// leave the variant forwarding its source's, not fall through to `None`.
+#[oopsie]
+#[oopsie(module(false), suffix = "Fl")]
+pub enum FwdTraceLeafError {
+    #[oopsie("leaf")]
+    Boom {
+        #[oopsie(backtrace)]
+        bt: oopsie::Backtrace,
+        #[oopsie(location)]
+        at: &'static std::panic::Location<'static>,
+    },
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false), suffix = "Fq")]
+pub enum FwdQuietLeafError {
+    #[oopsie("quiet")]
+    Quiet { keep: u32 },
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub enum FwdBtStrippedError {
+    #[oopsie(transparent)]
+    Wrap {
+        source: FwdTraceLeafError,
+        #[cfg(any())]
+        #[oopsie(backtrace)]
+        bt: oopsie::Backtrace,
+    },
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub enum FwdLocStrippedError {
+    #[oopsie(transparent)]
+    Wrap {
+        source: FwdTraceLeafError,
+        #[cfg(any())]
+        #[oopsie(location)]
+        at: &'static std::panic::Location<'static>,
+    },
+}
+
+#[oopsie]
+#[oopsie(module(false))]
+pub enum FwdBtKeptError {
+    #[oopsie(transparent)]
+    Wrap {
+        source: FwdQuietLeafError,
+        #[cfg(all())]
+        #[oopsie(backtrace)]
+        bt: oopsie::Backtrace,
+    },
+}
+
+#[test]
+fn enum_cfg_stripped_backtrace_field_keeps_source_forwarding() {
+    use oopsie::Diagnostic as _;
+    let err: FwdBtStrippedError = BoomFl {}.build().into();
+    assert!(err.oopsie_backtrace().is_some());
+}
+
+#[test]
+fn enum_cfg_stripped_location_field_keeps_source_forwarding() {
+    use oopsie::Diagnostic as _;
+    let err: FwdLocStrippedError = BoomFl {}.build().into();
+    assert!(err.oopsie_location().is_some());
+}
+
+#[test]
+fn enum_cfg_kept_backtrace_field_with_quiet_source_uses_own_field() {
+    use oopsie::Diagnostic as _;
+    let err: FwdBtKeptError = QuietFq { keep: 1u32 }.build().into();
+    assert!(err.oopsie_backtrace().is_some());
+}

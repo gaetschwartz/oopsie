@@ -509,3 +509,29 @@ fn from_error_ref_terminates_on_cyclic_source() {
         erased.source_chain().len()
     );
 }
+
+#[cfg(feature = "unstable-error-generic-member-access")]
+#[test]
+fn test_deserialized_erased_error_provides_diagnostics_to_wrapper() {
+    use oopsie::Diagnostic as _;
+    let erased: ErasedError = serde_json::from_value(serde_json::json!({
+        "message": "service unavailable",
+        "diagnostics": { "code": "svc::down", "help": "retry later", "exit_code": 3 },
+        "spantrace": null,
+        "backtrace": null,
+    }))
+    .unwrap();
+    let welp = oopsie::Welp::from_error(erased);
+    assert_eq!(
+        welp.oopsie_error_code(),
+        Some(oopsie::ErrorCode::from("svc::down"))
+    );
+    assert_eq!(
+        welp.oopsie_help_text(),
+        Some(oopsie::HelpText::from_static("retry later"))
+    );
+    assert_eq!(
+        welp.oopsie_exit_code().map(core::num::NonZeroU8::get),
+        Some(3)
+    );
+}
