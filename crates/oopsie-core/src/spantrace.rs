@@ -3,6 +3,9 @@
 use core::fmt;
 
 /// A wrapper around `tracing_error::SpanTrace`.
+///
+/// Two traces compare equal when they walk the same span callsites; debug
+/// builds additionally require the spans' recorded field values to match.
 #[cfg(feature = "tracing")]
 #[derive(Debug, Clone)]
 pub struct SpanTrace {
@@ -50,14 +53,14 @@ impl SpanTrace {
     /// Consumes the wrapper and returns the underlying `tracing_error::SpanTrace`.
     #[must_use]
     #[inline]
-    pub fn into_span_trace(self) -> tracing_error::SpanTrace {
+    pub fn into_spantrace(self) -> tracing_error::SpanTrace {
         self.inner
     }
 
     /// Borrows the underlying `tracing_error::SpanTrace`.
     #[inline]
     #[must_use]
-    pub const fn as_span_trace(&self) -> &tracing_error::SpanTrace {
+    pub const fn as_spantrace(&self) -> &tracing_error::SpanTrace {
         &self.inner
     }
 }
@@ -165,18 +168,22 @@ impl fmt::Display for SpanTrace {
 pub struct SpanTrace;
 
 #[cfg(not(feature = "tracing"))]
+#[expect(
+    clippy::missing_const_for_fn,
+    reason = "const-ness must not vary with the `tracing` feature"
+)]
 impl SpanTrace {
     /// Returns the inert stub; capture is a no-op without the `tracing` feature.
     #[must_use]
     #[inline]
-    pub const fn capture() -> Self {
+    pub fn capture() -> Self {
         Self
     }
 
     /// Always `false`: the stub never holds a captured trace.
     #[must_use]
     #[inline]
-    pub const fn is_captured(&self) -> bool {
+    pub fn is_captured(&self) -> bool {
         false
     }
 }
@@ -242,20 +249,16 @@ impl OptionalSpanTrace {
     }
 
     /// Returns the inner `Option<SpanTrace>`.
-    // The real `SpanTrace`'s destructor isn't const-evaluable, so only the
-    // featureless stub variant can be a `const fn`.
-    #[cfg(feature = "tracing")]
+    #[cfg_attr(
+        not(feature = "tracing"),
+        expect(
+            clippy::missing_const_for_fn,
+            reason = "const-ness must not vary with the `tracing` feature"
+        )
+    )]
     #[must_use]
     #[inline]
     pub fn into_inner(self) -> Option<SpanTrace> {
-        self.0
-    }
-
-    /// Returns the inner `Option<SpanTrace>`.
-    #[cfg(not(feature = "tracing"))]
-    #[must_use]
-    #[inline]
-    pub const fn into_inner(self) -> Option<SpanTrace> {
         self.0
     }
 
@@ -353,9 +356,9 @@ mod tests {
 
     #[cfg(feature = "tracing")]
     #[test]
-    fn test_into_span_trace_tracing_returns_some() {
+    fn test_into_spantrace_tracing_returns_some() {
         let tracing = SpanTrace::capture();
-        let _ = tracing.into_span_trace();
+        let _ = tracing.into_spantrace();
     }
 
     #[test]

@@ -199,40 +199,6 @@ impl Capturable for jiff::Zoned {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct NoSource;
 
-/// Normalize any source-error value to a `&(dyn Error + 'static)`.
-pub trait AsErrorSource {
-    /// Borrow this value as a `&(dyn Error + 'static)`.
-    fn as_error_source(&self) -> &(dyn error::Error + 'static);
-}
-
-impl<T: error::Error + 'static> AsErrorSource for T {
-    #[inline]
-    fn as_error_source(&self) -> &(dyn error::Error + 'static) {
-        self
-    }
-}
-
-impl AsErrorSource for dyn error::Error + 'static {
-    #[inline]
-    fn as_error_source(&self) -> &(dyn error::Error + 'static) {
-        self
-    }
-}
-
-impl AsErrorSource for dyn error::Error + Send + 'static {
-    #[inline]
-    fn as_error_source(&self) -> &(dyn error::Error + 'static) {
-        self
-    }
-}
-
-impl AsErrorSource for dyn error::Error + Send + Sync + 'static {
-    #[inline]
-    fn as_error_source(&self) -> &(dyn error::Error + 'static) {
-        self
-    }
-}
-
 /// Extension trait on [`Result`] for ergonomic error context wrapping.
 ///
 /// Import via `use oopsie::prelude::*` or `use oopsie::ResultExt`.
@@ -595,7 +561,7 @@ mod tests {
         use crate::{Backtrace, SpanTrace};
         // Tuple capture yields both traces; neither call panics.
         let (bt, st): (Backtrace, SpanTrace) = <(Backtrace, SpanTrace) as Capturable>::capture();
-        let _ = bt.frames();
+        let _ = crate::__private::backtrace_frames(&bt);
         let _ = st.status();
     }
 
@@ -610,8 +576,7 @@ mod tests {
     #[test]
     fn tuple_capture_ext_extracts_both_from_source() {
         use crate::{
-            Backtrace, Capturable, Diagnostic, RustBacktrace, SpanTrace,
-            with_rust_backtrace_override,
+            Backtrace, Capturable, Diagnostic, RustBacktrace, SpanTrace, backtrace::with_override,
         };
         use std::fmt;
 
@@ -635,12 +600,12 @@ mod tests {
             }
         }
 
-        with_rust_backtrace_override(RustBacktrace::Enabled, || {
+        with_override(RustBacktrace::Enabled, || {
             let src = Src {
                 backtrace: Backtrace::capture(),
                 spantrace: SpanTrace::capture(),
             };
-            let source_frames = src.backtrace.frames().len();
+            let source_frames = crate::__private::backtrace_frames(&src.backtrace).len();
             assert!(
                 source_frames > 0,
                 "backtrace must be enabled for this test to be probative"
@@ -648,7 +613,10 @@ mod tests {
             let extracted = <(Backtrace, SpanTrace) as Capturable>::capture_or_extract(&src);
             // The extracted backtrace must reuse the source's frame count, proving
             // extraction (not a fresh capture).
-            assert_eq!(extracted.0.frames().len(), source_frames);
+            assert_eq!(
+                crate::__private::backtrace_frames(&extracted.0).len(),
+                source_frames
+            );
         });
     }
 

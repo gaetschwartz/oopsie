@@ -75,22 +75,19 @@ pub struct BtWrapError {
 fn forwarded_backtrace_matches_source() {
     common::force_backtrace();
     let src = leaf_oopsies::Boom { msg: "x" }.build();
-    let src_frames = src
-        .oopsie_backtrace()
-        .expect("forced capture => Some")
-        .frames()
-        .len();
+    let src_bt = src.oopsie_backtrace().expect("forced capture => Some");
     assert!(
-        src_frames > 0,
+        src_bt.is_captured(),
         "force_backtrace must yield frames for this test to be probative"
     );
+    let src_frames = format!("{src_bt:?}");
 
     let wrap: BtWrapError = BtWrapOopsie.build_error(src);
     let wrap_bt = wrap
         .oopsie_backtrace()
         .expect("Wrap must forward the source's backtrace");
     assert_eq!(
-        wrap_bt.frames().len(),
+        format!("{wrap_bt:?}"),
         src_frames,
         "forwarded backtrace is the source's"
     );
@@ -238,22 +235,19 @@ pub struct GenWrapError<S: std::error::Error + std::fmt::Debug + 'static> {
 fn generic_forwarded_backtrace_matches_source() {
     common::force_backtrace();
     let src = leaf_oopsies::Boom { msg: "x" }.build();
-    let src_frames = src
-        .oopsie_backtrace()
-        .expect("forced capture => Some")
-        .frames()
-        .len();
+    let src_bt = src.oopsie_backtrace().expect("forced capture => Some");
     assert!(
-        src_frames > 0,
+        src_bt.is_captured(),
         "force_backtrace must yield frames for this test to be probative"
     );
+    let src_frames = format!("{src_bt:?}");
 
     let wrap: GenWrapError<LeafError> = GenWrapOopsie.build_error(src);
     let wrap_bt = wrap
         .oopsie_backtrace()
         .expect("generic wrapper must forward the source's backtrace");
     assert_eq!(
-        wrap_bt.frames().len(),
+        format!("{wrap_bt:?}"),
         src_frames,
         "forwarded backtrace is the source's"
     );

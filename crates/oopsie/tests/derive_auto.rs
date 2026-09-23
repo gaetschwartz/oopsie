@@ -158,7 +158,7 @@ fn three_heterogeneous_capture_fields_all_initialize() {
     let err = Triple { label: "x" }.build();
     let TripleCaptureError::Triple { bt, st, ost, .. } = &err;
     // Each captured field is concretely populated (content, not just presence):
-    assert!(!bt.frames().is_empty(), "backtrace must capture frames");
+    assert!(bt.is_captured(), "backtrace must capture frames");
     // SpanTrace and OptionalSpanTrace captured without a subscriber: they exist
     // and render (possibly empty) without panicking.
     let _ = st.status();
@@ -185,7 +185,7 @@ fn tuple_capture_field_initializes_both_elements() {
     let TupleCaptureError::Tuple { traces } = &err;
     // The tuple `Capturable` impl captured both halves.
     assert!(
-        !traces.0.frames().is_empty(),
+        traces.0.is_captured(),
         "tuple backtrace half must capture frames"
     );
     let _ = traces.1.status();

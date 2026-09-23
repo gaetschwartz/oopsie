@@ -1,0 +1,15 @@
+error[E0432]: unresolved import `oopsie::AsErrorSource`
+ --> tests/compile-fail/stable/as_error_source_private.rs:1:5
+  |
+1 | use oopsie::AsErrorSource;
+  |     ^^^^^^^^-------------
+  |             |
+  |             no `AsErrorSource` in the root
+
+error[E0432]: unresolved import `oopsie_core::AsErrorSource`
+ --> tests/compile-fail/stable/as_error_source_private.rs:2:5
+  |
+2 | use oopsie_core::AsErrorSource as _;
+  |     ^^^^^^^^^^^^^-------------^^^^^
+  |                  |
+  |                  no `AsErrorSource` in the root

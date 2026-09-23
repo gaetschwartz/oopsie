@@ -74,19 +74,19 @@ expression: error
         "column": 69
       },
       {
-        "name": "<oopsie_core[[HASH]]::backtrace::Backtrace as oopsie_core[[HASH]]::traits::Capturable>::capture",
-        "filename": "[WORKSPACE]/crates/oopsie-core/src/backtrace.rs",
+        "name": "<oopsie_core[[HASH]]::backtrace::capture::Backtrace as oopsie_core[[HASH]]::traits::Capturable>::capture",
+        "filename": "[WORKSPACE]/crates/oopsie-core/src/backtrace/capture.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "<(oopsie_core[[HASH]]::backtrace::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace) as oopsie_core[[HASH]]::traits::Capturable>::capture",
+        "name": "<(oopsie_core[[HASH]]::backtrace::capture::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace) as oopsie_core[[HASH]]::traits::Capturable>::capture",
         "filename": "[WORKSPACE]/crates/oopsie-core/src/traits.rs",
         "line": 42,
         "column": 69
       },
       {
-        "name": "<alloc[[HASH]]::boxed::Box<(oopsie_core[[HASH]]::backtrace::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace)> as oopsie_core[[HASH]]::traits::Capturable>::capture",
+        "name": "<alloc[[HASH]]::boxed::Box<(oopsie_core[[HASH]]::backtrace::capture::Backtrace, oopsie_core[[HASH]]::spantrace::SpanTrace)> as oopsie_core[[HASH]]::traits::Capturable>::capture",
         "filename": "[WORKSPACE]/crates/oopsie-core/src/traits.rs",
         "line": 42,
         "column": 69

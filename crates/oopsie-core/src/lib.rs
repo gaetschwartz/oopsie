@@ -24,7 +24,7 @@
 extern crate alloc;
 
 #[cfg(feature = "std")]
-mod backtrace;
+pub mod backtrace;
 mod chain;
 mod diagnostic;
 #[cfg(feature = "serde")]
@@ -48,10 +48,7 @@ use core::borrow::Borrow;
 use core::ops::Deref;
 
 #[cfg(feature = "std")]
-pub use backtrace::{
-    Backtrace, RustBacktrace, clear_rust_backtrace_override, rust_backtrace, rust_panic_backtrace,
-    set_rust_backtrace_override, with_rust_backtrace_override,
-};
+pub use backtrace::{capture::Backtrace, setting::RustBacktrace};
 pub use chain::{Chain, ErrorChainExt};
 pub use diagnostic::Diagnostic;
 #[cfg(not(feature = "std"))]
@@ -66,7 +63,42 @@ pub use welp::{Welp, WelpOptionExt, WelpResultExt};
 #[doc(hidden)]
 pub mod __private {
     #[cfg(feature = "std")]
-    pub use crate::backtrace::CORE_SRC_PATH;
+    pub use crate::backtrace::capture::{CORE_SRC_PATH, backtrace_frames, raw_backtrace};
+
+    /// Normalize any source-error value to a `&(dyn Error + 'static)`.
+    pub trait AsErrorSource {
+        /// Borrow this value as a `&(dyn Error + 'static)`.
+        fn as_error_source(&self) -> &(dyn core::error::Error + 'static);
+    }
+
+    impl<T: core::error::Error + 'static> AsErrorSource for T {
+        #[inline]
+        fn as_error_source(&self) -> &(dyn core::error::Error + 'static) {
+            self
+        }
+    }
+
+    impl AsErrorSource for dyn core::error::Error + 'static {
+        #[inline]
+        fn as_error_source(&self) -> &(dyn core::error::Error + 'static) {
+            self
+        }
+    }
+
+    impl AsErrorSource for dyn core::error::Error + Send + 'static {
+        #[inline]
+        fn as_error_source(&self) -> &(dyn core::error::Error + 'static) {
+            self
+        }
+    }
+
+    impl AsErrorSource for dyn core::error::Error + Send + Sync + 'static {
+        #[inline]
+        fn as_error_source(&self) -> &(dyn core::error::Error + 'static) {
+            self
+        }
+    }
+
     /// Autoref probe for capture deduplication.
     ///
     /// When the concrete source type implements `Diagnostic`, the high-priority

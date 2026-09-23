@@ -1,0 +1,27 @@
+error[E0432]: unresolved import `oopsie::AsErrorSource`
+ --> tests/compile-fail/nightly/as_error_source_private.rs:1:5
+  |
+1 | use oopsie::AsErrorSource;
+  |     ^^^^^^^^-------------
+  |             |
+  |             no `AsErrorSource` in the root
+  |
+help: consider importing this trait instead
+  |
+1 - use oopsie::AsErrorSource;
+1 + use snafu::AsErrorSource;
+  |
+
+error[E0432]: unresolved import `oopsie_core::AsErrorSource`
+ --> tests/compile-fail/nightly/as_error_source_private.rs:2:5
+  |
+2 | use oopsie_core::AsErrorSource as _;
+  |     ^^^^^^^^^^^^^-------------^^^^^
+  |                  |
+  |                  no `AsErrorSource` in the root
+  |
+help: consider importing this trait instead
+  |
+2 - use oopsie_core::AsErrorSource as _;
+2 + use snafu::AsErrorSource as _;
+  |

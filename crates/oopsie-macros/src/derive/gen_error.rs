@@ -547,7 +547,7 @@ pub fn gen_enum_error(
             quote! {
                 #[allow(unused_variables)]
                 fn provide<#lt>(&#lt self, #req: &mut ::core::error::Request<#lt>) {
-                    use #oopsie_path::AsErrorSource as _;
+                    use #oopsie_path::__private::AsErrorSource as _;
                     #probe_items
                     match self {
                         #(#provide_arms)*
@@ -558,7 +558,7 @@ pub fn gen_enum_error(
 
     // Bring `as_error_source` into scope for arms that descend into a source.
     let accessor_use_aes = if accessor_uses_source {
-        quote! { use #oopsie_path::AsErrorSource as _; }
+        quote! { use #oopsie_path::__private::AsErrorSource as _; }
     } else {
         quote! {}
     };
@@ -663,7 +663,7 @@ pub fn gen_enum_error(
             // Bring `as_error_source` into scope so method-call autoderef
             // can pick the `dyn Error + Send + Sync + 'static` impl for
             // `Box<dyn Error + …>` fields.
-            use #oopsie_path::AsErrorSource as _;
+            use #oopsie_path::__private::AsErrorSource as _;
             match self {
                 #(#source_arms)*
             }
@@ -729,7 +729,7 @@ pub fn gen_struct_error(
         let source_ident = &source_field.ident;
         quote! {
             {
-                use #oopsie_path::AsErrorSource as _;
+                use #oopsie_path::__private::AsErrorSource as _;
                 ::core::option::Option::Some(self.#source_ident.as_error_source())
             }
         }
@@ -840,7 +840,7 @@ pub fn gen_struct_error(
             quote! {
                 #[allow(unused_variables)]
                 fn provide<#lt>(&#lt self, #req: &mut ::core::error::Request<#lt>) {
-                    use #oopsie_path::AsErrorSource as _;
+                    use #oopsie_path::__private::AsErrorSource as _;
                     #probe_items
                     #destructure
                     #(#provide_stmts)*
@@ -858,7 +858,7 @@ pub fn gen_struct_error(
         .unwrap_or_default();
     let struct_src_access = struct_source.map(|s| quote! { self.#s.as_error_source() });
     let struct_use_aes = if struct_source.is_some() {
-        quote! { use #oopsie_path::AsErrorSource as _; }
+        quote! { use #oopsie_path::__private::AsErrorSource as _; }
     } else {
         quote! {}
     };
@@ -1169,7 +1169,7 @@ fn gen_source_meta_forward(
     let probe = gen_diag_forward(target, probe_method, oopsie_path);
     quote! {
         {
-            use #oopsie_path::AsErrorSource as _;
+            use #oopsie_path::__private::AsErrorSource as _;
             #oopsie_path::__private::#source_fn(#src_access).or_else(|| #probe)
         }
     }

@@ -79,7 +79,7 @@ pub fn init_test_subscriber_without_error_layer() -> tracing::subscriber::Defaul
 /// Force backtrace capture on the current thread so snapshots are deterministic
 /// regardless of the ambient `RUST_BACKTRACE` environment.
 pub fn force_backtrace() {
-    crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);
+    crate::backtrace::set_override(crate::RustBacktrace::Enabled);
 }
 
 /// `insta` snapshot redaction profiles that erase build-to-build noise

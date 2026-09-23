@@ -114,7 +114,7 @@ pub trait SpanTraceProvider {
 
 impl BacktraceProvider for Backtrace {
     fn frames(&self) -> Vec<BacktraceFrame> {
-        Self::frames(self)
+        oopsie_core::__private::backtrace_frames(self)
             .iter()
             .flat_map(|frame| {
                 frame.symbols().iter().map(|sym| BacktraceFrame {
@@ -133,7 +133,7 @@ impl BacktraceProvider for Backtrace {
 impl SpanTraceProvider for crate::SpanTrace {
     #[inline]
     fn with_spans(&self, f: &mut dyn FnMut(&SpanMetadata<'_>, &str) -> bool) {
-        self.as_span_trace().with_spans(|md, fields| {
+        self.as_spantrace().with_spans(|md, fields| {
             let meta = SpanMetadata {
                 name: md.name(),
                 target: md.target(),
@@ -2006,7 +2006,7 @@ mod tests {
         let core_traits = core_file("traits.rs");
         let frames = [
             frame_in(
-                "oopsie_core::backtrace::Backtrace::capture",
+                "oopsie_core::backtrace::capture::Backtrace::capture",
                 Some(&core_capture),
             ),
             frame_in(
@@ -2016,10 +2016,7 @@ mod tests {
             frame_in("my_app::user_fn", Some("/home/u/app/src/main.rs")),
             frame_in("my_app::app", Some("/home/u/app/src/main.rs")),
             frame_in("my_app::main::{closure#0}", Some("/home/u/app/src/main.rs")),
-            frame_in(
-                "oopsie_core::backtrace::with_rust_backtrace_override",
-                Some(&core_capture),
-            ),
+            frame_in("oopsie_core::backtrace::with_override", Some(&core_capture)),
             frame_in("my_app::main", Some("/home/u/app/src/main.rs")),
             frame_in("std::rt::lang_start_internal", None),
         ];
@@ -2029,7 +2026,7 @@ mod tests {
                 "my_app::user_fn",
                 "my_app::app",
                 "my_app::main::{closure#0}",
-                "oopsie_core::backtrace::with_rust_backtrace_override",
+                "oopsie_core::backtrace::with_override",
                 "my_app::main",
             ]
         );
@@ -2042,7 +2039,7 @@ mod tests {
             frame_in("my_app[d2d6]::user_fn", None),
             frame_in("my_app[d2d6]::app", None),
             frame_in(
-                "oopsie_core[77aa]::backtrace::with_rust_backtrace_override::<my_app[d2d6]::main::{closure#0}, ()>",
+                "oopsie_core[77aa]::backtrace::with_override::<my_app[d2d6]::main::{closure#0}, ()>",
                 None,
             ),
             frame_in("my_app[d2d6]::main", None),
@@ -2054,7 +2051,7 @@ mod tests {
             [
                 "my_app[d2d6]::user_fn",
                 "my_app[d2d6]::app",
-                "oopsie_core[77aa]::backtrace::with_rust_backtrace_override::<my_app[d2d6]::main::{closure#0}, ()>",
+                "oopsie_core[77aa]::backtrace::with_override::<my_app[d2d6]::main::{closure#0}, ()>",
                 "my_app[d2d6]::main",
             ]
         );
@@ -2073,7 +2070,7 @@ mod tests {
         let core_traits = core_file("traits.rs");
         let frames = [
             frame_in(
-                "oopsie_core::backtrace::Backtrace::capture",
+                "oopsie_core::backtrace::capture::Backtrace::capture",
                 Some(&core_capture),
             ),
             frame_in(
@@ -2097,17 +2094,14 @@ mod tests {
                 Some(&core_traits),
             ),
             frame_in("my_app::read_config", Some("/home/u/app/src/main.rs")),
-            frame_in(
-                "oopsie_core::backtrace::with_rust_backtrace_override",
-                Some(&core_capture),
-            ),
+            frame_in("oopsie_core::backtrace::with_override", Some(&core_capture)),
             frame_in("my_app::main", Some("/home/u/app/src/main.rs")),
         ];
         assert_eq!(
             filtered(&frames, error_backtrace_frame_filter),
             [
                 "my_app::read_config",
-                "oopsie_core::backtrace::with_rust_backtrace_override",
+                "oopsie_core::backtrace::with_override",
                 "my_app::main",
             ]
         );
@@ -2122,10 +2116,7 @@ mod tests {
             frame_in("core::panicking::panic_fmt", None),
             frame_in("my_app::user_fn", Some("/home/u/app/src/main.rs")),
             frame_in("my_app::app", Some("/home/u/app/src/main.rs")),
-            frame_in(
-                "oopsie_core::backtrace::with_rust_backtrace_override",
-                Some(&core_capture),
-            ),
+            frame_in("oopsie_core::backtrace::with_override", Some(&core_capture)),
             frame_in("my_app::main", Some("/home/u/app/src/main.rs")),
             frame_in("std::rt::lang_start_internal", None),
         ];
@@ -2134,7 +2125,7 @@ mod tests {
             [
                 "my_app::user_fn",
                 "my_app::app",
-                "oopsie_core::backtrace::with_rust_backtrace_override",
+                "oopsie_core::backtrace::with_override",
                 "my_app::main",
             ]
         );
@@ -2168,7 +2159,7 @@ mod tests {
             "oopsie_core[77aa]::backtrace::Backtrace::capture",
             "<oopsie_core[77aa]::backtrace::Backtrace as oopsie_core[77aa]::traits::Capturable>::capture",
             "<alloc[9f]::boxed::Box<oopsie_core[77aa]::backtrace::Backtrace> as oopsie_core[77aa]::traits::Capturable>::capture",
-            "<alloc::boxed::Box<oopsie_core::backtrace::Backtrace> as oopsie_core::traits::Capturable>::capture",
+            "<alloc::boxed::Box<oopsie_core::backtrace::capture::Backtrace> as oopsie_core::traits::Capturable>::capture",
             "std::backtrace_rs::backtrace::libunwind::trace",
             "std[c8fa]::backtrace_rs::backtrace::libunwind::trace",
             "<std::backtrace::Backtrace>::create",
@@ -2404,7 +2395,7 @@ mod tests {
         let user = "/home/u/bt-named/src/main.rs";
         let frames = [
             frame_in(
-                "oopsie_core::backtrace::Backtrace::capture",
+                "oopsie_core::backtrace::capture::Backtrace::capture",
                 Some(&core_capture),
             ),
             frame_in("backtrace::capture::deep_user_fn", Some(user)),

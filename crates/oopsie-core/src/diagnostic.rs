@@ -162,21 +162,24 @@ mod tests {
 
     #[test]
     fn box_diagnostic_extraction_reuses_source_frames() {
-        use crate::{RustBacktrace, with_rust_backtrace_override};
+        use crate::{RustBacktrace, backtrace::with_override};
 
-        with_rust_backtrace_override(RustBacktrace::Enabled, || {
+        with_override(RustBacktrace::Enabled, || {
             let src = Src {
                 backtrace: Backtrace::capture(),
                 spantrace: SpanTrace::capture(),
             };
-            let expected_frames = src.backtrace.frames().len();
+            let expected_frames = crate::__private::backtrace_frames(&src.backtrace).len();
             assert!(
                 expected_frames > 0,
                 "backtrace must be enabled for this test to be probative"
             );
             let boxed = Box::new(src);
             let extracted = <(Backtrace, SpanTrace) as Capturable>::capture_or_extract(&boxed);
-            assert_eq!(extracted.0.frames().len(), expected_frames);
+            assert_eq!(
+                crate::__private::backtrace_frames(&extracted.0).len(),
+                expected_frames
+            );
         });
     }
 
@@ -193,21 +196,24 @@ mod tests {
 
     #[test]
     fn arc_diagnostic_extraction_reuses_source_frames() {
-        use crate::{RustBacktrace, with_rust_backtrace_override};
+        use crate::{RustBacktrace, backtrace::with_override};
 
-        with_rust_backtrace_override(RustBacktrace::Enabled, || {
+        with_override(RustBacktrace::Enabled, || {
             let src = Src {
                 backtrace: Backtrace::capture(),
                 spantrace: SpanTrace::capture(),
             };
-            let expected_frames = src.backtrace.frames().len();
+            let expected_frames = crate::__private::backtrace_frames(&src.backtrace).len();
             assert!(
                 expected_frames > 0,
                 "backtrace must be enabled for this test to be probative"
             );
             let arced = Arc::new(src);
             let extracted = <(Backtrace, SpanTrace) as Capturable>::capture_or_extract(&arced);
-            assert_eq!(extracted.0.frames().len(), expected_frames);
+            assert_eq!(
+                crate::__private::backtrace_frames(&extracted.0).len(),
+                expected_frames
+            );
         });
     }
 }

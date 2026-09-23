@@ -289,12 +289,12 @@ impl<E: Diagnostic> Report<E> {
         let Some(backtrace) = &self.backtrace else {
             return Ok(());
         };
-        if backtrace.frames().is_empty() {
+        if !backtrace.is_captured() {
             return Ok(());
         }
 
         writeln!(f)?;
-        let mut printer = if oopsie_core::rust_backtrace().is_full() {
+        let mut printer = if oopsie_core::backtrace::current().is_full() {
             TracePrinter::unfiltered()
         } else {
             // Augment the symbol-based top trim with the captured call-site

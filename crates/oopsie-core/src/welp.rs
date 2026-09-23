@@ -606,7 +606,7 @@ impl<T> WelpOptionExt<T> for Option<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{RustBacktrace, with_rust_backtrace_override};
+    use crate::{RustBacktrace, backtrace::with_override};
 
     #[cfg(feature = "tracing")]
     fn with_error_subscriber<R>(f: impl FnOnce() -> R) -> R {
@@ -750,7 +750,7 @@ mod tests {
         // The inner traces must actually capture (live span + backtraces
         // enabled), otherwise the skip-empty fallback surfaces the wrap-site
         // traces and the ptr-eq checks below are vacuous.
-        let outer = with_rust_backtrace_override(RustBacktrace::Enabled, || {
+        let outer = with_override(RustBacktrace::Enabled, || {
             with_error_subscriber(|| {
                 let _g = tracing::info_span!("origin").entered();
                 let inner: Result<(), Welp> = Err(Welp::new("inner"));
@@ -758,7 +758,7 @@ mod tests {
             })
         });
         let bt = outer.oopsie_backtrace().expect("backtrace");
-        assert!(!bt.frames().is_empty());
+        assert!(bt.is_captured());
         #[cfg(feature = "unstable-error-generic-member-access")]
         {
             let source = StdError::source(&outer)
@@ -942,7 +942,7 @@ mod tests {
     #[test]
     fn traced_provides_traces_via_request_ref() {
         // Only captured traces are provided, so capture must succeed here.
-        let err = with_rust_backtrace_override(RustBacktrace::Enabled, || {
+        let err = with_override(RustBacktrace::Enabled, || {
             with_error_subscriber(|| {
                 let _g = tracing::info_span!("solo").entered();
                 Welp::new("solo")
@@ -959,7 +959,7 @@ mod tests {
         // must be withheld from the (first-wins) provider chain. Without the
         // tracing feature the span-trace stub is never captured, so its slot
         // stays empty too.
-        let err = with_rust_backtrace_override(RustBacktrace::Disabled, || Welp::new("solo"));
+        let err = with_override(RustBacktrace::Disabled, || Welp::new("solo"));
         assert!(core::error::request_ref::<Backtrace>(&err).is_none());
         assert!(core::error::request_ref::<SpanTrace>(&err).is_none());
     }
@@ -970,7 +970,7 @@ mod tests {
         // The inner traces must actually capture something (live span +
         // backtraces enabled), otherwise the skip-empty filters surface the
         // wrap-site traces instead and the ptr-eq assertions are meaningless.
-        let outer = with_rust_backtrace_override(RustBacktrace::Enabled, || {
+        let outer = with_override(RustBacktrace::Enabled, || {
             with_error_subscriber(|| {
                 let _g = tracing::info_span!("origin").entered();
                 Welp::wrap(Welp::new("inner"), "outer")
@@ -1012,7 +1012,7 @@ mod tests {
     #[test]
     fn sourced_forwards_source_provide() {
         // Only captured traces are provided, so capture must succeed here.
-        let outer = with_rust_backtrace_override(RustBacktrace::Enabled, || {
+        let outer = with_override(RustBacktrace::Enabled, || {
             with_error_subscriber(|| {
                 let _g = tracing::info_span!("origin").entered();
                 Welp::wrap(Welp::new("inner"), "outer")
@@ -1043,10 +1043,9 @@ mod tests {
 
     #[test]
     fn empty_source_backtrace_does_not_shadow_wrap_site_capture() {
-        let inner = with_rust_backtrace_override(RustBacktrace::Disabled, || Welp::new("inner"));
-        let outer =
-            with_rust_backtrace_override(RustBacktrace::Enabled, || Welp::wrap(inner, "outer"));
-        assert!(!outer.oopsie_backtrace().unwrap().frames().is_empty());
+        let inner = with_override(RustBacktrace::Disabled, || Welp::new("inner"));
+        let outer = with_override(RustBacktrace::Enabled, || Welp::wrap(inner, "outer"));
+        assert!(outer.oopsie_backtrace().unwrap().is_captured());
     }
 
     // Reaching the source's trace requires the Provider API: `wrap` is

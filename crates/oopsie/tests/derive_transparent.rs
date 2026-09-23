@@ -71,7 +71,7 @@ fn transparent_with_auto_fields() {
     // the capture field is initialized and reachable via destructuring.
     let TracedError::TracedIo { bt, .. } = &err;
     assert!(
-        !bt.frames().is_empty(),
+        bt.is_captured(),
         "auto-captured backtrace must be populated"
     );
     // `oopsie_backtrace()` is intentionally NOT asserted here: a transparent
@@ -125,10 +125,7 @@ fn transparent_transform_with_auto_field() {
     let err: TransformCaptureError = TransformCaptureError::from(io_err);
     let TransformCaptureError::Wrapped { source, bt } = &err;
     assert_eq!(source.kind(), io::ErrorKind::TimedOut);
-    assert!(
-        !bt.frames().is_empty(),
-        "auto field captured despite transform"
-    );
+    assert!(bt.is_captured(), "auto field captured despite transform");
 }
 
 // ─── transparent variant with auto-boxed Box<T> source ───
@@ -276,7 +273,7 @@ fn transparent_struct_with_auto_field() {
     assert_eq!(err.to_string(), "traced struct");
     // the capture field is initialized and reachable.
     assert!(
-        !err.bt.frames().is_empty(),
+        err.bt.is_captured(),
         "struct auto backtrace must be captured"
     );
 }

@@ -51,21 +51,21 @@ fn captured_backtrace_has_real_frames() {
         .expect("traced error must expose a backtrace");
     // Content, not just presence: a forced capture records real stack frames.
     assert!(
-        !bt.frames().is_empty(),
+        bt.is_captured(),
         "forced backtrace capture must record frames, got 0"
     );
     // This very test function must appear somewhere in the captured frames,
     // proving the backtrace was captured here (real content) rather than empty.
-    let has_this_fn = bt
-        .frames()
-        .iter()
-        .flat_map(backtrace::BacktraceFrame::symbols)
-        .filter_map(backtrace::BacktraceSymbol::name)
-        .any(|n| format!("{n}").contains("captured_backtrace_has_real_frames"));
-    assert!(
-        has_this_fn,
-        "captured backtrace should contain this test's frame"
-    );
+    #[cfg(feature = "fancy")]
+    {
+        let has_this_fn = symbol_names(bt)
+            .iter()
+            .any(|n| n.contains("captured_backtrace_has_real_frames"));
+        assert!(
+            has_this_fn,
+            "captured backtrace should contain this test's frame"
+        );
+    }
 }
 
 #[test]
@@ -131,11 +131,12 @@ enum ExtractWrapIoError {
     WrapIo { source: io::Error },
 }
 
+#[cfg(feature = "fancy")]
 fn symbol_names(bt: &oopsie::Backtrace) -> Vec<String> {
+    use oopsie::trace_printer::BacktraceProvider as _;
     bt.frames()
-        .iter()
-        .flat_map(backtrace::BacktraceFrame::symbols)
-        .filter_map(|s| s.name().map(|n| format!("{n}")))
+        .into_iter()
+        .filter_map(|frame| frame.name.map(String::from))
         .collect()
 }
 
@@ -144,6 +145,7 @@ fn build_extract_src() -> ExtractSrcError {
     extract_src_oopsies::Src { info: "x" }.build()
 }
 
+#[cfg(feature = "fancy")]
 #[test]
 fn diagnostic_source_extracts_backtrace_from_source() {
     use oopsie::Diagnostic as _;
@@ -164,6 +166,7 @@ fn diagnostic_source_extracts_backtrace_from_source() {
     );
 }
 
+#[cfg(feature = "fancy")]
 #[test]
 fn non_diagnostic_source_captures_fresh_backtrace() {
     use oopsie::Diagnostic as _;

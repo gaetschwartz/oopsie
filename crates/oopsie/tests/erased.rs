@@ -375,11 +375,11 @@ fn test_erased_spantrace_display_empty_spans() {
 #[test]
 fn test_tracing_level_bidirectional_conversion() {
     let cases = [
-        (TracingLevel::TRACE, tracing::Level::TRACE),
-        (TracingLevel::DEBUG, tracing::Level::DEBUG),
-        (TracingLevel::INFO, tracing::Level::INFO),
-        (TracingLevel::WARN, tracing::Level::WARN),
-        (TracingLevel::ERROR, tracing::Level::ERROR),
+        (TracingLevel::Trace, tracing::Level::TRACE),
+        (TracingLevel::Debug, tracing::Level::DEBUG),
+        (TracingLevel::Info, tracing::Level::INFO),
+        (TracingLevel::Warn, tracing::Level::WARN),
+        (TracingLevel::Error, tracing::Level::ERROR),
     ];
     for (erased, tracing_level) in cases {
         let forward: tracing::Level = erased.into();

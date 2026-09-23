@@ -57,19 +57,23 @@ impl ErasedFrame {
 }
 
 impl ErasedBacktrace {
-    /// Create an `ErasedBacktrace` from a live `Backtrace`.
-    ///
-    /// Captures every resolved symbol verbatim — including capture machinery,
-    /// OS/libc entry points, and unresolvable frames. Hiding
-    /// implementation/platform detail is a render-time concern; this snapshot
-    /// stays raw so a consumer can still render the full stack later.
-    #[cfg(feature = "std")]
+    /// Returns a slice of all frames.
     #[must_use]
-    pub fn from_backtrace(bt: &crate::Backtrace) -> Self {
-        bt.resolve();
+    #[inline]
+    pub fn frames(&self) -> &[ErasedFrame] {
+        &self.frames
+    }
+}
 
+/// Captures every resolved symbol verbatim — including capture machinery,
+/// OS/libc entry points, and unresolvable frames. Hiding
+/// implementation/platform detail is a render-time concern; this snapshot
+/// stays raw so a consumer can still render the full stack later.
+#[cfg(feature = "std")]
+impl From<&crate::Backtrace> for ErasedBacktrace {
+    fn from(bt: &crate::Backtrace) -> Self {
         let mut frames = Vec::new();
-        for frame in bt.frames() {
+        for frame in crate::__private::backtrace_frames(bt) {
             let symbols = frame.symbols();
             // A frame that failed to resolve has no symbols; keep a placeholder
             // so the stack shape survives erasure.
@@ -92,27 +96,13 @@ impl ErasedBacktrace {
             frames: frames.into(),
         }
     }
-
-    /// Returns a slice of all frames.
-    #[must_use]
-    #[inline]
-    pub fn frames(&self) -> &[ErasedFrame] {
-        &self.frames
-    }
 }
 
-#[cfg(feature = "std")]
-impl From<&crate::Backtrace> for ErasedBacktrace {
-    #[inline]
-    fn from(bt: &crate::Backtrace) -> Self {
-        Self::from_backtrace(bt)
-    }
-}
 #[cfg(feature = "std")]
 impl From<crate::Backtrace> for ErasedBacktrace {
     #[inline]
     fn from(bt: crate::Backtrace) -> Self {
-        Self::from_backtrace(&bt)
+        Self::from(&bt)
     }
 }
 
@@ -191,12 +181,12 @@ mod tests {
     }
 
     #[test]
-    fn from_backtrace_retains_raw_internal_frames() {
-        crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);
+    fn from_retains_raw_internal_frames() {
+        crate::backtrace::set_override(crate::RustBacktrace::Enabled);
         let bt = <crate::Backtrace as crate::Capturable>::capture();
-        crate::clear_rust_backtrace_override();
+        crate::backtrace::clear_override();
 
-        let erased = ErasedBacktrace::from_backtrace(&bt);
+        let erased = ErasedBacktrace::from(&bt);
 
         // The capture path itself runs through this crate, so a raw snapshot
         // must retain its frame — proving filtering is deferred to render
@@ -207,23 +197,23 @@ mod tests {
                     .as_deref()
                     .is_some_and(|f| f.starts_with(crate::__private::CORE_SRC_PATH))
             }),
-            "from_backtrace should retain raw internal frames, not strip them at capture"
+            "erasure should retain raw internal frames, not strip them at capture"
         );
     }
 
     #[test]
-    fn from_backtrace_keeps_at_least_one_erased_frame_per_source_frame() {
-        crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);
+    fn from_keeps_at_least_one_erased_frame_per_source_frame() {
+        crate::backtrace::set_override(crate::RustBacktrace::Enabled);
         let bt = <crate::Backtrace as crate::Capturable>::capture();
-        crate::clear_rust_backtrace_override();
+        crate::backtrace::clear_override();
 
-        let erased = ErasedBacktrace::from_backtrace(&bt);
+        let erased = ErasedBacktrace::from(&bt);
         assert!(
-            erased.frames().len() >= bt.frames().len(),
+            erased.frames().len() >= crate::__private::backtrace_frames(&bt).len(),
             "every source frame must survive erasure (unresolved ones as placeholders): \
              {} erased < {} source",
             erased.frames().len(),
-            bt.frames().len()
+            crate::__private::backtrace_frames(&bt).len()
         );
     }
 }

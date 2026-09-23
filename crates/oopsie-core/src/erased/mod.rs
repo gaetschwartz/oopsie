@@ -361,7 +361,7 @@ impl ErasedError {
         #[cfg(feature = "std")]
         let backtrace = err
             .oopsie_backtrace()
-            .map(ErasedBacktrace::from_backtrace)
+            .map(ErasedBacktrace::from)
             .filter(|bt| !bt.frames().is_empty());
         #[cfg(not(feature = "std"))]
         let backtrace: Option<ErasedBacktrace> = None;
@@ -1194,11 +1194,11 @@ mod tests {
     // ─────────────────────────────────────────────────────────────────────
     #[test]
     fn erased_frame_filename_is_str() {
-        crate::set_rust_backtrace_override(crate::RustBacktrace::Enabled);
+        crate::backtrace::set_override(crate::RustBacktrace::Enabled);
         let bt = <crate::Backtrace as crate::Capturable>::capture();
-        crate::clear_rust_backtrace_override();
+        crate::backtrace::clear_override();
 
-        let erased = crate::erased::backtrace::ErasedBacktrace::from_backtrace(&bt);
+        let erased = crate::erased::backtrace::ErasedBacktrace::from(&bt);
         // Verify at least one frame has a non-empty filename string.
         let has_filename = erased
             .frames()

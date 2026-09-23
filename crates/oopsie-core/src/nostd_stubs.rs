@@ -56,13 +56,21 @@ pub struct TraceMarker;
 
 /// No-op under no_std: there is no thread-local marker stack to push to.
 #[doc(hidden)]
+#[expect(
+    clippy::missing_const_for_fn,
+    reason = "const-ness must not vary with the `std` feature"
+)]
 #[must_use]
 #[inline]
-pub const fn set_marker() -> Option<TraceMarker> {
+pub fn set_marker() -> Option<TraceMarker> {
     None
 }
 
 /// No-op under no_std: there is no thread-local marker stack to restore.
 #[doc(hidden)]
+#[expect(
+    clippy::missing_const_for_fn,
+    reason = "const-ness must not vary with the `std` feature"
+)]
 #[inline]
-pub const fn restore_marker(_prev: Option<TraceMarker>) {}
+pub fn restore_marker(_prev: Option<TraceMarker>) {}
