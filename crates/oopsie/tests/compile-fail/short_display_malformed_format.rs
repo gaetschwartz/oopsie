@@ -4,9 +4,9 @@ use oopsie::Oopsie;
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
-enum WrapError {
-    #[oopsie("wrapped: {source}", transparent)]
-    Wrap { source: std::io::Error },
+enum MalformedError {
+    #[oopsie("bad {", code = "E1")]
+    Failed,
 }
 
 fn main() {}

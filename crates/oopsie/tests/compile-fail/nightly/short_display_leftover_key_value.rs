@@ -4,15 +4,16 @@ use oopsie::Oopsie;
 
 #[derive(Debug, Oopsie)]
 #[oopsie(module(false))]
-enum ExitError {
-    #[oopsie("exited", exit_code = 3)]
-    Exited,
+enum SizedError {
+    #[oopsie("too big", size = 16)]
+    TooBig,
 }
 
 #[derive(Debug, Oopsie)]
-#[oopsie("config broke", suffix = "Ctx")]
-struct ConfigError {
-    path: String,
+#[oopsie(module(false))]
+enum UnknownKeyError {
+    #[oopsie("{} x", n, bogus = 1)]
+    Counted { n: u32 },
 }
 
 fn main() {}

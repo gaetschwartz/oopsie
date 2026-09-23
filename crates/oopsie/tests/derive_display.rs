@@ -266,8 +266,8 @@ fn short_display_non_keyword_bare_arg_is_expression() {
     assert_eq!(err.to_string(), "x: more");
 }
 
-// A variant keyword (`code`) that is also a real field is a legitimate format
-// argument: the field guard keeps it out of the misparse diagnostic.
+// A bare arg filling a positional slot is a format argument even when it is
+// spelled like a keyword (`code`).
 #[test]
 fn short_display_keyword_named_field_is_expression() {
     #[oopsie::oopsie]
@@ -330,4 +330,120 @@ enum NamedFormatArgError {
 fn non_keyword_named_format_arg_is_kept() {
     assert_eq!(Doubled { amount: 4u32 }.build().to_string(), "doubled 8");
     assert_eq!(Tripled { amount: 2u32 }.build().to_string(), "tripled: 6");
+}
+
+// ---- Short-form arg splitting ----
+//
+// `display(...)` hands every arg to `format!`; the short form hands it only the
+// args its string consumes, and the rest are `#[oopsie(...)]` keywords.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum PathLookupError {
+    #[oopsie(display("Failed to get {part} of path {path}", path = path.display()))]
+    ExplicitPath {
+        part: String,
+        path: std::path::PathBuf,
+    },
+    #[oopsie("Failed to get {part} of path {path}", path = path.display())]
+    ShortPath {
+        part: String,
+        path: std::path::PathBuf,
+    },
+}
+
+#[test]
+fn keyword_named_format_arg_is_kept_in_both_forms() {
+    let explicit = ExplicitPath {
+        part: "stem",
+        path: "/tmp/a.txt",
+    }
+    .build();
+    assert_eq!(
+        explicit.to_string(),
+        "Failed to get stem of path /tmp/a.txt"
+    );
+    let short = ShortPath {
+        part: "stem",
+        path: "/tmp/a.txt",
+    }
+    .build();
+    assert_eq!(short.to_string(), "Failed to get stem of path /tmp/a.txt");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum ShortKeywordError {
+    #[oopsie("failed", code = "E1")]
+    CodedOnly,
+    #[oopsie("{} x", n, code = "E2")]
+    Counted { n: u32 },
+    #[oopsie("failed [{code}]", code = "E001")]
+    CodeInterpolated,
+    #[oopsie("exited", exit_code = 3)]
+    Exited,
+    #[oopsie("wrapped", transparent)]
+    Wrapped { source: std::io::Error },
+}
+
+#[test]
+fn short_form_leftover_code_is_a_keyword() {
+    use oopsie::Diagnostic as _;
+    let err = CodedOnly.build();
+    assert_eq!(err.to_string(), "failed");
+    assert_eq!(
+        err.oopsie_error_code()
+            .map(|c| c.as_str().to_owned())
+            .as_deref(),
+        Some("E1")
+    );
+}
+
+#[test]
+fn short_form_positional_arg_then_keyword() {
+    use oopsie::Diagnostic as _;
+    let err = Counted { n: 7u32 }.build();
+    assert_eq!(err.to_string(), "7 x");
+    assert_eq!(
+        err.oopsie_error_code()
+            .map(|c| c.as_str().to_owned())
+            .as_deref(),
+        Some("E2")
+    );
+}
+
+#[test]
+fn short_form_referenced_keyword_name_is_a_format_arg() {
+    use oopsie::Diagnostic as _;
+    let err = CodeInterpolated.build();
+    assert_eq!(err.to_string(), "failed [E001]");
+    assert!(err.oopsie_error_code().is_none());
+}
+
+#[test]
+fn short_form_leftover_exit_code_is_a_keyword() {
+    use oopsie::Diagnostic as _;
+    let err = Exited.build();
+    assert_eq!(
+        err.oopsie_exit_code().map(core::num::NonZeroU8::get),
+        Some(3)
+    );
+}
+
+#[test]
+fn short_form_leftover_transparent_is_a_keyword() {
+    let err: ShortKeywordError = std::io::Error::other("disk").into();
+    assert_eq!(err.to_string(), "wrapped");
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie("config broke", suffix = "Ctx")]
+struct ConfigError {
+    path: String,
+}
+
+#[test]
+fn short_form_leftover_container_keyword_on_struct() {
+    let err = ConfigCtx { path: "a.toml" }.build();
+    assert_eq!(err.to_string(), "config broke");
 }

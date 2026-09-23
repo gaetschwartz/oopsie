@@ -3,9 +3,16 @@
 use oopsie::Oopsie;
 
 #[derive(Debug, Oopsie)]
-enum WrapError {
+enum ModuleError {
     #[oopsie("x", module)]
     Wrap,
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum ExtraArgError {
+    #[oopsie("{} x", n, n + 1)]
+    Counted { n: u32 },
 }
 
 fn main() {}

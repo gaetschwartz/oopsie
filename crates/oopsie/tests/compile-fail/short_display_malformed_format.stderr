@@ -1,0 +1,9 @@
+error: invalid format string: expected `}` but string was terminated
+ --> tests/compile-fail/short_display_malformed_format.rs:8:20
+  |
+8 |     #[oopsie("bad {", code = "E1")]
+  |                   -^ expected `}` in format string
+  |                   |
+  |                   because of this opening brace
+  |
+  = note: if you intended to print `{`, you can escape it using `{{`

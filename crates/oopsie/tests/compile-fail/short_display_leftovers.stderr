@@ -1,0 +1,11 @@
+error: Unknown field: `module`. Available values: `code`, `display`, `exit_code`, `help`, `provide`, `traced`, `transparent`, `vis`
+ --> tests/compile-fail/short_display_leftovers.rs:7:19
+  |
+7 |     #[oopsie("x", module)]
+  |                   ^^^^^^
+
+error: unused display argument: the format string takes 1 positional argument, and this is not an `#[oopsie(...)]` keyword
+  --> tests/compile-fail/short_display_leftovers.rs:14:25
+   |
+14 |     #[oopsie("{} x", n, n + 1)]
+   |                         ^^^^^

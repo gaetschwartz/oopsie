@@ -19,6 +19,8 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{Expr, Ident, LitStr, Path, Token, Type, Visibility};
 
+use super::format_str::{FormatStrError, format_arg_usage};
+
 // ─── Container-level attributes ──────────────────────────────────
 
 /// A compile-time size constraint for the error type.
@@ -396,8 +398,7 @@ impl darling::FromMeta for DisplayAttr {
     }
 }
 
-/// `#[oopsie(...)]` keywords accepted on a variant/struct, used to recognize one
-/// misparsed as a trailing display format arg (`#[oopsie("fmt", transparent)]`).
+/// `#[oopsie(...)]` keywords accepted on a variant/struct.
 const VARIANT_KEYWORDS: &[&str] = &[
     "display",
     "traced",
@@ -412,127 +413,23 @@ const VARIANT_KEYWORDS: &[&str] = &[
 /// variant set but never on an enum variant.
 const CONTAINER_KEYWORDS: &[&str] = &["module", "suffix", "size", "path", "vis", "exit_code"];
 
-/// Which `#[oopsie(...)]` keyword set a short display attaches to: an enum
-/// variant accepts only variant keywords, a struct's single list mixes container
-/// and variant keys.
-#[derive(Clone, Copy)]
-pub enum DisplayScope {
-    Variant,
-    Struct,
-}
-
-impl DisplayScope {
-    fn is_keyword(self, ident: &str) -> bool {
-        let in_set = |set: &[&str]| set.contains(&ident);
-        match self {
-            Self::Variant => in_set(VARIANT_KEYWORDS) || in_set(CONTAINER_KEYWORDS),
-            Self::Struct => in_set(VARIANT_KEYWORDS) || in_set(CONTAINER_KEYWORDS),
-        }
-    }
-
-    /// Whether `ident` is a container-only keyword being misused on a variant —
-    /// legal on the enum itself but never on one of its variants — so the
-    /// rejection message can point at the enum-level placement instead of
-    /// suggesting a (nonexistent) variant-level attribute.
-    fn is_container_only_on_variant(self, ident: &str) -> bool {
-        matches!(self, Self::Variant)
-            && CONTAINER_KEYWORDS.contains(&ident)
-            && !VARIANT_KEYWORDS.contains(&ident)
-    }
-}
-
-/// The bare single-segment ident of `expr`, or `None` for any richer expression
-/// (`self.0`, `foo()`, `a::b`, a generic path). A trailing display arg of this
-/// shape is what an `#[oopsie(...)]` keyword degrades to once the parser swallows
-/// it past the leading string.
-fn bare_path_ident(expr: &Expr) -> Option<&Ident> {
-    let Expr::Path(p) = expr else { return None };
-    if p.qself.is_some() {
-        return None;
-    }
-    let seg = match p.path.segments.len() {
-        1 => &p.path.segments[0],
-        _ => return None,
-    };
-    if p.path.leading_colon.is_some() || !matches!(seg.arguments, syn::PathArguments::None) {
-        return None;
-    }
-    Some(&seg.ident)
-}
-
 impl DisplayAttr {
-    /// Reject a trailing display arg that is actually a misparsed `#[oopsie(...)]`
-    /// keyword. Greedy `Punctuated<Expr>` parsing of the args swallows a bare
-    /// keyword after the string (`#[oopsie("wrapped: {source}", transparent)]`),
-    /// which otherwise surfaces as an unused-argument warning plus a resolution
-    /// error on a value that was never meant to be one.
-    ///
-    /// A bare single ident is flagged when it matches a keyword for `scope`
-    /// **and** is not a field of the item — a field of that name is a legitimate
-    /// `{field}` interpolation argument, so it passes through. A `key = value`
-    /// arg is flagged whenever `key` is a keyword, field or not: it would
-    /// otherwise become a named format argument and silently drop the setting.
-    pub fn reject_keyword_args(
-        &self,
-        fields: &syn::Fields,
-        scope: DisplayScope,
-    ) -> syn::Result<()> {
-        let field_named = |ident: &Ident| matches!(fields, syn::Fields::Named(f) if f.named.iter().any(|f| f.ident.as_ref() == Some(ident)));
-        for arg in &self.args {
-            let (ident, meta, assign_value) = if let Expr::Assign(assign) = arg
-                && let Some(ident) = bare_path_ident(&assign.left)
-            {
-                let value = expr_text(&assign.right);
-                (ident, format!("{ident} = {value}"), Some(value))
-            } else if let Some(ident) = bare_path_ident(arg)
-                && !field_named(ident)
-            {
-                (ident, ident.to_string(), None)
-            } else {
-                continue;
-            };
-            let ident_str = ident.to_string();
-            if !scope.is_keyword(&ident_str) {
-                continue;
-            }
-            let fmt = self.format_str.value();
-            let message = if scope.is_container_only_on_variant(&ident_str) {
-                format!(
-                    "`{ident}` is an `#[oopsie(...)]` container keyword, not a display \
-                     format argument; it belongs on the enum, not this variant: move it \
-                     to the enum's own `#[oopsie({meta})]` attribute"
-                )
-            } else if let Some(value) = assign_value
-                && let renamed_arg = format!("{ident}_")
-                && let Some(renamed_fmt) = rename_placeholder(&fmt, &ident_str, &renamed_arg)
-            {
-                format!(
-                    "`{ident}` is an `#[oopsie(...)]` keyword, not a display format \
-                     argument; give it its own attribute (`#[oopsie(\"{fmt}\")] \
-                     #[oopsie({meta})]`), or rename the format argument: \
-                     `\"{renamed_fmt}\", {renamed_arg} = {value}`"
-                )
-            } else {
-                format!(
-                    "`{ident}` is an `#[oopsie(...)]` keyword, not a display format \
-                     argument; give it its own attribute: \
-                     `#[oopsie(\"{fmt}\")] #[oopsie({meta})]`"
-                )
-            };
-            return Err(syn::Error::new_spanned(ident, message));
-        }
-        Ok(())
-    }
-
     /// Whether this renders to a `&'static str` literal rather than a `format!`.
     ///
-    /// True iff there are no explicit args *and* the format string has no
-    /// `{…}` placeholder: a placeholder-free string is byte-identical whether
-    /// stored as a literal or run through `format!`, so the cheap const path is
+    /// True iff there are no explicit args *and* the format string consumes
+    /// none: a placeholder-free string is byte-identical whether stored as a
+    /// literal or run through `format!`, so the cheap const path is
     /// equivalent. An inline-capture placeholder like `{field}` makes this
-    /// false even with zero trailing args, so it routes through `format!`.
+    /// false even with zero trailing args, so it routes through `format!`. A
+    /// string malformed other than by a lone `}` also routes through
+    /// `format!`, so rustc reports it.
     pub fn is_static(&self) -> bool {
-        self.args.is_empty() && !format_str_has_placeholder(&self.format_str.value())
+        self.args.is_empty()
+            && match format_arg_usage(&self.format_str.value()) {
+                Ok(usage) => usage.is_empty(),
+                Err(FormatStrError::UnmatchedClose { .. }) => true,
+                Err(FormatStrError::Malformed { .. }) => false,
+            }
     }
 
     /// The literal to emit on the static path (`is_static()` true): the format
@@ -545,11 +442,11 @@ impl DisplayAttr {
     /// with `display`, which routes through `write!`.
     pub fn static_lit(&self) -> syn::Result<LitStr> {
         let mut value = self.format_str.value();
-        if let Some(pos) = unmatched_close_brace(&value) {
+        if let Err(FormatStrError::UnmatchedClose { at }) = format_arg_usage(&value) {
             return Err(syn::Error::new_spanned(
                 &self.format_str,
                 format!(
-                    "unmatched `}}` at byte {pos} in format string; \
+                    "unmatched `}}` at byte {at} in format string; \
                      write `}}}}` for a literal `}}`"
                 ),
             ));
@@ -557,181 +454,6 @@ impl DisplayAttr {
         unescape_format_braces(&mut value);
         Ok(LitStr::new(&value, self.format_str.span()))
     }
-}
-
-/// Whether a format string contains a real `{…}` placeholder, treating `{{` as
-/// an escape. Mirrors rustc's format parser (`rustc_parse_format`): a
-/// placeholder is opened *only* by an unescaped `{`, so that is all we scan
-/// for — `}`/`}}` never open one.
-fn format_str_has_placeholder(s: &str) -> bool {
-    let b = s.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'{' {
-            if b.get(i + 1) == Some(&b'{') {
-                i += 2;
-            } else {
-                return true;
-            }
-        } else {
-            i += 1;
-        }
-    }
-    false
-}
-
-/// `fmt` with every reference to the named argument `from` (as a placeholder
-/// or a `from$` width/precision) renamed to `to`, or `None` if it has none.
-fn rename_placeholder(fmt: &str, from: &str, to: &str) -> Option<String> {
-    let mut out = String::with_capacity(fmt.len());
-    let mut renamed = false;
-    let mut rest = fmt;
-    while let Some(open) = rest.find(['{', '}']) {
-        out.push_str(&rest[..open]);
-        rest = &rest[open..];
-        if rest.starts_with("{{") || rest.starts_with("}}") || rest.starts_with('}') {
-            let escape = if rest.starts_with("{{") || rest.starts_with("}}") {
-                2
-            } else {
-                1
-            };
-            out.push_str(&rest[..escape]);
-            rest = &rest[escape..];
-            continue;
-        }
-        let Some(close) = rest.find('}') else {
-            break;
-        };
-        let inner = &rest[1..close];
-        let (arg, spec) = inner.split_at(inner.find(':').unwrap_or(inner.len()));
-        out.push('{');
-        if arg.trim() == from {
-            out.push_str(to);
-            renamed = true;
-        } else {
-            out.push_str(arg);
-        }
-        let mut spec_rest = spec;
-        while let Some(dollar) = spec_rest.find('$') {
-            let head = &spec_rest[..dollar];
-            let name_start = head
-                .rfind(|c: char| !(c.is_alphanumeric() || c == '_'))
-                .map_or(0, |i| i + 1);
-            if &head[name_start..] == from {
-                out.push_str(&head[..name_start]);
-                out.push_str(to);
-                renamed = true;
-            } else {
-                out.push_str(head);
-            }
-            out.push('$');
-            spec_rest = &spec_rest[dollar + 1..];
-        }
-        out.push_str(spec_rest);
-        out.push('}');
-        rest = &rest[close + 1..];
-    }
-    out.push_str(rest);
-    renamed.then_some(out)
-}
-
-/// `expr` as the user wrote it when its span covers the whole expression
-/// (joining spans is nightly-only), else as [`tidy_tokens`].
-fn expr_text(expr: &Expr) -> String {
-    use quote::ToTokens as _;
-    use syn::spanned::Spanned as _;
-
-    let tokens = expr.to_token_stream();
-    expr.span()
-        .source_text()
-        .filter(|text| {
-            text.parse::<proc_macro2::TokenStream>()
-                .is_ok_and(|parsed| parsed.to_string() == tokens.to_string())
-        })
-        .unwrap_or_else(|| tidy_tokens(tokens))
-}
-
-/// `tokens` spaced like source, where their `Display` spaces every token
-/// (`a :: b`, `f (x)`).
-fn tidy_tokens(tokens: proc_macro2::TokenStream) -> String {
-    use proc_macro2::{Delimiter, Spacing, TokenTree};
-
-    let punct = |tt: Option<&TokenTree>| match tt {
-        Some(TokenTree::Punct(p)) => Some((p.as_char(), p.spacing())),
-        _ => None,
-    };
-    let tts: Vec<TokenTree> = tokens.into_iter().collect();
-    let mut out = String::new();
-    for (i, tt) in tts.iter().enumerate() {
-        let prev = i.checked_sub(1).and_then(|j| tts.get(j));
-        let before_prev = i.checked_sub(2).and_then(|j| tts.get(j));
-        let glued_to_prev = match (punct(prev), tt) {
-            (None, _) if prev.is_none() => true,
-            (Some((_, Spacing::Joint) | ('.', _)), _) => true,
-            (Some((':', _)), _) if punct(before_prev) == Some((':', Spacing::Joint)) => true,
-            (Some(('-' | '!' | '&' | '*', _)), _)
-                if before_prev.is_none()
-                    || punct(before_prev).is_some_and(|(_, s)| s == Spacing::Alone) =>
-            {
-                true
-            }
-            (_, TokenTree::Punct(p)) => {
-                matches!(p.as_char(), ',' | ';' | '.' | '?' | ':')
-                    || (p.as_char() == '!'
-                        && p.spacing() == Spacing::Alone
-                        && matches!(prev, Some(TokenTree::Ident(_))))
-            }
-            (Some(('!', Spacing::Alone)), TokenTree::Group(_)) => true,
-            (None, TokenTree::Group(g)) => {
-                matches!(g.delimiter(), Delimiter::Parenthesis | Delimiter::Bracket)
-                    && matches!(prev, Some(TokenTree::Ident(_) | TokenTree::Group(_)))
-            }
-            _ => false,
-        };
-        if !glued_to_prev {
-            out.push(' ');
-        }
-        match tt {
-            TokenTree::Group(g) => {
-                let inner = tidy_tokens(g.stream());
-                let (open, close) = match g.delimiter() {
-                    Delimiter::Parenthesis => ("(", ")"),
-                    Delimiter::Bracket => ("[", "]"),
-                    Delimiter::Brace if inner.is_empty() => ("{", "}"),
-                    Delimiter::Brace => ("{ ", " }"),
-                    Delimiter::None => ("", ""),
-                };
-                out.push_str(open);
-                out.push_str(&inner);
-                out.push_str(close);
-            }
-            TokenTree::Ident(_) | TokenTree::Punct(_) | TokenTree::Literal(_) => {
-                out.push_str(&tt.to_string());
-            }
-        }
-    }
-    out
-}
-
-/// Byte position of the first unmatched `}` (a `}` not part of a `}}` escape),
-/// or `None` if every `}` is escaped. Used only on the static path, where there
-/// is no placeholder for a `}` to close — so any lone `}` is malformed, exactly
-/// as rustc's parser reports.
-fn unmatched_close_brace(s: &str) -> Option<usize> {
-    let b = s.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        if b[i] == b'}' {
-            if b.get(i + 1) == Some(&b'}') {
-                i += 2;
-            } else {
-                return Some(i);
-            }
-        } else {
-            i += 1;
-        }
-    }
-    None
 }
 
 /// Collapse `{{`→`{` and `}}`→`}` in place, mirroring the `Piece::Lit` arms of
@@ -864,10 +586,9 @@ impl StructAttrs {
 }
 
 /// Find the first `#[oopsie(...)]` key on `attrs` that isn't a real
-/// `StructAttrs` field: `traced` (a `VARIANT_KEYWORDS` entry kept there only
-/// for `reject_keyword_args`, but never a field the struct-only derive path
-/// understands) or anything outside the combined container/variant keyword
-/// set.
+/// `StructAttrs` field: `traced` (a variant keyword, but never a field the
+/// struct-only derive path understands) or anything outside the combined
+/// container/variant keyword set.
 fn first_unknown_struct_key(attrs: &[syn::Attribute]) -> Option<Ident> {
     attrs
         .iter()
@@ -879,8 +600,10 @@ fn first_unknown_struct_key(attrs: &[syn::Attribute]) -> Option<Ident> {
         .flatten()
         .find_map(|meta| {
             let ident = meta.path().get_ident()?.clone();
-            (ident == "traced" || !DisplayScope::Struct.is_keyword(&ident.to_string()))
-                .then_some(ident)
+            let known = [VARIANT_KEYWORDS, CONTAINER_KEYWORDS]
+                .iter()
+                .any(|set| set.iter().any(|k| ident == k));
+            (ident == "traced" || !known).then_some(ident)
         })
 }
 
@@ -1192,12 +915,11 @@ impl FieldAttrs {
 
 /// Extracts the short-display form (`#[oopsie("fmt {}", arg)]`) from a list
 /// of attributes. Returns the synthesized `DisplayAttr` (if any) along with
-/// the remaining attributes (with the short-display attrs removed) so the
-/// caller can hand those to darling.
+/// the remaining attributes so the caller can hand those to darling: a
+/// short-display attribute is dropped, or rewritten to hold only the keywords
+/// trailing its format arguments.
 ///
 /// At most one short display per attribute list — a second one is an error.
-/// Short display cannot be combined with meta keywords in the same
-/// `#[oopsie(...)]` (preserves the existing diagnostic).
 pub fn extract_short_display(
     attrs: &[syn::Attribute],
 ) -> syn::Result<(Option<DisplayAttr>, Vec<syn::Attribute>)> {
@@ -1208,33 +930,129 @@ pub fn extract_short_display(
             kept.push(attr.clone());
             continue;
         }
-        // Parse the body: if it starts with a string literal, consume it as a
-        // short-display form; otherwise leave the attribute for darling.
-        let parsed: Option<DisplayAttr> =
-            attr.parse_args_with(|input: ParseStream| -> syn::Result<Option<DisplayAttr>> {
-                if input.peek(LitStr) {
-                    Ok(Some(input.parse()?))
-                } else {
-                    // Consume the rest so parse_args_with succeeds; the
-                    // attribute is preserved for darling to parse later.
-                    let _: proc_macro2::TokenStream = input.parse()?;
-                    Ok(None)
-                }
-            })?;
-        match parsed {
-            Some(d) => {
-                if display.is_some() {
-                    return Err(syn::Error::new_spanned(
-                        attr,
-                        "at most one short-display form per item; use `display(...)` if combining",
-                    ));
-                }
-                display = Some(d);
+        let Some(short) = split_short_display(attr)? else {
+            kept.push(attr.clone());
+            continue;
+        };
+        if display.is_some() {
+            return Err(syn::Error::new_spanned(
+                attr,
+                "at most one short-display form per item; use `display(...)` if combining",
+            ));
+        }
+        display = Some(short.display);
+        if !short.keywords.is_empty() {
+            let mut rewritten = attr.clone();
+            if let syn::Meta::List(list) = &mut rewritten.meta {
+                let keywords = short.keywords;
+                list.tokens = quote::quote!(#keywords);
             }
-            None => kept.push(attr.clone()),
+            kept.push(rewritten);
         }
     }
     Ok((display, kept))
+}
+
+/// A short-form `#[oopsie("fmt", args…)]` split into its display and the
+/// trailing args the format string doesn't consume, which are keywords.
+pub struct ShortDisplay {
+    pub display: DisplayAttr,
+    pub keywords: Punctuated<syn::Meta, Token![,]>,
+}
+
+/// Split `attr` if it is a short-form display, else `None`.
+///
+/// A trailing arg is a format argument when the format string consumes it:
+/// the first `N` args not of the form `name = value`, for the `N` positional
+/// arguments the string takes, and every `name = value` whose `name` the string
+/// references. The rest are keywords. When the string is malformed, every arg
+/// goes to the format string, so rustc reports the malformation.
+pub fn split_short_display(attr: &syn::Attribute) -> syn::Result<Option<ShortDisplay>> {
+    attr.parse_args_with(|input: ParseStream| {
+        if input.peek(LitStr) {
+            parse_short_display(input).map(Some)
+        } else {
+            let _: proc_macro2::TokenStream = input.parse()?;
+            Ok(None)
+        }
+    })
+}
+
+/// The keyword metas of an `#[oopsie(...)]` attribute, including those
+/// trailing a short-form display; `None` if the body doesn't parse.
+pub fn oopsie_keywords(attr: &syn::Attribute) -> Option<Punctuated<syn::Meta, Token![,]>> {
+    match split_short_display(attr) {
+        Ok(Some(short)) => Some(short.keywords),
+        Ok(None) => attr
+            .parse_args_with(Punctuated::<syn::Meta, Token![,]>::parse_terminated)
+            .ok(),
+        Err(_) => None,
+    }
+}
+
+fn parse_short_display(input: ParseStream) -> syn::Result<ShortDisplay> {
+    let format_str: LitStr = input.parse()?;
+    let value = format_str.value();
+    let usage = format_arg_usage(&value).ok();
+    let positional = usage.as_ref().map_or(0, |u| u.positional);
+    let mut positional_left = positional;
+    let mut args = Punctuated::new();
+    let mut keywords = Punctuated::new();
+    while !input.is_empty() {
+        input.parse::<Token![,]>()?;
+        if input.is_empty() {
+            break;
+        }
+        let is_format_arg = match (&usage, named_arg(input)) {
+            (None, _) => true,
+            (Some(usage), Some(name)) => usage.references(&name),
+            (Some(_), None) => {
+                let take = positional_left > 0;
+                positional_left = positional_left.saturating_sub(1);
+                take
+            }
+        };
+        if is_format_arg {
+            args.push(input.parse::<Expr>()?);
+        } else {
+            keywords.push(parse_leftover(input, positional)?);
+        }
+    }
+    Ok(ShortDisplay {
+        display: DisplayAttr { format_str, args },
+        keywords,
+    })
+}
+
+/// The name of a `name = value` arg at the head of `input`, unraw.
+fn named_arg(input: ParseStream) -> Option<String> {
+    use syn::ext::IdentExt as _;
+    let fork = input.fork();
+    let ident: Ident = fork.parse().ok()?;
+    (fork.peek(Token![=]) && !fork.peek(Token![==]) && !fork.peek(Token![=>]))
+        .then(|| ident.unraw().to_string())
+}
+
+/// A trailing short-display arg the format string doesn't consume, parsed as
+/// a keyword; anything that can't be one is an error spanned on the arg.
+fn parse_leftover(input: ParseStream, positional: usize) -> syn::Result<syn::Meta> {
+    use syn::parse::discouraged::Speculative as _;
+    let fork = input.fork();
+    if let Ok(meta) = fork.parse::<syn::Meta>()
+        && (fork.is_empty() || fork.peek(Token![,]))
+    {
+        input.advance_to(&fork);
+        return Ok(meta);
+    }
+    let arg: Expr = input.parse()?;
+    let plural = if positional == 1 { "" } else { "s" };
+    Err(syn::Error::new_spanned(
+        arg,
+        format!(
+            "unused display argument: the format string takes {positional} positional \
+             argument{plural}, and this is not an `#[oopsie(...)]` keyword"
+        ),
+    ))
 }
 
 /// Rejects the bare `vis = pub(...)` form. `Meta::NameValue`'s value parses
@@ -1470,18 +1288,6 @@ mod tests {
     // ── format-string helpers ───────────────────────────────────────
 
     #[test]
-    fn placeholder_detection_matches_rustc_escapes() {
-        assert!(!format_str_has_placeholder("plain text"));
-        assert!(!format_str_has_placeholder("escaped {{ and }}"));
-        assert!(!format_str_has_placeholder("a }} lone } close"));
-        assert!(format_str_has_placeholder("{field}"));
-        assert!(format_str_has_placeholder("positional {}"));
-        assert!(format_str_has_placeholder("a {{b}} then {c}"));
-        // A lone trailing `{` opens an (ill-formed) placeholder — same as rustc.
-        assert!(format_str_has_placeholder("trailing {"));
-    }
-
-    #[test]
     fn unescape_collapses_double_braces_in_place() {
         let mut s = "wrap {{names}} and {{{{nested}}}}".to_owned();
         unescape_format_braces(&mut s);
@@ -1682,137 +1488,93 @@ mod tests {
         assert_eq!(display.unwrap().args.len(), 1);
     }
 
-    fn fields_of(item: syn::ItemStruct) -> syn::Fields {
-        item.fields
+    fn split(attr: &syn::Attribute) -> (Vec<String>, Vec<String>) {
+        let short = split_short_display(attr).unwrap().unwrap();
+        let text = |t: &dyn quote::ToTokens| t.to_token_stream().to_string();
+        (
+            short.display.args.iter().map(|a| text(a)).collect(),
+            short.keywords.iter().map(|m| text(m)).collect(),
+        )
     }
 
     #[test]
-    fn reject_keyword_args_flags_non_field_keyword() {
-        let d: DisplayAttr =
-            DisplayAttr::from_meta(&parse_quote!(display("wrapped", transparent))).unwrap();
-        let fields = fields_of(parse_quote! { struct S { source: std::io::Error } });
-        d.reject_keyword_args(&fields, DisplayScope::Variant)
-            .unwrap_err();
-    }
-
-    #[test]
-    fn reject_keyword_args_allows_keyword_named_field() {
-        let d: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(display("{}", code))).unwrap();
-        let fields = fields_of(parse_quote! { struct S { code: u16 } });
-        d.reject_keyword_args(&fields, DisplayScope::Variant)
-            .unwrap();
-    }
-
-    #[test]
-    fn reject_keyword_args_allows_non_keyword_and_rich_exprs() {
-        let d: DisplayAttr =
-            DisplayAttr::from_meta(&parse_quote!(display("{} {}", extra, self.0))).unwrap();
-        let fields = fields_of(parse_quote! { struct S { whatever: u8 } });
-        d.reject_keyword_args(&fields, DisplayScope::Variant)
-            .unwrap();
-    }
-
-    #[test]
-    fn reject_keyword_args_struct_scope_flags_container_keyword() {
-        let d: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(display("x", size))).unwrap();
-        let fields = fields_of(parse_quote! { struct S { msg: String } });
-        // `size` is container-only: never legal on a variant either, and the
-        // Variant-scope error should point at the enum-level placement.
-        d.reject_keyword_args(&fields, DisplayScope::Variant)
-            .unwrap_err();
-        d.reject_keyword_args(&fields, DisplayScope::Struct)
-            .unwrap_err();
-    }
-
-    #[test]
-    fn reject_keyword_args_allows_container_keyword_named_field_on_variant() {
-        let d: DisplayAttr = DisplayAttr::from_meta(&parse_quote!(display("{}", module))).unwrap();
-        let fields = fields_of(parse_quote! { struct S { module: String } });
-        d.reject_keyword_args(&fields, DisplayScope::Variant)
-            .unwrap();
-    }
-
-    #[test]
-    fn reject_keyword_args_flags_keyword_assign_even_when_field_named() {
-        let d: DisplayAttr =
-            DisplayAttr::from_meta(&parse_quote!(display("[{code}]", code = "E001"))).unwrap();
-        let fields = fields_of(parse_quote! { struct S { code: u16 } });
-        d.reject_keyword_args(&fields, DisplayScope::Variant)
-            .unwrap_err();
-
-        let d: DisplayAttr =
-            DisplayAttr::from_meta(&parse_quote!(display("{n}", n = code))).unwrap();
-        d.reject_keyword_args(&fields, DisplayScope::Variant)
-            .unwrap();
-    }
-
-    fn keyword_arg_message(display: &DisplayAttr) -> String {
-        let fields = fields_of(parse_quote! { struct S { msg: String } });
-        display
-            .reject_keyword_args(&fields, DisplayScope::Variant)
-            .unwrap_err()
-            .to_string()
-    }
-
-    #[test]
-    fn reject_keyword_args_suggests_renaming_a_used_placeholder() {
-        let d = DisplayAttr::from_meta(&parse_quote!(display(
-            "failed [{code}] {code:?}",
-            code = codes::E001
-        )))
-        .unwrap();
-        assert_eq!(
-            keyword_arg_message(&d),
-            "`code` is an `#[oopsie(...)]` keyword, not a display format argument; give it \
-             its own attribute (`#[oopsie(\"failed [{code}] {code:?}\")] \
-             #[oopsie(code = codes::E001)]`), or rename the format argument: \
-             `\"failed [{code_}] {code_:?}\", code_ = codes::E001`"
-        );
-    }
-
-    #[test]
-    fn reject_keyword_args_only_moves_an_unused_arg() {
-        let d =
-            DisplayAttr::from_meta(&parse_quote!(display("exited {{code}}", code = 3))).unwrap();
-        assert_eq!(
-            keyword_arg_message(&d),
-            "`code` is an `#[oopsie(...)]` keyword, not a display format argument; give it \
-             its own attribute: `#[oopsie(\"exited {{code}}\")] #[oopsie(code = 3)]`"
-        );
-    }
-
-    #[test]
-    fn rename_placeholder_renames_only_the_named_argument() {
-        assert_eq!(
-            rename_placeholder(
-                "{code} {code:>8} {:>code$} {{code}} {codes} {0}",
-                "code",
-                "c"
-            )
-            .as_deref(),
-            Some("{c} {c:>8} {:>c$} {{code}} {codes} {0}")
-        );
-        assert_eq!(rename_placeholder("{codes} {{code}}", "code", "c"), None);
-    }
-
-    #[test]
-    fn tidy_tokens_reads_like_source() {
-        for (expr, text) in [
-            (parse_quote!(codes::E001), "codes::E001"),
-            (parse_quote!(::oopsie::codes::E001), "::oopsie::codes::E001"),
-            (parse_quote!(make(1, -2)), "make(1, -2)"),
+    fn short_display_splits_format_args_from_keywords() {
+        let cases: Vec<(syn::Attribute, &[&str], &[&str])> = vec![
             (
-                parse_quote!(self.codes[0].as_str()),
-                "self.codes[0].as_str()",
+                parse_quote!(#[oopsie("failed", code = "E1")]),
+                &[],
+                &["code = \"E1\""],
             ),
-            (parse_quote!(format!("{}", x)), "format!(\"{}\", x)"),
-            (parse_quote!(a != b && !c), "a != b && !c"),
-            (parse_quote!(&CODES), "&CODES"),
-            (parse_quote!(Code { n: 1 }), "Code { n: 1 }"),
-        ] {
-            let expr: Expr = expr;
-            assert_eq!(expr_text(&expr), text);
+            (
+                parse_quote!(#[oopsie("wrapped", transparent)]),
+                &[],
+                &["transparent"],
+            ),
+            (
+                parse_quote!(#[oopsie("{} x", n, code = "E1")]),
+                &["n"],
+                &["code = \"E1\""],
+            ),
+            (
+                parse_quote!(#[oopsie("Failed to get {part} of path {path}", path = path.display())]),
+                &["path = path . display ()"],
+                &[],
+            ),
+            (
+                parse_quote!(#[oopsie("[{code}]", code = "E1")]),
+                &["code = \"E1\""],
+                &[],
+            ),
+            (
+                parse_quote!(#[oopsie("{type}", r#type = 1)]),
+                &["r#type = 1"],
+                &[],
+            ),
+            (
+                parse_quote!(#[oopsie("{:>w$} {:.*}", w = 3, 2, x, y, transparent, help("h {}", z))]),
+                &["w = 3", "2", "x", "y"],
+                &["transparent", "help (\"h {}\" , z)"],
+            ),
+            (
+                parse_quote!(#[oopsie("bad {", code = "E1")]),
+                &["code = \"E1\""],
+                &[],
+            ),
+        ];
+        for (attr, args, keywords) in cases {
+            assert_eq!(
+                split(&attr),
+                (
+                    args.iter().map(|&s| s.to_owned()).collect(),
+                    keywords.iter().map(|&s| s.to_owned()).collect(),
+                )
+            );
         }
+    }
+
+    #[test]
+    fn short_display_rejects_unconsumed_non_keyword_arg() {
+        let attr: syn::Attribute = parse_quote!(#[oopsie("{}", a, b.c)]);
+        let Err(err) = split_short_display(&attr) else {
+            panic!("expected an error");
+        };
+        assert_eq!(
+            err.to_string(),
+            "unused display argument: the format string takes 1 positional argument, \
+             and this is not an `#[oopsie(...)]` keyword"
+        );
+    }
+
+    #[test]
+    fn short_display_keywords_become_their_own_attribute() {
+        let attrs: Vec<syn::Attribute> = parse_quote! { #[oopsie("{} x", n, code = "E1")] };
+        let (display, kept) = extract_short_display(&attrs).unwrap();
+        assert_eq!(display.unwrap().args.len(), 1);
+        let kept: Vec<String> = kept
+            .iter()
+            .map(|a| quote::ToTokens::to_token_stream(a).to_string())
+            .collect();
+        assert_eq!(kept, ["# [oopsie (code = \"E1\")]"]);
     }
 
     #[test]

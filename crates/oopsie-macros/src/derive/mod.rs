@@ -1,5 +1,6 @@
 //! `#[derive(Oopsie)]` implementation.
 
+mod format_str;
 mod gen_display;
 mod gen_error;
 mod gen_module;

@@ -40,6 +40,9 @@ enum KitchenSinkError {
     #[oopsie(transparent)]
     Wrapped { source: io::Error },
 
+    #[oopsie("short form keywords: {}", n, code = "kw::short", exit_code = 2)]
+    ShortForm { n: u32 },
+
     #[oopsie("from keyword: {inner}")]
     Marked {
         #[oopsie(from)]

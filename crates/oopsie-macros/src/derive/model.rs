@@ -57,8 +57,8 @@ impl<'a> ResolvedEnum<'a> {
     ///
     /// Validation runs in phases, each sweeping every variant before the next
     /// begins: field categorization and the source-cfg rule, then attribute
-    /// parsing with transparent/selector resolution, then display keyword-arg
-    /// rejection, then the help-conflict rule. The phase order determines which
+    /// parsing with transparent/selector resolution, then the help-conflict
+    /// rule. The phase order determines which
     /// error surfaces first when several rules fail; keep it stable, since the
     /// trybuild stderr fixtures pin the exact first diagnostic.
     pub fn resolve(input: &'a DeriveInput, container: &'a EnumContainerAttrs) -> syn::Result<Self> {
@@ -121,12 +121,7 @@ impl<'a> ResolvedEnum<'a> {
             });
         }
 
-        // Phase 3 — display keyword-arg rejection.
-        for v in &variants {
-            reject_display_keywords(v.variant, &v.attrs)?;
-        }
-
-        // Phase 4 — help-conflict rule.
+        // Phase 3 — help-conflict rule.
         for v in &variants {
             validate_help_conflict(&v.fields, &v.attrs)?;
         }
@@ -163,19 +158,16 @@ impl<'a> ResolvedEnum<'a> {
 /// to point the inert-`traced` diagnostic at the offending attribute.
 fn attr_mentions_traced(attr: &syn::Attribute) -> bool {
     attr.path().is_ident("oopsie")
-        && attr
-            .parse_args_with(
-                syn::punctuated::Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated,
-            )
-            .is_ok_and(|metas| metas.iter().any(|m| m.path().is_ident("traced")))
+        && super::parse::oopsie_keywords(attr)
+            .is_some_and(|metas| metas.iter().any(|m| m.path().is_ident("traced")))
 }
 
 impl<'a> ResolvedStruct<'a> {
     /// Parse and validate `input` against `attrs` in phases whose order fixes
     /// which error surfaces first: field categorization (and source-cfg) plus
-    /// transparent/selector-name resolution, then display keyword-arg rejection,
-    /// then the help-conflict rule. The trybuild stderr fixtures pin the exact
-    /// first diagnostic, so keep the order stable.
+    /// transparent/selector-name resolution, then the help-conflict rule. The
+    /// trybuild stderr fixtures pin the exact first diagnostic, so keep the
+    /// order stable.
     pub fn resolve(input: &'a DeriveInput, attrs: &'a StructAttrs) -> syn::Result<Self> {
         let syn::Data::Struct(data) = &input.data else {
             unreachable!("ResolvedStruct::resolve called on a non-struct")
@@ -204,7 +196,6 @@ impl<'a> ResolvedStruct<'a> {
             }
         }
 
-        reject_display_keywords_struct(input, attrs)?;
         validate_help_conflict(&fields, attrs)?;
 
         Ok(Self {
@@ -371,27 +362,6 @@ fn validate_help_conflict(fields: &CategorizedFields, attrs: &impl HasHelp) -> s
             "ambiguous help: this `#[oopsie(help)]` field conflicts with the \
              `help = ...` attribute; remove one",
         ));
-    }
-    Ok(())
-}
-
-/// Reject a trailing display arg on an enum variant that is actually a misparsed
-/// `#[oopsie(...)]` keyword.
-fn reject_display_keywords(variant: &syn::Variant, attrs: &VariantAttrs) -> syn::Result<()> {
-    if let Some(display) = &attrs.display {
-        display.reject_keyword_args(&variant.fields, super::parse::DisplayScope::Variant)?;
-    }
-    Ok(())
-}
-
-/// Reject a trailing display arg on a struct that is actually a misparsed
-/// `#[oopsie(...)]` keyword.
-fn reject_display_keywords_struct(input: &DeriveInput, attrs: &StructAttrs) -> syn::Result<()> {
-    let syn::Data::Struct(data) = &input.data else {
-        unreachable!()
-    };
-    if let Some(display) = &attrs.display {
-        display.reject_keyword_args(&data.fields, super::parse::DisplayScope::Struct)?;
     }
     Ok(())
 }

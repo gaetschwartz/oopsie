@@ -41,9 +41,10 @@ pub fn gen_use_block(oopsie_path: &syn::Path, scopes: &[(&str, &[Ident])]) -> To
 /// Collect the keyword ident of every meta in every `#[oopsie(...)]` attr into
 /// `out`, and the `oopsie` attribute-name ident of each such attr into
 /// `helpers` (so the attribute name itself becomes a hover target, not only its
-/// contents). Attributes whose body is not a meta list (the short-display form
-/// `#[oopsie("fmt {}", arg)]`) contribute their name but no keywords: this
-/// pre-pass must never error — validity checking is darling's job.
+/// contents). A short-display form `#[oopsie("fmt {}", arg, key)]` contributes
+/// only the keywords trailing its format arguments. Attributes whose body
+/// doesn't parse contribute their name alone: this pre-pass must never error —
+/// validity checking is darling's job.
 fn collect_into(attrs: &[syn::Attribute], out: &mut Vec<Ident>, helpers: &mut Vec<Ident>) {
     for attr in attrs {
         let Some(name) = attr.path().get_ident() else {
@@ -53,8 +54,7 @@ fn collect_into(attrs: &[syn::Attribute], out: &mut Vec<Ident>, helpers: &mut Ve
             continue;
         }
         helpers.push(name.clone());
-        let Ok(metas) = attr.parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
-        else {
+        let Some(metas) = crate::derive::parse::oopsie_keywords(attr) else {
             continue;
         };
         out.extend(
@@ -138,4 +138,18 @@ pub fn collect_attr_keywords(meta: &[NestedMeta]) -> (Vec<Ident>, Vec<Ident>) {
         recurse_lists(m, &mut traced);
     }
     (attr, traced)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn short_display_contributes_its_trailing_keywords() {
+        let attrs: Vec<syn::Attribute> =
+            syn::parse_quote! { #[oopsie("{} x", n, code = "E1", transparent)] };
+        let (mut keywords, mut helpers) = (Vec::new(), Vec::new());
+        super::collect_into(&attrs, &mut keywords, &mut helpers);
+        let keywords: Vec<String> = keywords.iter().map(ToString::to_string).collect();
+        assert_eq!(keywords, ["code", "transparent"]);
+        assert_eq!(helpers.len(), 1);
+    }
 }

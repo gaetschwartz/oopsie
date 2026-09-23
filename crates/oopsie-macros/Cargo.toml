@@ -34,13 +34,16 @@ proc-macro2 = "1"
 quote = "1"
 syn = { version = "3", features = ["full", "visit"] }
 toml_edit = { version = "0.25.12", features = ["parse", "serde"], optional = true, default-features = false }
+unicode-ident = "1"
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+bolero = "0.13.4"
 insta = "1.46.3"
 oopsie = { workspace = true }
 pretty_assertions = "1.4.1"
+ra-ap-rustc_parse_format = "=0.174.0"
 rstest = "0.27.0"
 tempfile = "3.27.0"

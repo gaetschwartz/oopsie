@@ -248,7 +248,8 @@ e.g. API error responses."
 //! | `provide` | Provide a typed value |
 //! | `vis` | Selector visibility |
 //!
-//! The short form `#[oopsie("msg {field}")]` is shorthand for `display(...)`.
+//! The short form `#[oopsie("msg {field}", ...)]` is shorthand for `display(...)`
+//! plus any keywords trailing the arguments its string consumes.
 //! With the `unstable` feature, `help` and `code` are additionally surfaced
 //! through the nightly `Provider` API.
 //!
