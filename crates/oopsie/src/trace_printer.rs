@@ -996,7 +996,7 @@ impl TracePrinter {
                     "   ... no spans captured ...".style(theme.frames_hidden)
                 )
             }
-            SpanTraceStatus::Unsupported => {
+            SpanTraceStatus::Unsupported | _ => {
                 writeln!(
                     f,
                     "{}",

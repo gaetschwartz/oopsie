@@ -49,6 +49,7 @@ fn cached_env_supports_color() -> bool {
 /// Color output configuration.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum ColorMode {
     /// Automatically detect based on environment and terminal.
     #[default]

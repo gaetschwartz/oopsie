@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 /// instead of rejecting the payload, whether parsed or deserialized.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[repr(u8)]
+#[non_exhaustive]
 pub enum TracingLevel {
     /// The most verbose level.
     TRACE = 0,

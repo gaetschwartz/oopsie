@@ -64,6 +64,7 @@ impl SpanTrace {
 
 /// The status of a [`SpanTrace`]: whether it was captured, or why it is empty.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SpanTraceStatus {
     /// Span traces are unsupported — typically no `ErrorLayer` is installed, or
     /// it comes from an incompatible `tracing-error` version.
