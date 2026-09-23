@@ -322,7 +322,12 @@ fn inject_into_named(
             return;
         }
         let cfg = gate.cfg_attribute();
-        fields.named.push(parse_quote! { #cfg #field });
+        // `#[doc(hidden)]`: every injected field is a mangled implementation
+        // detail, never part of the type's documented surface, so it must not
+        // trip `missing_docs` on a `pub` traced type.
+        fields
+            .named
+            .push(parse_quote! { #cfg #[doc(hidden)] #field });
     };
     push(
         &to_inject.traces,
@@ -377,7 +382,7 @@ pub(super) fn add_provide_attrs(
         name.push_str(v);
     }
     let provide = quote::quote! {
-        oopsie(provide(#code_type => #code_type::from(concat!(module_path!(), "::", #name))))
+        oopsie(provide(#code_type => #code_type::from(::core::concat!(::core::module_path!(), "::", #name))))
     };
     match gate {
         Gate::Off => {}

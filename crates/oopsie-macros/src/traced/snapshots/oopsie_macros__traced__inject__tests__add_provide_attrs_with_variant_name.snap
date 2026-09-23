@@ -2,4 +2,4 @@
 source: crates/oopsie-macros/src/traced/inject.rs
 expression: attr_str
 ---
-# [oopsie (provide (ErrorCode => ErrorCode :: from (concat ! (module_path ! () , "::" , "MyError::Variant"))))]
+# [oopsie (provide (ErrorCode => ErrorCode :: from (:: core :: concat ! (:: core :: module_path ! () , "::" , "MyError::Variant"))))]

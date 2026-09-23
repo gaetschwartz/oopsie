@@ -1216,3 +1216,70 @@ fn impossible_timestamp_field_keeps_the_injected_timestamp() {
     let err = ContradictoryTimestampFieldOopsie { info: "x" }.build();
     assert!(err.__oopsie_timestamp >= before);
 }
+
+// ---- injected auto-code must not resolve through a user `concat!`/`module_path!` shadow ----
+
+#[test]
+fn auto_code_ignores_shadowed_core_macros() {
+    use oopsie::Diagnostic as _;
+
+    macro_rules! concat {
+        ($($t:tt)*) => {
+            compile_error!("generated code must not call the shadowed local `concat!`")
+        };
+    }
+    macro_rules! module_path {
+        () => {
+            compile_error!("generated code must not call the shadowed local `module_path!`")
+        };
+    }
+
+    #[oopsie(traced)]
+    #[oopsie(module(false))]
+    enum ShadowedMacroError {
+        #[oopsie("shadowed")]
+        Boom { info: String },
+    }
+
+    let err = Boom {
+        info: "x".to_owned(),
+    }
+    .build();
+    let code = err
+        .oopsie_error_code()
+        .expect("auto-code should be present despite locally shadowed core macros");
+    assert!(
+        code.as_str().ends_with("::ShadowedMacroError::Boom"),
+        "auto-code broken by shadowed macros: {}",
+        code.as_str()
+    );
+}
+
+// ---- injected trace fields must not trip `#[deny(missing_docs)]` on a `pub` traced type ----
+
+/// A traced enum denying `missing_docs`, whose variant fields are public, so
+/// an undocumented injected field would trip it.
+pub mod missing_docs_pub_traced {
+    #![deny(missing_docs)]
+
+    use oopsie::oopsie;
+
+    /// A publicly documented traced enum.
+    #[oopsie(traced)]
+    pub enum DocumentedEnumError {
+        /// The connection failed.
+        #[oopsie("conn failed: {addr}")]
+        ConnFailed {
+            /// The address that failed to connect.
+            addr: String,
+        },
+    }
+}
+
+#[test]
+fn injected_trace_fields_are_doc_hidden() {
+    use missing_docs_pub_traced::{DocumentedEnumError, documented_enum_oopsies};
+
+    let err = documented_enum_oopsies::ConnFailed { addr: "127.0.0.1" }.build();
+    assert!(matches!(&err, DocumentedEnumError::ConnFailed { addr, .. } if addr == "127.0.0.1"));
+}

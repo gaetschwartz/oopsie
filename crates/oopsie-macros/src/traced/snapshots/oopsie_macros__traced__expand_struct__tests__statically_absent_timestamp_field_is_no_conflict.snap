@@ -2,4 +2,4 @@
 source: crates/oopsie-macros/src/traced/expand_struct.rs
 expression: out
 ---
-struct Seen { # [cfg (any ())] at : :: std :: time :: SystemTime , # [oopsie (traces)] __oopsie_traces : :: oopsie :: __private :: alloc :: boxed :: Box < (:: oopsie :: Backtrace , :: oopsie :: SpanTrace) > , # [oopsie (capture)] __oopsie_timestamp : :: oopsie :: __private :: SystemTime }
+struct Seen { # [cfg (any ())] at : :: std :: time :: SystemTime , # [doc (hidden)] # [oopsie (traces)] __oopsie_traces : :: oopsie :: __private :: alloc :: boxed :: Box < (:: oopsie :: Backtrace , :: oopsie :: SpanTrace) > , # [doc (hidden)] # [oopsie (capture)] __oopsie_timestamp : :: oopsie :: __private :: SystemTime }
