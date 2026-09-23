@@ -14,8 +14,12 @@ use std::collections::HashSet;
 
 use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
+use syn::punctuated::Punctuated;
 use syn::visit::Visit;
-use syn::{ConstParam, GenericParam, Generics, Lifetime, LifetimeParam, Type, TypeParam};
+use syn::{
+    ConstParam, GenericParam, Generics, Ident, Lifetime, LifetimeParam, Token, Type, TypeParam,
+    TypeParamBound, WherePredicate,
+};
 
 /// The set of generic parameters a selector carries, ready to render at the
 /// declaration site (`<'a, T, const N: usize>`) and the use site (`<'a, T, N>`).
@@ -94,6 +98,8 @@ pub fn param_name(param: &GenericParam) -> String {
 /// struct. The bounds re-surface as `where` predicates on the impls that name
 /// the destination error — see [`projected_bound_predicates`], routed by the
 /// generators to whichever impl or method has every named parameter in scope.
+/// A `?Sized` relaxation (inline or in the `where` clause) is the exception: it
+/// stays on the declaration, since the struct itself must admit unsized types.
 pub fn project(generics: &Generics, referenced: &ReferencedParams) -> SelectorGenerics {
     let mut decl_params = Vec::new();
     let mut use_args = Vec::new();
@@ -109,8 +115,8 @@ pub fn project(generics: &Generics, referenced: &ReferencedParams) -> SelectorGe
             }
             GenericParam::Type(tp) if referenced.types.contains(&tp.ident.to_string()) => {
                 let mut bare = tp.clone();
-                bare.bounds.clear();
-                bare.colon_token = None;
+                bare.bounds = maybe_bounds_of(generics, &tp.ident);
+                bare.colon_token = (!bare.bounds.is_empty()).then(Default::default);
                 bare.default = None;
                 decl_params.push(GenericParam::Type(bare));
                 let ident = &tp.ident;
@@ -143,12 +149,13 @@ pub fn projected_bound_predicates(
     for param in &generics.params {
         match param {
             GenericParam::Type(tp) if projected.contains(&tp.ident.to_string()) => {
-                if tp.bounds.is_empty() {
+                let bounds: Vec<&TypeParamBound> =
+                    tp.bounds.iter().filter(|b| !is_maybe_bound(b)).collect();
+                if bounds.is_empty() {
                     continue;
                 }
                 let ident = &tp.ident;
-                let bounds = &tp.bounds;
-                predicates.push(syn::parse_quote! { #ident: #bounds });
+                predicates.push(syn::parse_quote! { #ident: #(#bounds)+* });
             }
             GenericParam::Lifetime(lt) if projected.contains(&lt.lifetime.ident.to_string()) => {
                 if lt.bounds.is_empty() {
@@ -162,6 +169,75 @@ pub fn projected_bound_predicates(
         }
     }
     predicates
+}
+
+/// Whether `bound` relaxes a default bound (`?Sized`).
+const fn is_maybe_bound(bound: &TypeParamBound) -> bool {
+    matches!(bound, TypeParamBound::Trait(tb) if tb.maybe.is_some())
+}
+
+/// Whether `ty` is the bare parameter path `ident`.
+fn is_bare_param(ty: &Type, ident: &Ident) -> bool {
+    matches!(ty, Type::Path(tp) if tp.qself.is_none() && tp.path.is_ident(ident))
+}
+
+/// The `?Sized` relaxation declared for type parameter `ident`, inline or in
+/// the `where` clause, at most once (rustc rejects a duplicate, E0203).
+fn maybe_bounds_of(generics: &Generics, ident: &Ident) -> Punctuated<TypeParamBound, Token![+]> {
+    let inline = generics
+        .params
+        .iter()
+        .filter_map(|p| match p {
+            GenericParam::Type(tp) if tp.ident == *ident => Some(&tp.bounds),
+            GenericParam::Type(_) | GenericParam::Lifetime(_) | GenericParam::Const(_) => None,
+        })
+        .flatten();
+    let in_where = generics
+        .where_clause
+        .iter()
+        .flat_map(|wc| &wc.predicates)
+        .filter_map(|pred| match pred {
+            WherePredicate::Type(tp) if is_bare_param(&tp.bounded_ty, ident) => Some(&tp.bounds),
+            _ => None,
+        })
+        .flatten();
+    inline
+        .chain(in_where)
+        .filter(|b| is_maybe_bound(b))
+        .take(1)
+        .cloned()
+        .collect()
+}
+
+/// `pred` without the `?Sized` relaxations of the parameters in `projected`,
+/// which [`project`] already declares inline and rustc rejects twice (E0203);
+/// `None` when nothing is left.
+pub fn strip_projected_maybe_bounds(
+    pred: &WherePredicate,
+    projected: &HashSet<String>,
+) -> Option<WherePredicate> {
+    let WherePredicate::Type(tp) = pred else {
+        return Some(pred.clone());
+    };
+    let Type::Path(path) = &tp.bounded_ty else {
+        return Some(pred.clone());
+    };
+    let is_projected = path.qself.is_none()
+        && path
+            .path
+            .get_ident()
+            .is_some_and(|ident| projected.contains(&ident.to_string()));
+    if !is_projected {
+        return Some(pred.clone());
+    }
+    let mut stripped = tp.clone();
+    stripped.bounds = tp
+        .bounds
+        .iter()
+        .filter(|b| !is_maybe_bound(b))
+        .cloned()
+        .collect();
+    (!stripped.bounds.is_empty()).then(|| WherePredicate::Type(stripped))
 }
 
 /// Every generic parameter a `where` predicate names — in its subject and in

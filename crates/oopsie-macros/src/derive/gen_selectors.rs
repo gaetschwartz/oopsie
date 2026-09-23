@@ -323,7 +323,9 @@ impl SelectorShape<'_> {
                 .where_clause
                 .iter()
                 .flat_map(|wc| wc.predicates.iter())
-                .cloned(),
+                .filter_map(|pred| {
+                    super::generics::strip_projected_maybe_bounds(pred, &self.referenced_names)
+                }),
         );
         pool
     }

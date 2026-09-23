@@ -615,3 +615,43 @@ fn synthetic_into_param_avoids_user_dunder_t0() {
     let err: DunderT0Error<io::Error> = Sourced { count: 3u32 }.build_error(io_err);
     assert_eq!(err.to_string(), "dundered 3");
 }
+
+// A `?Sized` parameter must stay unsized-capable on the projected selector and
+// its impls, whether relaxed inline or in the `where` clause.
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum UnsizedRefError<'a, T: ?Sized + fmt::Debug> {
+    #[oopsie("bad {v:?}")]
+    BadRef { v: &'a T },
+    #[oopsie("bad {v:?} after {source}")]
+    BadRefSourced { v: &'a T, source: io::Error },
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie("where-relaxed {v:?}")]
+struct WhereUnsizedError<'a, T>
+where
+    T: ?Sized + fmt::Debug,
+{
+    v: &'a T,
+}
+
+#[test]
+fn unsized_param_keeps_maybe_sized_bound() {
+    let err: UnsizedRefError<'_, str> = BadRef { v: "x" }.build();
+    assert_eq!(err.to_string(), "bad \"x\"");
+
+    let shown: &dyn fmt::Debug = &5u8;
+    let err: UnsizedRefError<'_, dyn fmt::Debug> = BadRef { v: shown }.build();
+    assert_eq!(err.to_string(), "bad 5");
+
+    let io_err = io::Error::other("boom");
+    let err: UnsizedRefError<'_, str> = BadRefSourced { v: "y" }.build_error(io_err);
+    assert_eq!(err.to_string(), "bad \"y\" after boom");
+
+    let err: WhereUnsizedError<'_, str> = WhereUnsizedOopsie { v: "z" }.build();
+    assert_eq!(err.to_string(), "where-relaxed \"z\"");
+    let err: WhereUnsizedError<'_, [u8]> = WhereUnsizedOopsie { v: &[1u8, 2][..] }.build();
+    assert_eq!(err.to_string(), "where-relaxed [1, 2]");
+}
