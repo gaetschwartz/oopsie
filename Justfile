@@ -4,8 +4,13 @@
 stable_powerset := "--feature-powerset --exclude-features default,unstable,unstable-error-generic-member-access,unstable-try-trait-v2"
 nightly_powerset := "--feature-powerset --exclude-features default,unstable-error-generic-member-access,unstable-try-trait-v2 -F unstable"
 
-# Run `cargo <cmd>` on both stable and nightly. First arg "1" sweeps the feature
-# powerset of every workspace package; "0" runs default features only.
+# The test-running sweeps cap the combination depth; check/clippy sweeps stay
+# exhaustive.
+test_depth := "3"
+
+# Run `cargo <cmd>` on both stable and nightly. First arg "1" sweeps the whole
+# feature powerset of every workspace package, N > 1 sweeps combinations of at
+# most N features, "0" runs default features only.
 [positional-arguments]
 _cargo full *ARGS:
     #!/usr/bin/env bash
@@ -14,6 +19,9 @@ _cargo full *ARGS:
     if [ "{{ full }}" = "1" ]; then
         cargo +stable hack {{ stable_powerset }} "$@"
         cargo hack {{ nightly_powerset }} "$@"
+    elif [ "{{ full }}" != "0" ]; then
+        cargo +stable hack {{ stable_powerset }} --depth {{ full }} "$@"
+        cargo hack {{ nightly_powerset }} --depth {{ full }} "$@"
     else
         cargo +stable "$@"
         cargo "$@"
@@ -29,8 +37,8 @@ clippy-full: (_cargo "1" "clippy" "--workspace" "--all-targets" "--" "-D" "warni
 # Lint default features on stable + nightly, denying warnings.
 clippy: (_cargo "0" "clippy" "--workspace" "--all-targets" "--" "-D" "warnings")
 
-# Run doctests across the whole feature powerset on stable + nightly.
-doctest-full: (_cargo "1" "test" "--doc" "--workspace")
+# Run doctests across the depth-limited feature powerset on stable + nightly.
+doctest-full: (_cargo test_depth "test" "--doc" "--workspace")
 # Run doctests for default features on stable + nightly, plus fancy,serde,tracing.
 doctest: (_cargo "0" "test" "--doc" "--workspace")
     cargo +stable test --doc --workspace --no-default-features --features fancy,serde,tracing
@@ -48,15 +56,15 @@ _nextest-snapshots *ARGS:
 # Run the snapshot-bearing combos — the meaningful everyday test.
 nextest *ARGS: (_nextest-snapshots ARGS)
 
-# Run the feature powerset (snapshots skip), then the snapshot-bearing combos.
+# Run the depth-limited feature powerset (snapshots skip), then the snapshot-bearing combos.
 nextest-full *ARGS: (_nextest-snapshots ARGS)
-    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=0 cargo +stable hack {{ stable_powerset }} nextest run --workspace {{ ARGS }}
-    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=0 cargo hack {{ nightly_powerset }} nextest run --workspace {{ ARGS }}
+    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=0 cargo +stable hack {{ stable_powerset }} --depth {{ test_depth }} nextest run --workspace {{ ARGS }}
+    OOPSIE_BACKTRACE_SNAPSHOT_TESTS=0 cargo hack {{ nightly_powerset }} --depth {{ test_depth }} nextest run --workspace {{ ARGS }}
 
 # Run the snapshot-bearing test combos plus doctests.
 test *ARGS: (nextest ARGS) doctest
 
-# Run the whole feature powerset, then doctests for every combo.
+# Run the depth-limited feature powerset, then doctests for every combo.
 test-full *ARGS: (nextest-full ARGS) doctest-full
 
 # Re-bless insta snapshots + trybuild stderr on both blessed combos.
