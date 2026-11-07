@@ -384,7 +384,7 @@ mod tests {
     fn test_optional_span_trace_display_none() {
         let opt = OptionalSpanTrace::none();
         let display = opt.to_string();
-        assert!(display.is_empty());
+        assert_eq!(display, "");
     }
 
     #[test]
@@ -652,7 +652,7 @@ mod tests {
 
         #[test]
         fn display_is_empty() {
-            assert!(SpanTrace::capture().to_string().is_empty());
+            assert_eq!(SpanTrace::capture().to_string(), "");
         }
 
         #[test]

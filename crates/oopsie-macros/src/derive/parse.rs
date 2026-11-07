@@ -1443,7 +1443,7 @@ mod tests {
         let d = display.expect("expected a display attr");
         assert_eq!(d.format_str.value(), "simple message");
         assert!(d.args.is_empty());
-        assert!(kept.is_empty());
+        assert_eq!(kept.len(), 0);
     }
 
     #[test]
@@ -1946,7 +1946,7 @@ impl CategorizedFields {
                     ));
                 }
                 source = Some(SourceField {
-                    ident: ident.clone(),
+                    ident,
                     ty: field.ty.clone(),
                     kind: attrs.from,
                     forward,

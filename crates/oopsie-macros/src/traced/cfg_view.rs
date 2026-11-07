@@ -495,7 +495,7 @@ mod tests {
             .assignments()
             .map(|a| a.resolve_attrs(&attrs))
             .collect();
-        assert!(resolved[0].is_empty());
+        assert_eq!(resolved[0].len(), 0);
         assert_eq!(resolved[1].len(), 2);
         assert!(resolved[1][0].path().is_ident("oopsie"));
     }

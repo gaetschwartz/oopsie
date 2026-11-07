@@ -433,12 +433,18 @@ pub mod __private {
     pub mod chrono {
         /// Stand-in for `chrono::Local`. See [`super::chrono`].
         #[derive(Debug, Clone, Copy)]
-        #[deprecated(note = "enable oopsie's `chrono` feature to use `timestamp(chrono = true)`")]
+        #[deprecated(
+            since = "0.1.1",
+            note = "enable oopsie's `chrono` feature to use `timestamp(chrono = true)`"
+        )]
         pub struct Local;
 
         /// Stand-in for `chrono::DateTime`. See [`super::chrono`].
         #[derive(Debug, Clone, Copy)]
-        #[deprecated(note = "enable oopsie's `chrono` feature to use `timestamp(chrono = true)`")]
+        #[deprecated(
+            since = "0.1.1",
+            note = "enable oopsie's `chrono` feature to use `timestamp(chrono = true)`"
+        )]
         pub struct DateTime<Tz>(core::marker::PhantomData<Tz>);
     }
 

@@ -427,9 +427,7 @@ pub fn gen_enum_error(
         } else {
             (None, None)
         };
-        if let Some(body) =
-            trace_accessor_body(st_own, src_access.clone(), st_probe, &st_fn, oopsie_path)
-        {
+        if let Some(body) = trace_accessor_body(st_own, src_access, st_probe, &st_fn, oopsie_path) {
             let binds = accessor_pattern_binds(st_bind, source_ident);
             st_arms.push(enum_accessor_arm(variant_ident, &binds, &body));
             accessor_uses_source |= source_ident.is_some();
