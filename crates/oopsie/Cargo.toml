@@ -68,14 +68,17 @@ trybuild = "1.0.116"
 [[bench]]
 name = "capture"
 harness = false
+required-features = ["std"]
 
 [[bench]]
 name = "construct"
 harness = false
+required-features = ["std"]
 
 [[bench]]
 name = "propagate"
 harness = false
+required-features = ["std"]
 
 [[bench]]
 name = "render"
@@ -95,11 +98,11 @@ required-features = ["fancy", "tracing"]
 [[bench]]
 name = "erased"
 harness = false
-required-features = ["serde"]
+required-features = ["serde", "std"]
 
 [[example]]
 name = "erased_json"
-required-features = ["serde"]
+required-features = ["serde", "std"]
 
 [[example]]
 name = "welp"
