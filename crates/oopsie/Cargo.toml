@@ -47,7 +47,6 @@ workspace = true
 
 [dev-dependencies]
 anyhow = "1.0.102"
-backtrace = "0.3.76"
 chrono = "0.4.44"
 color-eyre = "0.6.5"
 criterion = "0.8.2"
