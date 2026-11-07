@@ -130,7 +130,7 @@ enum FieldNamedDunderRequestEnum {
 #[cfg(feature = "unstable-error-generic-member-access")]
 #[test]
 fn c8_field_named_dunder_request_in_provide() {
-    oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
+    oopsie_core::test_utils::force_backtrace();
     let err = DunderReq { __request: 9u32 }.build();
     let bt = core::error::request_ref::<oopsie::Backtrace>(&err);
     assert!(

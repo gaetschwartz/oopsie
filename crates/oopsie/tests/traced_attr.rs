@@ -389,7 +389,7 @@ fn layout_single_trace_fallback_backtrace_only() {
 #[test]
 fn featureless_spantrace_degrades_to_uncaptured() {
     use oopsie::Diagnostic as _;
-    oopsie::backtrace::set_override(oopsie::RustBacktrace::Enabled);
+    oopsie_core::test_utils::force_backtrace();
     let e = default_packed_oopsies::Boom { info: "x" }.build();
     assert!(
         !e.oopsie_spantrace()
@@ -401,7 +401,7 @@ fn featureless_spantrace_degrades_to_uncaptured() {
         e.oopsie_backtrace().is_some(),
         "backtrace accessor must capture in the featureless layout"
     );
-    oopsie::backtrace::clear_override();
+    oopsie_core::backtrace::clear_override();
 }
 
 // Explicit `traced(spantrace)` is honored featureless — the shape the old
