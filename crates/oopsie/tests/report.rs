@@ -400,7 +400,7 @@ fn test_report_suppresses_unsupported_spantrace() {
     };
 
     let report = Report::new(error).no_colors().to_string();
-    insta::with_settings!({ filters => vec![(r"report\.rs:\d+:\d+", "report.rs:[LOC]")] }, {
+    insta::with_settings!({ filters => vec![(r"\\", "/"), (r"report\.rs:\d+:\d+", "report.rs:[LOC]")] }, {
         insta::assert_snapshot!(report, @"
         Error[report::TestError]: Test error: unsupported render
           at crates/oopsie/tests/report.rs:[LOC]
@@ -1129,7 +1129,7 @@ fn test_report_welp_message_free_wraps_io_error() {
     let welp = result.welp().unwrap_err();
     let report = Report::new(welp).no_colors();
 
-    insta::with_settings!({ filters => vec![(r"report\.rs:\d+:\d+", "report.rs:[LOC]")] }, {
+    insta::with_settings!({ filters => vec![(r"\\", "/"), (r"report\.rs:\d+:\d+", "report.rs:[LOC]")] }, {
         insta::assert_snapshot!(snap_name!("report_welp_message_free"), report);
     });
 }

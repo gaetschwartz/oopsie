@@ -193,9 +193,9 @@ mod tests {
         // time rather than applied here.
         assert!(
             erased.frames().iter().any(|fr| {
-                fr.filename
-                    .as_deref()
-                    .is_some_and(|f| f.starts_with(crate::__private::CORE_SRC_PATH))
+                fr.filename.as_deref().is_some_and(|f| {
+                    std::path::Path::new(f).starts_with(crate::__private::CORE_SRC_PATH)
+                })
             }),
             "erasure should retain raw internal frames, not strip them at capture"
         );
