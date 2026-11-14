@@ -361,6 +361,62 @@ fn bare_transparent_non_diagnostic_source_forwards_none() {
     assert!(wrapped.oopsie_help_text().is_none());
 }
 
+// ─── Bare transparent hides its source: source() is the source's own cause ───
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+#[oopsie(display("mid failed"))]
+struct MidError {
+    source: io::Error,
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+enum BareOverMid {
+    #[oopsie(transparent)]
+    Mid { source: MidError },
+}
+
+#[derive(Debug, Oopsie)]
+#[oopsie(module(false))]
+#[oopsie(transparent)]
+struct BareStructOverMid {
+    source: MidError,
+}
+
+#[test]
+fn bare_transparent_source_skips_the_wrapped_error() {
+    let mid = MidError {
+        source: io::Error::new(io::ErrorKind::NotFound, "missing file"),
+    };
+    let wrapped = BareOverMid::from(mid);
+    assert_eq!(wrapped.to_string(), "mid failed");
+    // The wrapped `MidError` shares this layer's message, so `source()` is its
+    // cause rather than the `MidError` itself.
+    let src = wrapped.source().expect("mid's cause");
+    assert_eq!(src.to_string(), "missing file");
+    assert!(src.source().is_none());
+}
+
+#[test]
+fn bare_transparent_struct_source_skips_the_wrapped_error() {
+    let mid = MidError {
+        source: io::Error::new(io::ErrorKind::NotFound, "missing file"),
+    };
+    let wrapped = BareStructOverMid::from(mid);
+    assert_eq!(wrapped.to_string(), "mid failed");
+    assert_eq!(
+        wrapped.source().expect("mid's cause").to_string(),
+        "missing file"
+    );
+}
+
+#[test]
+fn bare_transparent_over_leaf_has_no_source() {
+    let wrapped = BareIoWrapper::from(io::Error::new(io::ErrorKind::NotFound, "missing file"));
+    assert!(wrapped.source().is_none());
+}
+
 // ─── Provider-API parity for a transparent traced wrapper (nightly only) ───
 //
 // Real-macro coverage for the stable diagnostic accessors on a transparent,

@@ -21,7 +21,8 @@ use crate::trace_printer::{
 /// A wrapper around an error that provides rich, colorized output.
 ///
 /// The error-chain section renders the message of every `source()` in the
-/// chain. The backtrace and span trace are read from the top-level error's
+/// chain. A transparent error hides the error it delegates its message to, so
+/// that message appears once. The backtrace and span trace are read from the top-level error's
 /// [`Diagnostic`] accessors only — `Report` does not walk the chain looking for
 /// traces. `#[oopsie]`-generated and transparent errors still surface the
 /// origin-most trace at the top level: their accessors recursively forward to

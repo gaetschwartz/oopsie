@@ -1035,9 +1035,8 @@ fn test_report_transparent_forwards_code_and_help() {
     // `Report` (which reads only the top error) now renders them. The leaf has
     // no backtrace, so the output is deterministic across stable/nightly.
     //
-    // Per the no-renderer-change decision, the delegated headline equals the
-    // immediate source's message, so it shows both as the headline and as the
-    // first `╰─▶` chain entry.
+    // The delegated headline is the leaf's message and a transparent layer
+    // hides its source, so the leaf is not repeated as a chain entry.
     let leaf = LeafOopsie { what: "disk" }.build();
     let root: TransparentRootError = TransparentRootError::from(leaf);
     let report = Report::new(root).no_colors();
@@ -1047,7 +1046,6 @@ fn test_report_transparent_forwards_code_and_help() {
         rendered,
         "\
 Error[leaf::failed]: leaf failed: disk
-  ╰─▶ leaf failed: disk
 
   help: turn it off and on again
 "
@@ -1119,12 +1117,9 @@ fn report_does_not_search_chain_for_traces() {
 // Message-free `.welp()` conversion (F3)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// `.welp()` delegates `Display` to the source and keeps the source reachable
-/// through `source()`. The headline therefore equals the source's message, and
-/// the chain renders that same message again as its first entry — the doubled
-/// top line is the deliberate eyre-compatible trade-off, pinned visibly here.
-/// Backtraces are disabled so the render is deterministic and the doubled line
-/// is the whole story.
+/// `.welp()` delegates `Display` to the source and hides it from `source()`, so
+/// the headline is the source's message and the chain does not repeat it.
+/// Backtraces are disabled so the render is deterministic.
 #[test]
 fn test_report_welp_message_free_wraps_io_error() {
     use oopsie::WelpResultExt as _;

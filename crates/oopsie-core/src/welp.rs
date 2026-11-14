@@ -170,10 +170,11 @@ impl Welp {
     }
 
     /// Wrap an existing error with no user message: this `Welp`'s [`Display`]
-    /// delegates to the source's, and the source stays reachable through
-    /// [`Error::source`]. Use it for the message-free `?`-style conversion of a
-    /// foreign error; reach for [`wrap`](Self::wrap) when a string context adds
-    /// information.
+    /// delegates to the source's, and [`Error::source`] skips it to return the
+    /// source's own cause, so a chain never repeats the message. The source
+    /// stays reachable through [`downcast_ref`](Self::downcast_ref). Use it for
+    /// the message-free `?`-style conversion of a foreign error; reach for
+    /// [`wrap`](Self::wrap) when a string context adds information.
     ///
     /// Captures a backtrace (and a span-trace under the `tracing` feature) at
     /// the call site; like [`wrap`](Self::wrap), the [`Diagnostic`] accessors
@@ -191,7 +192,8 @@ impl Welp {
     ///
     /// let err = Welp::from_error(std::io::Error::other("disk full"));
     /// assert_eq!(err.to_string(), "disk full");
-    /// assert!(std::error::Error::source(&err).is_some());
+    /// assert!(std::error::Error::source(&err).is_none());
+    /// assert!(err.downcast_ref::<std::io::Error>().is_some());
     /// ```
     #[track_caller]
     pub fn from_error<E>(source: E) -> Self
@@ -345,7 +347,16 @@ impl fmt::Display for Welp {
 impl StdError for Welp {
     fn source(&self) -> Option<&(dyn StdError + 'static)> {
         match &self.0 {
-            WelpRepr::Sourced { source, .. } => Some(&**source),
+            WelpRepr::Sourced {
+                message: None,
+                source,
+                ..
+            } => source.source(),
+            WelpRepr::Sourced {
+                message: Some(_),
+                source,
+                ..
+            } => Some(&**source),
             WelpRepr::Traced { .. } => None,
         }
     }
@@ -480,8 +491,8 @@ pub trait WelpResultExt<T, E>: Sized + crate::sealed::Ctx {
     /// Convert the error into a [`Welp`] with no user message — the kind of
     /// message-free `?`-style conversion `anyhow`/`eyre` give you for free. The
     /// resulting `Welp`'s [`Display`](core::fmt::Display) delegates to the
-    /// source's, and the source stays reachable through
-    /// [`Error::source`](core::error::Error::source). Reach for
+    /// source's, and [`Error::source`](core::error::Error::source) skips it to
+    /// return the source's own cause, so a chain never repeats the message. Reach for
     /// [`welp_context`](Self::welp_context) instead when a string adds
     /// information the source doesn't already carry.
     ///
@@ -719,15 +730,14 @@ mod tests {
         let err = Welp::from_error(std::io::Error::other("disk full"));
         assert_eq!(err.to_string(), "disk full");
         assert!(err.message().is_none());
-        let source = StdError::source(&err).expect("source missing");
-        assert_eq!(source.to_string(), "disk full");
+        assert!(StdError::source(&err).is_none());
     }
 
     #[test]
     fn from_error_source_downcasts_to_original() {
         let err = Welp::from_error(std::io::Error::new(std::io::ErrorKind::NotFound, "missing"));
-        let io = StdError::source(&err)
-            .and_then(|s| s.downcast_ref::<std::io::Error>())
+        let io = err
+            .downcast_ref::<std::io::Error>()
             .expect("source is the original io::Error");
         assert_eq!(io.kind(), std::io::ErrorKind::NotFound);
     }
@@ -739,12 +749,12 @@ mod tests {
     }
 
     #[test]
-    fn welp_on_err_delegates_display_and_keeps_source() {
+    fn welp_on_err_delegates_display_and_hides_source() {
         let r: Result<i32, std::io::Error> = Err(std::io::Error::other("io fail"));
         let err = r.welp().unwrap_err();
         assert_eq!(err.to_string(), "io fail");
         assert!(err.message().is_none());
-        assert_eq!(StdError::source(&err).unwrap().to_string(), "io fail");
+        assert!(StdError::source(&err).is_none());
     }
 
     #[test]
@@ -774,8 +784,8 @@ mod tests {
         assert!(bt.is_captured());
         #[cfg(feature = "unstable-error-generic-member-access")]
         {
-            let source = StdError::source(&outer)
-                .and_then(|s| s.downcast_ref::<Welp>())
+            let source = outer
+                .downcast_ref::<Welp>()
                 .expect("source is the inner Welp");
             let inner_bt = source.oopsie_backtrace().expect("inner backtrace");
             assert!(
@@ -995,8 +1005,8 @@ mod tests {
         // (deeper) trace must win over the wrap-site capture.
         #[cfg(feature = "unstable-error-generic-member-access")]
         {
-            let source = StdError::source(&outer)
-                .and_then(|s| s.downcast_ref::<Welp>())
+            let source = outer
+                .downcast_ref::<Welp>()
                 .expect("source is the inner Welp");
             let inner_bt = source.oopsie_backtrace().expect("inner backtrace");
             let inner_st = source.oopsie_spantrace().expect("inner spantrace");
