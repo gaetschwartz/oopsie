@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-14
+
 ### Changed
 
 - A `transparent` error whose `Display` is delegated to its source (no
@@ -351,6 +353,7 @@ Initial release candidate.
 - Feature flags: `fancy`, `serde`, `tracing`, `chrono`, `jiff`, `extras`, and
   the nightly `unstable-*` set.
 
+[0.2.0]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.2.0
 [0.1.1]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.1
 [0.1.0]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0
 [0.1.0-rc.24]: https://github.com/gaetschwartz/oopsie/releases/tag/v0.1.0-rc.24
