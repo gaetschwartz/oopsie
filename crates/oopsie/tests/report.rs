@@ -454,7 +454,7 @@ fn test_debug_fmt_non_empty() {
     .build();
     let report = Report::new(error).no_colors();
     let debug_output = format!("{report:?}");
-    assert!(!debug_output.is_empty());
+    assert_ne!(debug_output, "");
     assert!(debug_output.contains("debug test"));
 }
 
@@ -462,7 +462,7 @@ fn test_debug_fmt_non_empty() {
 fn test_display_ok_is_empty() {
     let report = Report::<TestError>::ok();
     let output = report.to_string();
-    assert!(output.is_empty());
+    assert_eq!(output, "");
 }
 
 // --- Termination::report() tests ---
@@ -500,7 +500,7 @@ fn test_termination_report_honors_declared_exit_code() {
 fn test_report_run_ok() {
     let report = Report::<TestError>::run(|| Ok(()));
     assert!(report.error().is_none());
-    assert!(report.to_string().is_empty());
+    assert_eq!(report.to_string(), "");
 }
 
 #[test]
@@ -1002,7 +1002,7 @@ fn test_report_from_residual_question_mark() {
 
     let ok_report = run(false);
     assert!(ok_report.error().is_none());
-    assert!(ok_report.to_string().is_empty());
+    assert_eq!(ok_report.to_string(), "");
 }
 
 // ─── transparent wrapper surfaces a leaf's forwarded code + help ───

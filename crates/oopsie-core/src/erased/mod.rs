@@ -1086,7 +1086,7 @@ mod tests {
         let erased: ErasedError = serde_json::from_str(r#"{"message":"x"}"#)
             .expect("missing optional fields must not fail");
         assert_eq!(&*erased.message, "x");
-        assert!(erased.source_chain.is_empty());
+        assert_eq!(erased.source_chain, Vec::<Box<str>>::new());
         assert!(erased.diagnostics.is_none());
         assert!(erased.spantrace.is_none());
         assert!(erased.backtrace.is_none());
