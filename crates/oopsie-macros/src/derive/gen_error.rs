@@ -58,7 +58,7 @@ fn trace_accessor_body(
 /// The `Error::source` value for a layer's source field. A layer whose `Display`
 /// is its source's hides that source and exposes the source's own, so a chain
 /// walker never sees the same message twice.
-fn source_expr(source: TokenStream2, display_delegated: bool) -> TokenStream2 {
+fn source_expr(source: &TokenStream2, display_delegated: bool) -> TokenStream2 {
     if display_delegated {
         quote! { ::core::error::Error::source(#source) }
     } else {
@@ -278,7 +278,7 @@ pub fn gen_enum_error(
         if let Some(source_field) = &categorized.source {
             let source_ident = &source_field.ident;
             let exposed = source_expr(
-                quote! { #source_ident.as_error_source() },
+                &quote! { #source_ident.as_error_source() },
                 variant_attrs.transparent && variant_attrs.display.is_none(),
             );
             source_arms.push(quote! {
@@ -741,7 +741,7 @@ pub fn gen_struct_error(
     let source_body = if let Some(source_field) = &categorized.source {
         let source_ident = &source_field.ident;
         let exposed = source_expr(
-            quote! { self.#source_ident.as_error_source() },
+            &quote! { self.#source_ident.as_error_source() },
             variant_attrs.transparent && variant_attrs.display.is_none(),
         );
         quote! {
